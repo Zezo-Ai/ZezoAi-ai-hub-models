@@ -95,7 +95,7 @@ def compile_model(
         )
 
     model_compile_options = model.get_hub_compile_options(
-        target_runtime, precision, extra_options, device
+        target_runtime, precision, extra_options, device, MODEL_ID
     )
     print(f"Optimizing model {model_name} to run on-device")
     submitted_compile_job = hub.submit_compile_job(
@@ -106,6 +106,27 @@ def compile_model(
         options=model_compile_options,
     )
     return cast(hub.client.CompileJob, submitted_compile_job)
+
+
+def link_model(
+    compiled_model: hub.Model,
+    device: hub.Device,
+    model_name: str,
+    model: BaseModel,
+    target_runtime: TargetRuntime,
+) -> hub.client.LinkJob:
+    """Link compiled DLC to context binary for AOT."""
+    assert target_runtime.is_aot_compiled, (
+        f"link_model() requires an AOT runtime, got {target_runtime}"
+    )
+    link_options = model.get_hub_link_options(target_runtime)
+    print(f"Linking {model_name} to context binary")
+    return hub.submit_link_job(
+        [compiled_model],
+        device=device,
+        name=model_name,
+        options=link_options,
+    )
 
 
 def profile_model(
@@ -204,6 +225,7 @@ def export_model(
     device: hub.Device,
     precision: Precision = Precision.float,
     num_calibration_samples: int | None = None,
+    quantized_model_id: str | None = None,
     skip_compiling: bool = False,
     skip_profiling: bool = False,
     skip_inferencing: bool = False,
@@ -245,6 +267,8 @@ def export_model(
         to use for quantization. If not set, uses the default number
         specified by the dataset. If model doesn't have a calibration dataset
         specified, this must be None.
+    quantized_model_id
+        A quantized ONNX hub model id, skips quantizing model.
     skip_compiling
         If set, skips compiling of model to format that can run on device.
     skip_profiling
@@ -325,29 +349,35 @@ def export_model(
     quantize_job: hub.client.QuantizeJob | None = None
     quantized_model: hub.Model | None = None
     if precision != Precision.float:
-        onnx_compile_job = compile_model(
-            model,
-            model_name,
-            device,
-            TargetRuntime.ONNX,
-            precision,
-            input_spec=input_spec,
-        )
-        onnx_model = onnx_compile_job.get_target_model()
-        assert onnx_model is not None, f"ONNX compile job failed: {onnx_compile_job}"
-        quantize_job = quantize_model(
-            precision,
-            model,
-            model_name,
-            onnx_model,
-            num_calibration_samples,
-            quantize_options,
-            input_spec,
-        )
-        if skip_compiling:
-            return ExportResult(quantize_job=quantize_job)
-        quantized_model = quantize_job.get_target_model()
-        assert quantized_model is not None, f"Quantize job failed: {quantize_job}"
+        if quantized_model_id:
+            quantized_model = hub.get_model(quantized_model_id)
+            assert quantized_model is not None
+        else:
+            onnx_compile_job = compile_model(
+                model,
+                model_name,
+                device,
+                TargetRuntime.ONNX,
+                precision,
+                input_spec=input_spec,
+            )
+            onnx_model = onnx_compile_job.get_target_model()
+            assert onnx_model is not None, (
+                f"ONNX compile job failed: {onnx_compile_job}"
+            )
+            quantize_job = quantize_model(
+                precision,
+                model,
+                model_name,
+                onnx_model,
+                num_calibration_samples,
+                quantize_options,
+                input_spec,
+            )
+            if skip_compiling:
+                return ExportResult(quantize_job=quantize_job)
+            quantized_model = quantize_job.get_target_model()
+            assert quantized_model is not None, f"Quantize job failed: {quantize_job}"
 
     # 3. Compiles the model to an asset that can be run on device
     compile_job = compile_model(
@@ -466,7 +496,6 @@ def main() -> None:
             TargetRuntime.ONNX,
             TargetRuntime.PRECOMPILED_QNN_ONNX,
         ],
-        Precision.w8a8: [],
         Precision.w8a16: [
             TargetRuntime.QNN_DLC,
             TargetRuntime.QNN_CONTEXT_BINARY,

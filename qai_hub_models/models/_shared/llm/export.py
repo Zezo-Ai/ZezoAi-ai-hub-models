@@ -24,7 +24,7 @@ from qai_hub.public_rest_api import DatasetEntries
 
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models._shared.llm.model import (
-    DEFAULT_SEQUENCE_LENGTH,
+    DEFAULT_EXPORT_SEQUENCE_LENGTHS,
     PositionProcessorBase,
 )
 from qai_hub_models.models._shared.llm.split_onnx_utils import utils
@@ -63,6 +63,16 @@ from qai_hub_models.utils.args import (
 VALID_TARGET_RUNTIMES = Literal[TargetRuntime.GENIE, TargetRuntime.ONNXRUNTIME_GENAI]
 
 
+def _parse_comma_separated_ints(value: str) -> list[int]:
+    """Argparse type function: converts "128,1" -> [128, 1]."""
+    return [int(x) for x in value.split(",")]
+
+
+def _ensure_int_list(raw: int | list[int]) -> list[int]:
+    """Normalize an int or list[int] to list[int] (for direct callers of export_model)."""
+    return [raw] if isinstance(raw, int) else raw
+
+
 def _make_sub_component_name(
     instantiation_name: str, part_index: int, num_splits: int
 ) -> str:
@@ -71,7 +81,7 @@ def _make_sub_component_name(
 
 # TODO(#12640): Unnecessary if we can pull this information directly.
 def _infer_output_specs(
-    instantiations: list[tuple[str, int]],
+    instantiations: list[tuple[str, int, int]],
     num_splits: int,
     input_specs: dict[str, Any],
     llm_config: PretrainedConfig,
@@ -89,7 +99,7 @@ def _infer_output_specs(
 
     output_specs: dict[str, Any] = {}
     intermediate_type = "float16" if precision == Precision.w4 else "uint16"
-    for instantiation_name, seq_len in instantiations:
+    for instantiation_name, seq_len, _ in instantiations:
         for i in range(num_splits):
             specs: dict[str, tuple[tuple[int, ...], str]] = {}
             if i == num_splits - 1:
@@ -260,28 +270,28 @@ def export_model(
     # 1. Initialize PyTorch model
     model_params = dict(get_model_kwargs(model_cls, additional_model_kwargs))
 
+    # Normalize context_length to a list of ints
+    context_lengths = _ensure_int_list(model_params.pop("context_length"))
     # Check for context length constraint for SA8295P ADP
     if (
         "constrained_device_max_context_length" in additional_model_kwargs
         and "chipset:qualcomm-sa8295p" in device.attributes
-        and model_params["context_length"]
-        > additional_model_kwargs["constrained_device_max_context_length"]
     ):
-        raise ValueError(
-            f"The {model_name}'s context length is too large to deploy on SA8295P. "
-            "Please set the context length to 1024 or lower."
-        )
+        max_cl = additional_model_kwargs["constrained_device_max_context_length"]
+        if any(cl > max_cl for cl in context_lengths):
+            raise ValueError(
+                f"The {model_name}'s context length is too large to deploy on SA8295P. "
+                "Please set the context length to 1024 or lower."
+            )
 
-    prompt_sequence_length = model_params.pop(
-        "sequence_length", DEFAULT_SEQUENCE_LENGTH
+    sequence_lengths = _ensure_int_list(
+        model_params.pop("sequence_length", DEFAULT_EXPORT_SEQUENCE_LENGTHS)
     )
-    assert isinstance(prompt_sequence_length, int)
+    prompt_sequence_length = max(sequence_lengths)
 
-    # If user specifies sequence length, it will define the prompt
-    # generator's sequence length only
-    instantiations = [
-        ("prompt", prompt_sequence_length),
-        ("token", 1),
+    # Names follow the ar{seq_len}_cl{ctx_len} convention required by Genie.
+    instantiations: list[tuple[str, int, int]] = [
+        (f"ar{sl}_cl{cl}", sl, cl) for cl in context_lengths for sl in sequence_lengths
     ]
 
     compile_jobs_to_link: dict[str, list[hub.client.CompileJob]] = {}
@@ -306,10 +316,13 @@ def export_model(
         onnx_export_dir = tmpdir_handler.name
     Path(onnx_export_dir).mkdir(parents=True, exist_ok=True)
 
-    for instantiation_name, seq_len in instantiations:
+    for instantiation_name, seq_len, ctx_len in instantiations:
         full_name = f"{model_name}_{instantiation_name}"
         model = model_cls.from_pretrained(
-            sequence_length=seq_len, precision=precision, **model_params
+            sequence_length=seq_len,
+            context_length=ctx_len,
+            precision=precision,
+            **model_params,
         )
 
         llm_config = model.llm_config
@@ -447,7 +460,7 @@ def export_model(
     profile_jobs: dict[str, hub.client.ProfileJob] = {}
 
     if not skip_profiling:
-        for instantiation_name, _seq_len in instantiations:
+        for instantiation_name, _, _ in instantiations:
             for sub_component_name in sub_component_names[instantiation_name]:
                 component_name = component_from_sub_component_names[sub_component_name]
                 print(
@@ -476,8 +489,10 @@ def export_model(
     final_device_output_data: dict[str, DatasetEntries] = {}
     final_ref_output_data: dict[str, list[np.ndarray]] = {}
     if not skip_inferencing:
-        for instantiation_name, seq_len in instantiations:
-            model = model_cls.from_pretrained(sequence_length=seq_len, **model_params)
+        for instantiation_name, seq_len, ctx_len in instantiations:
+            model = model_cls.from_pretrained(
+                sequence_length=seq_len, context_length=ctx_len, **model_params
+            )
             full_model_sample_inputs = model.sample_inputs()
             output_data: DatasetEntries = {}
             for sub_component_name in sub_component_names[instantiation_name]:
@@ -539,7 +554,7 @@ def export_model(
 
     # 6. Summarize the results from profiling and inference
     if not skip_summary and not skip_profiling:
-        for instantiation_name, _ in instantiations:
+        for instantiation_name, _, _ in instantiations:
             for sub_component_name in sub_component_names[instantiation_name]:
                 profile_job = profile_jobs[sub_component_name]
                 assert profile_job is not None and profile_job.wait().success
@@ -547,7 +562,7 @@ def export_model(
                 print_profile_metrics_from_job(profile_job, profile_data)
 
     if not skip_summary and not skip_inferencing:
-        for instantiation_name, _ in instantiations:
+        for instantiation_name, _, _ in instantiations:
             # Get ordered model output names
             torch_out = final_ref_output_data[instantiation_name]
             inference_result = final_device_output_data[instantiation_name]
@@ -580,7 +595,7 @@ def export_model(
                 llm_config=llm_config,
                 position_processor_cls=position_processor_cls,
                 encodings_path=input_encodings_path,
-                context_length=model_params["context_length"],
+                context_length=max(context_lengths),
                 prompt_sequence_length=prompt_sequence_length,
                 onnx_model_path_from_sub_component_name=onnx_model_path_from_sub_component_name,
                 num_splits=num_splits,
@@ -600,7 +615,7 @@ def export_model(
                 hub_device=device,
                 checkpoint=model.checkpoint,
                 llm_config=llm_config,
-                context_length=model_params["context_length"],
+                context_length=max(context_lengths),
                 model_list=target_model_list,
                 output_path=output_path,
                 precision=precision,
@@ -680,7 +695,11 @@ def get_llm_parser(
     model_cls: type[LLM_AIMETOnnx],
     default_export_device: str,
     default_precision: Precision,
+    default_sequence_lengths: list[int] | None = None,
+    default_context_lengths: list[int] | None = None,
 ) -> argparse.ArgumentParser:
+    if default_sequence_lengths is None:
+        default_sequence_lengths = DEFAULT_EXPORT_SEQUENCE_LENGTHS
     parser = export_parser(
         model_cls=model_cls,
         export_fn=export_model,
@@ -698,6 +717,27 @@ def get_llm_parser(
     parser.add_argument(
         "--zip-assets", action="store_true", help="If set, zip assets on download."
     )
+    # Override the auto-generated --context-length and --sequence-length (int)
+    # to accept comma-separated lists, e.g. "1024,4096" or "128,1".
+    # The type function parses strings to list[int] at the CLI boundary.
+    for action in parser._actions:  # pylint: disable=protected-access
+        if action.dest == "context_length":
+            action.type = _parse_comma_separated_ints
+            if default_context_lengths is not None:
+                action.default = default_context_lengths
+            action.help = (
+                "Context length(s) for the model. "
+                "Pass a single value (e.g. 4096) or a comma-separated list "
+                "(e.g. 1024,4096) to export models for multiple context lengths."
+            )
+        elif action.dest == "sequence_length":
+            action.type = _parse_comma_separated_ints
+            action.default = default_sequence_lengths
+            action.help = (
+                "Sequence length(s) for the model. "
+                "Pass a single value (e.g. 128) or a comma-separated list "
+                "(e.g. 128,1) to export models for multiple sequence lengths."
+            )
     suppress_help_arguments = [
         "host_device",
         "fp_model",
@@ -730,22 +770,36 @@ def export_main(
     default_export_device: str,
     default_precision: Precision,
     constrained_device_max_context_length: int | None = None,
+    default_sequence_lengths: list[int] | None = None,
+    default_context_lengths: list[int] | None = None,
 ) -> None:
+    if default_sequence_lengths is None:
+        default_sequence_lengths = DEFAULT_EXPORT_SEQUENCE_LENGTHS
     warnings.filterwarnings("ignore")
     parser = get_llm_parser(
         supported_precision_runtimes,
         model_cls,
         default_export_device,
         default_precision,
+        default_sequence_lengths,
+        default_context_lengths,
     )
     args = parser.parse_args()
     additional_model_kwargs = vars(args)
 
     if not args.skip_inferencing:
         additional_model_kwargs["_skip_quantsim_creation"] = False
+    additional_model_kwargs["context_length"] = _ensure_int_list(
+        additional_model_kwargs["context_length"]
+    )
+    additional_model_kwargs["sequence_length"] = _ensure_int_list(
+        additional_model_kwargs["sequence_length"]
+    )
+    first_context_length = additional_model_kwargs["context_length"][0]
+    first_sequence_length = additional_model_kwargs["sequence_length"][0]
     fp_model_params = dict(
-        sequence_length=additional_model_kwargs["sequence_length"],
-        context_length=additional_model_kwargs["context_length"],
+        sequence_length=first_sequence_length,
+        context_length=first_context_length,
     )
     if isinstance(
         additional_model_kwargs["checkpoint"], str

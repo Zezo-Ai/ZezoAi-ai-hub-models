@@ -199,6 +199,8 @@ class MODEL_TAG(Enum):
 class MODEL_STATUS(Enum):
     PUBLIC = "public"
     PRIVATE = "private"
+    # pending models are waiting for scorecard to collect perf data before going public
+    PENDING = "pending"
     # proprietary models are released only internally
     PROPRIETARY = "proprietary"
 

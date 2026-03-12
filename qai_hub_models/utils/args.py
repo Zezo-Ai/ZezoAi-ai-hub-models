@@ -14,6 +14,7 @@ import sys
 from collections.abc import Callable, Mapping
 from enum import Enum
 from functools import partial
+from itertools import chain
 from pathlib import Path
 from pydoc import locate
 from typing import Any, TypeVar
@@ -148,6 +149,7 @@ class QAIHMArgumentParser(argparse.ArgumentParser):
 
     def __init__(
         self,
+        model_cls: type[FromPretrainedTypeVar | FromPrecompiledTypeVar] | None = None,
         supported_precision_runtimes: (
             dict[Precision, list[TargetRuntime]] | None
         ) = None,
@@ -156,9 +158,10 @@ class QAIHMArgumentParser(argparse.ArgumentParser):
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        self.supported_precision_runtimes = supported_precision_runtimes
+        self.supported_precision_runtimes = supported_precision_runtimes or {}
         self.default_device = default_device
         self.default_chipset = default_chipset
+        self.model_cls = model_cls
         super().__init__(*args, **kwargs)
 
     @staticmethod
@@ -194,7 +197,56 @@ class QAIHMArgumentParser(argparse.ArgumentParser):
         if getattr(parsed, "quantize", None):
             parsed.precision = parsed.quantize
 
-        if self.supported_precision_runtimes is not None:
+        # Resolve default target_runtime based on the chosen precision.
+        if getattr(parsed, "target_runtime", None) is None:
+            precision = getattr(parsed, "precision", None)
+            if precision is None and self.supported_precision_runtimes:
+                precision = next(iter(self.supported_precision_runtimes))
+            if precision is not None and precision in self.supported_precision_runtimes:
+                parsed.target_runtime = _get_default_runtime(
+                    self.supported_precision_runtimes[precision]
+                )
+            else:
+                # No precision arg -- fall back to first eligible across all precisions.
+                all_runtimes = chain.from_iterable(
+                    self.supported_precision_runtimes.values()
+                )
+
+                # If all else fails, use TFLITE
+                parsed.target_runtime = next(all_runtimes, TargetRuntime.TFLITE)
+
+        quantized_model_id_arg = getattr(parsed, "quantized_model_id", None)
+        if quantized_model_id_arg:
+            if getattr(parsed, "precision", None) == Precision.float:
+                raise ValueError(
+                    "--quantized-model-id can only be used with a quantized precision. "
+                    "Pass --precision <non-float> or --quantize."
+                )
+            assert self.model_cls is not None
+            if not issubclass(self.model_cls, CollectionModel):
+                # BaseModel
+                parsed.quantized_model_id = quantized_model_id_arg
+            else:
+                # CollectionModel
+                components = getattr(parsed, "components", None)
+                components = (
+                    components if components else self.model_cls.component_class_names
+                )
+
+                model_ids = [
+                    s.strip() for s in quantized_model_id_arg.split(",") if s.strip()
+                ]
+                if len(model_ids) != len(components):
+                    raise ValueError(
+                        "For collection models, --quantized-model-id must provide exactly one id per selected component. "
+                        f"Expected {len(components)} ids, got {len(model_ids)}."
+                    )
+
+                parsed.quantized_model_id = dict(
+                    zip(components, model_ids, strict=True)
+                )
+
+        if self.supported_precision_runtimes:
             self.validate_precision_runtime(self.supported_precision_runtimes, parsed)
 
         return parsed
@@ -243,10 +295,12 @@ class QAIHMArgumentParser(argparse.ArgumentParser):
 
 
 def get_parser(
+    model_cls: type[FromPretrainedTypeVar | FromPrecompiledTypeVar] | None = None,
     supported_precision_runtimes: dict[Precision, list[TargetRuntime]] | None = None,
     allow_dupe_args: bool = False,
 ) -> QAIHMArgumentParser:
     return QAIHMArgumentParser(
+        model_cls,
         supported_precision_runtimes=supported_precision_runtimes,
         formatter_class=QAIHMHelpFormatter,
         conflict_handler="resolve" if allow_dupe_args else "error",
@@ -302,25 +356,21 @@ def add_output_dir_arg(parser: ParserT) -> ParserT:
 
 
 def _get_default_runtime(
-    available_runtimes: list[TargetRuntime] | set[TargetRuntime],
+    available_runtimes: list[TargetRuntime],
 ) -> TargetRuntime:
     if len(available_runtimes) == 0:
         raise RuntimeError("available_runtimes empty, expecting at-least one runtime.")
-    return (
-        TargetRuntime.TFLITE
-        if TargetRuntime.TFLITE in available_runtimes
-        else next(iter(available_runtimes))
-    )
+    return available_runtimes[0]
 
 
 def add_target_runtime_arg(
     parser: ParserT,
     helpmsg: str,
-    available_target_runtimes: list[TargetRuntime] | set[TargetRuntime] | None = None,
-    default: TargetRuntime = TargetRuntime.TFLITE,
+    available_target_runtimes: list[TargetRuntime] | None = None,
+    default: TargetRuntime | None = None,
 ) -> ParserT:
     if available_target_runtimes is None:
-        available_target_runtimes = set(TargetRuntime.__members__.values())
+        available_target_runtimes = list(TargetRuntime.__members__.values())
     parser.add_argument(
         "--target-runtime",
         type=str,
@@ -366,7 +416,7 @@ def get_on_device_demo_parser(
     parser: QAIHMArgumentParser | None = None,
     supported_eval_modes: list[EvalMode] | None = None,
     supported_precisions: set[Precision] | None = None,
-    available_target_runtimes: list[TargetRuntime] | set[TargetRuntime] | None = None,
+    available_target_runtimes: list[TargetRuntime] | None = None,
     add_output_dir: bool = False,
     default_device: str | None = None,
 ) -> QAIHMArgumentParser:
@@ -396,7 +446,7 @@ def get_on_device_demo_parser(
         Argument parser with all required arguments for on-device demos.
     """
     if available_target_runtimes is None:
-        available_target_runtimes = set(TargetRuntime.__members__.values())
+        available_target_runtimes = list(TargetRuntime.__members__.values())
     if not parser:
         parser = get_parser()
 
@@ -864,7 +914,11 @@ def _evaluate_export_common_parser(
     """Common arguments between export and evaluate scripts."""
     # Set handler to resolve, to allow from_pretrained and get_input_spec
     # to have the same argument names.
-    parser = get_parser(supported_precision_runtimes, allow_dupe_args=True)
+    parser = get_parser(
+        model_cls,
+        supported_precision_runtimes,
+        allow_dupe_args=True,
+    )
     # Default runtime for compiled model is fixed for given model
     # Python doesn't have ordered sets, so use a dictionary to preserver order
     available_runtimes: dict[TargetRuntime, None] = {}
@@ -873,12 +927,12 @@ def _evaluate_export_common_parser(
             available_runtimes[rt] = None
 
     available_runtimes_list = list(available_runtimes.keys())
-    default_runtime = _get_default_runtime(available_runtimes_list)
+    # Default is resolved dynamically in parse_args based on the chosen precision.
     add_target_runtime_arg(
         parser,
         available_target_runtimes=available_runtimes_list,
-        default=default_runtime,
-        helpmsg="The runtime for which to export.",
+        default=None,
+        helpmsg="The runtime for which to export. Default is chosen based on the precision.",
     )
     if issubclass(model_cls, FromPretrainedProtocol):
         # Skip adding CLI from model for compiled model
@@ -975,6 +1029,18 @@ def add_export_function_args(
         return description
 
     add_function_parser_args(signature, parser, _get_export_help)
+
+    if "quantized_model_id" in signature:
+        signature.pop("quantized_model_id")
+        parser.add_argument(
+            "--quantized-model-id",
+            type=str,
+            default=None,
+            help="If set, uses this quantized model ID instead of quantizing during export. "
+            "For BaseModel: --quantized-model-id <id>. "
+            "For CollectionModel: --quantized-model-id <id1,id2,...>. "
+            "For CollectionModel, IDs must be provided in the same order as the selected components in --components.",
+        )
 
 
 def export_parser(

@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 import torch
 
+from qai_hub_models.datasets.coco import COCO_DATASET
 from qai_hub_models.datasets.common import BaseDataset, DatasetMetadata, DatasetSplit
 from qai_hub_models.extern.xtcocotools.coco import COCO
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
@@ -19,14 +20,6 @@ from qai_hub_models.utils.printing import suppress_stdout
 
 COCO_FOLDER_NAME = "coco-wholebody"
 COCO_VERSION = 1
-
-# Dataset assets
-COCO_VAL_IMAGES_ASSET = CachedWebDatasetAsset(
-    "http://images.cocodataset.org/zips/val2017.zip",
-    COCO_FOLDER_NAME,
-    COCO_VERSION,
-    "val2017.zip",
-)
 
 COCO_VAL_ANNOTATIONS_ASSET = CachedWebDatasetAsset.from_asset_store(
     COCO_FOLDER_NAME,
@@ -72,7 +65,7 @@ class CocoBodyDataset(BaseDataset):
         self.samples = num_samples
 
         # Load dataset paths
-        self.image_dir = COCO_VAL_IMAGES_ASSET.path().parent / "val2017" / "val2017"
+        self.image_dir = COCO_DATASET.path().parent / "val2017" / "val2017"
         self.annotation_path = COCO_VAL_ANNOTATIONS_ASSET.path()
         BaseDataset.__init__(self, self.annotation_path, split)
 
@@ -178,14 +171,14 @@ class CocoBodyDataset(BaseDataset):
 
     def _validate_data(self) -> bool:
         return (
-            COCO_VAL_IMAGES_ASSET.path(extracted=True).exists()
+            COCO_DATASET.path(extracted=True).exists()
             and COCO_VAL_ANNOTATIONS_ASSET.path().exists()
         )
 
     def _download_data(self) -> None:
         """Download and extract COCO-WholeBody dataset assets."""
         # Download and extract images
-        COCO_VAL_IMAGES_ASSET.fetch(extract=True)
+        COCO_DATASET.fetch(extract=True)
         COCO_VAL_ANNOTATIONS_ASSET.fetch()
 
     @staticmethod

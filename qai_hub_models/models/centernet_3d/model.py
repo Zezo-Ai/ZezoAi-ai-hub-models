@@ -170,6 +170,10 @@ class CenterNet3D(CenterNet):
     def calibration_dataset_name() -> str:
         return "kitti"
 
+    @staticmethod
+    def get_channel_last_inputs() -> list[str]:
+        return ["image"]
+
 
 def load_model(model: torch.nn.Module, model_path: str) -> torch.nn.Module:
     checkpoint = torch.load(model_path, weights_only=False)

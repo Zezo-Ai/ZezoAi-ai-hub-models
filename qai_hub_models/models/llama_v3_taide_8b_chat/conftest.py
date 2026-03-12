@@ -6,14 +6,20 @@
 # Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
+from __future__ import annotations
+
 import gc
 import inspect
 from collections.abc import Generator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from qai_hub_models.models.llama_v3_taide_8b_chat import Model
+
+if TYPE_CHECKING:
+    from qai_hub_models.models._shared.llm.perf_collection import LLMPerfConfig
+    from qai_hub_models.models._shared.llm.test import CompileJobCache
 
 
 # Instantiate the model only once for all tests.
@@ -44,3 +50,17 @@ def cached_from_pretrained() -> Generator[pytest.MonkeyPatch, None, None]:
 @pytest.fixture(scope="module", autouse=True)
 def ensure_gc() -> None:
     gc.collect()
+
+
+@pytest.fixture(scope="session")
+def llm_perf_config() -> LLMPerfConfig:
+    from qai_hub_models.models._shared.llm.perf_collection import LLMPerfConfig
+
+    return LLMPerfConfig.from_environment()
+
+
+@pytest.fixture(scope="session")
+def compile_job_cache() -> CompileJobCache:
+    from qai_hub_models.models._shared.llm.test import CompileJobCache
+
+    return CompileJobCache()

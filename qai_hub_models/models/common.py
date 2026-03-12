@@ -362,9 +362,7 @@ class InferenceEngine(Enum):
     QNN = "qnn"
     ONNX = "onnx"
     GENIE = "genie"
-    LLAMA_CPP_CPU = "llama_cpp_cpu"
-    LLAMA_CPP_GPU = "llama_cpp_gpu"
-    LLAMA_CPP_NPU = "llama_cpp_npu"
+    LLAMA_CPP = "llama_cpp"
 
     @property
     def full_package_name(self) -> str:
@@ -376,12 +374,8 @@ class InferenceEngine(Enum):
             return "ONNX Runtime"
         if self == InferenceEngine.GENIE:
             return "Genie (Qualcomm GenAI Inference Extensions)"
-        if self == InferenceEngine.LLAMA_CPP_CPU:
-            return "Llama.cpp (CPU)"
-        if self == InferenceEngine.LLAMA_CPP_GPU:
-            return "Llama.cpp (GPU)"
-        if self == InferenceEngine.LLAMA_CPP_NPU:
-            return "Llama.cpp (NPU)"
+        if self == InferenceEngine.LLAMA_CPP:
+            return "Llama.cpp"
         assert_never(self)
 
     @property
@@ -464,6 +458,13 @@ class TargetRuntime(Enum):
     # https://github.com/microsoft/onnxruntime-genai
     ONNXRUNTIME_GENAI = "onnxruntime_genai"
 
+    # Qualcomm Voice AI
+    # https://www.qualcomm.com/products/features/voice-assist
+    # https://qpm.qualcomm.com/#/main/tools/details/VoiceAI_ASR_Community
+    # https://qpm.qualcomm.com/#/main/tools/details/VoiceAI_TTS
+    # https://qpm.qualcomm.com/#/main/tools/details/VoiceAI_Translation
+    VOICE_AI = "voice_ai"
+
     # Llama.cpp runtime variants
     # https://github.com/ggml-org/llama.cpp
     LLAMA_CPP_CPU = "llama_cpp_cpu"
@@ -484,6 +485,7 @@ class TargetRuntime(Enum):
         if (
             self == TargetRuntime.QNN_CONTEXT_BINARY  # noqa: PLR1714 | Can't merge comparisons and use assert_never
             or self == TargetRuntime.QNN_DLC
+            or self == TargetRuntime.VOICE_AI
         ):
             return InferenceEngine.QNN
         if (
@@ -494,12 +496,12 @@ class TargetRuntime(Enum):
             return InferenceEngine.ONNX
         if self == TargetRuntime.GENIE:
             return InferenceEngine.GENIE
-        if self == TargetRuntime.LLAMA_CPP_CPU:
-            return InferenceEngine.LLAMA_CPP_CPU
-        if self == TargetRuntime.LLAMA_CPP_GPU:
-            return InferenceEngine.LLAMA_CPP_GPU
-        if self == TargetRuntime.LLAMA_CPP_NPU:
-            return InferenceEngine.LLAMA_CPP_NPU
+        if (
+            self == TargetRuntime.LLAMA_CPP_CPU  # noqa: PLR1714 | Can't merge comparisons and use assert_never
+            or self == TargetRuntime.LLAMA_CPP_GPU
+            or self == TargetRuntime.LLAMA_CPP_NPU
+        ):
+            return InferenceEngine.LLAMA_CPP
         assert_never(self)
 
     @property
@@ -507,7 +509,7 @@ class TargetRuntime(Enum):
         """The file extension (without the .) assets for this runtime use."""
         if self == TargetRuntime.TFLITE:
             return "tflite"
-        if self == TargetRuntime.QNN_CONTEXT_BINARY:
+        if self == TargetRuntime.QNN_CONTEXT_BINARY or self == TargetRuntime.VOICE_AI:  # noqa: PLR1714 | Can't merge comparisons and use assert_never
             return "bin"
         if self == TargetRuntime.QNN_DLC:
             return "dlc"
@@ -531,7 +533,7 @@ class TargetRuntime(Enum):
     @property
     def hub_model_type(self) -> hub.SourceModelType:
         """The associated hub SourceModelType for assets for this TargetRuntime."""
-        if self == TargetRuntime.QNN_CONTEXT_BINARY:
+        if self == TargetRuntime.QNN_CONTEXT_BINARY or self == TargetRuntime.VOICE_AI:  # noqa: PLR1714 | Can't merge comparisons and use assert_never
             return hub.SourceModelType.QNN_CONTEXT_BINARY
         if self == TargetRuntime.QNN_DLC:
             return hub.SourceModelType.QNN_DLC
@@ -606,6 +608,7 @@ class TargetRuntime(Enum):
             or self == TargetRuntime.PRECOMPILED_QNN_ONNX
             or self == TargetRuntime.GENIE
             or self == TargetRuntime.ONNXRUNTIME_GENAI
+            or self == TargetRuntime.VOICE_AI
         ):
             return precision in [
                 Precision.w8a8,
@@ -648,7 +651,7 @@ class TargetRuntime(Enum):
                 "llama.cpp runtimes use pre-built GGUF models instead."
             )
 
-        if self.is_exclusively_for_genai:
+        if self.is_orchestrator_runtime:
             hub_target_runtime_flag = TargetRuntime.QNN_DLC.value
         else:
             hub_target_runtime_flag = self.value
@@ -674,17 +677,22 @@ class TargetRuntime(Enum):
         """
         return self in [
             TargetRuntime.QNN_CONTEXT_BINARY,
+            TargetRuntime.VOICE_AI,
             TargetRuntime.PRECOMPILED_QNN_ONNX,
             TargetRuntime.GENIE,
             TargetRuntime.ONNXRUNTIME_GENAI,
         ]
 
     @property
-    def is_exclusively_for_genai(self) -> bool:
-        """Returns true if this runtime is exclusively used to execute GenAI models."""
+    def is_orchestrator_runtime(self) -> bool:
+        """
+        Returns true if this runtime is an orchestration layer that lives on
+        top of a different runtime (eg. Genie is an extension built on top of QAIRT).
+        """
         return self in [
             TargetRuntime.GENIE,
             TargetRuntime.ONNXRUNTIME_GENAI,
+            TargetRuntime.VOICE_AI,
             TargetRuntime.LLAMA_CPP_CPU,
             TargetRuntime.LLAMA_CPP_GPU,
             TargetRuntime.LLAMA_CPP_NPU,

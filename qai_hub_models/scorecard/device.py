@@ -498,12 +498,29 @@ class ScorecardDevice:
         else:
             assert_never(self.form_factor)
 
-        return [
+        out = [
             path
             for path in ScorecardProfilePath
             if path.runtime in self.supported_runtimes
             and path.runtime.inference_engine in inference_engines_to_test
         ]
+
+        # We limit qnn_dlc_via_qnn_ep to just the default device.
+        # This reduces the number of jobs we run on a full scorecard by several thousand.
+        if (
+            not self.is_default
+            and ScorecardProfilePath.QNN_DLC_VIA_QNN_EP.enabled
+            # Only disable for non-default devices that aren't explicitly enabled.
+            # This allows users to test this path for specific devices if they want.
+            # For example:
+            #   If QAIHM_TEST_DEVICES is set to "all" -- cs_8_gen_3 will NOT run QNN_DLC_VIA_QNN_EP.
+            #
+            #   If QAIHM_TEST_DEVICES is set to "cs_8_gen_3" or "all,cs_8_gen_3" -- cs_8_gen_3 WILL run qnn_dlc_via_qnn_ep.
+            and self.name not in EnabledDevicesEnvvar.get()
+        ):
+            out = [x for x in out if x != ScorecardProfilePath.QNN_DLC_VIA_QNN_EP]
+
+        return out
 
     @cached_property
     def compile_paths(self) -> list[ScorecardCompilePath]:

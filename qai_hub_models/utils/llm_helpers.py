@@ -57,7 +57,11 @@ def log_evaluate_test_result(
 
 
 def log_perf_on_device_result(
-    model_name: str, precision: str, device: str, tps: float, ttft: float
+    model_name: str,
+    precision: str,
+    device: str,
+    tps: float | None,
+    ttft_ms: float | None,
 ) -> None:
     """
     Logs the performance results of a model running on a specific device to a CSV file.
@@ -74,8 +78,8 @@ def log_perf_on_device_result(
         Device on which the model was run (e.g., 'Snapdragon X Elite', 'Snapdragon 8 Elite').
     tps
         Tokens per second, measuring throughput (unit: tokens/sec).
-    ttft
-        Time to first token, measuring latency (unit: microseconds).
+    ttft_ms
+        Time to first token, measuring latency (unit: milliseconds).
     """
     log_file = Path("test_perf_on_device.csv")
     lock_file = log_file.with_suffix(".lock")
@@ -91,10 +95,10 @@ def log_perf_on_device_result(
                         "Precision",
                         "Device",
                         "Tokens per Second",
-                        "TTFT (microseconds)",
+                        "TTFT (ms)",
                     ]
                 )
-            writer.writerow([model_name, precision, device, tps, ttft])
+            writer.writerow([model_name, precision, device, tps, ttft_ms])
 
 
 def create_genie_config(

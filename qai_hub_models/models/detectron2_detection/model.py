@@ -5,10 +5,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import torch
 from detectron2.modeling import GeneralizedRCNN
+from qai_hub.client import Device
 from torch.nn import functional as F
 from typing_extensions import Self
 
@@ -189,10 +188,11 @@ class Detectron2ROIHead(Detectron2):
         target_runtime: TargetRuntime,
         precision: Precision,
         other_compile_options: str = "",
-        device: Any = None,
+        device: Device | None = None,
+        context_graph_name: str | None = None,
     ) -> str:
         compile_options = super().get_hub_compile_options(
-            target_runtime, precision, other_compile_options, device
+            target_runtime, precision, other_compile_options, device, context_graph_name
         )
         if target_runtime != TargetRuntime.ONNX:
             compile_options += " --truncate_64bit_tensors True --truncate_64bit_io True"

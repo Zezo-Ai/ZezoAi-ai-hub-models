@@ -82,6 +82,7 @@ def test_parse_resnet18_export() -> None:
         "skip_downloading",
         "skip_summary",
         "output_dir",
+        "quantized_model_id",
         "fetch_static_assets",
         "zip_assets",
     }
@@ -255,6 +256,7 @@ def test_parse_whisper_export() -> None:
         "skip_downloading",
         "skip_summary",
         "output_dir",
+        "quantized_model_id",
         "fetch_static_assets",
         "components",
         "zip_assets",
@@ -454,6 +456,77 @@ def test_compile_model_from_args() -> None:
         assert kwargs["device"].attributes == "chipset:qualcomm-snapdragon-8gen3"
         assert kwargs["compile_options"] == "'--qairt_version=2.39'"
         assert kwargs["quantize_options"] == "'--range_scheme min_max'"
+
+
+def test_default_runtime_follows_precision() -> None:
+    """Default target_runtime should match the first eligible runtime for the chosen precision."""
+    parser = export_parser(
+        model_cls=ResnetModel,
+        export_fn=resnet_export,
+        supported_precision_runtimes={
+            Precision.float: [TargetRuntime.TFLITE],
+            Precision.w8a16: [TargetRuntime.QNN_DLC, TargetRuntime.QNN_CONTEXT_BINARY],
+        },
+    )
+
+    # No args: default precision is float, so default runtime should be TFLITE
+    args = parser.parse_args([])
+    assert args.precision == Precision.float
+    assert args.target_runtime == TargetRuntime.TFLITE
+
+    # Explicit w8a16: default runtime should be QNN_DLC (first eligible for w8a16)
+    args = parser.parse_args(["--precision", "w8a16"])
+    assert args.precision == Precision.w8a16
+    assert args.target_runtime == TargetRuntime.QNN_DLC
+
+    # Explicit runtime always wins, even if it differs from the precision default
+    args = parser.parse_args(
+        ["--precision", "w8a16", "--target-runtime", "qnn_context_binary"]
+    )
+    assert args.target_runtime == TargetRuntime.QNN_CONTEXT_BINARY
+
+    # --quantize should also drive the default runtime
+    args = parser.parse_args(["--quantize", "w8a16"])
+    assert args.precision == Precision.w8a16
+    assert args.target_runtime == TargetRuntime.QNN_DLC
+
+
+def test_default_runtime_no_precision_arg() -> None:
+    """When there is no --precision arg (BasePrecompiledModel), the default
+    runtime should be the first runtime of the first precision.
+    """
+    from qai_hub_models.models.baichuan2_7b import Model as BaichuanModel
+    from qai_hub_models.models.baichuan2_7b.export import (
+        export_model as baichuan_export,
+    )
+
+    parser = export_parser(
+        model_cls=BaichuanModel,
+        export_fn=baichuan_export,
+        supported_precision_runtimes={
+            Precision.w4a16: [
+                TargetRuntime.QNN_CONTEXT_BINARY,
+            ],
+        },
+    )
+    args = parser.parse_args([])
+    # No precision attr on the namespace, so the resolver should fall back
+    # to the first precision's first runtime.
+    assert args.target_runtime == TargetRuntime.QNN_CONTEXT_BINARY
+
+
+def test_default_runtime_single_non_float_precision() -> None:
+    """When the only precision is non-float, its first runtime should be the default."""
+    parser = export_parser(
+        model_cls=ResnetModel,
+        export_fn=resnet_export,
+        supported_precision_runtimes={
+            Precision.w8a8: [TargetRuntime.QNN_DLC, TargetRuntime.TFLITE],
+        },
+    )
+    args = parser.parse_args([])
+    assert args.precision == Precision.w8a8
+    assert args.target_runtime == TargetRuntime.QNN_DLC
 
 
 def test_model_parser_uses_docstrings_for_help() -> None:

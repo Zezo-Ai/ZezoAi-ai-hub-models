@@ -44,7 +44,7 @@ class MobileSAMEncoder(BaseModel):
         self.sam = sam
 
     def forward(self, image: torch.Tensor) -> torch.Tensor:
-        x = self.sam.preprocess(image)
+        x = (image - self.sam.pixel_mean) * (1 / self.sam.pixel_std)
         return self.sam.image_encoder(x)
 
     @staticmethod
@@ -164,7 +164,7 @@ class MobileSAMDecoder(BaseModel):
     def _get_input_spec_for_instance(
         self: MobileSAMDecoder,
         has_mask_input: bool = False,
-        num_of_points: int = 2,
+        num_of_points: int = 1,
     ) -> InputSpec:
         """
         Override for model.get_input_spec() when called on instances of this class.
@@ -183,7 +183,7 @@ class MobileSAMDecoder(BaseModel):
     @staticmethod
     def get_input_spec(
         has_mask_input: bool = False,
-        num_of_points: int = 2,
+        num_of_points: int = 1,
         embed_dim: int = 256,
         image_embedding_height: int = 64,
         image_embedding_width: int = 64,

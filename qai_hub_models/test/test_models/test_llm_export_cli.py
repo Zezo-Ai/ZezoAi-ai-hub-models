@@ -22,7 +22,7 @@ from qai_hub_models.utils.args import QAIHMArgumentParser
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.model_cache import CacheMode
 
-TEST_GENAI_RUNTIMES = [x for x in TargetRuntime if x.is_exclusively_for_genai]
+TEST_GENAI_RUNTIMES = [TargetRuntime.GENIE, TargetRuntime.ONNXRUNTIME_GENAI]
 TEST_NUM_COMPONENTS = [1, 3]
 TEST_HUB_JOB_OPTIONS = ["", f"{QAIRTVersion.HUB_FLAG} 2.36", "--extra-option"]
 TEST_HUB_DEVICES: list[tuple[str | None, str | None, str, str, bool]] = [
@@ -205,10 +205,11 @@ def test_export_cli(
         Precision.w8a16: list(TEST_GENAI_RUNTIMES),
     }
 
-    # Required args to LLM_AimetONNX.from_pretrained() that are optional args for the user
-    user_provided_from_pretrained_kwargs = dict(
-        sequence_length=1280,
-        context_length=40960,
+    # Required args to LLM_AimetONNX.from_pretrained() that are optional args for the user.
+    # CLI values are strings; argparse converts them to list[int].
+    user_provided_cli_kwargs = dict(
+        sequence_length="128",
+        context_length="4096",
         host_device=host_device,
         checkpoint=checkpoint,
     )
@@ -222,11 +223,15 @@ def test_export_cli(
         position_processor_cls=position_processor_cls,
         # Required args to LLM_AimetONNX.from_pretrained()
         _skip_quantsim_creation=(bool(skip_inferencing)),
-        **user_provided_from_pretrained_kwargs,
+        # After argparse parsing, these become list[int]
+        sequence_length=[128],
+        context_length=[4096],
+        host_device=host_device,
+        checkpoint=checkpoint,
     )
 
     cli_args = ["export.py"]
-    for k, v in user_provided_from_pretrained_kwargs.items():
+    for k, v in user_provided_cli_kwargs.items():
         if v is not None:
             cli_args.extend([f"--{k.replace('_', '-')}", str(v)])
 

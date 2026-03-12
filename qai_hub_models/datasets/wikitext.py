@@ -43,8 +43,8 @@ class WikiText(BaseDataset):
         # Causes a big drop in quantization accuracy
         separator = (
             "\n\n"
-            if split == DatasetSplit.TEST
-            else self.tokenizer.bos_token or self.tokenizer.eos_token
+            if split == DatasetSplit.TEST or tokenizer.bos_token is None
+            else tokenizer.bos_token
         )
         self.tokens = self.tokenizer(
             separator.join(raw_dataset["text"]),

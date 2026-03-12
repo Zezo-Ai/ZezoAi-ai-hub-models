@@ -23,7 +23,6 @@ from qai_hub_models.scorecard import (
 )
 from qai_hub_models.scorecard.device import cs_x_elite
 from qai_hub_models.scorecard.execution_helpers import (
-    for_each_scorecard_path_and_device,
     get_model_test_precisions,
 )
 from qai_hub_models.scorecard.results.chipset_helpers import (
@@ -54,8 +53,9 @@ def _clean_old_failure_reasons(
     clean_accuracy: bool,
 ) -> None:
     """In the code gen config, delete failure reasons for all enabled runtimes + given precision pairs."""
-    for precision in precisions:
-        if reasons_by_runtime := code_gen_config.disabled_paths.data.get(precision):
+    passing_precisions: list[Precision] = []
+    for precision, reasons_by_runtime in code_gen_config.disabled_paths.data.items():
+        if precision in precisions:
             for path in ScorecardProfilePath:
                 if (not path.is_public or path.enabled) and (
                     reasons := reasons_by_runtime.get(path.runtime)
@@ -66,11 +66,26 @@ def _clean_old_failure_reasons(
                         reasons.scorecard_accuracy_failure = None
                     if not reasons.has_failure:
                         reasons_by_runtime.pop(path.runtime)
-            if not reasons_by_runtime:
-                code_gen_config.disabled_paths.data.pop(precision)
+
+        # Delete precisions that are no longer valid
+        if precision not in code_gen_config.supported_precisions:
+            for runtime, reasons in reasons_by_runtime.items():
+                if clean_general:
+                    reasons.scorecard_failure = None
+                if clean_accuracy:
+                    reasons.scorecard_accuracy_failure = None
+                if not reasons.has_failure:
+                    reasons_by_runtime.pop(runtime)
+
+        if not reasons_by_runtime:
+            passing_precisions.append(precision)
+
+    for precision in passing_precisions:
+        code_gen_config.disabled_paths.data.pop(precision)
 
 
 def update_code_gen_failure_reasons(
+    enabled_test_paths: dict[Precision, list[ScorecardProfilePath]],
     components: list[str] | None,
     compile_summary: ModelCompileSummary,
     profile_summary: ModelPerfSummary,
@@ -83,45 +98,28 @@ def update_code_gen_failure_reasons(
     If relevant jobs can't be found in the given scorecard summaries, then no changes are made to the config.
     """
     model_id = compile_summary.model_id
-    supported_precisions = get_model_test_precisions(
-        model_id,
-        set(code_gen_config.supported_precisions),
-        code_gen_config.can_use_quantize_job,
-    )
 
-    # Include only AOT or JIT, but not both
-    export_paths = [
-        x
-        for x in ScorecardProfilePath
-        if x.enabled
-        and x.is_public
-        and (
-            (x.runtime in code_gen_config.supported_genai_runtimes)
-            or (
-                not x.runtime.is_exclusively_for_genai
-                and (
-                    (code_gen_config.requires_aot_prepare and x.runtime.is_aot_compiled)
-                    or (
-                        not code_gen_config.requires_aot_prepare
-                        and not x.runtime.is_aot_compiled
-                    )
-                )
-            )
-        )
-    ]
+    # Limit to only public paths. If a path is not public, then we don't track it in code-gen.yaml.
+    enabled_test_paths = {
+        p: [path for path in paths if path.is_public]
+        for p, paths in enabled_test_paths.items()
+    }
 
     compile_failures: dict[
         Precision, dict[ScorecardCompilePath, dict[str, CompileScorecardJob]]
-    ] = {p: {x.compile_path: {} for x in export_paths} for p in supported_precisions}
+    ] = {
+        p: {path.compile_path: {} for path in paths}
+        for p, paths in enabled_test_paths.items()
+    }
     profile_failures: dict[
         Precision, dict[ScorecardProfilePath, dict[str, ProfileScorecardJob]]
-    ] = {p: {x: {} for x in export_paths} for p in supported_precisions}
+    ] = {p: {path: {} for path in paths} for p, paths in enabled_test_paths.items()}
     too_slow_profile_jobs: dict[
         Precision, dict[ScorecardProfilePath, dict[str, ProfileScorecardJob]]
-    ] = {p: {x: {} for x in export_paths} for p in supported_precisions}
+    ] = copy.deepcopy(profile_failures)
 
     has_profile_jobs: dict[Precision, dict[ScorecardProfilePath, bool]] = {
-        p: {} for p in supported_precisions
+        p: {} for p in enabled_test_paths
     }
 
     default_device = ScorecardDevice.get(device_name=code_gen_config.default_device)
@@ -166,14 +164,12 @@ def update_code_gen_failure_reasons(
                 ):
                     too_slow_profile_jobs[precision][path][component_id] = profile_job
 
-    for_each_scorecard_path_and_device(
-        ScorecardProfilePath,
-        process_model,
-        supported_precisions,
-        include_devices=list({default_device, *canary_devices}),
-        include_paths=export_paths,
-    )
+    for precision, sc_paths in enabled_test_paths.items():
+        for path in sc_paths:
+            for device in {default_device, *canary_devices}:
+                process_model(precision, path, device)
 
+    supported_precisions = list(enabled_test_paths.keys())
     _clean_old_failure_reasons(
         precisions=supported_precisions,
         code_gen_config=code_gen_config,
@@ -182,8 +178,8 @@ def update_code_gen_failure_reasons(
     )
 
     # Add new failure reasons
-    for precision in supported_precisions:
-        for path in export_paths:
+    for precision, sc_paths in enabled_test_paths.items():
+        for path in sc_paths:
             if not path.supports_precision(precision):
                 path_failure_reason = f"{path.runtime} does not support {precision!s}"
             elif failed_compile_jobs := compile_failures[precision][path.compile_path]:
@@ -223,7 +219,7 @@ def update_code_gen_accuracy_failure_reasons(
     supported_precisions = get_model_test_precisions(
         model_id,
         set(code_gen_config.supported_precisions),
-        code_gen_config.can_use_quantize_job,
+        can_use_quantize_job=code_gen_config.can_use_quantize_job,
     )
 
     _clean_old_failure_reasons(
@@ -256,24 +252,27 @@ def update_code_gen_accuracy_failure_reasons(
 
 def update_model_publish_status(model_info: QAIHMModelInfo) -> bool:
     """Update the model publishing status based on failure reasons. Returns true if the status was changed, false otherwise."""
-    cj = model_info.code_gen_config
+    cg = model_info.code_gen_config
 
     # Update model status & reason, if applicable
     SCORECARD_STATUS_REASON = "No successful runtimes in scorecard (this field was auto-populated by the scorecard run)"
-    if cj.supports_at_least_1_runtime:
-        if (
+    if cg.supports_at_least_1_runtime:
+        # Promote PENDING or PRIVATE (with scorecard reason) to PUBLIC
+        if model_info.status == MODEL_STATUS.PENDING or (
             model_info.status == MODEL_STATUS.PRIVATE
             and model_info.status_reason == SCORECARD_STATUS_REASON
         ):
             model_info.status = MODEL_STATUS.PUBLIC
             model_info.status_reason = None
-            print(f"{model_info.id} | Removed Status Reason and set model to PUBLIC")
+            print(f"{model_info.id} | Set model to PUBLIC")
             return True
     elif model_info.status == MODEL_STATUS.PUBLIC:
+        # Demote PUBLIC to PRIVATE if no longer eligible
         model_info.status = MODEL_STATUS.PRIVATE
         model_info.status_reason = SCORECARD_STATUS_REASON
-        print(f"{model_info.id} | Added Status Reason and set model to PRIVATE")
+        print(f"{model_info.id} | Set model to PRIVATE: {SCORECARD_STATUS_REASON}")
         return True
+    # Note: PENDING stays PENDING if no successful runtimes yet
 
     return False
 

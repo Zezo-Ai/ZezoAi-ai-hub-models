@@ -11,8 +11,21 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 
 set_strict_mode
 
-install_aws_cli
-run_as_root apt-get install -y python3-opencv cmake libportaudio2 ffmpeg mecab libmecab-dev mecab-ipadic-utf8 libegl-dev
+start_group "Ubuntu install: update repositories"
+    APT_GPG_FILE=/etc/apt/trusted.gpg.d/apt.github-cli.gpg
+    wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | run_as_root tee "$APT_GPG_FILE" > /dev/null
+
+    APT_SOURCE_FILE=/etc/apt/sources.list.d/github-cli.list
+    echo "deb [arch=$(run_as_root dpkg --print-architecture) signed-by=$APT_GPG_FILE] https://cli.github.com/packages stable main" | run_as_root tee "$APT_SOURCE_FILE" > /dev/null
+
+    run_as_root apt-get update
+end_group
+
+start_group "Ubuntu Install: install/upgrade packages"
+    install_aws_cli
+    run_as_root apt-get install -y gh python3-opencv cmake libportaudio2 ffmpeg libegl-dev
+end_group
+
 start_group "Ubuntu install: uv"
     if [ ! -x /usr/local/bin/uv ] || [ "$(uv --version)" != "uv 0.6.14" ]; then
         wget https://github.com/astral-sh/uv/releases/download/0.6.14/uv-installer.sh

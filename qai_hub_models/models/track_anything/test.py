@@ -45,8 +45,7 @@ def test_app() -> None:
     output = np.asarray(app.track(frames, mask, raw_output=True))
     expected = load_numpy(OUTPUT_MASK.fetch())
 
-    assert_most_close(output, expected, 0.005)
-    np.testing.assert_allclose(output, expected, rtol=0.02, atol=0.01)
+    assert_most_close(output, expected, 0.005, rtol=0.001, atol=0.001)
 
 
 @skip_clone_repo_check

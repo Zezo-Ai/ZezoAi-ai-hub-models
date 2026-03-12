@@ -18,6 +18,7 @@ from qai_hub_models.utils.envvar_bases import (
     QAIHMStringEnvvar,
     QAIHMStringListEnvvar,
     QAIHMStrSetWithEnumEnvvar,
+    pytest_cli_envvar,
 )
 from qai_hub_models.utils.hub_clients import get_default_hub_deployment
 from qai_hub_models.utils.path_helpers import get_git_branch
@@ -46,6 +47,7 @@ class SpecialModelSetting(Enum):
         return self.value
 
 
+@pytest_cli_envvar
 class EnabledModelsEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialModelSetting]):
     """
     The list of models enabled for testing.
@@ -74,7 +76,13 @@ class EnabledModelsEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialModelSetting]):
 
     VARNAME = "QAIHM_TEST_MODELS"
     CLI_ARGNAMES = ["--models"]
-    CLI_HELP_MESSAGE = "Comma-separated list of models to enable."
+    CLI_HELP_MESSAGE = """Comma-separated list of models to enable.
+Models are identified by their folder name in qai_hub_models/models or by their yaml file name in qai_hub_models/scorecard/internal/static_models.
+Special options:
+ * 'all' -- Enable all models
+ * 'pytorch' -- Enable pytorch model recipes (all models under qai_hub_models/models)
+ * 'static' -- Enable internal test models in qai_hub_models/scorecard/internal
+"""
     SPECIAL_SETTING_ENUM = SpecialModelSetting
 
     @classmethod
@@ -102,6 +110,7 @@ class SpecialPrecisionSetting(Enum):
         return self.value
 
 
+@pytest_cli_envvar
 class EnabledPrecisionsEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialPrecisionSetting]):
     """
     The list of precisions enabled for testing.
@@ -127,7 +136,15 @@ class EnabledPrecisionsEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialPrecisionSetting]
 
     VARNAME = "QAIHM_TEST_PRECISIONS"
     CLI_ARGNAMES = ["--precisions"]
-    CLI_HELP_MESSAGE = "Comma-separated list of precisions to enable."
+    CLI_HELP_MESSAGE = """Comma-separated list of precisions to enable.
+Precisions are identified by the defined options in qai_hub_models/models/common.py::Precision.
+Special options:
+ * 'default' -- Enable supported precisions for each model
+ * 'default_minus_float' -- Enable supported precisions for each model except float
+ * 'default_quantized' -- Enable supported quantized precisions for each model (e.g. w8a16, w8a8, etc.)
+ * 'bench' -- Enable precisions used by the weekly dev scorecard
+If a precision is specified explicitly (not through a special option), it is enabled regardless of whether it's included in the 'supported' set of precisions for each model.
+"""
     SPECIAL_SETTING_ENUM = SpecialPrecisionSetting
 
     @classmethod
@@ -147,6 +164,7 @@ class SpecialPathSetting(Enum):
         return self.value
 
 
+@pytest_cli_envvar
 class EnabledPathsEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialPathSetting]):
     """
     The list of scorecard profile paths (runtimes) enabled for testing.
@@ -165,18 +183,20 @@ class EnabledPathsEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialPathSetting]):
 
                 Special Path Settings:
                     See SpecialPathSetting
-
-    Discussion:
-        You can get enabled paths via this API:
-        ```
-        from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
-        enabled_paths = ScorecardProfilePath.all_paths(enabled=True)
-        ```
     """
 
     VARNAME = "QAIHM_TEST_PATHS"
     CLI_ARGNAMES = ["--runtimes", "--paths"]
-    CLI_HELP_MESSAGE = "Comma-separated list of profile paths / runtimes to enable."
+    CLI_HELP_MESSAGE = """Comma-separated list of profile paths / runtimes to enable.
+Paths can be specified by their full name (e.g. tflite, qnn_dlc, onnx) or by a prefix that matches multiple paths (e.g. 'qnn' would match both 'qnn_dlc' and 'qnn_context_binary').
+Path names map to the enum values in qai_hub_models/scorecard/path_profile.py::ScorecardProfilePath
+
+Special options:
+ * 'all' -- Enable all paths
+ * 'default' -- Enable default set of paths used by CI & scorecard
+
+"""
+
     SPECIAL_SETTING_ENUM = SpecialPathSetting
 
     @classmethod
@@ -196,6 +216,7 @@ class SpecialDeviceSetting(Enum):
         return self.value
 
 
+@pytest_cli_envvar
 class EnabledDevicesEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialDeviceSetting]):
     """
     The list of scorecard devices enabled for testing.
@@ -221,7 +242,14 @@ class EnabledDevicesEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialDeviceSetting]):
 
     VARNAME = "QAIHM_TEST_DEVICES"
     CLI_ARGNAMES = ["--devices"]
-    CLI_HELP_MESSAGE = "Comma-separated list of devices to enable. Device names can be found in qai_hub_models/scorecard/device.py. Example: cs_8_elite"
+    CLI_HELP_MESSAGE = """Comma-separated list of devices to enable.
+Device names can be found in qai_hub_models/scorecard/device.py. Example: cs_8_elite
+
+Special options:
+ * 'all' -- Enable all devices
+ * 'canary' -- Enable devices tested by CI
+"""
+
     SPECIAL_SETTING_ENUM = SpecialDeviceSetting
 
     @classmethod
@@ -241,6 +269,7 @@ class EnabledDevicesEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialDeviceSetting]):
         return result
 
 
+@pytest_cli_envvar
 class QAIRTVersionEnvvar(QAIHMStringEnvvar):
     """
     The QAIRT version used for compile and profile jobs.
@@ -287,6 +316,7 @@ class QAIRTVersionEnvvar(QAIHMStringEnvvar):
         return QAIRTVersion(value)
 
 
+@pytest_cli_envvar
 class IgnoreKnownFailuresEnvvar(QAIHMBoolEnvvar):
     """
     If this is false, test infra won't run model + runtime + precision combos that have failure reasons set in code-gen.yaml.
@@ -305,25 +335,7 @@ class IgnoreKnownFailuresEnvvar(QAIHMBoolEnvvar):
         return False
 
 
-class EnableAsyncTestingEnvvar(QAIHMBoolEnvvar):
-    """
-    When this is false, tests in `test_generated.py` run the entire export script. For example, `test_profile` will run the required compile job.
-    The tests will wait for completion of the job and assert on the job's final state.
-
-    When this is true, tests in `test_generated.py` must be run in a specific sequence. For example, `test_compile` must be run before `test_profile`.
-    Each test runs a job and caches its job ID to a file (in QAIHM_TEST_ARTIFACTS_DIR) rather than waiting for job completion.
-    The cached job IDs are then picked up by downstream tests.
-    """
-
-    VARNAME = "QAIHM_TEST_HUB_ASYNC"
-    CLI_ARGNAMES = ["--enable-test-async"]
-    CLI_HELP_MESSAGE = "Enable if tests should run asynchronously--that is, compile / profile / inference jobs will be submitted in separate tests."
-
-    @classmethod
-    def default(cls) -> bool:
-        return False
-
-
+@pytest_cli_envvar
 class IgnoreDeviceJobCacheEnvvar(QAIHMBoolEnvvar):
     """
     If this is false, when targeting prod, profile tests will check if the prerequisite compile job produced the same asset as last week's scorecard.
@@ -342,6 +354,7 @@ class IgnoreDeviceJobCacheEnvvar(QAIHMBoolEnvvar):
         return False
 
 
+@pytest_cli_envvar
 class ArtifactsDirEnvvar(QAIHMPathEnvvar):
     """The directory where all intermediate and results artifacts from scorecard are stored."""
 
@@ -366,6 +379,7 @@ class StaticModelsDirEnvvar(QAIHMPathEnvvar):
         return Path(os.path.dirname(__file__)) / "internal" / "models"
 
 
+@pytest_cli_envvar
 class DeploymentEnvvar(QAIHMStringEnvvar):
     """The deployment to target."""
 
@@ -390,6 +404,7 @@ class DeploymentListEnvvar(QAIHMStringListEnvvar):
         return [DeploymentEnvvar.default()]
 
 
+@pytest_cli_envvar
 class S3ArtifactsDirEnvvar(QAIHMPathEnvvar):
     """The folder location on AWS at which uploaded, `zipped` assets generated by export scripts should be stored."""
 
@@ -399,7 +414,7 @@ class S3ArtifactsDirEnvvar(QAIHMPathEnvvar):
 
     @classmethod
     def default(cls) -> Path:
-        return Path()
+        return Path("unset")
 
 
 #
@@ -458,23 +473,3 @@ class DateFormatEnvvar(QAIHMDateFormatEnvvar):
 
     DATE_ENVVAR = DateEnvvar
     DATE_FORMAT_ENVVAR = FormatEnvvar
-
-
-class AsyncHubFailuresAsTestFailuresEnvvar(QAIHMBoolEnvvar):
-    """
-    This is only applicable if QAIHM_TEST_HUB_ASYNC is set.
-
-    If True, AI Hub Workbench job failures submitted in a previous step will cause downstream tests to fail.
-    For example, if a compile job fails or is missing, the tests that run profile and inference on the same model will also fail.
-
-    If False, AI Hub Workbench job failures submitted in a previous step will cause downstream tests to be skipped.
-    For example, if a compile job fails or is missing, the tests that run profile and inference on the same model will be skipped.
-    """
-
-    VARNAME = "QAIHM_TEST_ASYNC_HUB_FAILURES_AS_TEST_FAILURES"
-    CLI_ARGNAMES = ["--async-hub-failures-as-test-failures"]
-    CLI_HELP_MESSAGE = " This is only applicable if QAIHM_TEST_HUB_ASYNC is set. If true, AI Hub Workbench job failures submitted in a previous step will cause downstream tests to fail rather than be skipped."
-
-    @classmethod
-    def default(cls) -> bool:
-        return False

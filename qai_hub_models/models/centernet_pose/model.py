@@ -179,3 +179,7 @@ class CenterNetPose(CenterNet):
     @staticmethod
     def calibration_dataset_name() -> str:
         return "cocobody"
+
+    @staticmethod
+    def get_channel_last_inputs() -> list[str]:
+        return ["image"]

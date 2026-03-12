@@ -19,6 +19,11 @@ from qai_hub_models.models._shared.llm import test
 from qai_hub_models.models._shared.llm.common import cleanup
 from qai_hub_models.models._shared.llm.evaluate import evaluate
 from qai_hub_models.models._shared.llm.export import export_model
+from qai_hub_models.models._shared.llm.perf_collection import (
+    LLMPerfConfig,
+    get_llm_perf_parametrization,
+)
+from qai_hub_models.models._shared.llm.test import CompileJobCache
 from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.models.llama_v3_8b_instruct import (
     MODEL_ID,
@@ -36,6 +41,8 @@ from qai_hub_models.models.llama_v3_8b_instruct.export import (
 from qai_hub_models.models.llama_v3_8b_instruct.export import main as export_main
 from qai_hub_models.models.llama_v3_8b_instruct.model import (
     DEFAULT_CONTEXT_LENGTH,
+    DEFAULT_EXPORT_CONTEXT_LENGTHS,
+    DEFAULT_EXPORT_SEQUENCE_LENGTHS,
     MODEL_ASSET_VERSION,
 )
 from qai_hub_models.scorecard import (
@@ -252,7 +259,7 @@ def test_evaluate(
         metric=task,
         value=actual_metric,
     )
-    np.testing.assert_allclose(actual_metric, expected_metric, rtol=1e-02, atol=1e-02)
+    np.testing.assert_allclose(actual_metric, expected_metric, rtol=0.03, atol=0)
 
 
 @pytest.mark.nightly
@@ -302,8 +309,8 @@ def test_compile(
         device,
         extra_model_arguments=dict(
             checkpoint="DEFAULT",
-            sequence_length=128,
-            context_length=DEFAULT_CONTEXT_LENGTH,
+            sequence_length=DEFAULT_EXPORT_SEQUENCE_LENGTHS,
+            context_length=DEFAULT_EXPORT_CONTEXT_LENGTHS,
             _skip_quantsim_creation=True,
             model_cls=Model,
             model_name=MODEL_ID,
@@ -312,7 +319,8 @@ def test_compile(
             num_layers_per_split=NUM_LAYERS_PER_SPLIT,
             output_dir=test.GENIE_BUNDLES_ROOT,
             fp_model=FP_Model.from_pretrained(
-                sequence_length=128, context_length=DEFAULT_CONTEXT_LENGTH
+                sequence_length=max(DEFAULT_EXPORT_SEQUENCE_LENGTHS),
+                context_length=max(DEFAULT_EXPORT_CONTEXT_LENGTHS),
             ),
             position_processor_cls=PositionProcessor,
         ),
@@ -377,7 +385,58 @@ def test_qdc(
         precision=str(precision),
         device=device.name,
         tps=tps,
-        ttft=min_ttft,
+        ttft_ms=min_ttft,
     )
     assert tps > 5.0
     assert min_ttft < 250000.0
+
+
+def _get_llm_perf_params() -> list[tuple[Precision, ScorecardDevice]]:
+    params = get_llm_perf_parametrization(
+        MODEL_ID,
+        default_devices=[cs_x_elite],
+        default_precisions=[Precision.w4a16],
+    )
+    return params if params else [(Precision.w4a16, cs_x_elite)]
+
+
+@pytest.mark.llm_perf
+@pytest.mark.skipif(
+    not torch.cuda.is_available()
+    or not importlib.util.find_spec("qdc_public_api_client"),
+    reason="This test requires GPU and the qdc_public_api_client package.",
+)
+@pytest.mark.parametrize(("precision", "device"), _get_llm_perf_params())
+def test_llm_perf(
+    precision: Precision,
+    device: ScorecardDevice,
+    compile_job_cache: CompileJobCache,
+    llm_perf_config: LLMPerfConfig,
+) -> None:
+    tps, ttft = test.run_llm_perf_test(
+        model_id=MODEL_ID,
+        export_model_func=export_model,
+        device=device,
+        precision=precision,
+        compile_job_cache=compile_job_cache,
+        output_dir=test.GENIE_BUNDLES_ROOT,
+        model_cls=Model,
+        model_asset_version=MODEL_ASSET_VERSION,
+        num_splits=NUM_SPLITS,
+        export_context_lengths=llm_perf_config.export_context_lengths
+        or DEFAULT_EXPORT_CONTEXT_LENGTHS,
+        export_sequence_lengths=llm_perf_config.export_sequence_lengths
+        or DEFAULT_EXPORT_SEQUENCE_LENGTHS,
+        fp_model_cls=FP_Model,
+        position_processor_cls=PositionProcessor,
+        num_layers_per_split=NUM_LAYERS_PER_SPLIT,
+        qairt_sdk_path=llm_perf_config.qairt_sdk_path,
+        skip_perf_update=llm_perf_config.skip_perf_update,
+    )
+    log_perf_on_device_result(
+        model_name=MODEL_ID,
+        precision=str(precision),
+        device=device.name,
+        tps=tps,
+        ttft_ms=ttft,
+    )

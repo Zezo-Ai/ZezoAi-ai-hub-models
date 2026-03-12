@@ -103,6 +103,10 @@ class FOMMDetector(BaseModel):
     def get_output_names() -> list[str]:
         return ["keypoints", "jacobian"]
 
+    @staticmethod
+    def get_channel_last_inputs() -> list[str]:
+        return ["image"]
+
 
 class FOMMGenerator(BaseModel):
     """Given keypoints from a source image, a target image, and the norm of the keypoints from the target,
@@ -183,6 +187,10 @@ class FOMMGenerator(BaseModel):
     @staticmethod
     def get_output_names() -> list[str]:
         return ["output_image"]
+
+    @staticmethod
+    def get_channel_last_inputs() -> list[str]:
+        return ["image"]
 
 
 @CollectionModel.add_component(FOMMDetector)

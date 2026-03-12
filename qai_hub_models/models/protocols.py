@@ -202,6 +202,7 @@ class PretrainedHubModelProtocol(HubModelProtocol, FromPretrainedProtocol, Proto
         precision: Precision,
         other_compile_options: str = "",
         device: Device | None = None,
+        context_graph_name: str | None = None,
     ) -> str:
         """AI Hub Workbench compile options recommended for the model."""
         ...

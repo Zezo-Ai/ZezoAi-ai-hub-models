@@ -11,6 +11,7 @@ from qai_hub_models.scorecard.device import ScorecardDevice
 
 WEBSITE_CHIPSET_ORDER = [
     "qualcomm-snapdragon-8-elite",
+    "qualcomm-snapdragon-x2-elite",
     "qualcomm-snapdragon-x-elite",
     "qualcomm-snapdragon-8gen3",
     "qualcomm-snapdragon-8gen2",
@@ -32,9 +33,19 @@ WEBSITE_CHIPSET_ORDER = [
 ]
 
 
+def _sanitize_chipset_name(name: str) -> str:
+    """
+    We want some chipset names to appear differently on the website and perf.yaml
+    compared to the name registered in workbench.
+    """
+    if name.endswith("-for-galaxy"):
+        return name[: -len("-for-galaxy")]
+    return name
+
+
 def sorted_chipsets(chips: set[str]) -> list[str]:
     """Sort the set of chipsets in order they should show up on the website."""
-    chips = set(chips)
+    chips = {_sanitize_chipset_name(c) for c in chips}
 
     out = []
     for chipset in WEBSITE_CHIPSET_ORDER:

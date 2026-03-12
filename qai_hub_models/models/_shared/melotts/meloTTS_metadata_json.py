@@ -96,7 +96,6 @@ class TTSMetadata(BaseQAIHMConfig):
     model_type: str = "melo"
     runtime: RuntimeInfo | None = None
     assets: ModelAssets | None = None
-    tool_versions: ToolVersions | None = None
 
     # ------------------------------------------------------------------
     # Builds a TTSMetadata instance from model files
@@ -185,7 +184,6 @@ class TTSMetadata(BaseQAIHMConfig):
             capabilities=capabilities,
             runtime=runtime,
             assets=assets,
-            tool_versions=tool_versions,
         )
 
 

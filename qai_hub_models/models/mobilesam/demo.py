@@ -4,21 +4,25 @@
 # ---------------------------------------------------------------------
 
 
-import argparse
-
 import torch
 from mobile_sam.utils.transforms import ResizeLongestSide
 
 from qai_hub_models.models._shared.sam.app import SAMApp, SAMInputImageLayout
 from qai_hub_models.models._shared.sam.utils import show_image
 from qai_hub_models.models.mobilesam.model import (
-    DEFAULT_MODEL_TYPE,
     MODEL_ASSET_VERSION,
     MODEL_ID,
     SMALL_MODEL_TYPE,
     MobileSAM,
 )
+from qai_hub_models.utils.args import (
+    demo_model_components_from_cli_args,
+    get_model_cli_parser,
+    get_on_device_demo_parser,
+    validate_on_device_demo_args,
+)
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
+from qai_hub_models.utils.evaluate import EvalMode
 
 IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "truck.jpg"
@@ -28,18 +32,12 @@ IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
 # The demo will output image with segmentation mask applied for input points
 def main(is_test: bool = False) -> None:
     # Demo parameters
-    parser = argparse.ArgumentParser()
+    parser = get_model_cli_parser(MobileSAM)
     parser.add_argument(
         "--image",
         type=str,
         default=IMAGE_ADDRESS,
         help="image file path or URL",
-    )
-    parser.add_argument(
-        "--model-type",
-        type=str,
-        default=DEFAULT_MODEL_TYPE,
-        help=f"SAM model type to load. Tested with model type `{DEFAULT_MODEL_TYPE}`.",
     )
     parser.add_argument(
         "--point-coordinates",
@@ -54,22 +52,30 @@ def main(is_test: bool = False) -> None:
         default=True,
         help="If True, returns single mask. For multiple points multiple masks could lead to better results.",
     )
-    args = parser.parse_args(["--model-type", SMALL_MODEL_TYPE] if is_test else None)
+    get_on_device_demo_parser(parser, add_output_dir=True)
 
-    # # Load image & model
-    # model = demo_model_from_cli_args(model_cls, MODEL_ID, args)
-    # coordinates = list(filter(None, args.point_coordinates.split(";")))
+    args = parser.parse_args(["--model-type", SMALL_MODEL_TYPE] if is_test else None)
+    validate_on_device_demo_args(args, MODEL_ID)
+
     coordinates = [coord for coord in args.point_coordinates.split(";") if coord]
 
     # Load Application
     wrapper = MobileSAM.from_pretrained(model_type=args.model_type)
+    if args.eval_mode == EvalMode.ON_DEVICE:
+        encoder, decoder = demo_model_components_from_cli_args(
+            MobileSAM, MODEL_ID, args
+        )
+    else:
+        encoder = wrapper.encoder
+        decoder = wrapper.decoder
     app = SAMApp(
         wrapper.sam.image_encoder.img_size,
         wrapper.sam.mask_threshold,
         SAMInputImageLayout[wrapper.sam.image_format],
-        [wrapper.encoder],
-        wrapper.decoder,
+        [encoder],  # type: ignore[list-item]
+        decoder,  # type: ignore[arg-type]
         ResizeLongestSide,
+        wrapper.sam.pixel_mean,
     )
 
     # Load Image
@@ -98,7 +104,7 @@ def main(is_test: bool = False) -> None:
     )
 
     if not is_test:
-        show_image(image, generated_mask)
+        show_image(image, generated_mask, input_coords, args.output_dir)
 
 
 if __name__ == "__main__":

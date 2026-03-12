@@ -5,9 +5,10 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 import torch
+from qai_hub.client import Device
 from typing_extensions import Self
 
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
@@ -139,10 +140,11 @@ class LiteHRNet(BaseModel):
         target_runtime: TargetRuntime,
         precision: Precision,
         other_compile_options: str = "",
-        device: Any = None,
+        device: Device | None = None,
+        context_graph_name: str | None = None,
     ) -> str:
         compile_options = super().get_hub_compile_options(
-            target_runtime, precision, other_compile_options, device
+            target_runtime, precision, other_compile_options, device, context_graph_name
         )
         if target_runtime != TargetRuntime.ONNX:
             compile_options += " --truncate_64bit_tensors"

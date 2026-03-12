@@ -12,7 +12,6 @@ import qai_hub as hub
 from pydantic import Field
 from typing_extensions import assert_never
 
-from qai_hub_models.models.common import InferenceEngine
 from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
@@ -213,8 +212,8 @@ class DevicesAndChipsetsYaml(BaseQAIHMConfig):
     to create model card webpages.
     """
 
-    scorecard_path_to_website_runtime: dict[ScorecardProfilePath, InferenceEngine] = (
-        Field(default_factory=dict)
+    scorecard_path_to_website_runtime: dict[ScorecardProfilePath, str] = Field(
+        default_factory=dict
     )
     scorecard_path_assets_require_chipset: dict[ScorecardProfilePath, bool] = Field(
         default_factory=dict
@@ -242,7 +241,7 @@ class DevicesAndChipsetsYaml(BaseQAIHMConfig):
         for profile_path in ScorecardProfilePath:
             if profile_path.is_public:
                 out.scorecard_path_to_website_runtime[profile_path] = (
-                    profile_path.runtime.inference_engine
+                    profile_path.website_runtime_name
                 )
                 out.scorecard_path_extensions[profile_path] = (
                     f".{profile_path.runtime.file_extension}"

@@ -13,6 +13,7 @@ import torch
 from transformers import GenerationConfig, TextStreamer, set_seed
 
 from qai_hub_models.models._shared.llm.model import (
+    DEFAULT_EXPORT_SEQUENCE_LENGTHS,
     LLM_QNN,
     LLM_AIMETOnnx,
     LLMBase,
@@ -135,7 +136,7 @@ class ChatApp:
 
         models: list[LLM_Loader | LLMBase | LLM_AIMETOnnx | LLM_QNN] = [
             LLM_Loader(self.model_cls, sequence_length, model_params, host_device)
-            for sequence_length in (1, 128)
+            for sequence_length in DEFAULT_EXPORT_SEQUENCE_LENGTHS
         ]
         if "fp_model" in model_from_pretrained_extra:
             config = model_from_pretrained_extra["fp_model"].llm_config

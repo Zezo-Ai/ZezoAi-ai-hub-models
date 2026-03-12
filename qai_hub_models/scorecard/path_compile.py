@@ -31,7 +31,10 @@ class ScorecardCompilePath(Enum):
     PRECOMPILED_QNN_ONNX = "precompiled_qnn_onnx"
     GENIE = "genie"
     ONNXRUNTIME_GENAI = "onnxruntime_genai"
+    VOICE_AI = "voice_ai"
+
     ONNX_FP16 = "onnx_fp16"
+
     LLAMA_CPP_CPU = "llama_cpp_cpu"
     LLAMA_CPP_GPU = "llama_cpp_gpu"
     LLAMA_CPP_NPU = "llama_cpp_npu"
@@ -47,32 +50,6 @@ class ScorecardCompilePath(Enum):
             x for x in ScorecardProfilePath if x.enabled and x.compile_path == self
         ]
         return len(profile_paths) > 0
-
-    @staticmethod
-    def all_paths(
-        enabled: bool | None = None,
-        supports_precision: Precision | None = None,
-        is_aot_compiled: bool | None = None,
-        include_genai_paths: bool = False,
-    ) -> list[ScorecardCompilePath]:
-        """
-        Get all compile paths that match the given attributes.
-        If an attribute is None, it is ignored when filtering paths.
-        """
-        return [
-            path
-            for path in ScorecardCompilePath
-            if (enabled is None or path.enabled == enabled)
-            and (
-                supports_precision is None
-                or path.supports_precision(supports_precision)
-            )
-            and (
-                is_aot_compiled is None
-                or path.runtime.is_aot_compiled == is_aot_compiled
-            )
-            and (include_genai_paths or (not path.runtime.is_exclusively_for_genai))
-        ]
 
     @property
     def runtime(self) -> TargetRuntime:
@@ -103,6 +80,8 @@ class ScorecardCompilePath(Enum):
             return TargetRuntime.LLAMA_CPP_GPU
         if self == ScorecardCompilePath.LLAMA_CPP_NPU:
             return TargetRuntime.LLAMA_CPP_NPU
+        if self == ScorecardCompilePath.VOICE_AI:
+            return TargetRuntime.VOICE_AI
         assert_never(self)
 
     @property

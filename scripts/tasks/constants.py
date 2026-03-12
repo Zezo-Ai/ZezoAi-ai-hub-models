@@ -64,4 +64,6 @@ PUBLIC_BENCH_MODELS = os.path.join(
 )
 
 # Requirements Path
+REQUIREMENTS_PATH = os.path.join(PY_PACKAGE_SRC_ROOT, "requirements.txt")
+DEV_REQUIREMENTS_PATH = os.path.join(PY_PACKAGE_SRC_ROOT, "requirements-dev.txt")
 GLOBAL_REQUIREMENTS_PATH = os.path.join(PY_PACKAGE_SRC_ROOT, "global_requirements.txt")

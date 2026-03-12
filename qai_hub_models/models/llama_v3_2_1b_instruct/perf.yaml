@@ -1,17 +1,19 @@
 supported_devices:
-  - Snapdragon X Elite CRD
-  - Snapdragon X2 Elite CRD
-  - Snapdragon 8 Elite QRD
-  - SA8295P ADP
-  - SA8775P ADP
-  - Snapdragon 8 Elite Gen 5 QRD
+- Snapdragon X Elite CRD
+- Snapdragon X2 Elite CRD
+- Snapdragon 8 Elite QRD
+- Snapdragon 8 Elite Gen 5 QRD
+- SA8295P ADP
+- SA8775P ADP
+- Dragonwing IQ-9075 EVK
 supported_chipsets:
-  - qualcomm-snapdragon-8-elite
-  - qualcomm-snapdragon-x-elite
-  - qualcomm-snapdragon-x2-elite
-  - qualcomm-sa8295p
-  - qualcomm-sa8775p
-  - qualcomm-snapdragon-8-elite-gen5
+- qualcomm-snapdragon-x-elite
+- qualcomm-snapdragon-x2-elite
+- qualcomm-snapdragon-8-elite
+- qualcomm-snapdragon-8-elite-gen5
+- qualcomm-sa8295p
+- qualcomm-sa8775p
+- qualcomm-qcs9075
 precisions:
   w4:
     components:
@@ -20,43 +22,51 @@ precisions:
           Snapdragon 8 Elite Gen 5 QRD:
             genie:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 54.865
-                    max: 1755.680
-                  tokens_per_second: 33.14
+              - context_length: 4096
+                tokens_per_second: 33.14
+                time_to_first_token_range_milliseconds:
+                  min: 54.865
+                  max: 1755.68
           Snapdragon 8 Elite QRD:
             genie:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 75.987
-                    max: 2431.584
-                  tokens_per_second: 26.95
+              - context_length: 4096
+                tokens_per_second: 26.95
+                time_to_first_token_range_milliseconds:
+                  min: 75.987
+                  max: 2431.584
           SA8295P ADP:
             genie:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 225.0
-                    max: 7200.0
-                  tokens_per_second: 11.0
+              - context_length: 4096
+                tokens_per_second: 11.0
+                time_to_first_token_range_milliseconds:
+                  min: 225.0
+                  max: 7200.0
           Snapdragon X Elite CRD:
             genie:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 167.680
-                    max: 5365.760
-                  tokens_per_second: 11.97
+              - context_length: 4096
+                tokens_per_second: 11.97
+                time_to_first_token_range_milliseconds:
+                  min: 167.68
+                  max: 5365.76
           Snapdragon X2 Elite CRD:
             genie:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 58.585
-                    max: 1874.720
-                  tokens_per_second: 27.95
+              - context_length: 4096
+                tokens_per_second: 27.95
+                time_to_first_token_range_milliseconds:
+                  min: 58.585
+                  max: 1874.72
+          Dragonwing IQ-9075 EVK:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 16.298914909362793
+                time_to_first_token_range_milliseconds:
+                  min: 156.1625
+                  max: 4997.2
   w4a16:
     components:
       Llama-v3.2-1B-Instruct:
@@ -64,40 +74,48 @@ precisions:
           Snapdragon 8 Elite Gen 5 QRD:
             genie:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 30.247
-                    max: 967.904
-                  tokens_per_second: 74.39
+              - context_length: 4096
+                tokens_per_second: 74.39
+                time_to_first_token_range_milliseconds:
+                  min: 30.247
+                  max: 967.904
           Snapdragon 8 Elite QRD:
             genie:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 39.570
-                    max: 1266.240
-                  tokens_per_second: 64.14
+              - context_length: 4096
+                tokens_per_second: 64.14
+                time_to_first_token_range_milliseconds:
+                  min: 39.57
+                  max: 1266.24
           SA8775P ADP:
             genie:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 67.938
-                    max: 2174.016
-                  tokens_per_second: 32.61
+              - context_length: 4096
+                tokens_per_second: 32.61
+                time_to_first_token_range_milliseconds:
+                  min: 67.938
+                  max: 2174.016
           Snapdragon X Elite CRD:
             genie:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 69.256
-                    max: 2216.192
-                  tokens_per_second: 23.70
+              - context_length: 4096
+                tokens_per_second: 23.7
+                time_to_first_token_range_milliseconds:
+                  min: 69.256
+                  max: 2216.192
           Snapdragon X2 Elite CRD:
             genie:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 50.183
-                    max: 1605.856
-                  tokens_per_second: 90.36
+              - context_length: 4096
+                tokens_per_second: 90.36
+                time_to_first_token_range_milliseconds:
+                  min: 50.183
+                  max: 1605.856
+          Dragonwing IQ-9075 EVK:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 40.44345893859863
+                time_to_first_token_range_milliseconds:
+                  min: 53.9733
+                  max: 1727.1456

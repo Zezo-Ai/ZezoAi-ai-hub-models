@@ -191,6 +191,6 @@ class GKT(BaseModel):
         return "nuscenes_bev_gkt"
 
     @staticmethod
-    def get_hub_litemp_percentage(precision: Precision) -> float:
+    def get_hub_litemp_percentage(_: Precision) -> float:
         """Returns the Lite-MP percentage value for the specified mixed precision quantization."""
-        return 4
+        return 10

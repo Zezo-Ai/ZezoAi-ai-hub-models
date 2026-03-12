@@ -125,9 +125,10 @@ class HfWhisperEncoder(BaseModel):
         precision: Precision,
         other_compile_options: str = "",
         device: Device | None = None,
+        context_graph_name: str | None = None,
     ) -> str:
         compile_options = super().get_hub_compile_options(
-            target_runtime, precision, other_compile_options, device
+            target_runtime, precision, other_compile_options, device, context_graph_name
         )
         if (
             precision == Precision.float
@@ -301,9 +302,10 @@ class HfWhisperDecoder(BaseModel):
         precision: Precision,
         other_compile_options: str = "",
         device: Device | None = None,
+        context_graph_name: str | None = None,
     ) -> str:
         compile_options = super().get_hub_compile_options(
-            target_runtime, precision, other_compile_options, device
+            target_runtime, precision, other_compile_options, device, context_graph_name
         )
         if (
             precision == Precision.float

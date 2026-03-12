@@ -186,6 +186,34 @@ class CollectionModel:
             for component_name, component in self.components.items()
         }
 
+    def get_component_precisions(
+        self,
+        precision: Precision,
+    ) -> dict[str, Precision]:
+        """
+        Resolve a top-level precision into per-component precisions.
+
+        For mixed precisions, each component's ``component_precision()`` is
+        queried. For uniform precisions, every component maps to the same value.
+
+        Parameters
+        ----------
+        precision
+            The top-level precision requested for the model.
+
+        Returns
+        -------
+        dict[str, Precision]
+            Mapping from component name to its precision.
+        """
+        if precision not in [Precision.mixed, Precision.mixed_with_float]:
+            return dict.fromkeys(self.component_class_names, precision)
+
+        return {
+            name: component.component_precision()
+            for name, component in self.components.items()
+        }
+
     def get_hub_profile_options(
         self,
         target_runtime: TargetRuntime,
@@ -595,10 +623,12 @@ class BaseModel(
                 compile_options += " --quantize_io_type uint8"
 
         if target_runtime.is_aot_compiled:
-            # Without this flag, graph names are random.
-            # Scorecard job caching relies on models keeping the same md5 hash if they haven't changed.
-            # By always setting this flag, we remove a source of randomness in compiled QNN assets.
-            compile_options += f" --qnn_options context_enable_graphs={context_graph_name or 'default_graph'}"
+            assert context_graph_name is not None, (
+                f"Must specify a context_graph_name to compile for runtime {target_runtime.value}."
+            )
+            compile_options += (
+                f" --qnn_options context_enable_graphs={context_graph_name}"
+            )
 
         if other_compile_options != "":
             return compile_options + " " + other_compile_options

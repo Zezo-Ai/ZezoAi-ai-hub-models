@@ -148,3 +148,7 @@ class CenterNet2D(CenterNet):
     @staticmethod
     def calibration_dataset_name() -> str:
         return "coco"
+
+    @staticmethod
+    def get_channel_last_inputs() -> list[str]:
+        return ["image"]

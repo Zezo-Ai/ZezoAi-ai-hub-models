@@ -304,6 +304,8 @@ class Encoder(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io false "
         compile_options = super().get_hub_compile_options(
             target_runtime,
             precision,
@@ -314,8 +316,6 @@ class Encoder(BaseModel):
         # # Must use --truncate_64bit_io when input tensors have type int64.
         if target_runtime != TargetRuntime.ONNX:
             compile_options += " --truncate_64bit_tensors --truncate_64bit_io "
-        if target_runtime.qairt_version_changes_compilation:
-            compile_options += " --quantize_full_type float16 --quantize_io false "
         return compile_options
 
     @staticmethod
@@ -426,16 +426,15 @@ class Flow(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
-        compile_options = super().get_hub_compile_options(
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io false "
+        return super().get_hub_compile_options(
             target_runtime,
             precision,
             other_compile_options,
             device,
             context_graph_name="flow",
         )
-        if target_runtime.qairt_version_changes_compilation:
-            compile_options += " --quantize_io false "
-        return compile_options
 
     @staticmethod
     def calibration_dataset_name() -> str:
@@ -494,16 +493,15 @@ class Decoder(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
-        compile_options = super().get_hub_compile_options(
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io false "
+        return super().get_hub_compile_options(
             target_runtime,
             precision,
             other_compile_options,
             device,
             context_graph_name="decoder",
         )
-        if target_runtime.qairt_version_changes_compilation:
-            compile_options += " --quantize_io false "
-        return compile_options
 
     @staticmethod
     def calibration_dataset_name() -> str:
@@ -617,16 +615,15 @@ class T5Encoder(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
-        compile_options = super().get_hub_compile_options(
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io false "
+        return super().get_hub_compile_options(
             target_runtime,
             precision,
             other_compile_options,
             device,
             context_graph_name="charsiu_encoder",
         )
-        if target_runtime.qairt_version_changes_compilation:
-            compile_options += " --quantize_io false "
-        return compile_options
 
     @staticmethod
     def component_precision() -> Precision:
@@ -855,16 +852,15 @@ class T5Decoder(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
-        compile_options = super().get_hub_compile_options(
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io false "
+        return super().get_hub_compile_options(
             target_runtime,
             precision,
             other_compile_options,
             device,
             context_graph_name="charsiu_decoder",
         )
-        if target_runtime.qairt_version_changes_compilation:
-            compile_options += " --quantize_io false "
-        return compile_options
 
     @staticmethod
     def component_precision() -> Precision:
@@ -947,6 +943,8 @@ class BertWrapper(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io false "
         compile_options = super().get_hub_compile_options(
             target_runtime,
             precision,
@@ -956,8 +954,6 @@ class BertWrapper(BaseModel):
         )
         if target_runtime != TargetRuntime.ONNX:
             compile_options += " --truncate_64bit_tensors --truncate_64bit_io "
-        if target_runtime.qairt_version_changes_compilation:
-            compile_options += " --quantize_io false "
         return compile_options
 
     @staticmethod
@@ -966,4 +962,4 @@ class BertWrapper(BaseModel):
 
     @staticmethod
     def component_precision() -> Precision:
-        return Precision.w16a16
+        return Precision.float

@@ -94,10 +94,10 @@ try:
     )
 
     from qai_hub_models.models._shared.llm._utils import (
+        _apply_int8_kv_cache_tying_and_lm_head,
+        _get_kv_io_map,
         _get_lm_head_weights,
         _set_lm_head_to_8b,
-        _set_tensors_to_output_8b_sym,
-        _tie_quantizers_for_kv_cache,
     )
     from qai_hub_models.utils.quantization_aimet_onnx import (
         ensure_min_aimet_onnx_version,
@@ -119,6 +119,9 @@ MIN_AIMET_ONNX_VERSION = "2.8.0"
 
 DEFAULT_SEQUENCE_LENGTH = 128
 DEFAULT_CONTEXT_LENGTH = 4096
+
+DEFAULT_EXPORT_SEQUENCE_LENGTHS: list[int] = [DEFAULT_SEQUENCE_LENGTH, 1]
+DEFAULT_EXPORT_CONTEXT_LENGTHS: list[int] = [DEFAULT_CONTEXT_LENGTH]
 
 DEFAULT_CALIBRATION_SEQ_LEN = 2048
 
@@ -286,41 +289,54 @@ def get_onnx_model(
         for name in input_specs
     ]
 
-    # Names are changed in 2.9, which can ruin a user's .onnx files. These
-    # files are cached, so we prevent users from running this export.
-    ensure_supported_version("torch", min_version="2.4.1", below_version="2.9")
-    with torch.no_grad():
-        safe_torch_onnx_export(
-            fp_model,
-            tuple(example_input),
+    data_full_path = os.path.join(os.path.dirname(path), "model.data")
+    data_backup_full_path = os.path.join(os.path.dirname(path), ".model.data")
+
+    # If the data file already exists, we need to preserve it. This may have
+    # quantization-modified weights (from algorithms like AdaScale), so if we
+    # re-export the model from PyTorch, we will revert the weights. To prevent
+    # this, we rename the original data file so it is not overwritten and
+    # restore it after the export.
+    already_has_data = os.path.isfile(data_full_path)
+    if already_has_data:
+        os.rename(data_full_path, data_backup_full_path)
+
+    try:
+        # Names are changed in 2.9, which can ruin a user's .onnx files. These
+        # files are cached, so we prevent users from running this export.
+        ensure_supported_version("torch", min_version="2.4.1", below_version="2.9")
+        with torch.no_grad():
+            safe_torch_onnx_export(
+                fp_model,
+                tuple(example_input),
+                path,
+                input_names=list(input_specs.keys()),
+                output_names=fp_model._get_output_names(
+                    fp_model.llm_config.num_hidden_layers
+                ),
+                opset_version=17,
+            )
+
+        fp_model.to(old_device)
+
+        onnx_model = onnx.load(path)
+        # Clean up multiple weights files
+        for file in glob.glob(os.path.join(os.path.dirname(path), "*.weight")):
+            os.remove(file)
+        for file in glob.glob(os.path.join(os.path.dirname(path), "onnx__*")):
+            os.remove(file)
+
+        onnx.save_model(
+            onnx_model,
             path,
-            input_names=list(input_specs.keys()),
-            output_names=fp_model._get_output_names(
-                fp_model.llm_config.num_hidden_layers
-            ),
-            opset_version=17,
+            save_as_external_data=True,
+            all_tensors_to_one_file=True,
+            location="model.data",
         )
 
-    fp_model.to(old_device)
-
-    onnx_model = onnx.load(path)
-    # Clean up multiple weights files
-    for file in glob.glob(os.path.join(os.path.dirname(path), "*.weight")):
-        os.remove(file)
-    for file in glob.glob(os.path.join(os.path.dirname(path), "onnx__*")):
-        os.remove(file)
-
-    data_full_path = os.path.join(os.path.dirname(path), "model.data")
-    if os.path.isfile(data_full_path):
-        os.remove(data_full_path)
-
-    onnx.save_model(
-        onnx_model,
-        path,
-        save_as_external_data=True,
-        all_tensors_to_one_file=True,
-        location="model.data",
-    )
+    finally:
+        if already_has_data:
+            os.rename(data_backup_full_path, data_full_path)
 
     load_external_data_for_model(onnx_model, os.path.dirname(path))
     if not return_model:
@@ -1115,15 +1131,12 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
     def _configure_quant_sim(
         cls, quant_sim: QuantizationSimModel, precision: Precision
     ) -> QuantizationSimModel:
-        # Setting the LM head weights to 8-bit.
-        _set_lm_head_to_8b(quant_sim)
-
         if precision == Precision.w4a16:
-            # Setting kv_cache and some other layers to 8-bit
-            _set_tensors_to_output_8b_sym(quant_sim)
-            # Tie kv_cache
-            _tie_quantizers_for_kv_cache(quant_sim)
+            kv_io_map = _get_kv_io_map(quant_sim)
+            quant_sim = _apply_int8_kv_cache_tying_and_lm_head(quant_sim, kv_io_map)
         elif precision == Precision.w4:
+            _set_lm_head_to_8b(quant_sim)
+
             # Set all activation quantizers to float16
             for op_name, qc_op in quant_sim.qc_quantize_op_dict.items():
                 if op_name in quant_sim.activation_names:
@@ -1145,8 +1158,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         # Make the directory for the output checkpoint
         os.makedirs(output_checkpoint, exist_ok=True)
         export_sequence_lengths = {
-            1,
-            DEFAULT_SEQUENCE_LENGTH,
+            *DEFAULT_EXPORT_SEQUENCE_LENGTHS,
             self.sequence_length,
             self.context_length // 2,
         }
@@ -1274,7 +1286,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
-        if not target_runtime.is_exclusively_for_genai:
+        if target_runtime not in [TargetRuntime.GENIE, TargetRuntime.ONNXRUNTIME_GENAI]:
             raise RuntimeError(
                 f"Unsupported target_runtime provided: {target_runtime}."
                 " Only Generative AI runtimes (Genie, ONNX Runtime GenAI) are supported."

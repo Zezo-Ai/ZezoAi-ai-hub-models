@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import os
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field, fields
 from datetime import datetime
 from typing import cast
@@ -15,10 +16,7 @@ from typing import cast
 from qai_hub_models.configs.info_yaml import MODEL_DOMAIN, MODEL_USE_CASE
 from qai_hub_models.configs.model_disable_reasons import ModelDisableReasonsMapping
 from qai_hub_models.models.common import Precision
-from qai_hub_models.scorecard.device import ScorecardDevice, cs_universal
-from qai_hub_models.scorecard.execution_helpers import (
-    for_each_scorecard_path_and_device,
-)
+from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
 from qai_hub_models.scorecard.results.performance_summary import (
     ModelCompileSummary,
@@ -204,10 +202,10 @@ class ResultsSpreadsheet(list):
     def append_model_summary_entries(
         self,
         model_id: str,
-        precisions: list[Precision],
+        paramaterizations: Iterable[
+            tuple[Precision, ScorecardProfilePath, ScorecardDevice]
+        ],
         components: list[str] | None = None,
-        devices: list[ScorecardDevice] | None = None,
-        paths: list[ScorecardProfilePath] | None = None,
         quantize_summary: ModelQuantizeSummary | None = None,
         compile_summary: ModelCompileSummary | None = None,
         profile_summary: ModelPerfSummary | None = None,
@@ -216,10 +214,8 @@ class ResultsSpreadsheet(list):
         self.extend(
             ResultsSpreadsheet.get_model_summary_entries(
                 model_id,
-                precisions,
+                paramaterizations,
                 components,
-                devices,
-                paths,
                 quantize_summary,
                 compile_summary,
                 profile_summary,
@@ -255,10 +251,10 @@ class ResultsSpreadsheet(list):
     @staticmethod
     def get_model_summary_entries(
         model_id: str,
-        precisions: list[Precision],
+        paramaterizations: Iterable[
+            tuple[Precision, ScorecardProfilePath, ScorecardDevice]
+        ],
         components: list[str] | None = None,
-        devices: list[ScorecardDevice] | None = None,
-        paths: list[ScorecardProfilePath] | None = None,
         quantize_summary: ModelQuantizeSummary | None = None,
         compile_summary: ModelCompileSummary | None = None,
         profile_summary: ModelPerfSummary | None = None,
@@ -270,9 +266,7 @@ class ResultsSpreadsheet(list):
         profile_summary = profile_summary or ModelPerfSummary()
         inference_summary = inference_summary or ModelInferenceSummary()
 
-        def create_entry(
-            precision: Precision, path: ScorecardProfilePath, device: ScorecardDevice
-        ) -> None:
+        for precision, path, device in paramaterizations:
             for component_id in components or [model_id]:
                 # Get job for this path + device + component combo
                 quantize_job = quantize_summary.get_run(
@@ -352,16 +346,6 @@ class ResultsSpreadsheet(list):
                     inference_url=inference_url,
                 )
                 entries.append(entry)
-
-        for_each_scorecard_path_and_device(
-            ScorecardProfilePath,
-            create_entry,
-            precisions,
-            exclude_devices=[cs_universal],
-            include_mirror_devices=True,
-            include_devices=devices,
-            include_paths=paths,
-        )
 
         return entries
 

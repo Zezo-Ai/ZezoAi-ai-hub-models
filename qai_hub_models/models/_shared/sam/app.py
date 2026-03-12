@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from PIL.Image import Image
 
 from qai_hub_models.models._shared.sam.model_patches import (
@@ -47,6 +48,7 @@ class SAMApp:
             tuple[torch.Tensor, torch.Tensor],
         ],
         resize_longest_side: Callable,
+        pixel_mean: torch.Tensor,
     ) -> None:
         """
         Parameters
@@ -66,6 +68,8 @@ class SAMApp:
             from qai_hub_models.models.sam.model import ResizeLongestSide
             or
             from qai_hub_models.models.mobilesam.model import ResizeLongestSide.
+        pixel_mean
+            Pixel mean values for normalization in range [0, 1]. Typically derived from SAM preprocessing.
         """
         self.sam_encoder_splits = sam_encoder_splits
         self.sam_decoder = sam_decoder
@@ -73,6 +77,7 @@ class SAMApp:
         self.encoder_input_img_size = encoder_input_img_size
         self.input_img_size_transform = resize_longest_side(encoder_input_img_size)
         self.input_image_channel_layout = input_image_channel_layout
+        self.pixel_mean = pixel_mean
 
     def predict(self, *args: Any, **kwargs: Any) -> tuple[torch.Tensor, torch.Tensor]:
         return self.predict_mask_from_points(*args, **kwargs)
@@ -186,6 +191,18 @@ class SAMApp:
 
         # Normalize input to [0, 1] (must be done after resize)
         input_images = input_images / 255.0
+
+        # Pad the shorter side to reach exactly encoder_input_img_size x encoder_input_img_size.
+        # Filling the padded region with pixel_mean ensures (x - pixel_mean) / pixel_std = 0
+        # in the encoder, matching the original sam.preprocess() padding behaviour.
+        h, w = input_images.shape[2], input_images.shape[3]
+        pad_h = self.encoder_input_img_size - h
+        pad_w = self.encoder_input_img_size - w
+        input_images = F.pad(input_images, (0, pad_w, 0, pad_h), value=0.0)
+        if pad_w > 0:
+            input_images[:, :, :, w:] = self.pixel_mean
+        if pad_h > 0:
+            input_images[:, :, h:, :] = self.pixel_mean
 
         # Run encoder
         image_embeddings = input_images

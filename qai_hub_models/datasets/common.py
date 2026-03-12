@@ -18,8 +18,6 @@ from typing import Any, NamedTuple, final
 
 from torch.utils.data import Dataset, default_collate
 
-from qai_hub_models.utils.asset_loaders import LOCAL_STORE_DEFAULT_PATH
-from qai_hub_models.utils.envvars import IsOnCIEnvvar
 from qai_hub_models.utils.input_spec import InputSpec
 
 
@@ -158,30 +156,6 @@ class BaseDataset(Dataset, Sized, ABC):
     def get_dataset_metadata() -> DatasetMetadata:
         """Metadata about the dataset. Used for publishing on the website."""
         raise NotImplementedError()
-
-
-def setup_fiftyone_env() -> None:
-    """
-    FiftyOne is an external library that provides utilities for downloading and storing
-    datasets. We want all of its operations to be done within the ai-hub-models cache
-    directory.
-
-    Import within the function so it only happens when the function is called.
-    """
-    try:
-        import fiftyone as fo
-    except (ImportError, ModuleNotFoundError):
-        raise ImportError(
-            "This dataset requires the `fiftyone` module. Run `pip install fiftyone>=1.0.1,<1.9` to use this dataset."
-        ) from None
-
-    fiftyone_dir = os.path.join(LOCAL_STORE_DEFAULT_PATH, "fiftyone")
-    fo.config.database_dir = os.path.join(fiftyone_dir, "mongo")
-    fo.config.dataset_zoo_dir = fiftyone_dir
-    fo.config.default_dataset_dir = fiftyone_dir
-    fo.config.model_zoo_dir = os.path.join(fiftyone_dir, "__models__")
-    if IsOnCIEnvvar.get():
-        fo.config.show_progress_bars = False
 
 
 class UnfetchableDatasetError(Exception):

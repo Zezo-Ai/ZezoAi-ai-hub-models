@@ -157,6 +157,8 @@ class ZipformerEncoder(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io false "
         compile_options = super().get_hub_compile_options(
             target_runtime,
             precision,
@@ -167,6 +169,10 @@ class ZipformerEncoder(BaseModel):
         if target_runtime != TargetRuntime.ONNX:
             compile_options += " --truncate_64bit_tensors --truncate_64bit_io "
         return compile_options
+
+    @staticmethod
+    def component_precision() -> Precision:
+        return Precision.w8a16
 
 
 class ZipformerDecoder(BaseModel):
@@ -226,6 +232,8 @@ class ZipformerDecoder(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io false "
         compile_options = super().get_hub_compile_options(
             target_runtime,
             precision,
@@ -236,6 +244,10 @@ class ZipformerDecoder(BaseModel):
         if target_runtime != TargetRuntime.ONNX:
             compile_options += " --truncate_64bit_tensors --truncate_64bit_io "
         return compile_options
+
+    @staticmethod
+    def component_precision() -> Precision:
+        return Precision.w16a16
 
 
 class ZipformerJoiner(BaseModel):
@@ -291,6 +303,8 @@ class ZipformerJoiner(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io false "
         return super().get_hub_compile_options(
             target_runtime,
             precision,
@@ -298,6 +312,10 @@ class ZipformerJoiner(BaseModel):
             device,
             context_graph_name="joiner_model",
         )
+
+    @staticmethod
+    def component_precision() -> Precision:
+        return Precision.w16a16
 
 
 @CollectionModel.add_component(ZipformerEncoder)

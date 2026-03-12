@@ -5,8 +5,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import torch
@@ -15,14 +14,12 @@ from sam2.sam2_image_predictor import SAM2ImagePredictor
 from qai_hub_models.models._shared.sam.utils import show_image
 from qai_hub_models.models._shared.sam2.app import SAM2App, SAM2InputImageLayout
 from qai_hub_models.utils.args import (
-    add_output_dir_arg,
     demo_model_components_from_cli_args,
     get_model_cli_parser,
     get_on_device_demo_parser,
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
-from qai_hub_models.utils.base_model import CollectionModel
 from qai_hub_models.utils.evaluate import EvalMode
 
 
@@ -30,7 +27,7 @@ def sam2_demo_main(
     model_cls: Any,
     model_id: str,
     default_image: str | CachedWebModelAsset,
-    default_model_type: str | None = None,
+    default_model_type: str,
     is_test: bool = False,
 ) -> None:
     """
@@ -80,50 +77,29 @@ def sam2_demo_main(
         help="Comma separated x and y coordinate. Multiple coordinate separated by `;`."
         " e.g. `x1,y1;x2,y2`. Default: `500,375;`",
     )
-    add_output_dir_arg(parser)
-    get_on_device_demo_parser(parser)
+    get_on_device_demo_parser(parser, add_output_dir=True)
 
-    # Determine default args if is_test is True
-    args_list = []
-    if is_test and default_model_type:
-        args_list = ["--model-type", default_model_type]
-    elif is_test:
-        pass
-
-    args = parser.parse_args(args_list if is_test else None)
+    args = parser.parse_args(["--model-type", default_model_type] if is_test else None)
     validate_on_device_demo_args(args, model_id)
 
     coordinates: list[str] = list(filter(None, args.point_coordinates.split(";")))
 
-    if hasattr(args, "model_type") and args.model_type:
-        wrapper = cast(
-            CollectionModel, model_cls.from_pretrained(model_type=args.model_type)
-        )
-    else:
-        wrapper = cast(CollectionModel, model_cls.from_pretrained())
-
-    sam2_encoder: Any
-    sam2_decoder: Any
+    wrapper = model_cls.from_pretrained(args.model_type)
 
     if args.eval_mode == EvalMode.ON_DEVICE:
-        if args.hub_model_id:
-            sam2_encoder, sam2_decoder = demo_model_components_from_cli_args(
-                model_cls, model_id, args
-            )
-        else:
-            raise ValueError(
-                "If running this demo with on device, must supply hub_model_id."
-            )
+        sam2_encoder, sam2_decoder = demo_model_components_from_cli_args(
+            model_cls, model_id, args
+        )
     else:
-        sam2_encoder = wrapper.encoder  # type: ignore[attr-defined]
-        sam2_decoder = wrapper.decoder  # type: ignore[attr-defined]
+        sam2_encoder = wrapper.encoder
+        sam2_decoder = wrapper.decoder
 
     app = SAM2App(
-        encoder_input_img_size=wrapper.encoder.sam2.image_size,  # type: ignore[attr-defined]
-        mask_threshold=SAM2ImagePredictor(wrapper.encoder.sam2).mask_threshold,  # type: ignore[attr-defined]
+        encoder_input_img_size=wrapper.encoder.sam2.image_size,
+        mask_threshold=SAM2ImagePredictor(wrapper.encoder.sam2).mask_threshold,
         input_image_channel_layout=SAM2InputImageLayout["RGB"],
-        sam2_encoder=sam2_encoder,
-        sam2_decoder=sam2_decoder,
+        sam2_encoder=sam2_encoder,  # type: ignore[arg-type]
+        sam2_decoder=sam2_decoder,  # type: ignore[arg-type]
     )
     # Load Image
     image = load_image(args.image)
@@ -152,6 +128,4 @@ def sam2_demo_main(
     )
 
     if not is_test:
-        show_image(
-            image, np.asarray(generated_mask), input_coords, str(Path.cwd() / "build")
-        )
+        show_image(image, np.asarray(generated_mask), input_coords, args.output_dir)

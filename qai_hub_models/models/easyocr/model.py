@@ -90,6 +90,10 @@ class EasyOCRDetector(BaseModel):
     def calibration_dataset_name() -> str:
         return "icdar2015"
 
+    @staticmethod
+    def get_channel_last_inputs() -> list[str]:
+        return ["image"]
+
 
 class EasyOCRRecognizer(BaseModel):
     """VGG based model is the default model of text recognition"""
@@ -163,6 +167,10 @@ class EasyOCRRecognizer(BaseModel):
     @staticmethod
     def calibration_dataset_name() -> str:
         return "icdar2015"
+
+    @staticmethod
+    def get_channel_last_inputs() -> list[str]:
+        return ["image"]
 
 
 @CollectionModel.add_component(EasyOCRDetector)

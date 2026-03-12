@@ -22,7 +22,12 @@ from qai_hub_models.scorecard import (
 )
 
 JobTypeVar = TypeVar(
-    "JobTypeVar", hub.ProfileJob, hub.InferenceJob, hub.CompileJob, hub.QuantizeJob
+    "JobTypeVar",
+    hub.ProfileJob,
+    hub.InferenceJob,
+    hub.CompileJob,
+    hub.QuantizeJob,
+    hub.LinkJob,
 )
 ScorecardPathTypeVar = TypeVar(
     "ScorecardPathTypeVar", ScorecardCompilePath, ScorecardProfilePath
@@ -38,6 +43,7 @@ ScorecardJobTypeVar = TypeVar(
     "CompileScorecardJob",
     "ProfileScorecardJob",
     "InferenceScorecardJob",
+    "LinkScorecardJob",
 )
 
 
@@ -269,3 +275,7 @@ class InferenceScorecardJob(ScorecardJob[hub.InferenceJob, ScorecardProfilePath]
         if not self.success:
             raise ValueError("Can't get output dataset if job did not succeed.")
         return cast(DatasetEntries, self.job.download_output_data())
+
+
+class LinkScorecardJob(ScorecardJob[hub.LinkJob, ScorecardCompilePath]):
+    job_type_class = hub.LinkJob

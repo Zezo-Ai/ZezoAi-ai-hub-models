@@ -80,7 +80,7 @@ class CommonVoiceText(BaseDataset):
 
     @staticmethod
     def default_samples_per_job() -> int:
-        return 5
+        return 100
 
 
 class CommonVoiceDataset(BaseDataset):

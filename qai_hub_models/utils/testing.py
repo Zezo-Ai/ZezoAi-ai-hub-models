@@ -55,7 +55,6 @@ from qai_hub_models.utils.testing_async_utils import (  # noqa: F401
     get_inference_job_ids_file,
     get_profile_job_ids_file,
     get_quantize_job_ids_file,
-    is_hub_testing_async,
 )
 
 

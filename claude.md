@@ -107,12 +107,6 @@ python scripts/build_and_test.py test_qaihm
 
 # Run unit tests for a specific model
 QAIHM_TEST_MODELS=<model_id> python scripts/build_and_test.py test_changed_models
-
-# Run all pre-checkin tests (excludes long-running export tests)
-python scripts/build_and_test.py precheckin
-
-# Run all tests including export/compile (long)
-python scripts/build_and_test.py all_tests_long
 ```
 
 **Important:** Always use `build_and_test.py` to run tests—it handles model dependencies and environment setup automatically.
@@ -123,10 +117,6 @@ python scripts/build_and_test.py all_tests_long
 
 | Command | Description |
 |---------|-------------|
-| `precheckin` | Quick tests: `test_qaihm` + `test_changed_models` (no export tests, shared env) |
-| `precheckin_long` | Full tests for changed models: includes export tests, fresh env per model |
-| `all_tests` | All models: `test_qaihm` + `test_all_models` (no export tests) |
-| `all_tests_long` | All models with full test suite including exports |
 | `test_qaihm` | Run tests for core qai_hub_models package (excludes models/) |
 | `test_compile_all_models` | Submit compile jobs for all models |
 | `test_profile_all_models` | Submit profile jobs for all models |
@@ -135,9 +125,7 @@ python scripts/build_and_test.py all_tests_long
 ### Testing Workflow
 
 The CI (`.github/workflows/test.yml`) runs tests with these key settings:
-- `QAIHM_TEST_HUB_ASYNC=1` - Jobs submitted without waiting
 - `QAIHM_TEST_DEVICES=canary` - Uses canary device set
-- `QAIHM_TEST_ASYNC_HUB_FAILURES_AS_TEST_FAILURES=1` - Upstream failures cause test failures
 
 ## Environment Variables
 
@@ -170,9 +158,7 @@ Tests can be configured via environment variables. All variables are prefixed wi
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `QAIHM_TEST_IGNORE_KNOWN_FAILURES` | If `true`, run tests even for known-failing model+runtime+precision combos | `false` |
-| `QAIHM_TEST_HUB_ASYNC` | If `true`, tests submit jobs without waiting; requires running tests in sequence (compile → profile → inference) | `false` |
 | `QAIHM_TEST_IGNORE_DEVICE_JOB_CACHE` | If `true`, always submit new profile jobs instead of reusing cached results | `false` |
-| `QAIHM_TEST_ASYNC_HUB_FAILURES_AS_TEST_FAILURES` | If `true` (and async enabled), upstream job failures cause downstream test failures instead of skips | `false` |
 
 ### Output & Artifacts
 | Variable | Description | Default |
@@ -183,14 +169,15 @@ Tests can be configured via environment variables. All variables are prefixed wi
 
 ### Example Usage
 ```bash
-# Compile then profile a single model on one device with w8a8 precision (async mode recommended)
-export QAIHM_TEST_HUB_ASYNC=1
+# Compile then profile a single model on one device with w8a8 precision
 export QAIHM_TEST_MODELS=yolov7
 export QAIHM_TEST_DEVICES=cs_8_elite
 export QAIHM_TEST_PRECISIONS=w8a8
 
-python scripts/build_and_test.py test_compile_all_models  # Step 1: compile
-python scripts/build_and_test.py test_profile_all_models  # Step 2: profile (uses compiled artifacts)
+python scripts/build_and_test.py test_pre_quantize_compile_all_models  # Step 1: pre-quantize compile
+python scripts/build_and_test.py test_quantize_all_models  # Step 2 quantize
+python scripts/build_and_test.py test_compile_all_models  # Step 3: compile
+python scripts/build_and_test.py test_profile_all_models  # Step 4: profile
 ```
 
 ## Important Notes

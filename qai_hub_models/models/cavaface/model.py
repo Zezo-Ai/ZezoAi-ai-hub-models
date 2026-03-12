@@ -69,3 +69,7 @@ class CavaFace(BaseModel):
     @staticmethod
     def get_output_names() -> list[str]:
         return ["embeddings"]
+
+    @staticmethod
+    def get_channel_last_inputs() -> list[str]:
+        return ["image"]

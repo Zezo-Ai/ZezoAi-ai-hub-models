@@ -32,7 +32,6 @@ def main() -> None:
             TargetRuntime.QNN_CONTEXT_BINARY,
             TargetRuntime.PRECOMPILED_QNN_ONNX,
         ],
-        Precision.w8a8: [],
     }
 
     parser = evaluate_parser(

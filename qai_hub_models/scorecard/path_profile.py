@@ -50,6 +50,7 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
     PRECOMPILED_QNN_ONNX = "precompiled_qnn_onnx"
     GENIE = "genie"
     ONNXRUNTIME_GENAI = "onnxruntime_genai"
+    VOICE_AI = "voice_ai"
     ONNX_DML_GPU = "onnx_dml_gpu"
     QNN_DLC_GPU = "qnn_dlc_gpu"
     LLAMA_CPP_CPU = "llama_cpp_cpu"
@@ -85,6 +86,7 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
             ScorecardProfilePath.QNN_CONTEXT_BINARY,
             ScorecardProfilePath.GENIE,
             ScorecardProfilePath.ONNXRUNTIME_GENAI,
+            ScorecardProfilePath.VOICE_AI,
             ScorecardProfilePath.LLAMA_CPP_CPU,
             ScorecardProfilePath.LLAMA_CPP_GPU,
             ScorecardProfilePath.LLAMA_CPP_NPU,
@@ -126,32 +128,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
 
         return self.compile_path.supports_precision(precision)
 
-    @staticmethod
-    def all_paths(
-        enabled: bool | None = None,
-        supports_precision: Precision | None = None,
-        is_aot_compiled: bool | None = None,
-        include_genai_paths: bool = False,
-    ) -> list[ScorecardProfilePath]:
-        """
-        Get all profile paths that match the given attributes.
-        If an attribute is None, it is ignored when filtering paths.
-        """
-        return [
-            path
-            for path in ScorecardProfilePath
-            if (enabled is None or path.enabled == enabled)
-            and (
-                supports_precision is None
-                or path.supports_precision(supports_precision)
-            )
-            and (
-                is_aot_compiled is None
-                or path.runtime.is_aot_compiled == is_aot_compiled
-            )
-            and (include_genai_paths or (not path.runtime.is_exclusively_for_genai))
-        ]
-
     @property
     def is_public(self) -> bool:
         """Whether a path is make visible publicly (included in perf.yaml, numerics.yaml, allowed in export scripts, etc.)"""
@@ -180,6 +156,8 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
             return TargetRuntime.GENIE
         if self == ScorecardProfilePath.ONNXRUNTIME_GENAI:
             return TargetRuntime.ONNXRUNTIME_GENAI
+        if self == ScorecardProfilePath.VOICE_AI:
+            return TargetRuntime.VOICE_AI
         if self == ScorecardProfilePath.LLAMA_CPP_CPU:
             return TargetRuntime.LLAMA_CPP_CPU
         if self == ScorecardProfilePath.LLAMA_CPP_GPU:
@@ -211,6 +189,8 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
             return ScorecardCompilePath.GENIE
         if self == ScorecardProfilePath.ONNXRUNTIME_GENAI:
             return ScorecardCompilePath.ONNXRUNTIME_GENAI
+        if self == ScorecardProfilePath.VOICE_AI:
+            return ScorecardCompilePath.VOICE_AI
         if self == ScorecardProfilePath.LLAMA_CPP_CPU:
             return ScorecardCompilePath.LLAMA_CPP_CPU
         if self == ScorecardProfilePath.LLAMA_CPP_GPU:
@@ -273,6 +253,18 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
 
         return out.strip()
 
+    @property
+    def website_runtime_name(self) -> str:
+        """The name of the runtime on the website that corresponds to this path."""
+        if self in [
+            ScorecardProfilePath.VOICE_AI,
+            ScorecardProfilePath.LLAMA_CPP_CPU,
+            ScorecardProfilePath.LLAMA_CPP_GPU,
+            ScorecardProfilePath.LLAMA_CPP_NPU,
+        ]:
+            return self.value
+        return self.runtime.inference_engine.value
+
 
 class ScorecardProfilePathJITParseableAllList(
     EnumListWithParseableAll[ScorecardProfilePath]
@@ -284,4 +276,8 @@ class ScorecardProfilePathJITParseableAllList(
     """
 
     EnumType = ScorecardProfilePath
-    ALL = [x for x in ScorecardProfilePath if not x.runtime.is_aot_compiled]
+    ALL = [
+        x
+        for x in ScorecardProfilePath
+        if not x.runtime.is_aot_compiled and not x.runtime.is_orchestrator_runtime
+    ]

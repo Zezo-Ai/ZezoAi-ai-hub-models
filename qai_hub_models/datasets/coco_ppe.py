@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import asyncio
+import os
 from pathlib import Path
 
 import torch
@@ -15,9 +16,11 @@ from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetMetadata,
     DatasetSplit,
-    setup_fiftyone_env,
 )
 from qai_hub_models.models.gear_guard_net.model import GearGuardNet
+from qai_hub_models.utils.asset_loaders import (
+    ASSET_CONFIG,
+)
 from qai_hub_models.utils.image_processing import (
     app_to_net_image_inputs,
     resize_pad,
@@ -33,8 +36,9 @@ DEFAULT_SELECTED_LIST_FILE = (
     / "coco_2017_select.txt"
 )
 
+
 DATASET_ID = "coco_ppe"
-DATASET_ASSET_VERSION = 1
+DATASET_ASSET_VERSION = 2
 
 
 class CocoPPEDataset(BaseDataset):
@@ -50,6 +54,8 @@ class CocoPPEDataset(BaseDataset):
     Only entries that exist within the requested split (train or val of COCO-2017)
     will be kept; entries from other splits (e.g., train2014 or test2017) are ignored.
 
+    This dataset can only be used for training.
+
     By default, list of selected samples is defined DEFAULT_SELECTED_LIST_FILE
     """
 
@@ -58,7 +64,6 @@ class CocoPPEDataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.TRAIN,
         input_spec: InputSpec | None = None,
         selected_list_file: str | None = None,
-        selected_paths: Iterable[str] | None = None,
     ) -> None:
         """
         Parameters
@@ -73,23 +78,22 @@ class CocoPPEDataset(BaseDataset):
             Optional path to a text file containing one path per line that identifies
             selected images. Lines beginning with '#' are ignored. If neither this nor
             selected_paths is provided, a placeholder path is used: DEFAULT_SELECTED_LIST_FILE
-
-        selected_paths
-            Optional in-memory iterable of path strings. Useful for programmatic configuration.
         """
+        if split != DatasetSplit.TRAIN:
+            raise ValueError("coco_ppe dataset only supports train split.")
+        self.data_path = ASSET_CONFIG.get_local_store_dataset_path(
+            DATASET_ID, DATASET_ASSET_VERSION, "images"
+        )
         # If nothing provided, use the placeholder path so users know where to plug their list
-        if selected_list_file is None and selected_paths is None:
+        if selected_list_file is None:
             selected_list_file = str(DEFAULT_SELECTED_LIST_FILE)
 
         # Store selection inputs for use during filtering
         self.selected_list_file = selected_list_file
-        self.selected_paths = (
-            list(selected_paths) if selected_paths is not None else None
-        )
 
-        # FiftyOne package manages dataset so pass a dummy name for data path
-        BaseDataset.__init__(self, "non_existent_dir", split, input_spec)
+        self._resolve_chosen_samples()
 
+        BaseDataset.__init__(self, self.data_path, split, input_spec)
         # input_spec is (h, w) and target_image_size is (w, h)
         input_spec = input_spec or GearGuardNet.get_input_spec()
 
@@ -101,9 +105,7 @@ class CocoPPEDataset(BaseDataset):
         self, index: int
     ) -> tuple[
         torch.Tensor,
-        tuple[
-            str, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
-        ],
+        int,
     ]:
         """
         Get a single sample from the dataset.
@@ -119,46 +121,19 @@ class CocoPPEDataset(BaseDataset):
         -------
         scaled_padded_torch_image : torch.Tensor
             Preprocessed image tensor of shape (C, H, W), range [0, 1].
-        metadata : tuple[str, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-            image_id
-                Image identifier.
-            scale_factor
-                Preprocessing scale factor.
-            pad
-                Padding applied.
-            boxes
-                Bounding boxes (zeros for this dataset).
-            labels
-                Labels (zeros for this dataset).
-            num_boxes
-                Number of boxes (zero for this dataset).
+        label: int
+            Hardcoded to 0 since no label is currently resolved.
         """
-        from fiftyone.core.sample import SampleView
-
-        # Open PIL image sample.
-        sample: SampleView = self.dataset[index : index + 1].first()
-        image = Image.open(sample.filepath).convert("RGB")
+        filepath = self.data_path / self.chosen_samples[index]["filename"]
+        image = Image.open(filepath).convert("RGB")
 
         # Convert to torch (NCHW, range [0, 1]) tensor.
         torch_image = app_to_net_image_inputs(image)[1]
         # Scale and center-pad image to user-requested target image shape.
-        scaled_padded_torch_image, scale_factor, pad = resize_pad(
+        scaled_padded_torch_image, _, _ = resize_pad(
             torch_image, (self.target_h, self.target_w)
         )
-
-        num_boxes = 0
-        boxes = torch.zeros((self.max_boxes, 4))
-        labels = torch.zeros(self.max_boxes)
-        image_id = self._filepath2imageId(Path(sample.filepath).name)
-
-        return scaled_padded_torch_image.squeeze(0), (
-            image_id,
-            torch.tensor([scale_factor]),
-            torch.tensor([pad]),
-            boxes,
-            labels,
-            torch.tensor([num_boxes]),
-        )
+        return scaled_padded_torch_image.squeeze(0), 0
 
     def __len__(self) -> int:
         """
@@ -169,7 +144,7 @@ class CocoPPEDataset(BaseDataset):
         num_samples : int
             Number of samples in the dataset.
         """
-        return len(self.dataset)
+        return len(self.chosen_samples)
 
     def _validate_data(self) -> bool:
         """
@@ -180,40 +155,24 @@ class CocoPPEDataset(BaseDataset):
         is_valid : bool
             True if the dataset attribute exists, False otherwise.
         """
-        return hasattr(self, "dataset")
+        return self.data_path.exists() and len(os.listdir(self.data_path)) > 20
 
     def _download_data(self) -> None:
         """
-        Download and load the COCO dataset, filtering to the selected subset.
-
-        This method loads the COCO-2017 dataset using FiftyOne and filters it to only
-        include images specified in the selection list. The dataset is sorted by filepath
-        to ensure deterministic ordering.
+        Download the chosen images.
 
         Raises
         ------
         ValueError
             If no target images are found in the dataset after filtering.
         """
-        # Build the allowed base filenames for this split
-        split_str = self.split_str
-        sel_image_ids = self._build_allowed_image_ids_for_split(split_str)
+        # This requires extra dependencies that we don't want to require
+        # For models that only need the validation set
+        from qai_hub_models.datasets.coco_utils import download_many_urls
 
-        if not sel_image_ids:
-            # If no selection provided or nothing matches, keep the dataset as-is
-            raise ValueError("sample_ids = 0, could not find target images in dataset")
-
-        # Load the split using the parent implementation (sets self.dataset)
-        setup_fiftyone_env()
-
-        # This is an expensive import, so don't want to unnecessarily import it in
-        # other files that import datasets/__init__.py
-        import fiftyone.zoo as foz
-
-        # Sorting by filepath ensures a deterministic ordering every time this is called
-        self.dataset = foz.load_zoo_dataset(
-            "coco-2017", split=split_str, shuffle=False, image_ids=sel_image_ids
-        ).sort_by("filepath")
+        asyncio.run(
+            download_many_urls(self.chosen_samples, self.data_path, "filename", "url")
+        )
 
     @staticmethod
     def default_samples_per_job() -> int:
@@ -223,9 +182,9 @@ class CocoPPEDataset(BaseDataset):
         Returns
         -------
         samples_per_job : int
-            Default number of samples per job (300).
+            Default number of samples per job (30).
         """
-        return 300
+        return 30
 
     @staticmethod
     def get_dataset_metadata(split: DatasetSplit) -> DatasetMetadata:
@@ -247,90 +206,29 @@ class CocoPPEDataset(BaseDataset):
         ValueError
             If an unsupported split is provided.
         """
-        if split == DatasetSplit.TRAIN:
-            split_description = "train2017 split"
-        elif split == DatasetSplit.VAL:
-            split_description = "val2017 split"
-        else:
-            raise ValueError(
-                f"Unsupported dataset split: {split}. "
-                "Only DatasetSplit.TRAIN and DatasetSplit.VAL are supported."
-            )
         return DatasetMetadata(
             link="https://cocodataset.org/",
-            split_description=split_description,
+            split_description="2017 edition",
         )
 
-    def _build_allowed_image_ids_for_split(self, split_str: str) -> set[str]:
+    def _resolve_chosen_samples(self) -> None:
         """
-        Parse selected_list_file and/or selected_paths, normalize separators, and return
-        a set of image IDs that belong to the requested split.
+        Parse selected_list_file, normalize separators, and return
+        a list of image IDs and download urls.
 
-        This method reads from the selected list file and/or selected paths, normalizes
-        path separators, filters entries by the requested split, and extracts base filenames
-        to create a set of allowed image IDs.
-
-        Parameters
-        ----------
-        split_str
-            The split string ('validation' or 'train') to filter images by.
-
-        Returns
-        -------
-        allowed_image_ids : set[str]
-            Set of image IDs (basenames without leading zeros and .jpg extension)
-            that belong to the requested split.
+        Sets the field self.chosen_samples with a list of dictionaires with the format:
+        [{"coco_url": "https...", "file_name": "000000000013.jpg"}, ...]
         """
-        entries: list[str] = []
-
-        if self.selected_list_file:
-            try:
-                with open(self.selected_list_file) as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith("#"):
-                            continue
-                        entries.append(line)
-            except Exception:
-                # If the file cannot be read, fall back to selected_paths only
-                pass
-
-        if self.selected_paths:
-            entries.extend(self.selected_paths)
-
-        # Normalize path separators and filter by split
-        split_token = "val2017" if split_str == "validation" else "train2017"
-        allowed: set[str] = set()
-        for p in entries:
-            norm = p.replace("\\", "/")
-            if split_token not in norm:
-                # Ignore entries from other splits like train2014/test2017
-                continue
-            # Keep only the base filename (e.g., '000000140556.jpg')
-            base = Path(norm).name
-            base = self._filepath2imageId(base)
-            if base:
-                allowed.add(base)
-        return allowed
-
-    @staticmethod
-    def _filepath2imageId(filepath: str) -> str:
-        """
-        Convert a filepath to an image ID by removing the .jpg extension and leading zeros.
-
-        Parameters
-        ----------
-        filepath
-            The filepath or filename to convert to an image ID.
-
-        Returns
-        -------
-        image_id : str
-            The image ID with .jpg extension and leading zeros removed.
-            Returns the original filepath if it doesn't end with .jpg.
-        """
-        if filepath.lower().endswith(".jpg"):
-            # Remove the .jpg suffix if present
-            filepath = filepath[:-4]
-        # Remove leading zeros
-        return filepath.lstrip("0")
+        self.chosen_samples: list[dict[str, str]] = []
+        split_token = "train2017"
+        with open(self.selected_list_file) as f:
+            for line in f:
+                entry: dict[str, str] = {}
+                line = line.strip()
+                if not line or line.startswith("#") or split_token not in line:
+                    continue
+                line = line.replace("\\", "/")
+                filename = Path(line).name
+                entry["url"] = f"http://images.cocodataset.org/{split_token}/{filename}"
+                entry["filename"] = filename
+                self.chosen_samples.append(entry)

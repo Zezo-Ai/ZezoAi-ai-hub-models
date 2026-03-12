@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,9 +40,7 @@ def show_image(
 
     if should_save_to_disk:
         if output_dir is None:
-            raise ValueError(
-                "In headless mode, --output-dir must be passed to choose where outputs are saved to disk."
-            )
+            output_dir = str(Path.cwd() / "build")
         os.makedirs(output_dir, exist_ok=True)
         print("Saving images to disk: ")
 

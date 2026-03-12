@@ -39,6 +39,7 @@ from qai_hub_models.utils.onnx.helpers import download_and_unzip_workbench_onnx_
 from qai_hub_models.utils.path_helpers import get_next_free_path
 from qai_hub_models.utils.printing import (
     print_inference_metrics,
+    print_on_target_demo_cmd,
     print_profile_metrics_from_job,
     print_tool_versions,
 )
@@ -49,7 +50,7 @@ from qai_hub_models.utils.qai_hub_helpers import (
 
 
 def quantize_model(
-    precision: Precision,
+    precision: Precision | dict[str, Precision],
     model: CollectionModel,
     model_name: str,
     onnx_models: dict[str, hub.Model],
@@ -57,19 +58,17 @@ def quantize_model(
     extra_options: str = "",
     components: list[str] | None = None,
 ) -> dict[str, hub.client.QuantizeJob]:
-    quantize_jobs: dict[str, hub.client.QuantizeJob] = {}
-    precision_by_component = {
-        component_name: component.component_precision()
-        if precision in [Precision.mixed, Precision.mixed_with_float]
+    component_precisions = (
+        model.get_component_precisions(precision)
+        if isinstance(precision, Precision)
         else precision
-        for component_name, component in model.components.items()
-    }
-
-    for component_name in components or Model.component_class_names:
+    )
+    quantize_jobs: dict[str, hub.client.QuantizeJob] = {}
+    for component_name in components or model.component_class_names:
+        component_precision = component_precisions[component_name]
         component = model.components[component_name]
         assert isinstance(component, BaseModel)
         input_spec = component.get_input_spec()
-        component_precision = precision_by_component[component_name]
         if component_precision != Precision.float:
             print(f"Quantizing {component_name}.")
             if (
@@ -133,7 +132,11 @@ def compile_model(
             )
 
         model_compile_options = component.get_hub_compile_options(
-            target_runtime, precision, extra_options, device
+            target_runtime,
+            precision,
+            extra_options,
+            device,
+            f"{MODEL_ID}_{component_name.lower()}",
         )
         print(f"Optimizing model {component_name} to run on-device")
         submitted_compile_job = hub.submit_compile_job(
@@ -147,6 +150,32 @@ def compile_model(
             hub.client.CompileJob, submitted_compile_job
         )
     return compile_jobs
+
+
+def link_model(
+    compiled_models: dict[str, hub.Model],
+    device: hub.Device,
+    model_name: str,
+    model: CollectionModel,
+    target_runtime: TargetRuntime,
+) -> dict[str, hub.client.LinkJob]:
+    """Link compiled DLCs to context binary for AOT."""
+    assert target_runtime.is_aot_compiled, (
+        f"link_model() requires an AOT runtime, got {target_runtime}"
+    )
+    link_jobs: dict[str, hub.client.LinkJob] = {}
+    for component_name, compiled_model in compiled_models.items():
+        component = model.components[component_name]
+        assert isinstance(component, BaseModel)
+        link_options = component.get_hub_link_options(target_runtime)
+        print(f"Linking {component_name} to context binary")
+        link_jobs[component_name] = hub.submit_link_job(
+            [compiled_model],
+            device=device,
+            name=f"{model_name}_{component_name}",
+            options=link_options,
+        )
+    return link_jobs
 
 
 def profile_model(
@@ -267,6 +296,7 @@ def export_model(
     components: list[str] | None = None,
     precision: Precision = Precision.float,
     num_calibration_samples: int | None = None,
+    quantized_model_id: dict[str, str] | None = None,
     skip_compiling: bool = False,
     skip_profiling: bool = False,
     skip_inferencing: bool = False,
@@ -312,6 +342,8 @@ def export_model(
         to use for quantization. If not set, uses the default number
         specified by the dataset. If model doesn't have a calibration dataset
         specified, this must be None.
+    quantized_model_id
+        A quantized ONNX hub model id, skips quantizing model.
     skip_compiling
         If set, skips compiling of model to format that can run on device.
     skip_profiling
@@ -401,34 +433,47 @@ def export_model(
     quantize_jobs: dict[str, hub.client.QuantizeJob] = {}
     quantized_models: dict[str, hub.Model] | None = None
     if precision != Precision.float:
-        onnx_compile_jobs = compile_model(
-            model,
-            model_name,
-            device,
-            TargetRuntime.ONNX,
-            precision,
-            components=components,
-        )
-        onnx_models = assert_success_and_get_target_models(onnx_compile_jobs)
-        quantize_jobs = quantize_model(
-            precision,
-            model,
-            model_name,
-            onnx_models,
-            num_calibration_samples,
-            quantize_options,
-            components,
-        )
-        if skip_compiling:
-            return CollectionExportResult(
-                components={
-                    component_name: ExportResult(
-                        quantize_job=quantize_jobs.get(component_name)
-                    )
-                    for component_name in components
-                },
+        if quantized_model_id:
+            quantized_models = {
+                component: hub_model
+                for component in components
+                if (hub_model := hub.get_model(quantized_model_id[component]))
+                is not None
+            }
+        else:
+            component_precisions = model.get_component_precisions(precision)
+            onnx_compile_jobs = compile_model(
+                model,
+                model_name,
+                device,
+                TargetRuntime.ONNX,
+                precision,
+                components=[
+                    c
+                    for c, p in component_precisions.items()
+                    if c in components and p != Precision.float
+                ],
             )
-        quantized_models = assert_success_and_get_target_models(quantize_jobs)
+            onnx_models = assert_success_and_get_target_models(onnx_compile_jobs)
+            quantize_jobs = quantize_model(
+                component_precisions,
+                model,
+                model_name,
+                onnx_models,
+                num_calibration_samples,
+                quantize_options,
+                components,
+            )
+            if skip_compiling:
+                return CollectionExportResult(
+                    components={
+                        component_name: ExportResult(
+                            quantize_job=quantize_jobs.get(component_name)
+                        )
+                        for component_name in components
+                    },
+                )
+            quantized_models = assert_success_and_get_target_models(quantize_jobs)
 
     # 3. Compiles the model to an asset that can be run on device
     compile_jobs = compile_model(
@@ -527,6 +572,7 @@ def export_model(
 
     if not skip_summary:
         print_tool_versions(tool_versions, tool_versions_are_from_device_job)
+        print_on_target_demo_cmd(compile_jobs.values(), Path(__file__).parent, device)
 
     if downloaded_model_path:
         print(f"{model_name} was saved to {downloaded_model_path}\n")

@@ -23,7 +23,7 @@ See supported: [On-Device Runtimes](#on-device-runtimes), [Hardware Targets & Pr
 The package is available via pip:
 
 ```shell
-# NOTE for Snapdragon X Elite users:
+# NOTE for Snapdragon X Elite and Snapdragon X2 Elite users:
 # Only AMDx64 (64-bit) Python is supported on Windows.
 # Installation will fail when using Windows ARM64 Python.
 
@@ -115,19 +115,19 @@ _End-to-end_ demos:
 *Some older chipsets do not support fp16 inference on their NPU.
 
 ### Chipsets
-* Snapdragon [8 Elite](https://www.qualcomm.com/products/mobile/snapdragon/smartphones/snapdragon-8-series-mobile-platforms/snapdragon-8-elite-mobile-platform), [8 Gen 3](https://www.qualcomm.com/products/mobile/snapdragon/smartphones/snapdragon-8-series-mobile-platforms/snapdragon-8-gen-3-mobile-platform), [8 Gen 2](https://www.qualcomm.com/products/mobile/snapdragon/smartphones/snapdragon-8-series-mobile-platforms/snapdragon-8-gen-2-mobile-platform), and [8 Gen 1](https://www.qualcomm.com/products/mobile/snapdragon/smartphones/snapdragon-8-series-mobile-platforms/snapdragon-8-gen-1-mobile-platform) Mobile Platforms
-* [Snapdragon X Elite](https://www.qualcomm.com/products/mobile/snapdragon/pcs-and-tablets/snapdragon-x-elite) Compute Platform
-* SA8255P, SA8295P, SA8650P, and SA8775P Automotive Platforms
-* [QCS 6490](https://www.qualcomm.com/products/internet-of-things/industrial/building-enterprise/qcs6490),  [QCS 8250](https://www.qualcomm.com/products/internet-of-things/consumer/cameras/qcs8250), and [QCS 8550](https://www.qualcomm.com/products/technology/processors/qcs8550) IoT Platforms
+* Snapdragon [8 Elite Gen 5](https://www.qualcomm.com/smartphones/products/8-series/snapdragon-8-elite-gen-5), [8 Elite](https://www.qualcomm.com/products/mobile/snapdragon/smartphones/snapdragon-8-series-mobile-platforms/snapdragon-8-elite-mobile-platform), [8 Gen 3](https://www.qualcomm.com/products/mobile/snapdragon/smartphones/snapdragon-8-series-mobile-platforms/snapdragon-8-gen-3-mobile-platform), [8 Gen 2](https://www.qualcomm.com/products/mobile/snapdragon/smartphones/snapdragon-8-series-mobile-platforms/snapdragon-8-gen-2-mobile-platform), and [8 Gen 1](https://www.qualcomm.com/products/mobile/snapdragon/smartphones/snapdragon-8-series-mobile-platforms/snapdragon-8-gen-1-mobile-platform) Mobile Platforms
+* [Snapdragon X2 Elite](https://www.qualcomm.com/laptops/products/snapdragon-x2-elite), [Snapdragon X Elite](https://www.qualcomm.com/products/mobile/snapdragon/pcs-and-tablets/snapdragon-x-elite) Compute Platforms
+* SA7255P, SA8295P, and SA8775P Automotive Platforms
+* [QCS 6490](https://www.qualcomm.com/products/internet-of-things/industrial/building-enterprise/qcs6490), [QCS 8250](https://www.qualcomm.com/products/internet-of-things/consumer/cameras/qcs8250), [QCS 9075](https://www.qualcomm.com/internet-of-things/products/iq9-series/iq-9075), and [QCS 8550](https://www.qualcomm.com/products/technology/processors/qcs8550) IoT Platforms
 * QCS8450 XR Platform
 
 and many more.
 
 ### Devices
-* Samsung Galaxy S21, S22, S23, and S24 Series
-* Xiaomi 12 and 13
-* Snapdragon X Elite CRD (Compute Reference Device)
-* Qualcomm RB3 Gen 2, RB5
+* Samsung Galaxy S21, S22, S23, S24, and S25 Series
+* Xiaomi 12, 13, 15, and 17
+* Snapdragon X Elite CRD and Snapdragon X2 Elite CRD (Compute Reference Device)
+* Qualcomm RB3 Gen 2, RB5 Gen 2, IQ-8, IQ-9
 
 and many more.
 
@@ -182,7 +182,13 @@ and many more.
 | [LaMa-Dilated](https://aihub.qualcomm.com/models/lama_dilated) | [qai_hub_models.models.lama_dilated](qai_hub_models/models/lama_dilated/README.md) |
 | | |
 | **Super Resolution**
+| [ESRGAN](qai_hub_models/models/esrgan/README.md) | [qai_hub_models.models.esrgan](qai_hub_models/models/esrgan/README.md) |
+| [QuickSRNetLarge](qai_hub_models/models/quicksrnetlarge/README.md) | [qai_hub_models.models.quicksrnetlarge](qai_hub_models/models/quicksrnetlarge/README.md) |
+| [QuickSRNetMedium](qai_hub_models/models/quicksrnetmedium/README.md) | [qai_hub_models.models.quicksrnetmedium](qai_hub_models/models/quicksrnetmedium/README.md) |
+| [QuickSRNetSmall](qai_hub_models/models/quicksrnetsmall/README.md) | [qai_hub_models.models.quicksrnetsmall](qai_hub_models/models/quicksrnetsmall/README.md) |
+| [Real-ESRGAN-General-x4v3](qai_hub_models/models/real_esrgan_general_x4v3/README.md) | [qai_hub_models.models.real_esrgan_general_x4v3](qai_hub_models/models/real_esrgan_general_x4v3/README.md) |
 | [Real-ESRGAN-x4plus](https://aihub.qualcomm.com/models/real_esrgan_x4plus) | [qai_hub_models.models.real_esrgan_x4plus](qai_hub_models/models/real_esrgan_x4plus/README.md) |
+| [SESR-M5](qai_hub_models/models/sesr_m5/README.md) | [qai_hub_models.models.sesr_m5](qai_hub_models/models/sesr_m5/README.md) |
 | [XLSR](https://aihub.qualcomm.com/models/xlsr) | [qai_hub_models.models.xlsr](qai_hub_models/models/xlsr/README.md) |
 | | |
 | **Semantic Segmentation**
@@ -201,7 +207,7 @@ and many more.
 | [FastSam-S](https://aihub.qualcomm.com/models/fastsam_s) | [qai_hub_models.models.fastsam_s](qai_hub_models/models/fastsam_s/README.md) |
 | [FastSam-X](https://aihub.qualcomm.com/models/fastsam_x) | [qai_hub_models.models.fastsam_x](qai_hub_models/models/fastsam_x/README.md) |
 | [HRNet-W48-OCR](https://aihub.qualcomm.com/models/hrnet_w48_ocr) | [qai_hub_models.models.hrnet_w48_ocr](qai_hub_models/models/hrnet_w48_ocr/README.md) |
-| [MaskRCNN](qai_hub_models/models/maskrcnn/README.md) | [qai_hub_models.models.maskrcnn](qai_hub_models/models/maskrcnn/README.md) |
+| [MaskRCNN](https://aihub.qualcomm.com/models/maskrcnn) | [qai_hub_models.models.maskrcnn](qai_hub_models/models/maskrcnn/README.md) |
 | [MediaPipe-Selfie-Segmentation](https://aihub.qualcomm.com/models/mediapipe_selfie) | [qai_hub_models.models.mediapipe_selfie](qai_hub_models/models/mediapipe_selfie/README.md) |
 | [MobileSam](https://aihub.qualcomm.com/models/mobilesam) | [qai_hub_models.models.mobilesam](qai_hub_models/models/mobilesam/README.md) |
 | [PSPNet](https://aihub.qualcomm.com/models/pspnet) | [qai_hub_models.models.pspnet](qai_hub_models/models/pspnet/README.md) |
@@ -319,6 +325,8 @@ and many more.
 | | |
 | **Audio Generation**
 | [MeloTTS-EN](https://aihub.qualcomm.com/models/melotts_en) | [qai_hub_models.models.melotts_en](qai_hub_models/models/melotts_en/README.md) |
+| [MeloTTS-ES](https://aihub.qualcomm.com/models/melotts_es) | [qai_hub_models.models.melotts_es](qai_hub_models/models/melotts_es/README.md) |
+| [MeloTTS-ZH](https://aihub.qualcomm.com/models/melotts_zh) | [qai_hub_models.models.melotts_zh](qai_hub_models/models/melotts_zh/README.md) |
 
 ### Generative AI
 
@@ -354,6 +362,7 @@ and many more.
 | [Phi-3.5-Mini-Instruct](https://aihub.qualcomm.com/models/phi_3_5_mini_instruct) | [qai_hub_models.models.phi_3_5_mini_instruct](qai_hub_models/models/phi_3_5_mini_instruct/README.md) |
 | [Qwen2-7B-Instruct](https://aihub.qualcomm.com/models/qwen2_7b_instruct) | [qai_hub_models.models.qwen2_7b_instruct](qai_hub_models/models/qwen2_7b_instruct/README.md) |
 | [Qwen2.5-7B-Instruct](https://aihub.qualcomm.com/models/qwen2_5_7b_instruct) | [qai_hub_models.models.qwen2_5_7b_instruct](qai_hub_models/models/qwen2_5_7b_instruct/README.md) |
+| [Qwen3-4B](https://aihub.qualcomm.com/models/qwen3_4b) | [qai_hub_models.models.qwen3_4b](qai_hub_models/models/qwen3_4b/README.md) |
 
 
 ## Need help?

@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import sys
 import tarfile
@@ -730,7 +731,31 @@ class CachedWebAsset:
         asset_config: ModelZooAssetConfig = ASSET_CONFIG,
         model_downloader: Callable[[str, str, int], str] | None = None,
         downloader_num_retries: int = 4,
+        ci_private_s3_key: str | None = None,
     ) -> None:
+        """
+        Parameters
+        ----------
+        url
+            URL to download the asset from.
+        local_cache_path
+            Path to store the downloaded asset on disk.
+        asset_config
+            Asset config to use to save this file.
+        model_downloader
+            Callable to download the file. Defaults to ``download_file``.
+        downloader_num_retries
+            Number of retries when downloading.
+        ci_private_s3_key
+            If set, the asset will be fetched from the private S3 bucket
+            using this key when running on CI (`QAIHM_CI=1`).
+        """
+        if ci_private_s3_key and IsOnCIEnvvar.get():
+            from qai_hub_models.utils._internal.aws import QAIHM_PRIVATE_S3_BUCKET
+
+            url = f"s3://{QAIHM_PRIVATE_S3_BUCKET}/{ci_private_s3_key}"
+            model_downloader = download_from_private_s3
+
         self.url = url
         self.local_cache_path = local_cache_path
         self.asset_config: ModelZooAssetConfig = asset_config
@@ -1045,7 +1070,29 @@ class CachedWebDatasetAsset(CachedWebAsset):
         asset_config: ModelZooAssetConfig = ASSET_CONFIG,
         model_downloader: Callable[[str, str, int], str] | None = None,
         downloader_num_retries: int = 4,
+        ci_private_s3_key: str | None = None,
     ) -> None:
+        """
+        Parameters
+        ----------
+        url
+            URL to download the asset from.
+        dataset_id
+            Dataset ID.
+        dataset_version
+            Asset version for this dataset.
+        filename
+            Filename for this asset on disk.
+        asset_config
+            Asset config to use to save this file.
+        model_downloader
+            Callable to download the file. Defaults to ``download_file``.
+        downloader_num_retries
+            Number of retries when downloading.
+        ci_private_s3_key
+            If set, the asset will be fetched from the private S3 bucket
+            using this key when running on CI (`QAIHM_CI=1`).
+        """
         local_cache_path = asset_config.get_local_store_dataset_path(
             dataset_id, dataset_version, filename
         )
@@ -1055,6 +1102,7 @@ class CachedWebDatasetAsset(CachedWebAsset):
             asset_config,
             model_downloader,
             downloader_num_retries,
+            ci_private_s3_key,
         )
         self.dataset_id = dataset_id
         self.dataset_version = dataset_version
@@ -1145,40 +1193,141 @@ class CachedWebDatasetAsset(CachedWebAsset):
         )
 
 
+def download_from_private_s3(
+    s3_url: str, dst_path: str | Path, num_retries: int = 4
+) -> str:
+    """
+    Download a file from S3 to a local path.
+
+    Parameters
+    ----------
+    s3_url
+        S3 URL in the format s3://bucket-name/key.
+    dst_path
+        Local destination path.
+    num_retries
+        Unused. Present for compatibility with the downloader interface.
+
+    Returns
+    -------
+    dst_path : str
+        The local path where the file was saved.
+    """
+    dst_path = str(dst_path)
+    if not os.path.exists(dst_path):
+        from qai_hub_models.utils._internal.aws import get_qaihm_s3, s3_download
+
+        if not s3_url.startswith("s3://"):
+            raise ValueError(f"Expected s3:// URL, got: {s3_url}")
+        without_prefix = s3_url[len("s3://") :]
+        bucket_name, key = without_prefix.split("/", 1)
+        bucket, _ = get_qaihm_s3(bucket_name)
+        s3_download(bucket, key, dst_path)
+    return dst_path
+
+
 def download_file(
     web_url: str, dst_path: str, num_retries: int = 4, verbose: bool = True
 ) -> str:
     """
     Downloads data from the internet and stores in `dst_folder`.
     `dst_folder` should be relative to the local cache root for qai_hub_models.
+
+    Supports resuming partial downloads on connection failures.
     """
     if not os.path.exists(dst_path):
-        # Streaming, so we can iterate over the response.
-        response = requests.get(web_url, stream=True)
-        if response.status_code != 200:
-            raise ValueError(f"Unable to download file at {web_url}")
-
-        # Sizes in bytes.
-        total_size = int(response.headers.get("content-length", 0))
-        block_size = 1024
-
         with qaihm_temp_dir() as tmp_dir:
             tmp_filepath = os.path.join(tmp_dir, Path(dst_path).name)
-            with tqdm(total=total_size, unit="B", unit_scale=True) as progress_bar:
-                progress_bar.set_description(
-                    f"Downloading data at {web_url} to {dst_path}"
-                )
-                with open(tmp_filepath, "wb") as file:
-                    for data in response.iter_content(block_size):
-                        if not IsOnCIEnvvar.get():
-                            progress_bar.update(len(data))
-                        file.write(data)
 
-                if IsOnCIEnvvar.get():
-                    progress_bar.set_postfix_str("Done", refresh=False)
-                    progress_bar.update(total_size)
-                else:
-                    progress_bar.set_postfix_str("Done")
+            for attempt in range(num_retries + 1):
+                # Resume from where we left off if the temp file exists
+                bytes_downloaded = (
+                    os.path.getsize(tmp_filepath) if os.path.exists(tmp_filepath) else 0
+                )
+                headers = {}
+                if bytes_downloaded > 0:
+                    headers["Range"] = f"bytes={bytes_downloaded}-"
+
+                try:
+                    response = requests.get(web_url, stream=True, headers=headers)
+                    if response.status_code not in (200, 206):
+                        raise ValueError(
+                            f"Unable to download file at {web_url}"
+                            f" (status {response.status_code})"
+                        )
+
+                    # If server doesn't support range requests and returned
+                    # full content, restart from scratch.
+                    if bytes_downloaded > 0 and response.status_code == 200:
+                        bytes_downloaded = 0
+
+                    # Prefer Content-Range header for total file size
+                    # (e.g. "bytes 1000-1999/5000" -> 5000) when available.
+                    content_range = response.headers.get("content-range", "")
+                    range_match = re.search(r"/(\d+)\s*$", content_range)
+                    if range_match:
+                        total_size = int(range_match.group(1))
+                    else:
+                        total_size = bytes_downloaded + int(
+                            response.headers.get("content-length", 0)
+                        )
+                    block_size = 1024
+
+                    mode = "ab" if bytes_downloaded > 0 else "wb"
+                    with tqdm(
+                        total=total_size,
+                        initial=bytes_downloaded,
+                        unit="B",
+                        unit_scale=True,
+                    ) as progress_bar:
+                        progress_bar.set_description(
+                            f"Downloading data at {web_url} to {dst_path}"
+                        )
+                        with open(tmp_filepath, mode) as file:
+                            for data in response.iter_content(block_size):
+                                if not IsOnCIEnvvar.get():
+                                    progress_bar.update(len(data))
+                                file.write(data)
+
+                        if IsOnCIEnvvar.get():
+                            progress_bar.set_postfix_str("Done", refresh=False)
+                            progress_bar.update(total_size)
+                        else:
+                            progress_bar.set_postfix_str("Done")
+
+                    # Verify the download is complete. A server may
+                    # return a partial range even when asked for the
+                    # full remainder of the file.
+                    actual_size = os.path.getsize(tmp_filepath)
+                    if total_size and actual_size < total_size:
+                        if attempt < num_retries:
+                            print(
+                                f"Download incomplete ({actual_size}/{total_size} bytes), "
+                                f"retrying ({attempt + 1}/{num_retries})..."
+                            )
+                            continue
+                        raise ValueError(
+                            f"Download incomplete after {num_retries} retries: "
+                            f"got {actual_size}/{total_size} bytes from {web_url}"
+                        )
+
+                    # Download completed successfully
+                    break
+
+                except (
+                    requests.exceptions.ChunkedEncodingError,
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.ContentDecodingError,
+                    requests.exceptions.Timeout,
+                ) as e:
+                    if attempt < num_retries:
+                        print(
+                            f"Download interrupted ({e.__class__.__name__}), "
+                            f"retrying ({attempt + 1}/{num_retries})..."
+                        )
+                    else:
+                        raise
+
             shutil.move(tmp_filepath, dst_path)
     return dst_path
 
@@ -1226,7 +1375,7 @@ def copyfile(src: str, dst: str, num_retries: int = 4) -> str:
 
 
 def extract_zip_file(
-    filepath_str: os.PathLike | str, out_path: Path | None = None
+    filepath_str: os.PathLike | str, out_path: str | os.PathLike | None = None
 ) -> Path:
     """
     Given a local filepath to a zip file, extract its contents. into a folder
@@ -1250,7 +1399,7 @@ def extract_zip_file(
         if out_path is None:
             out_path = filepath.parent / filepath.stem
         zf.extractall(path=out_path)
-    return out_path
+    return Path(out_path)
 
 
 # TODO (#12708): Remove this and rely on client

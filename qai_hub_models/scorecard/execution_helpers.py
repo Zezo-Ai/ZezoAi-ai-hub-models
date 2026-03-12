@@ -5,11 +5,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, cast
 
 import qai_hub as hub
 
@@ -21,7 +20,6 @@ from qai_hub_models.scorecard.envvars import (
     IgnoreKnownFailuresEnvvar,
     SpecialPrecisionSetting,
 )
-from qai_hub_models.scorecard.results.scorecard_job import ScorecardPathOrNoneTypeVar
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
 
 try:
@@ -37,49 +35,6 @@ except ImportError:
 
     def get_bench_pytorch_w8a16_models() -> list[str]:  # type: ignore[misc]
         return []
-
-
-def for_each_scorecard_path_and_device(
-    path_type: type[ScorecardPathOrNoneTypeVar],
-    callback: Callable[[Precision, ScorecardPathOrNoneTypeVar, ScorecardDevice], None],
-    precisions: list[Precision] | None = None,
-    include_paths: list[ScorecardPathOrNoneTypeVar] | None = None,
-    include_devices: list[ScorecardDevice] | None = None,
-    exclude_paths: list[ScorecardPathOrNoneTypeVar] | None = None,
-    exclude_devices: list[ScorecardDevice] | None = None,
-    include_mirror_devices: bool = False,
-) -> None:
-    if precisions is None:
-        precisions = [Precision.float]
-    for precision in precisions:
-        if path_type is not type(None) and path_type is not None:
-            all_paths = path_type.all_paths(enabled=True, supports_precision=precision)  # type: ignore[attr-defined]
-        else:
-            all_paths = [None]
-
-        for path in all_paths:
-            if include_paths is not None and path not in include_paths:
-                continue
-            if exclude_paths is not None and path in exclude_paths:
-                continue
-
-            for device in ScorecardDevice.all_devices(
-                enabled=True,
-                npu_supports_precision=precision,
-                supports_compile_path=(
-                    path if isinstance(path, ScorecardCompilePath) else None
-                ),
-                supports_profile_path=(
-                    path if isinstance(path, ScorecardProfilePath) else None
-                ),
-                is_mirror=None if include_mirror_devices else False,
-            ):
-                if include_devices is not None and device not in include_devices:
-                    continue
-                if exclude_devices is not None and device in exclude_devices:
-                    continue
-
-                callback(precision, path, device)
 
 
 def get_enabled_test_precisions() -> tuple[
@@ -125,8 +80,10 @@ def get_quantized_bench_models() -> set[str]:
 
 def get_model_test_precisions(
     model_id: str,
-    model_supported_precisions: set[Precision],
+    enabled_model_test_precisions: set[Precision],
+    passing_model_test_precisions: set[Precision] | None = None,
     can_use_quantize_job: bool = True,
+    include_unsupported_paths: bool | None = None,
 ) -> list[Precision]:
     """
     Get the list of precisions that should be tested in this environment.
@@ -135,17 +92,30 @@ def get_model_test_precisions(
     ----------
     model_id
         The model ID.
-    model_supported_precisions
-        The set of Precisions that this model can support.
+    enabled_model_test_precisions
+        All Precisions that are enabled for testing with this model.
+    passing_model_test_precisions
+        All Precisions that are enabled for testing with this model and have no known failure reasons in code-gen.yaml
+        If None, assumes this is the same as enabled_model_test_precisions
     can_use_quantize_job
-        Whether a model can use quantize job.
-        If true, extra precisions set in parameter `enabled_test_precisions` will be included.
+        Whether this model can use quantize job.
+    include_unsupported_paths
+        If true, all enabled paths will be included, instead of the ones compatible with
+        parameter supported_paths.
 
     Returns
     -------
     model_test_precisions : list[Precision]
         The list of precisions to test for this model.
     """
+    if include_unsupported_paths is None:
+        include_unsupported_paths = IgnoreKnownFailuresEnvvar.get()
+    model_supported_precisions = (
+        enabled_model_test_precisions
+        if include_unsupported_paths or passing_model_test_precisions is None
+        else passing_model_test_precisions
+    )
+
     enabled_test_precisions = get_enabled_test_precisions()
     special_precision_setting, extra_enabled_precisions = enabled_test_precisions
     enabled_precisions: set[Precision] = set()
@@ -180,7 +150,7 @@ def get_model_test_precisions(
             and model_id in get_bench_pytorch_w8a16_models()
         ):
             enabled_precisions.add(Precision.w8a16)
-    if can_use_quantize_job:
+    if can_use_quantize_job and include_unsupported_paths:
         # If quantize job is supported, this model can run tests on any desired precision.
         enabled_precisions.update(extra_enabled_precisions)
     else:
@@ -193,20 +163,108 @@ def get_model_test_precisions(
 
 
 ScorecardPathTypeVar = TypeVar(
-    "ScorecardPathTypeVar", ScorecardCompilePath, ScorecardProfilePath, None
+    "ScorecardPathTypeVar", ScorecardCompilePath, ScorecardProfilePath
 )
+
+
+def get_enabled_paths_for_testing(
+    model_id: str,
+    model_supported_test_paths: dict[Precision, list[TargetRuntime]],
+    model_passing_test_paths: dict[Precision, list[TargetRuntime]],
+    path_type: type[ScorecardPathTypeVar],
+    can_use_quantize_job: bool = True,
+    include_unsupported_paths: bool | None = None,
+) -> dict[Precision, list[ScorecardPathTypeVar]]:
+    """
+    Get a list of precision + runtime pairs for testing a model.
+
+    Parameters
+    ----------
+    model_id
+        model_id of the relevant model.
+    model_supported_test_paths
+        The list of (Precision, Runtime) pairs that are supported for testing for a the given model.
+    model_passing_test_paths
+        The list of (Precision, Runtime) pairs that have no known failure reasons for a the given model.
+    path_type
+        The type of scorecard path to return (Compile or Profile)
+    can_use_quantize_job
+        Whether this model can be quantized with QuantizeJob.
+        If true, extra precisions set in parameter `enabled_test_precisions` will be included.
+    include_unsupported_paths
+        If true, all enabled paths will be included, instead of the ones compatible with
+        parameter supported_paths.
+
+    Returns
+    -------
+    enabled_test_paths : dict[Precision, list[ScorecardPathTypeVar]]
+        A dict of (Precision, ScorecardPath) pairs to test.
+        Each (Precision, ScorecardPath) pair will:
+        * Only include items enabled in this environment via env variables
+            (each arg is a comma separated list)
+            - QAIHM_TEST_PRECISIONS (enabled precisions, default is DEFAULT (only include precisions supported by each model)
+            - QAIHM_TEST_PATHS (enabled runtimes, default is ALL)
+        * Be compatible with each other
+        * Be compatible with the model
+    """
+    if include_unsupported_paths is None:
+        include_unsupported_paths = IgnoreKnownFailuresEnvvar.get()
+
+    # Get the precisions enabled for this model in this test environment.
+    test_precisions = get_model_test_precisions(
+        model_id,
+        set(model_supported_test_paths.keys()),
+        set(model_passing_test_paths.keys())
+        if model_passing_test_paths is not None
+        else None,
+        can_use_quantize_job,
+        include_unsupported_paths,
+    )
+
+    if include_unsupported_paths:
+        model_test_precision_runtimes = model_supported_test_paths.copy()
+
+        # Users can "force enable" a precision. In this case, models may run a precision that is not in their enabled list.
+        # For these "forced" precisions, we test against all runtimes that are supported by this model.
+        all_enabled_test_runtimes = {
+            runtime
+            for runtimes_by_precision in model_supported_test_paths.values()
+            for runtime in runtimes_by_precision
+        }
+        for precision in set(test_precisions) - model_test_precision_runtimes.keys():
+            if precision_runtimes := [
+                x for x in all_enabled_test_runtimes if x.supports_precision(precision)
+            ]:
+                model_test_precision_runtimes[precision] = precision_runtimes
+    else:
+        model_test_precision_runtimes = model_passing_test_paths
+
+    out: dict[Precision, list[ScorecardPathTypeVar]] = {}
+    for precision in test_precisions:
+        sc_paths: list[ScorecardPathTypeVar] = []
+        for path in path_type:
+            path = cast(ScorecardPathTypeVar, path)
+            if (
+                not path.enabled
+                or path.runtime not in model_test_precision_runtimes.get(precision, [])
+                or not path.supports_precision(precision)
+            ):
+                continue
+            sc_paths.append(path)
+        if sc_paths:
+            out[precision] = sc_paths
+    return out
 
 
 def get_model_test_parameterizations(
     model_id: str,
-    supported_paths: dict[Precision, list[TargetRuntime]],
-    timeout_paths: dict[Precision, list[TargetRuntime]],
+    model_supported_test_paths: dict[Precision, list[TargetRuntime]],
+    model_passing_test_paths: dict[Precision, list[TargetRuntime]],
     path_type: type[ScorecardPathTypeVar],
     can_use_quantize_job: bool = True,
     devices: list[ScorecardDevice] | None = None,
     include_unsupported_paths: bool | None = None,
-    requires_aot_prepare: bool = False,
-    only_include_genai_paths: bool = False,
+    include_mirror_devices: bool = False,
 ) -> list[tuple[Precision, ScorecardPathTypeVar, ScorecardDevice]]:
     """
     Get a list of parameterizations for testing a model.
@@ -215,10 +273,10 @@ def get_model_test_parameterizations(
     ----------
     model_id
         model_id of the relevant model.
-    supported_paths
-        The list of (Precision, Runtime) pairs that this model can support.
-    timeout_paths
-        The list of (Precision, Runtime) pairs that time out. These will never run regardless of scorecard settings.
+    model_supported_test_paths
+        The list of (Precision, Runtime) pairs that are enabled for testing for a the given model.
+    model_passing_test_paths
+        The list of (Precision, Runtime) pairs that have no known failure reasons for a the given model.
     path_type
         The type of scorecard path to return (Compile or Profile)
     can_use_quantize_job
@@ -229,11 +287,9 @@ def get_model_test_parameterizations(
     include_unsupported_paths
         If true, all enabled paths will be included, instead of the ones compatible with
         parameter supported_paths.
-    requires_aot_prepare
-        If True, only AOT (compilation to context binary on Hub) paths are included.
-        If False, only JIT (compilation to context binary on-device) paths are included.
-    only_include_genai_paths
-        If True, only GenAI paths are included.
+    include_mirror_devices
+        If true, mirror devices will be included in the output.
+        Jobs are never run on "mirror" devices. Instead, results are copied ("mirrored") from a different device.
 
     Returns
     -------
@@ -252,62 +308,38 @@ def get_model_test_parameterizations(
         * Be compatible with the model:
             - See parameter documentation for details.
     """
-    ret: list[tuple[Precision, ScorecardPathTypeVar, ScorecardDevice]] = []
-    if include_unsupported_paths is None:
-        include_unsupported_paths = IgnoreKnownFailuresEnvvar.get()
-
-    # Get the precisions enabled for this model in this test environment.
-    model_supported_precisions = set(supported_paths.keys())
-    test_precisions = get_model_test_precisions(
-        model_id, model_supported_precisions, can_use_quantize_job
+    enabled_test_paths = get_enabled_paths_for_testing(
+        model_id,
+        model_supported_test_paths,
+        model_passing_test_paths,
+        path_type,
+        can_use_quantize_job,
+        include_unsupported_paths,
     )
 
-    # For each enabled test precision...
-    for precision in test_precisions:
-        # Get all enabled paths that support this precision
-        path_list = path_type.all_paths(  # type: ignore[attr-defined]
-            enabled=True,
-            supports_precision=precision,
-            include_genai_paths=only_include_genai_paths,
-        )
-
-        if only_include_genai_paths:
-            # Only include GenAI paths.
-            path_list = [
-                path for path in path_list if path.runtime.is_exclusively_for_genai
-            ]
-        elif requires_aot_prepare:
-            # Only include AOT compiled paths.
-            path_list = [path for path in path_list if path.runtime.is_aot_compiled]
-        else:
-            # Only include JIT compiled paths.
-            path_list = [path for path in path_list if not path.runtime.is_aot_compiled]
-
-        # Filter the list to include only paths that are supported by this model.
-        if not include_unsupported_paths:
-            supported_runtime_list = supported_paths.get(precision, [])
-            path_list = [
-                path for path in path_list if path.runtime in supported_runtime_list
-            ]
-
-        # Filter out timeout paths
-        timeout_precision_paths = timeout_paths.get(precision, [])
-        path_list = [
-            path for path in path_list if path.runtime not in timeout_precision_paths
-        ]
-
-        # For each test path...
-
-        for sc_path in path_list:
-            for device in devices or ScorecardDevice.all_devices(is_mirror=False):
-                if not device.enabled or not device.npu_supports_precision(precision):
+    # Calculate the tests to run based on enabled paths, devices, and precisions
+    ret: list[tuple[Precision, ScorecardPathTypeVar, ScorecardDevice]] = []
+    for precision, sc_paths in enabled_test_paths.items():
+        for sc_path in sc_paths:
+            for device in (
+                devices if devices is not None else ScorecardDevice.all_devices()
+            ):
+                if (
+                    not device.enabled
+                    or not device.npu_supports_precision(precision)
+                    or (not include_mirror_devices and device.mirror_device is not None)
+                ):
                     continue
                 if (
-                    sc_path not in device.compile_paths
+                    isinstance(sc_path, ScorecardCompilePath)
+                    and sc_path not in device.compile_paths
+                ):
+                    continue
+                if (
+                    isinstance(sc_path, ScorecardProfilePath)
                     and sc_path not in device.profile_paths
                 ):
                     continue
-
                 ret.append((precision, sc_path, device))
     return ret
 
@@ -337,18 +369,28 @@ def pytest_device_idfn(val: object) -> str | None:
 
 def needs_pre_quantize_compile(
     model_id: str,
-    supported_paths: dict[Precision, list[TargetRuntime]],
+    enabled_test_paths: dict[Precision, list[TargetRuntime]],
+    passing_test_paths: dict[Precision, list[TargetRuntime]],
 ) -> bool:
-    return len(get_quantize_parameterized_pytest_config(model_id, supported_paths)) > 0
+    return (
+        len(
+            get_quantize_parameterized_pytest_config(
+                model_id, enabled_test_paths, passing_test_paths
+            )
+        )
+        > 0
+    )
 
 
 def get_quantize_parameterized_pytest_config(
     model_id: str,
-    supported_paths: dict[Precision, list[TargetRuntime]],
+    enabled_test_paths: dict[Precision, list[TargetRuntime]],
+    passing_test_paths: dict[Precision, list[TargetRuntime]],
 ) -> list[Precision]:
     precisions = get_model_test_precisions(
         model_id,
-        set(supported_paths.keys()),
+        set(enabled_test_paths.keys()),
+        set(passing_test_paths.keys()),
         can_use_quantize_job=True,
     )
     return [x for x in precisions if x.has_quantized_activations]
@@ -356,71 +398,97 @@ def get_quantize_parameterized_pytest_config(
 
 def get_compile_parameterized_pytest_config(
     model_id: str,
-    supported_paths: dict[Precision, list[TargetRuntime]],
-    timeout_paths: dict[Precision, list[TargetRuntime]],
+    enabled_test_paths: dict[Precision, list[TargetRuntime]],
+    passing_test_paths: dict[Precision, list[TargetRuntime]],
     can_use_quantize_job: bool = True,
-    requires_aot_prepare: bool = False,
-    only_include_genai_paths: bool = False,
+    include_mirror_devices: bool = False,
 ) -> list[tuple[Precision, ScorecardCompilePath, ScorecardDevice]]:
     """Get a pytest parameterization list of all enabled (device, compile path) pairs."""
     return get_model_test_parameterizations(
         model_id,
-        supported_paths,
-        timeout_paths,
+        enabled_test_paths,
+        passing_test_paths,
         ScorecardCompilePath,
         can_use_quantize_job,
-        requires_aot_prepare=requires_aot_prepare,
-        only_include_genai_paths=only_include_genai_paths,
+        include_mirror_devices=include_mirror_devices,
     )
+
+
+def get_link_parameterized_pytest_config(
+    model_id: str,
+    enabled_test_paths: dict[Precision, list[TargetRuntime]],
+    passing_test_paths: dict[Precision, list[TargetRuntime]],
+    can_use_quantize_job: bool = True,
+    include_mirror_devices: bool = False,
+) -> list[tuple[Precision, ScorecardCompilePath, ScorecardDevice]]:
+    """
+    Get a pytest parameterization list of all enabled (precision, compile path, device)
+    tuples that require link jobs.
+
+    Link jobs are needed for AOT-compiled runtimes, which use hub.link()
+    to convert DLCs to device-specific context binaries.
+    """
+    compile_configs = get_model_test_parameterizations(
+        model_id,
+        enabled_test_paths,
+        passing_test_paths,
+        ScorecardCompilePath,
+        can_use_quantize_job,
+        include_mirror_devices=include_mirror_devices,
+    )
+    # Filter to only AOT-compiled runtimes that need linking
+    return [
+        (precision, path, device)
+        for precision, path, device in compile_configs
+        if path.runtime.is_aot_compiled
+    ]
 
 
 def get_profile_parameterized_pytest_config(
     model_id: str,
-    supported_paths: dict[Precision, list[TargetRuntime]],
-    timeout_paths: dict[Precision, list[TargetRuntime]],
+    enabled_test_paths: dict[Precision, list[TargetRuntime]],
+    passing_test_paths: dict[Precision, list[TargetRuntime]],
     can_use_quantize_job: bool = True,
-    requires_aot_prepare: bool = False,
+    include_mirror_devices: bool = False,
 ) -> list[tuple[Precision, ScorecardProfilePath, ScorecardDevice]]:
     """Get a pytest parameterization list of all enabled (device, profile path) pairs."""
     return get_model_test_parameterizations(
         model_id,
-        supported_paths,
-        timeout_paths,
+        enabled_test_paths,
+        passing_test_paths,
         ScorecardProfilePath,
         can_use_quantize_job,
-        requires_aot_prepare=requires_aot_prepare,
+        include_mirror_devices=include_mirror_devices,
     )
 
 
 def get_export_parameterized_pytest_config(
     model_id: str,
     device: ScorecardDevice,
-    supported_paths: dict[Precision, list[TargetRuntime]],
-    timeout_paths: dict[Precision, list[TargetRuntime]],
+    enabled_test_paths: dict[Precision, list[TargetRuntime]],
+    passing_test_paths: dict[Precision, list[TargetRuntime]],
     can_use_quantize_job: bool = True,
     requires_aot_prepare: bool = False,
 ) -> list[tuple[Precision, ScorecardProfilePath, ScorecardDevice]]:
     """Get a pytest parameterization list of all enabled (device, profile path) pairs."""
     return get_model_test_parameterizations(
         model_id,
-        supported_paths,
-        timeout_paths,
+        enabled_test_paths,
+        passing_test_paths,
         ScorecardProfilePath,
         can_use_quantize_job,
         ScorecardDevice.all_devices(enabled=True, include_universal=False)
         if requires_aot_prepare
         else [device],
-        requires_aot_prepare=requires_aot_prepare,
     )
 
 
 def get_evaluation_parameterized_pytest_config(
     model_id: str,
     device: ScorecardDevice,
-    supported_paths: dict[Precision, list[TargetRuntime]],
-    timeout_paths: dict[Precision, list[TargetRuntime]],
+    enabled_test_paths: dict[Precision, list[TargetRuntime]],
+    passing_test_paths: dict[Precision, list[TargetRuntime]],
     can_use_quantize_job: bool = True,
-    requires_aot_prepare: bool = False,
 ) -> list[tuple[Precision, ScorecardProfilePath, ScorecardDevice]]:
     """Get a pytest parameterization list of all enabled (device, profile path) pairs."""
     enabled_devices = ScorecardDevice.all_devices(enabled=True, include_universal=False)
@@ -433,12 +501,11 @@ def get_evaluation_parameterized_pytest_config(
 
     return get_model_test_parameterizations(
         model_id,
-        supported_paths,
-        timeout_paths,
+        enabled_test_paths,
+        passing_test_paths,
         ScorecardProfilePath,
         can_use_quantize_job,
         [device],
-        requires_aot_prepare=requires_aot_prepare,
     )
 
 

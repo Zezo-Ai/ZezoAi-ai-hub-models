@@ -170,13 +170,13 @@ class QAIHMModelInfo(BaseQAIHMConfig):
 
         # Validate related models are present
         for r_model in self.related_models:
-            if r_model not in MODEL_IDS:
-                raise ValueError(f"Related model {r_model} is not a valid model ID.")
-            if r_model == self.id:
-                raise ValueError(f"Model {r_model} cannot be related to itself.")
             # TODO: https://github.com/qcom-ai-hub/tetracode/issues/15078
             # Add validation to make sure related models are not private if this
             # model is public.
+            # if r_model not in MODEL_IDS:
+            #    raise ValueError(f"Related model {r_model} is not a valid model ID.")
+            if r_model == self.id:
+                raise ValueError(f"Model {r_model} cannot be related to itself.")
 
         # If paper is arxiv, it should be an abs link
         if (

@@ -8,7 +8,17 @@ This repository contains scripts for optimized on-device export suitable to run 
 Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.qualcomm.com) to compile, profile, and evaluate this model. [Sign up](https://myaccount.qualcomm.com/signup) to run these models on a hosted Qualcomm® device.
 
 ## Setup
-### 1. Install the package
+### 1. Install System-Level Dependencies
+#### Linux
+```bash
+sudo apt install libegl-dev
+```
+
+#### Windows
+You can export this model on windows without extra system dependencies.
+To run the demo, you will need to install LibEGL libraries. Options include ANGLE or Mesa3D. This is not a well-tested path; we recommend using WSL or a Linux machine for the demo.
+
+### 2. Install the package
 Install the package via pip:
 ```bash
 # NOTE: 3.10 <= PYTHON_VERSION < 3.14 is supported.
@@ -16,7 +26,7 @@ pip install dm_control==1.0.36 --no-deps
 pip install "qai-hub-models[act]"
 ```
 
-### 2. Configure Qualcomm® AI Hub Workbench
+### 3. Configure Qualcomm® AI Hub Workbench
 Sign-in to [Qualcomm® AI Hub Workbench](https://workbench.aihub.qualcomm.com/) with your
 Qualcomm® ID. Once signed in navigate to `Account -> Settings -> API Token`.
 

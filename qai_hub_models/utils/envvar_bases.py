@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import os
 from datetime import datetime
 from enum import Enum
@@ -14,6 +15,33 @@ from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 ParsedT = TypeVar("ParsedT")
+
+# Registry of envvar classes that should be exposed as pytest CLI args
+PYTEST_CLI_ENVVAR_REGISTRY: list[type[QAIHMEnvvar[Any]]] = []
+
+
+def pytest_cli_envvar(cls: type[QAIHMEnvvar[Any]]) -> type[QAIHMEnvvar[Any]]:
+    """Decorator that registers an envvar class for pytest CLI exposure."""
+    PYTEST_CLI_ENVVAR_REGISTRY.append(cls)
+    return cls
+
+
+@functools.wraps(wrapped=argparse.ArgumentParser.add_argument)
+def _add_parser_argument(parser: Any, *args: Any, **kwargs: Any) -> None:
+    if isinstance(parser, (argparse.ArgumentParser, argparse._ArgumentGroup)):
+        parser.add_argument(*args, **kwargs)
+        return
+
+    try:
+        import pytest
+
+        if isinstance(parser, (pytest.Parser, pytest.OptionGroup)):
+            parser.addoption(*args, **kwargs)
+            return
+    except ImportError:
+        pass
+
+    raise NotImplementedError(f"Unsupported parser type: {type(parser)}")
 
 
 class QAIHMEnvvar(Generic[ParsedT]):
@@ -166,7 +194,7 @@ class QAIHMEnvvar(Generic[ParsedT]):
     @classmethod
     def add_arg(
         cls,
-        parser: argparse.ArgumentParser | argparse._ArgumentGroup,
+        parser: Any,
         default: ParsedT | None = None,
         setenv: bool = False,
     ) -> None:
@@ -190,11 +218,13 @@ class QAIHMEnvvar(Generic[ParsedT]):
         setenv
             If true, the argument parser will set this environment variable with passed-in CLI value.
         """
-        parser.add_argument(
+        default = cls.get(default)
+        _add_parser_argument(
+            parser,
             *cls.CLI_ARGNAMES,
-            action=partial(cls.ParseAction, envvar=cls, setenv=setenv),  # type: ignore[arg-type]
-            default=cls.get(default),
-            help=cls.CLI_HELP_MESSAGE,
+            action=partial(cls.ParseAction, envvar=cls, setenv=setenv),
+            default=default,
+            help=f"{cls.CLI_HELP_MESSAGE} Default is envvar::{cls.VARNAME} ({default}).",
         )
 
 
@@ -255,7 +285,7 @@ class QAIHMBoolEnvvar(QAIHMEnvvar[bool]):
     @classmethod
     def add_arg(
         cls,
-        parser: argparse.ArgumentParser,
+        parser: Any,
         default: bool | None = None,
         setenv: bool = False,
     ) -> None:
@@ -294,7 +324,8 @@ class QAIHMBoolEnvvar(QAIHMEnvvar[bool]):
             `parser.parse_args([`--no-set-bool`]).set_bool == false`
         """
         default = cls.default() if default is None else default
-        if cls.VARNAME in os.environ and cls.get(default) != default:
+        value = cls.get(default)
+        if cls.VARNAME in os.environ and value != default:
             args: list[str] = []
             for x in cls.CLI_ARGNAMES:
                 if x.startswith("--"):
@@ -312,17 +343,18 @@ class QAIHMBoolEnvvar(QAIHMEnvvar[bool]):
             args = cls.CLI_ARGNAMES
             dest = None
 
-        parser.add_argument(
+        _add_parser_argument(
+            parser,
             *args,
             action=partial(
                 cls.StoreTrueFalseAction,
-                const=not cls.get(default),
+                const=not value,
                 envvar=cls,
                 setenv=setenv,
-            ),  # type: ignore[arg-type]
-            default=cls.get(default),
+            ),
+            default=value,
             dest=dest,
-            help=cls.CLI_HELP_MESSAGE,
+            help=f"{cls.CLI_HELP_MESSAGE} Default is envvar::{cls.VARNAME} ({value}).",
         )
 
 

@@ -252,3 +252,17 @@ def get_pip() -> str:
     if uv_installed():
         return "uv pip"
     return "pip"
+
+
+@functools.cache
+def has_cuda_gpu() -> bool:
+    """Return True if nvidia-smi exits with code 0, used as a proxy for CUDA GPU availability."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi"],
+            check=False,
+            capture_output=True,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False

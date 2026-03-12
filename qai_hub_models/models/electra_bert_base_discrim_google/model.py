@@ -9,6 +9,7 @@ import torch
 from transformers import ElectraForPreTraining, ElectraTokenizer
 from typing_extensions import Self
 
+from qai_hub_models.datasets import DATASET_NAME_MAP
 from qai_hub_models.models._shared.bert_hf.model import BaseBertModel
 from qai_hub_models.models._shared.bert_hf.model_patches import (
     patch_get_extended_attention_mask,
@@ -17,23 +18,33 @@ from qai_hub_models.utils.input_spec import InputSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
+WEIGHTS_NAME = "google/electra-base-discriminator"
 
 
 class ElectraBertBaseDiscrimGoogle(BaseBertModel):
     """Exportable HuggingFace ElectraBertBaseDiscrimGoogle Model"""
 
     @classmethod
-    def from_pretrained(
-        cls, weights: str = "google/electra-base-discriminator"
-    ) -> Self:
+    def from_pretrained(cls, weights: str = WEIGHTS_NAME) -> Self:
         """Load HuggingFace Bert Model for Embeddings."""
         model = ElectraForPreTraining.from_pretrained(weights)
         tokenizer = ElectraTokenizer.from_pretrained(weights)
         model.electra.get_extended_attention_mask = patch_get_extended_attention_mask
         return cls(model, tokenizer)
 
+    @staticmethod
+    def eval_datasets() -> list[str]:
+        return ["electra_bert_wikitext_masked"]
+
+    @staticmethod
+    def calibration_dataset_name() -> str:
+        return "electra_bert_wikitext_masked"
+
     def forward(
-        self, input_tokens: torch.Tensor, attention_masks: torch.Tensor
+        self,
+        input_tokens: torch.Tensor,
+        attention_masks: torch.Tensor,
+        mask_indices: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Parameters
@@ -42,6 +53,9 @@ class ElectraBertBaseDiscrimGoogle(BaseBertModel):
             Input token IDs with shape [batch_size, seq_len]
         attention_masks
             Attention masks with shape [batch_size, seq_len]
+        mask_indices
+            Unused. Accepted for compatibility with WikiTextMasked dataset
+            which returns 3-tuples.
 
         Returns
         -------
@@ -65,3 +79,8 @@ class ElectraBertBaseDiscrimGoogle(BaseBertModel):
     @staticmethod
     def get_output_names() -> list[str]:
         return ["predictions"]
+
+
+DATASET_NAME_MAP["electra_bert_wikitext_masked"] = (
+    ElectraBertBaseDiscrimGoogle.get_dataset_class(WEIGHTS_NAME)
+)

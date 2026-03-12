@@ -71,12 +71,12 @@ from qai_hub_models.utils.testing_async_utils import (
     cache_dataset,
     callable_side_effect,
     fetch_async_test_jobs,
+    get_async_test_job_cache_path,
     get_cached_dataset_entries,
     get_compile_jobs_are_identical_cache_file,
     get_cpu_accuracy_file,
     get_dataset_ids_file,
     get_release_assets_file,
-    is_hub_testing_async,
     str_with_async_test_metadata,
     write_accuracy,
 )
@@ -140,10 +140,12 @@ def patch_hub_with_cached_jobs(
     component_names: list[str] | None = None,
     patch_quantization: bool = False,
     patch_compile: bool = False,
+    patch_link: bool = False,
     patch_profile: bool = False,
     patch_inference: bool = False,
 ) -> tuple[
     mock._patch,
+    mock._patch | nullcontext,
     mock._patch | nullcontext,
     mock._patch | nullcontext,
     mock._patch | nullcontext,
@@ -185,6 +187,8 @@ def patch_hub_with_cached_jobs(
         Whether to patch previously cached quantization jobs. Default is False.
     patch_compile
         Whether to patch previously cached compile jobs. Default is False.
+    patch_link
+        Whether to patch previously cached link jobs. Default is False.
     patch_profile
         Whether to patch previously cached profile jobs. Default is False.
     patch_inference
@@ -200,6 +204,8 @@ def patch_hub_with_cached_jobs(
         Patch for quantization jobs.
     compile_job_patch : mock._patch | nullcontext
         Patch for compilation jobs.
+    link_job_patch : mock._patch | nullcontext
+        Patch for link jobs.
     profile_job_patch : mock._patch | nullcontext
         Patch for profiling jobs.
     inference_job_patch : mock._patch | nullcontext
@@ -220,11 +226,10 @@ def patch_hub_with_cached_jobs(
         "qai_hub.get_devices", return_value=[device.reference_device]
     )
 
-    if not is_hub_testing_async():
-        return (device_patch, *[nullcontext() for _ in range(5)])  # type: ignore[arg-type,return-value]
     calibration_datas_to_patch: list[hub.Dataset] = []
     quantize_jobs_to_patch: list[hub.QuantizeJob] = []
     compile_jobs_to_patch: list[hub.CompileJob] = []
+    link_jobs_to_patch: list[hub.LinkJob] = []
     profile_jobs_to_patch: list[hub.ProfileJob] = []
     inference_jobs_to_patch: list[hub.InferenceJob] = []
 
@@ -270,6 +275,21 @@ def patch_hub_with_cached_jobs(
             compile_jobs_to_patch.extend(compile_jobs.values())
         else:
             raise CachedScorecardJobError("Could not find cached compile jobs.")
+
+    if patch_link:
+        assert path
+        if link_jobs := fetch_async_test_jobs(
+            hub.JobType.LINK,
+            model_id,
+            precision,
+            path,
+            device,
+            component_names,
+            raise_if_not_successful=True,
+        ):
+            link_jobs_to_patch.extend(link_jobs.values())
+        else:
+            raise CachedScorecardJobError("Could not find cached link jobs.")
 
     if patch_profile:
         assert path
@@ -343,6 +363,18 @@ def patch_hub_with_cached_jobs(
         else nullcontext()
     )
 
+    link_side_effect = itertools.chain(
+        link_jobs_to_patch, itertools.repeat(_invalid_job_submission)
+    )
+    link_job_patch = (
+        mock.patch(
+            "qai_hub.submit_link_job",
+            side_effect=callable_side_effect(link_side_effect),
+        )
+        if patch_link or link_jobs_to_patch
+        else nullcontext()
+    )
+
     profile_side_effect = itertools.chain(
         profile_jobs_to_patch, itertools.repeat(_invalid_job_submission)
     )
@@ -372,6 +404,7 @@ def patch_hub_with_cached_jobs(
         calibration_data_patch,
         quantize_job_patch,
         compile_job_patch,
+        link_job_patch,
         profile_job_patch,
         inference_job_patch,
     )
@@ -623,6 +656,96 @@ def compile_via_export(
         )
 
 
+def link_via_export(
+    link_model: Callable[..., hub.LinkJob | dict[str, hub.LinkJob]],
+    model_id: str,
+    model: CollectionModel | BaseModel,
+    precision: Precision,
+    scorecard_path: ScorecardCompilePath,
+    device: ScorecardDevice,
+) -> None:
+    """
+    Use the provided export script function to submit link jobs.
+
+    If async testing is enabled:
+        * Fetches previously cached compile jobs.
+
+        * Submitted link jobs are added to the async testing cache,
+          and this method returns immediately.
+
+    Otherwise:
+        * Waits for the submitted jobs and asserts success.
+        NOTE: This method will wait infinitely long for running jobs.
+
+    Parameters
+    ----------
+    link_model
+        Export script function to submit link jobs.
+    model_id
+        Model ID.
+    model
+        QAIHM instance of the model.
+    precision
+        Model precision.
+    scorecard_path
+        Scorecard path.
+    device
+        Scorecard device.
+    """
+    has_components = isinstance(model, CollectionModel)
+
+    # Fetch compile jobs from cache
+    compile_jobs = fetch_async_test_jobs(
+        hub.JobType.COMPILE,
+        model_id,
+        precision,
+        scorecard_path,
+        device,
+        model.component_class_names if isinstance(model, CollectionModel) else None,
+        raise_if_not_successful=True,
+    )
+    if compile_jobs is None:
+        raise CachedScorecardJobError(
+            str_with_async_test_metadata(
+                "Could not find cached compile jobs for linking.",
+                model_id,
+                precision,
+                scorecard_path,
+                device,
+            )
+        )
+
+    # Get compiled models from compile jobs
+    compiled_models_map = assert_success_and_get_target_models(
+        cast(Mapping[str | None, hub.CompileJob], compile_jobs)
+    )
+    compiled_models: hub.Model | dict[str | None, hub.Model] = (
+        compiled_models_map if has_components else compiled_models_map[None]
+    )
+
+    # Call link_model from export script
+    link_output = link_model(
+        compiled_models,
+        device.execution_device,
+        model_id,
+        model,
+        scorecard_path.runtime,
+    )
+
+    # Normalize to dict format
+    link_jobs = (
+        cast(dict[str | None, hub.Job], link_output)
+        if isinstance(link_output, dict)
+        else {None: link_output}
+    )
+
+    # Verify success or cache job IDs to a file.
+    for component, job in link_jobs.items():
+        assert_success_or_cache_job(
+            model_id, job, precision, scorecard_path, device, component
+        )
+
+
 def run_llm_compile(
     export_model: ExportFunc,
     model_id: str,
@@ -792,6 +915,91 @@ def fetch_cached_jobs_if_compile_jobs_are_identical(
     return cached_jobs
 
 
+def fetch_compile_or_link_jobs(
+    model_id: str,
+    precision: Precision,
+    scorecard_path: ScorecardCompilePath | ScorecardProfilePath,
+    device: ScorecardDevice,
+    component_names: list[str] | None = None,
+) -> Mapping[str | None, hub.Job]:
+    """
+    Fetch cached compile or link jobs depending on runtime type.
+
+    For AOT runtimes (is_aot_compiled=True): fetches link jobs (context binaries).
+    For JIT runtimes: fetches compile jobs.
+
+    Parameters
+    ----------
+    model_id
+        Model ID.
+    precision
+        Model precision.
+    scorecard_path
+        Scorecard path.
+    device
+        Scorecard device.
+    component_names
+        Name of all model components (if applicable), or None if there are no components.
+
+    Returns
+    -------
+    jobs : Mapping[str | None, hub.Job]
+        The cached jobs (link jobs for AOT, compile jobs for JIT).
+
+    Raises
+    ------
+    CachedScorecardJobError
+        If no cached jobs are found.
+    """
+    is_aot = scorecard_path.runtime.is_aot_compiled
+
+    jobs: Mapping[str | None, hub.Job] | None
+    if is_aot:
+        # For AOT runtimes, fetch link jobs (context binaries)
+        jobs = fetch_async_test_jobs(
+            hub.JobType.LINK,
+            model_id,
+            precision,
+            scorecard_path,
+            device,
+            component_names,
+            raise_if_not_successful=True,
+        )
+        if not jobs:
+            raise CachedScorecardJobError(
+                str_with_async_test_metadata(
+                    "Could not find cached link jobs.",
+                    model_id,
+                    precision,
+                    scorecard_path,
+                    device,
+                )
+            )
+    else:
+        # For JIT runtimes, fetch compile jobs
+        jobs = fetch_async_test_jobs(
+            hub.JobType.COMPILE,
+            model_id,
+            precision,
+            scorecard_path,
+            device,
+            component_names,
+            raise_if_not_successful=True,
+        )
+        if not jobs:
+            raise CachedScorecardJobError(
+                str_with_async_test_metadata(
+                    "Could not find cached compile jobs.",
+                    model_id,
+                    precision,
+                    scorecard_path,
+                    device,
+                )
+            )
+
+    return jobs
+
+
 def profile_via_export(
     profile_model: Callable[..., hub.ProfileJob | dict[str, hub.ProfileJob]],
     model_id: str,
@@ -849,25 +1057,13 @@ def profile_via_export(
     else:
         # If there are no cached profile jobs, use the export script to create a new profile job
         has_components = isinstance(model, CollectionModel)
-        compile_jobs = fetch_async_test_jobs(
-            hub.JobType.COMPILE,
+        jobs = fetch_compile_or_link_jobs(
             model_id,
             precision,
             scorecard_path,
             device,
             model.component_class_names if isinstance(model, CollectionModel) else None,
-            raise_if_not_successful=True,
         )
-        if not compile_jobs:
-            raise CachedScorecardJobError(
-                str_with_async_test_metadata(
-                    "Could not find cached compile jobs.",
-                    model_id,
-                    precision,
-                    scorecard_path,
-                    device,
-                )
-            )
 
         profile_output = profile_model(
             model_id,
@@ -875,7 +1071,7 @@ def profile_via_export(
             model.get_hub_profile_options(
                 scorecard_path.runtime, scorecard_path.get_profile_options()
             ),
-            compile_jobs if has_components else compile_jobs[None],
+            jobs if has_components else jobs[None],
         )
         profile_jobs = (
             cast(dict[str | None, hub.Job], profile_output)
@@ -935,25 +1131,13 @@ def inference_via_export(
     """
     # TODO(#15111): Reenable caching for Inference Jobs. Inference jobs also must check that input datasets are the same, not just the compiled assets.
     has_components = isinstance(model, CollectionModel)
-    compile_jobs = fetch_async_test_jobs(
-        hub.JobType.COMPILE,
+    jobs = fetch_compile_or_link_jobs(
         model_id,
         precision,
         scorecard_path,
         device,
         model.component_class_names if isinstance(model, CollectionModel) else None,
-        raise_if_not_successful=True,
     )
-    if not compile_jobs:
-        raise CachedScorecardJobError(
-            str_with_async_test_metadata(
-                "Could not find cached compile jobs.",
-                model_id,
-                precision,
-                scorecard_path,
-                device,
-            )
-        )
 
     runtime = scorecard_path.runtime
     inference_output = inference_model(
@@ -963,7 +1147,7 @@ def inference_via_export(
         model_id,
         device.execution_device,
         model.get_hub_profile_options(runtime, scorecard_path.get_profile_options()),
-        compile_jobs if has_components else compile_jobs[None],
+        jobs if has_components else jobs[None],
     )
     inference_jobs: dict[str | None, hub.Job] = (
         cast(dict[str | None, hub.Job], inference_output)
@@ -1023,12 +1207,22 @@ def export_test_e2e(
         and os.stat(get_profile_job_ids_file()).st_size > 0
     )
 
+    # Check for cached link jobs (only relevant for AOT runtimes)
+    is_aot = scorecard_path.runtime.is_aot_compiled
+    link_jobs_cache_path = get_async_test_job_cache_path(hub.JobType.LINK)
+    has_cached_link_jobs = (
+        is_aot
+        and os.path.exists(link_jobs_cache_path)
+        and os.stat(link_jobs_cache_path).st_size > 0
+    )
+
     # Patch previous jobs
     (
         device_patch,
         calibration_data_patch,
         quantize_job_patch,
         compile_job_patch,
+        link_job_patch,
         profile_job_patch,
         _,
     ) = patch_hub_with_cached_jobs(
@@ -1039,6 +1233,7 @@ def export_test_e2e(
         component_names,
         patch_quantization=not QAIHMModelCodeGen.from_model(model_id).is_aimet,
         patch_compile=True,
+        patch_link=has_cached_link_jobs,
         patch_profile=has_cached_profile_jobs,
         patch_inference=False,
     )
@@ -1049,6 +1244,7 @@ def export_test_e2e(
         calibration_data_patch,
         quantize_job_patch,
         compile_job_patch,
+        link_job_patch,
         profile_job_patch,
         tempfile.TemporaryDirectory() as tmpdir,
     ):
@@ -1242,6 +1438,40 @@ def torch_inference_for_accuracy_validation(
     cache_dataset(model_id, "torch_val", hub.upload_dataset(hub_entries))
 
 
+def _pad_and_concatenate(tensor_list: list[np.ndarray]) -> np.ndarray:
+    """Concatenate arrays along axis 0, padding other dims if shapes differ.
+
+    Detection models may produce variable-length outputs (e.g., different
+    number of detections per image after NMS). Zero-padding is safe because
+    downstream evaluators filter by score threshold.
+    """
+    max_ndim = max(arr.ndim for arr in tensor_list)
+    if any(arr.ndim != max_ndim for arr in tensor_list):
+        raise ValueError(
+            "All arrays must have the same number of dimensions, "
+            f"got ndims {[arr.ndim for arr in tensor_list]}"
+        )
+    max_shape = [max(arr.shape[dim] for arr in tensor_list) for dim in range(max_ndim)]
+
+    needs_padding = any(
+        arr.shape[dim] != max_shape[dim]
+        for arr in tensor_list
+        for dim in range(1, max_ndim)
+    )
+
+    if not needs_padding:
+        return np.concatenate(tensor_list, axis=0)
+
+    total_rows = sum(arr.shape[0] for arr in tensor_list)
+    out = np.zeros((total_rows, *max_shape[1:]), dtype=tensor_list[0].dtype)
+    row = 0
+    for arr in tensor_list:
+        slices = (slice(row, row + arr.shape[0]), *(slice(0, s) for s in arr.shape[1:]))
+        out[slices] = arr
+        row += arr.shape[0]
+    return out
+
+
 def torch_inference_for_accuracy_validation_outputs(model_id: str) -> list[np.ndarray]:
     """
     Fetches torch inference results computed by torch_inference_for_accuracy_validation
@@ -1267,7 +1497,7 @@ def torch_inference_for_accuracy_validation_outputs(model_id: str) -> list[np.nd
     # This flattens the dict into a list of the same order,
     # and merges the list of batch outputs for each dictionary entry into a single tensor.
     return [
-        np.concatenate(tensor_list, axis=0) if len(tensor_list) > 1 else tensor_list[0]
+        _pad_and_concatenate(tensor_list) if len(tensor_list) > 1 else tensor_list[0]
         for tensor_list in dataset.values()
     ]
 
@@ -1352,6 +1582,7 @@ def accuracy_on_sample_inputs_via_export(
         calibration_data_patch,
         quantize_job_patch,
         compile_job_patch,
+        _,  # link_job_patch
         _,  # profile_job_patch
         inference_job_patch,
     ) = patch_hub_with_cached_jobs(
@@ -1586,7 +1817,8 @@ def accuracy_on_dataset_via_evaluate_and_export(
         calibration_data_patch,
         quantize_job_patch,
         compile_job_patch,
-        _,
+        _,  # link_job_patch
+        _,  # profile_job_patch
         inference_job_patch,
     ) = patch_hub_with_cached_jobs(
         model_id,
@@ -1666,6 +1898,11 @@ def torch_accuracy_on_dataset(
         Model ID.
 
     """
+    # Create evaluator BEFORE mock is active so train_model() uses the real model.
+    # Some evaluators (e.g. ClassificationEvaluator) call the model many times
+    # during __init__, which would exhaust the mock's side_effect list.
+    evaluator = model.get_evaluator()
+
     torch_call_patch = mock.patch(
         "qai_hub_models.utils.evaluate.BaseModel.__call__",
         side_effect=torch_evaluate_mock_outputs,
@@ -1677,7 +1914,7 @@ def torch_accuracy_on_dataset(
     num_samples = get_num_eval_samples(dataset_name)
     with torch_call_patch, cache_path_patch:
         evaluate_result = evaluate_on_dataset(
-            evaluator_func=model.get_evaluator,
+            evaluator_func=lambda: evaluator,
             torch_model=model,
             use_cache=True,
             dataset_name=dataset_name,

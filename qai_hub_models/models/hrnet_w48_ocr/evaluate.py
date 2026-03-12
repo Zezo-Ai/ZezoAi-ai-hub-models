@@ -31,7 +31,6 @@ def main() -> None:
         Precision.float: [
             TargetRuntime.ONNX,
         ],
-        Precision.w8a16: [],
     }
 
     parser = evaluate_parser(

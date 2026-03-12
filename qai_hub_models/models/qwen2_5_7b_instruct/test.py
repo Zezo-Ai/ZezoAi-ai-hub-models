@@ -9,6 +9,10 @@ import torch
 
 from qai_hub_models.models._shared.llm.common import cleanup
 from qai_hub_models.models._shared.llm.export import export_model
+from qai_hub_models.models._shared.llm.model import (
+    DEFAULT_EXPORT_CONTEXT_LENGTHS,
+    DEFAULT_EXPORT_SEQUENCE_LENGTHS,
+)
 from qai_hub_models.models.common import Precision
 from qai_hub_models.models.qwen2_5_7b_instruct import MODEL_ID, Model
 from qai_hub_models.models.qwen2_5_7b_instruct.export import (
@@ -16,7 +20,6 @@ from qai_hub_models.models.qwen2_5_7b_instruct.export import (
     NUM_SPLITS,
 )
 from qai_hub_models.models.qwen2_5_7b_instruct.model import (
-    DEFAULT_CONTEXT_LENGTH,
     MODEL_ASSET_VERSION,
 )
 from qai_hub_models.scorecard import (
@@ -52,8 +55,8 @@ def test_compile(
         device,
         extra_model_arguments=dict(
             checkpoint="DEFAULT",
-            sequence_length=128,
-            context_length=DEFAULT_CONTEXT_LENGTH,
+            sequence_length=DEFAULT_EXPORT_SEQUENCE_LENGTHS,
+            context_length=DEFAULT_EXPORT_CONTEXT_LENGTHS,
             _skip_quantsim_creation=True,
             model_cls=Model,
             model_name=MODEL_ID,

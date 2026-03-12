@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from PIL import Image
 
+from qai_hub_models.datasets.coco import COCO_DATASET
 from qai_hub_models.datasets.common import BaseDataset, DatasetMetadata, DatasetSplit
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset, extract_zip_file
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
@@ -19,18 +20,12 @@ COCO_FOLDER_NAME = "coco-panoptic"
 COCO_VERSION = 1
 
 # Dataset assets
-COCO_VAL_IMAGES_ASSET = CachedWebDatasetAsset(
-    "http://images.cocodataset.org/zips/val2017.zip",
-    COCO_FOLDER_NAME,
-    COCO_VERSION,
-    "val2017.zip",
-)
-
 COCO_ANNOTATIONS_ASSET = CachedWebDatasetAsset(
     "http://images.cocodataset.org/annotations/panoptic_annotations_trainval2017.zip",
     COCO_FOLDER_NAME,
     COCO_VERSION,
     "panoptic_annotations_trainval2017.zip",
+    ci_private_s3_key="qai-hub-models/datasets/coco_panoptic/panoptic_annotations_trainval2017.zip",
 )
 
 
@@ -47,7 +42,9 @@ class CocoPanopticSegmentationDataset(BaseDataset):
         self.num_samples = num_samples
 
         # Load dataset paths
-        self.image_dir = COCO_VAL_IMAGES_ASSET.path().parent / "val2017" / "val2017"
+        self.image_dir = (
+            COCO_DATASET.path(extracted=True).parent / "val2017" / "val2017"
+        )
         self.annotation_path = (
             COCO_ANNOTATIONS_ASSET.path().parent
             / "panoptic_annotations_trainval2017"
@@ -109,15 +106,15 @@ class CocoPanopticSegmentationDataset(BaseDataset):
 
     def _validate_data(self) -> bool:
         return (
-            COCO_VAL_IMAGES_ASSET.path(extracted=True).exists()
+            COCO_DATASET.path(extracted=True).exists()
             and COCO_ANNOTATIONS_ASSET.path(extracted=True).exists()
         )
 
     def _download_data(self) -> None:
         """Download and extract COCO dataset assets."""
-        # Download and extract images
-        COCO_VAL_IMAGES_ASSET.fetch(extract=True)
+        COCO_DATASET.fetch(extract=True)
         COCO_ANNOTATIONS_ASSET.fetch(extract=True)
+
         extract_zip_file(
             str(
                 self.annotation_path.parent

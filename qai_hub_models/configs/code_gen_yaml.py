@@ -89,9 +89,11 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # ("AOT prepare") are enabled, both in CI and in Scorecard.
     requires_aot_prepare: bool = False
 
-    # Supported GenAI based runtimes.
-    # If set, ONLY these runtimes will be supported. All others will be disabled.
-    supported_genai_runtimes: list[TargetRuntime] = Field(default_factory=list)
+    # "Orchestrator runtimes" are runtimes that require extra orchestration steps beyond just running the model in order to work.
+    orchestrator_runtimes: list[TargetRuntime] = Field(default_factory=list)
+
+    # If set, only the runtimes in orchestrator runtimes will be supported.
+    only_allow_orchestrator_runtimes: bool = False
 
     # If set, disables generating `export.py`.
     skip_export: bool = False
@@ -152,11 +154,16 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     llama_cpp_gpu_command: str | None = None
     llama_cpp_npu_command: str | None = None
 
+    # Instructions for installing system-level dependencies before pip install.
+    readme_install_system_deps: str | None = None
+
     def is_supported(
         self,
         precision: Precision,
         runtime: TargetRuntime,
         consider_scorecard_failures: bool = True,
+        consider_user_defined_failures: bool = True,
+        consider_timeouts: bool = True,
     ) -> bool:
         """
         Return true if this precision + runtime combo is supported by this model.
@@ -166,7 +173,13 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
         are ignored for the purposes of determining if a path is supported.
         """
         return not bool(
-            self.failure_reason(precision, runtime, consider_scorecard_failures)
+            self.failure_reason(
+                precision,
+                runtime,
+                consider_scorecard_failures,
+                consider_user_defined_failures,
+                consider_timeouts,
+            )
         )
 
     def failure_reason(
@@ -174,13 +187,20 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
         precision: Precision,
         runtime: TargetRuntime,
         include_scorecard_failures: bool = True,
+        include_user_defined_failures: bool = True,
+        include_timeouts: bool = True,
     ) -> str | None:
         """Return the reason a model failed or None if the model did not fail."""
-        if self.supported_genai_runtimes:
-            if runtime not in self.supported_genai_runtimes:
-                return f"{runtime} is not supported for this GenAI model."
-        elif runtime.is_exclusively_for_genai:
-            return "GenAI runtimes are not supported by this model."
+        if (
+            not runtime.is_orchestrator_runtime
+            and self.only_allow_orchestrator_runtimes
+        ):
+            return f"{runtime} is not an orchestrator runtime, but only orchestrator runtimes are supported for this model."
+        if (
+            runtime.is_orchestrator_runtime
+            and runtime not in self.orchestrator_runtimes
+        ):
+            return f"{runtime} is not a supported runtime for this model."
 
         if self.is_precompiled and runtime != TargetRuntime.QNN_CONTEXT_BINARY:
             return "Precompiled models are only supported via the QNN path."
@@ -194,7 +214,7 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
         if (
             not self.requires_aot_prepare
             and runtime.is_aot_compiled
-            and not runtime.is_exclusively_for_genai
+            and not runtime.is_orchestrator_runtime
         ):
             # Only the JIT path is tested if this model does not require AOT prepare.
             # All AOT paths will fail if QNN fails.
@@ -203,11 +223,15 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
         if (
             reason := self.disabled_paths.get_disable_reasons(precision, runtime)
         ) and reason.has_failure:
-            if include_scorecard_failures:
-                return reason.failure_reason
-            if reason.scorecard_failure is None:
-                return reason.failure_reason
-
+            if include_scorecard_failures and (
+                scorecard_failure := reason.scorecard_failure
+                or reason.scorecard_accuracy_failure
+            ):
+                return scorecard_failure
+            if include_user_defined_failures and reason.issue is not None:
+                return reason.issue
+            if include_timeouts and reason.causes_timeout:
+                return reason.issue or "Timeout"
         return None
 
     @property
@@ -265,6 +289,50 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     def default_precision(self) -> Precision:
         return self.supported_precisions[0]
 
+    def get_supported_paths_for_testing(
+        self, only_include_passing: bool = False
+    ) -> dict[Precision, list[TargetRuntime]]:
+        """
+        Returns a set of {precision, runtime} pairs that are enabled for testing this model in scorecard.
+
+        Parameters
+        ----------
+        only_include_passing
+            If True, only includes runtimes that have no known failure reasons in code-gen.yaml.
+            If False, includes all runtimes that are enabled for testing, even if they have known failures.
+
+        Returns
+        -------
+        dict[Precision, list[TargetRuntime]]
+            A dictionary mapping precision to a list of runtimes that are supported for testing for that precision.
+
+        Notes
+        -----
+        Certain supported pairs may be excluded from this list if they are not enabled for testing.
+        For example, models that allow JIT (on-device) compile will not test AOT runtimes; we assume that if it works on JIT it will work on AOT.
+        """
+        out: dict[Precision, list[TargetRuntime]] = {}
+        for precision in self.supported_precisions:
+            if runtimes := [
+                r
+                for r in TargetRuntime
+                if (
+                    self.is_supported(
+                        precision,
+                        r,
+                        consider_scorecard_failures=only_include_passing,
+                        consider_user_defined_failures=only_include_passing,
+                        consider_timeouts=True,
+                    )
+                    and (
+                        (self.requires_aot_prepare and r.is_aot_compiled)
+                        or (not self.requires_aot_prepare and not r.is_aot_compiled)
+                    )
+                )
+            ]:
+                out[precision] = runtimes
+        return out
+
     @model_validator(mode="after")
     def check_fields(self) -> QAIHMModelCodeGen:
         if (
@@ -303,10 +371,10 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
             raise ValueError(
                 "If pip_pre_build_reqs is set, global_requirements_incompatible must also be true."
             )
-        for x in self.supported_genai_runtimes:
-            if not x.is_exclusively_for_genai:
+        for x in self.orchestrator_runtimes:
+            if not x.is_orchestrator_runtime:
                 raise ValueError(
-                    f"{x.value} is not a GenAI runtime, and should not be listed in supported_genai_runtimes."
+                    f"{x.value} is not an orchestrator runtime, and should not be listed in orchestrator_runtimes."
                 )
         if self.default_device not in CANARY_DEVICES:
             raise ValueError(

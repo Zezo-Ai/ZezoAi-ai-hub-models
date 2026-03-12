@@ -28,7 +28,6 @@ from qai_hub_models.scorecard.device import cs_universal
 from qai_hub_models.scorecard.envvars import (
     DEFAULT_AGGREGATED_CSV_NAME,
     ArtifactsDirEnvvar,
-    EnableAsyncTestingEnvvar,
 )
 from qai_hub_models.scorecard.execution_helpers import get_async_job_cache_name
 from qai_hub_models.scorecard.results.scorecard_job import ScorecardJob
@@ -83,10 +82,6 @@ def append_line_to_file(path: os.PathLike, line: str) -> None:
         f.write(line + "\n")
 
 
-def is_hub_testing_async() -> bool:
-    return EnableAsyncTestingEnvvar.get()
-
-
 def get_artifacts_dir_opt() -> Path:
     return ArtifactsDirEnvvar.get()
 
@@ -126,6 +121,10 @@ def get_inference_job_ids_file(artifacts_dir: os.PathLike | str | None = None) -
 
 def get_quantize_job_ids_file(artifacts_dir: os.PathLike | str | None = None) -> Path:
     return get_artifact_filepath("quantize-jobs.yaml", artifacts_dir)
+
+
+def get_link_job_ids_file(artifacts_dir: os.PathLike | str | None = None) -> Path:
+    return get_artifact_filepath("link-jobs.yaml", artifacts_dir)
 
 
 def get_cpu_accuracy_file(artifacts_dir: os.PathLike | str | None = None) -> Path:
@@ -202,6 +201,8 @@ def get_async_test_job_cache_path(job_type: hub.JobType) -> Path:
         return get_inference_job_ids_file()
     if job_type == hub.JobType.QUANTIZE:
         return get_quantize_job_ids_file()
+    if job_type == hub.JobType.LINK:
+        return get_link_job_ids_file()
     raise NotImplementedError(
         f"No file for storing test jobs of type {job_type.display_name}"
     )
@@ -255,21 +256,10 @@ def assert_success_or_cache_job(
         return  # For models where precision varies per-component, some components may not have jobs (e.g., float components in quantization)
 
     assert job is not None
-    if is_hub_testing_async():
-        cache_path = get_async_test_job_cache_path(job._job_type)
-        cache = get_scorecard_job_yaml(job._job_type)
-        cache.set_job_id(job.job_id, path, model_id, device, precision, component)
-        cache.to_file(cache_path, append=True)
-    else:
-        job_status = job.wait()
-        assert job_status.success, str_with_async_test_metadata(
-            f"{job._job_type.display_name.title()} job ({job.job_id}) failed: {job_status.message}",
-            model_id,
-            precision,
-            path,
-            device,
-            component,
-        )
+    cache_path = get_async_test_job_cache_path(job._job_type)
+    cache = get_scorecard_job_yaml(job._job_type)
+    cache.set_job_id(job.job_id, path, model_id, device, precision, component)
+    cache.to_file(cache_path, append=True)
 
 
 @overload
@@ -322,6 +312,19 @@ def fetch_async_test_job(
     cache_path: str | Path | None = None,
     raise_if_not_successful: bool = False,
 ) -> hub.QuantizeJob | None: ...
+
+
+@overload
+def fetch_async_test_job(
+    job_type: Literal[hub.JobType.LINK],
+    model_id: str,
+    precision: Precision,
+    path: ScorecardCompilePath | ScorecardProfilePath,
+    device: ScorecardDevice,
+    component: str | None = None,
+    cache_path: str | Path | None = None,
+    raise_if_not_successful: bool = False,
+) -> hub.LinkJob | None: ...
 
 
 @overload
@@ -462,6 +465,19 @@ def fetch_async_test_jobs(
     cache_path: str | Path | None = None,
     raise_if_not_successful: bool = False,
 ) -> Mapping[str | None, hub.QuantizeJob] | None: ...
+
+
+@overload
+def fetch_async_test_jobs(
+    job_type: Literal[hub.JobType.LINK],
+    model_id: str,
+    precision: Precision,
+    path: ScorecardCompilePath | ScorecardProfilePath,
+    device: ScorecardDevice,
+    component_names: list[str] | None = None,
+    cache_path: str | Path | None = None,
+    raise_if_not_successful: bool = False,
+) -> Mapping[str | None, hub.LinkJob] | None: ...
 
 
 @overload

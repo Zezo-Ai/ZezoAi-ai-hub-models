@@ -5,28 +5,29 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import os
 from enum import Enum
-from pathlib import Path
-from typing import Literal
+from typing import Any
 
 import torch
 import torch.nn.functional as F
-from PIL import Image
 from torch.utils.data.dataloader import default_collate
+from torchvision.datasets.coco import CocoDetection
 
 from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetMetadata,
     DatasetSplit,
-    setup_fiftyone_env,
 )
+from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.image_processing import (
     app_to_net_image_inputs,
     resize_pad,
     transform_resize_pad_normalized_coordinates,
 )
 from qai_hub_models.utils.input_spec import InputSpec
-from qai_hub_models.utils.path_helpers import QAIHM_PACKAGE_ROOT
 
 
 class CocoDatasetClass(Enum):
@@ -35,7 +36,25 @@ class CocoDatasetClass(Enum):
 
 
 DATASET_ID = "coco"
-DATASET_ASSET_VERSION = 1
+DATASET_ASSET_VERSION = 2
+
+COCO_DATASET = CachedWebDatasetAsset(
+    "http://images.cocodataset.org/zips/val2017.zip",
+    DATASET_ID,
+    DATASET_ASSET_VERSION,
+    "val2017.zip",
+    ci_private_s3_key="qai-hub-models/datasets/coco/val2017.zip",
+)
+COCO_ANNOTATIONS = CachedWebDatasetAsset(
+    "http://images.cocodataset.org/annotations/annotations_trainval2017.zip",
+    DATASET_ID,
+    DATASET_ASSET_VERSION,
+    "annotations_trainval2017.zip",
+    ci_private_s3_key="qai-hub-models/datasets/coco/annotations_trainval2017.zip",
+)
+
+DEFAULT_NUM_TRAIN_SAMPLES = 2000
+TOTAL_VAL_SAMPLES = 5000
 
 
 def collate_fn(
@@ -59,7 +78,7 @@ def collate_fn(
         return [], ([], [], [], [], [], [])
 
 
-class CocoDataset(BaseDataset):
+class CocoDataset(BaseDataset, CocoDetection):
     """
     Wrapper class around COCO dataset https://cocodataset.org/
 
@@ -73,9 +92,8 @@ class CocoDataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.TRAIN,
         input_spec: InputSpec | None = None,
         max_boxes: int = 100,
-        num_samples: int = 5000,
         num_classes: CocoDatasetClass = CocoDatasetClass.SUBSET_CLASSES,
-        label_types: list[Literal["detections", "segmentations"]] | None = None,
+        max_train_samples: int = DEFAULT_NUM_TRAIN_SAMPLES,
     ) -> None:
         """
         Parameters
@@ -96,40 +114,49 @@ class CocoDataset(BaseDataset):
 
             If a sample has more than this many boxes, an exception is thrown.
 
-        num_samples
-            Number of data samples to download. Needs to be specified
-            during initialization because only as many samples as requested
-            are downloaded.
-
         num_classes
             Number of classes this model detects.
 
-        label_types
-            Type of predictions this model produces.
+        max_train_samples
+            Downloading the whole training set is too big, so we choose a reasonably
+            large number to download by default that is enough for most use cases.
         """
-        if label_types is None:
-            label_types = ["detections"]
-        self.num_samples = num_samples
         self.num_classes = num_classes
-        self.label_types = label_types
+        self.train_samples: list[dict[str, Any]] = []
+        self.max_train_samples = max_train_samples
+        self.coco_base = COCO_DATASET.path(extracted=True).parent
 
-        # FiftyOne package manages dataset so pass a dummy name for data path
-        BaseDataset.__init__(self, "non_existent_dir", split, input_spec)
-
-        # coco labels 91 reference from https://huggingface.co/facebook/detr-resnet-50/blob/main/config.json
-        # the mapping is to insert unused and extend to 91 labels.
-        label_file = (
-            "coco_labels_91.txt"
-            if self.num_classes == CocoDatasetClass.ALL_CLASSES
-            else "coco_labels.txt"
+        anno_file = (
+            "instances_val2017.json"
+            if split == DatasetSplit.VAL
+            else "instances_train2017.json"
         )
+        self.root = (
+            COCO_DATASET.path(extracted=True) / "val2017"
+            if split == DatasetSplit.VAL
+            else self.coco_base / "train2017"
+        )
+        BaseDataset.__init__(self, self.root, split, input_spec)
+        CocoDetection.__init__(
+            self,
+            root=self.root,
+            annFile=COCO_ANNOTATIONS.path(extracted=True) / "annotations" / anno_file,
+        )
+        if split == DatasetSplit.TRAIN:
+            if self.train_samples == []:
+                # These are resolved during download, but if data is already downloaded
+                # It should be done here.
+                self._resolve_train_samples()
+            self.ids = [int(sample["id"]) for sample in self.train_samples]
 
-        counter = 0
-        self.label_map = {}
-        with open(QAIHM_PACKAGE_ROOT / "labels" / label_file) as f:
-            for line in f:
-                self.label_map[line.strip()] = counter
-                counter += 1
+        # Full coco dataset has 91 classes but some models use an 80 class subset
+        # This creates a mapping from the 91 class index to the 80 class index
+        self.class80_label_map = {}
+        if self.num_classes == CocoDatasetClass.SUBSET_CLASSES:
+            categories = self.coco.loadCats(self.coco.getCatIds())
+            categories.sort(key=lambda x: x["id"])
+            for i, cat in enumerate(categories):
+                self.class80_label_map[cat["id"]] = i
 
         # input_spec is (h, w) and target_image_size is (w, h)
         input_spec = input_spec or {"image": ((1, 3, 640, 640), "")}
@@ -173,11 +200,9 @@ class CocoDataset(BaseDataset):
             num_boxes
                 Number of boxes present in the ground truth data. Shape [1].
         """
-        from fiftyone.core.sample import SampleView
-
-        # Open PIL image sample.
-        sample: SampleView = self.dataset[index : index + 1].first()
-        image = Image.open(sample.filepath).convert("RGB")
+        image, target = CocoDetection.__getitem__(self, index)
+        boxes_list = []
+        labels_list = []
         src_image_w, src_image_h = image.size
 
         # Convert to torch (NCHW, range [0, 1]) tensor.
@@ -187,23 +212,32 @@ class CocoDataset(BaseDataset):
             torch_image, (self.target_h, self.target_w)
         )
 
-        boxes_list = []
-        labels_list = []
-        if sample.ground_truth is not None:
-            for annotation in sample.ground_truth.detections:
-                x, y, w, h = annotation.bounding_box
-                coords = torch.Tensor([[x, y], [x + w, y + h]])
-                transformed_coords = transform_resize_pad_normalized_coordinates(
-                    coords,
-                    (src_image_w, src_image_h),
-                    scaled_padded_torch_image.shape[2:4][::-1],
-                    scale_factor,
-                    pad,
-                )
-                boxes_list.append(list(transformed_coords.flatten()))
-
-                # Convert string label to int idx
-                labels_list.append(self.label_map[annotation.label])
+        for annotation in target:
+            bbox = annotation.get("bbox")
+            coords = torch.Tensor(
+                [
+                    [
+                        bbox[0] / src_image_w,
+                        bbox[1] / src_image_h,
+                    ],
+                    [
+                        (bbox[0] + bbox[2]) / src_image_w,
+                        (bbox[1] + bbox[3]) / src_image_h,
+                    ],
+                ]
+            )
+            transformed_coords = transform_resize_pad_normalized_coordinates(
+                coords,
+                (src_image_w, src_image_h),
+                scaled_padded_torch_image.shape[2:4][::-1],
+                scale_factor,
+                pad,
+            )
+            boxes_list.append(list(transformed_coords.flatten()))
+            label = int(annotation.get("category_id"))
+            if self.num_classes == CocoDatasetClass.SUBSET_CLASSES:
+                label = self.class80_label_map[label]
+            labels_list.append(label)
         boxes = torch.tensor(boxes_list)
         labels = torch.tensor(labels_list)
 
@@ -220,9 +254,8 @@ class CocoDataset(BaseDataset):
         else:
             boxes = F.pad(boxes, (0, 0, 0, self.max_boxes - num_boxes), value=0)
             labels = F.pad(labels, (0, self.max_boxes - num_boxes), value=0)
-
         return scaled_padded_torch_image.squeeze(0), (
-            int(Path(sample.filepath).name[:-4]),
+            self.ids[index],
             self.target_h,
             self.target_w,
             boxes,
@@ -230,28 +263,50 @@ class CocoDataset(BaseDataset):
             torch.tensor([num_boxes]),
         )
 
-    def __len__(self) -> int:
-        return len(self.dataset)
-
     def _validate_data(self) -> bool:
-        return hasattr(self, "dataset")
+        # Check validation data exists
+        if not self.root.exists():
+            return False
+
+        # Check annotations exist
+        if not COCO_ANNOTATIONS.path(extracted=True).exists():
+            return False
+
+        if self.split == DatasetSplit.TRAIN:
+            # Ensure there are enough training samples
+            return len(os.listdir(self.root)) >= self.max_train_samples
+        return len(os.listdir(self.root)) == TOTAL_VAL_SAMPLES
 
     def _download_data(self) -> None:
-        setup_fiftyone_env()
+        COCO_DATASET.fetch(extract=True)
+        COCO_ANNOTATIONS.fetch(extract=True)
 
-        # This is an expensive import, so don't want to unnecessarily import it in
-        # other files that import datasets/__init__.py
-        import fiftyone.zoo as foz
+        if self.split == DatasetSplit.TRAIN:
+            # This requires extra dependencies that we don't want to require
+            # For models that only need the validation set
+            from qai_hub_models.datasets.coco_utils import download_many_urls
 
-        # Sorting by filepath ensures a deterministic ordering every time this is called
-        split_str = "validation" if self.split == DatasetSplit.VAL else "train"
-        self.dataset = foz.load_zoo_dataset(
-            "coco-2017",
-            split=split_str,
-            label_types=self.label_types,
-            max_samples=self.num_samples,
-            shuffle=False,
-        ).sort_by("filepath")
+            self._resolve_train_samples()
+            asyncio.run(
+                download_many_urls(
+                    self.train_samples, self.root, "file_name", "coco_url"
+                )
+            )
+
+    def _resolve_train_samples(self) -> None:
+        if self.split == DatasetSplit.TRAIN:
+            with open(
+                self.coco_base
+                / "annotations_trainval2017"
+                / "annotations"
+                / "instances_train2017.json"
+            ) as f:
+                train_metadata = json.loads(f.read())
+            all_samples = sorted(train_metadata["images"], key=lambda k: k["id"])
+            step_size = (len(all_samples)) // self.max_train_samples
+            self.train_samples = all_samples[
+                : step_size * self.max_train_samples : step_size
+            ]
 
     @staticmethod
     def default_samples_per_job() -> int:

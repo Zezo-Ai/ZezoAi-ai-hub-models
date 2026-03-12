@@ -5,19 +5,114 @@
 
 from __future__ import annotations
 
+import functools
 import os
+import re
 import subprocess
 from collections.abc import Iterable
 
 from .constants import (
     DEFAULT_PYTHON,
+    DEV_REQUIREMENTS_PATH,
     GLOBAL_REQUIREMENTS_PATH,
     PY_PACKAGE_INSTALL_ROOT,
     PY_PACKAGE_MODELS_ROOT,
     REPO_ROOT,
+    REQUIREMENTS_PATH,
 )
 from .task import RunCommandsTask, RunCommandsWithVenvTask
-from .util import get_code_gen_str_field, get_pip, uv_installed
+from .util import get_code_gen_str_field, get_pip, has_cuda_gpu, uv_installed
+
+
+@functools.cache
+def get_package_version(
+    package_name: str, requirements_path: str = REQUIREMENTS_PATH
+) -> str | None:
+    """Extract version constraint for a package from a requirements file."""
+    if not os.path.exists(requirements_path):
+        return None
+
+    with open(requirements_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Remove inline comments
+            line = line.split("#")[0].strip()
+            # Match package name followed by version specifier
+            match = re.match(rf"^{re.escape(package_name)}([<>=!~\[].*)$", line)
+            if match:
+                version = match.group(1)
+                # Remove extras (e.g., diffusers[torch] -> diffusers)
+                version = re.sub(r"\[.*?\]", "", version)
+                # Remove environment markers (e.g., "; python_version>='3.8'")
+                return version.split(";")[0].strip()
+    return None
+
+
+def get_torch_cpu_install_command(
+    extras: Iterable[str] = (),
+    search_global_reqs: bool = False,
+    packages: list[str] | None = None,
+) -> str | None:
+    """
+    Build a pip install command for torch packages from the CPU index.
+    Returns None if no CUDA GPU is available or no packages need to be installed.
+
+    Parameters
+    ----------
+    extras
+        Extras to check for model-specific torch version requirements.
+    search_global_reqs
+        Whether to also check global requirements
+    packages
+        List of torch-related packages to check for version requirements.
+
+    Returns
+    -------
+    str | None
+        A pip install command for the torch CPU packages with appropriate versions, or None if no installation is needed.
+        If a package is not found in any requirements file, it will be skipped and not included in the install command.
+    """
+    if has_cuda_gpu():
+        return None
+
+    # Check for torch package versions in the provided requirements files.
+    # Requirements files that are later / last in the list take highest priority.
+    reqfiles_to_check = [REQUIREMENTS_PATH]
+    if search_global_reqs:
+        reqfiles_to_check.append(GLOBAL_REQUIREMENTS_PATH)
+    for extra in extras:
+        if extra == "dev":
+            reqfiles_to_check.append(DEV_REQUIREMENTS_PATH)
+        else:
+            model_requirements_path = os.path.join(
+                PY_PACKAGE_MODELS_ROOT, extra, "requirements.txt"
+            )
+            if os.path.exists(model_requirements_path):
+                reqfiles_to_check.append(model_requirements_path)
+
+    # Get versions for each package.
+    packages_to_versions: dict[str, str | None] = dict.fromkeys(
+        packages or ["torch", "torchvision", "torchaudio"]
+    )
+    for reqfile in reqfiles_to_check[::-1]:
+        packages_to_versions = {
+            package: version if version else get_package_version(package, reqfile)
+            for package, version in packages_to_versions.items()
+        }
+
+    # Convert to version strings.
+    pgk_install_strings = []
+    for package, version in packages_to_versions.items():
+        if version is not None:
+            pgk_install_strings.append(f"'{package}{version}'")
+
+    return (
+        f"{get_pip()} install {' '.join(pgk_install_strings)} --index-url https://download.pytorch.org/whl/cpu"
+        if pgk_install_strings
+        else None
+    )
 
 
 class CreateVenvTask(RunCommandsTask):
@@ -102,12 +197,17 @@ class DownloadQDCWheelTask(RunCommandsWithVenvTask):
 
 class InstallGlobalRequirementsTask(RunCommandsWithVenvTask):
     def __init__(self, venv_path: str | None) -> None:
+        commands: list[str] = []
+
+        if torch_cpu_cmd := get_torch_cpu_install_command(search_global_reqs=True):
+            commands.append(torch_cpu_cmd)
+
+        commands.append(f'{get_pip()} install -r "{GLOBAL_REQUIREMENTS_PATH}" ')
+
         super().__init__(
             group_name="Install Global Requirements",
             venv=venv_path,
-            commands=[
-                f'{get_pip()} install -r "{GLOBAL_REQUIREMENTS_PATH}" ',
-            ],
+            commands=commands,
         )
 
 
@@ -121,6 +221,10 @@ class SyncLocalQAIHMVenvTask(RunCommandsWithVenvTask):
         flags: str | None = None,
         pre_install: str | None = None,
         qaihm_wheel_dir: str | os.PathLike | None = None,
+        junit_xml_path: str | None = None,
+        junit_testsuite: str = "",
+        junit_name: str = "",
+        junit_classname: str = "",
     ) -> None:
         extras_str = f"[{','.join(extras)}]" if extras else ""
 
@@ -131,25 +235,35 @@ class SyncLocalQAIHMVenvTask(RunCommandsWithVenvTask):
             # This flag disables the `--use-pep517` behavior for uv. This is the default for pip, and is not a valid pip arg.
             flags = flags.replace("--no-build-isolation", "")
 
+        commands: list[str] = []
+
+        if torch_cpu_cmd := get_torch_cpu_install_command(extras):
+            commands.append(torch_cpu_cmd)
+
+        if pre_install:
+            commands.append(f"{get_pip()} install {pre_install}")
+
         if qaihm_wheel_dir is not None:
             # Find wheel file and install it (use relative path to work in both local and CI)
-            commands = [
+            commands.append(
                 f"{get_pip()} install $(ls {qaihm_wheel_dir}/qai_hub_models-*.whl){extras_str} {flags or ''}"
-            ]
+            )
             install_method = "wheel"
         else:
             # Local development: Use editable install
-            commands = [
+            commands.append(
                 f'{get_pip()} install -e "{PY_PACKAGE_INSTALL_ROOT}{extras_str}" {flags or ""}'
-            ]
+            )
             install_method = "editable"
-        if pre_install:
-            commands.insert(0, f"{get_pip()} install {pre_install}")
 
         super().__init__(
             group_name=f"Install QAIHM{extras_str} ({install_method})",
             venv=venv_path,
             commands=commands,
+            junit_xml_path=junit_xml_path,
+            junit_testsuite=junit_testsuite,
+            junit_name=junit_name,
+            junit_classname=junit_classname,
         )
 
 
@@ -162,6 +276,7 @@ class SyncModelVenvTask(SyncLocalQAIHMVenvTask):
         venv_path: str | None,
         include_dev_deps: bool = False,
         qaihm_wheel_dir: str | os.PathLike | None = None,
+        junit_xml_path: str | None = None,
     ) -> None:
         extras = []
         if include_dev_deps:
@@ -177,6 +292,10 @@ class SyncModelVenvTask(SyncLocalQAIHMVenvTask):
             get_code_gen_str_field(model_name, "pip_install_flags"),
             get_code_gen_str_field(model_name, "pip_pre_build_reqs"),
             qaihm_wheel_dir,
+            junit_xml_path=junit_xml_path,
+            junit_testsuite="pytest",
+            junit_name="environment_setup",
+            junit_classname=f"qai_hub_models.models.{model_name}",
         )
 
 

@@ -18,7 +18,6 @@ class Coco91ClassDataset(CocoDataset):
         split: DatasetSplit = DatasetSplit.TRAIN,
         input_spec: InputSpec | None = None,
         max_boxes: int = 100,
-        num_samples: int = 5000,
         use_all_classes: CocoDatasetClass = CocoDatasetClass.ALL_CLASSES,
     ) -> None:
-        super().__init__(split, input_spec, max_boxes, num_samples, use_all_classes)
+        super().__init__(split, input_spec, max_boxes, use_all_classes)

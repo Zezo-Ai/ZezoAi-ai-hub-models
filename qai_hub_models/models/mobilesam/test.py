@@ -30,7 +30,7 @@ def test_e2e_numerical() -> None:
 
     # OOTB SAM Objects
     sam_without_our_edits = MobileSAMLoader._load_sam_from_repo(model_type)
-    sam_predictor = SamPredictor(sam_without_our_edits)
+    sam_predictor = SamPredictor(sam_without_our_edits.eval())
     sam_onnx_decoder = SamOnnxModel(sam_predictor.model, return_single_mask=True)
 
     # QAIHM MobileSAMApp
@@ -42,6 +42,7 @@ def test_e2e_numerical() -> None:
         [qaihm_sam.encoder],
         qaihm_sam.decoder,
         ResizeLongestSide,
+        qaihm_sam.sam.pixel_mean,
     )
 
     #
@@ -66,13 +67,20 @@ def test_e2e_numerical() -> None:
     # Verify encoder output
     #
     sam_predictor.set_image(input_image_data)
-    sam_predictor_image_embeddings = cast(  # noqa: F841
-        torch.Tensor, sam_predictor.features
-    )
+    sam_predictor_image_embeddings = cast(torch.Tensor, sam_predictor.features)
 
     qaihm_image_embeddings, qaihm_input_image_size = qaihm_app.predict_embeddings(
         input_image_data
     )
+
+    assert_most_close(
+        sam_predictor_image_embeddings.numpy(),
+        qaihm_image_embeddings.numpy(),
+        0.001,
+        rtol=0.001,
+        atol=0.001,
+    )
+
     #
     # Verify Decoder output
     # Use embeddings from SAM predictor to make sure the inputs to both decoders are the same.
@@ -82,7 +90,7 @@ def test_e2e_numerical() -> None:
     sam_pred_masks, sam_pred_scores, _ = cast(
         tuple[torch.Tensor, torch.Tensor, torch.Tensor],
         sam_onnx_decoder.forward(
-            qaihm_image_embeddings,
+            sam_predictor_image_embeddings,
             point_coords_postprocessed,
             point_labels,
             mask_input,
@@ -95,16 +103,20 @@ def test_e2e_numerical() -> None:
         qaihm_pred_masks,
         qaihm_pred_scores,
     ) = qaihm_app.predict_mask_from_points_and_embeddings(
-        qaihm_image_embeddings, qaihm_input_image_size, point_coords, point_labels, True
+        sam_predictor_image_embeddings,
+        qaihm_input_image_size,
+        point_coords,
+        point_labels,
+        True,
     )
 
     assert_most_close(
-        sam_pred_masks.numpy(), qaihm_pred_masks.numpy(), 0.1, rtol=0.01, atol=0.01
+        sam_pred_masks.numpy(), qaihm_pred_masks.numpy(), 0.001, rtol=0.001, atol=0.001
     )
     assert_most_close(
         sam_pred_scores.numpy(),
         qaihm_pred_scores.numpy(),
-        0.1,
+        0.001,
         rtol=0.005,
         atol=0.005,
     )

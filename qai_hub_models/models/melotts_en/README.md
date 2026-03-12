@@ -1,4 +1,4 @@
-# [MeloTTS-EN: MeloTTS is a high-quality multi-lingual text-to-speech library for English, Chinese and Spanish language](https://aihub.qualcomm.com/models/melotts_en)
+# [MeloTTS-EN: High-quality text-to-speech for English](https://aihub.qualcomm.com/models/melotts_en)
 
 MeloTTS is a high-quality multi-lingual text-to-speech library for English, Chinese and Spanish language.
 
@@ -8,7 +8,13 @@ This repository contains scripts for optimized on-device export suitable to run 
 Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.qualcomm.com) to compile, profile, and evaluate this model. [Sign up](https://myaccount.qualcomm.com/signup) to run these models on a hosted Qualcomm® device.
 
 ## Setup
-### 1. Install the package
+### 1. Install System-Level Dependencies
+#### Linux
+```bash
+sudo apt install libportaudio2
+```
+
+### 2. Install the package
 Install the package via pip:
 ```bash
 # NOTE: 3.10 <= PYTHON_VERSION < 3.14 is supported.
@@ -16,7 +22,7 @@ pip install --no-deps git+https://github.com/myshell-ai/MeloTTS.git
 pip install "qai-hub-models[melotts-en]"
 ```
 
-### 2. Configure Qualcomm® AI Hub Workbench
+### 3. Configure Qualcomm® AI Hub Workbench
 Sign-in to [Qualcomm® AI Hub Workbench](https://workbench.aihub.qualcomm.com/) with your
 Qualcomm® ID. Once signed in navigate to `Account -> Settings -> API Token`.
 

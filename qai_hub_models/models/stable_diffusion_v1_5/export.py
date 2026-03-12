@@ -64,7 +64,11 @@ def compile_model(
         )
 
         model_compile_options = component.get_hub_compile_options(
-            target_runtime, Precision.w8a16, extra_options, device
+            target_runtime,
+            Precision.w8a16,
+            extra_options,
+            device,
+            f"{MODEL_ID}_{component_name.lower()}",
         )
         print(f"Optimizing model {component_name} to run on-device")
         submitted_compile_job = hub.submit_compile_job(
@@ -78,6 +82,32 @@ def compile_model(
             hub.client.CompileJob, submitted_compile_job
         )
     return compile_jobs
+
+
+def link_model(
+    compiled_models: dict[str, hub.Model],
+    device: hub.Device,
+    model_name: str,
+    model: CollectionModel,
+    target_runtime: TargetRuntime,
+) -> dict[str, hub.client.LinkJob]:
+    """Link compiled DLCs to context binary for AOT."""
+    assert target_runtime.is_aot_compiled, (
+        f"link_model() requires an AOT runtime, got {target_runtime}"
+    )
+    link_jobs: dict[str, hub.client.LinkJob] = {}
+    for component_name, compiled_model in compiled_models.items():
+        component = model.components[component_name]
+        assert isinstance(component, BaseModel)
+        link_options = component.get_hub_link_options(target_runtime)
+        print(f"Linking {component_name} to context binary")
+        link_jobs[component_name] = hub.submit_link_job(
+            [compiled_model],
+            device=device,
+            name=f"{model_name}_{component_name}",
+            options=link_options,
+        )
+    return link_jobs
 
 
 def profile_model(

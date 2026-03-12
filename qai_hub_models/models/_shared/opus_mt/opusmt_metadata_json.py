@@ -11,7 +11,6 @@ translation model capabilities, language pairs, and runtime parameters.
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Any
@@ -85,40 +84,6 @@ class T2TMetadata(BaseQAIHMConfig):
     model_type: str = "opus"
     assets: ModelAssets | None = None
     runtime: RuntimeInfo | None = None
-    tool_versions: ToolVersions | None = None
-
-    def to_json(
-        self,
-        path: Path,
-        indent: int = 4,
-        **kwargs: Any,
-    ) -> None:
-        """
-        Save T2T metadata to JSON file.
-
-        Parameters
-        ----------
-        path
-            Path to save the JSON file
-        indent
-            JSON indentation level
-        **kwargs
-            Additional arguments passed to json.dump
-
-        """
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Convert to dictionary and handle nested objects
-        data = self.model_dump()
-
-        # Remove tool_versions from JSON output as it's not JSON serializable
-        # and is only used internally for processing
-        if "tool_versions" in data:
-            del data["tool_versions"]
-
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=indent, ensure_ascii=False, **kwargs)
 
     @classmethod
     def from_opus_mt_model(
@@ -166,11 +131,25 @@ class T2TMetadata(BaseQAIHMConfig):
         source_languages = [LanguageSpec(code=source_lang_code, name=source_lang_name)]
         target_languages = [LanguageSpec(code=target_lang_code, name=target_lang_name)]
 
-        # Default capabilities
-        capabilities = TranslationCapabilities()
+        # Separate kwargs for different components
+        capabilities_kwargs = {}
+        parameters_kwargs = {}
+        runtime_kwargs = {}
 
-        # Default parameters
-        parameters = TranslationParameters()
+        # Categorize kwargs based on which class they belong to
+        for key, value in kwargs.items():
+            if hasattr(TranslationCapabilities, key):
+                capabilities_kwargs[key] = value
+            elif hasattr(TranslationParameters, key):
+                parameters_kwargs[key] = value
+            elif hasattr(RuntimeInfo, key):
+                runtime_kwargs[key] = value
+
+        # Create capabilities with custom values
+        capabilities = TranslationCapabilities(**capabilities_kwargs)
+
+        # Create parameters with custom values
+        parameters = TranslationParameters(**parameters_kwargs)
 
         # Default runtime info with QNN version from tool_versions if available
         qnn_version = {"major": 2, "minor": 33, "patch": 0}  # Default
@@ -186,21 +165,15 @@ class T2TMetadata(BaseQAIHMConfig):
                 ),
             }
 
-        runtime = RuntimeInfo(
-            qnn_version=qnn_version,
-            model_lang=source_lang_code,
-            enc_model_max_seq_len=kwargs.get("enc_model_max_seq_len", 256),
-            dec_model_max_seq_len=kwargs.get("dec_model_max_seq_len", 256),
-        )
-
-        # Override with any provided kwargs
-        for key, value in kwargs.items():
-            if hasattr(capabilities, key):
-                setattr(capabilities, key, value)
-            elif hasattr(parameters, key):
-                setattr(parameters, key, value)
-            elif hasattr(runtime, key):
-                setattr(runtime, key, value)
+        # Set default runtime values and override with kwargs
+        runtime_defaults = {
+            "qnn_version": qnn_version,
+            "model_lang": source_lang_code,
+            "enc_model_max_seq_len": kwargs.get("enc_model_max_seq_len", 256),
+            "dec_model_max_seq_len": kwargs.get("dec_model_max_seq_len", 256),
+        }
+        runtime_defaults.update(runtime_kwargs)
+        runtime = RuntimeInfo(**runtime_defaults)
 
         return cls(
             name=model_name,
@@ -211,7 +184,6 @@ class T2TMetadata(BaseQAIHMConfig):
             capabilities=capabilities,
             parameters=parameters,
             runtime=runtime,
-            tool_versions=tool_versions,
         )
 
 

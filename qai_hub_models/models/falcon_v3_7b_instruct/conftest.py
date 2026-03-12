@@ -2,30 +2,20 @@
 # Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
-# THIS FILE WAS AUTO-GENERATED. DO NOT EDIT MANUALLY.
+from __future__ import annotations
 
 import gc
 import inspect
-import warnings
 from collections.abc import Generator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
-import torch.jit._trace
 
-from qai_hub_models.models.yolov6 import Model
-from qai_hub_models.utils.testing import skip_clone_repo_check
+from qai_hub_models.models.falcon_v3_7b_instruct import Model
 
-
-def pytest_configure(config: pytest.Config) -> None:
-    # pytest is unable to figure out how to silence several PyTorch warning types from pyproject.toml settings,
-    # so we apply a manual warning filter here instead.
-    warnings.filterwarnings(action="ignore", category=torch.jit._trace.TracerWarning)
-    warnings.filterwarnings(action="ignore", category=UserWarning, module="torch.*")
-    warnings.filterwarnings(action="ignore", category=FutureWarning, module="torch.*")
-    warnings.filterwarnings(
-        action="ignore", category=DeprecationWarning, module="torch.*"
-    )
+if TYPE_CHECKING:
+    from qai_hub_models.models._shared.llm.perf_collection import LLMPerfConfig
+    from qai_hub_models.models._shared.llm.test import CompileJobCache
 
 
 # Instantiate the model only once for all tests.
@@ -38,7 +28,6 @@ def cached_from_pretrained() -> Generator[pytest.MonkeyPatch, None, None]:
         from_pretrained = Model.from_pretrained
         sig = inspect.signature(from_pretrained)
 
-        @skip_clone_repo_check
         def _cached_from_pretrained(*args: Any, **kwargs: Any) -> Model:
             cache_key = str(args) + str(kwargs)
             model = pretrained_cache.get(cache_key)
@@ -48,7 +37,7 @@ def cached_from_pretrained() -> Generator[pytest.MonkeyPatch, None, None]:
             pretrained_cache[cache_key] = non_none_model
             return non_none_model
 
-        _cached_from_pretrained.__signature__ = sig
+        _cached_from_pretrained.__signature__ = sig  # type: ignore[attr-defined]
 
         mp.setattr(Model, "from_pretrained", _cached_from_pretrained)
         yield mp
@@ -57,3 +46,17 @@ def cached_from_pretrained() -> Generator[pytest.MonkeyPatch, None, None]:
 @pytest.fixture(scope="module", autouse=True)
 def ensure_gc() -> None:
     gc.collect()
+
+
+@pytest.fixture(scope="session")
+def llm_perf_config() -> LLMPerfConfig:
+    from qai_hub_models.models._shared.llm.perf_collection import LLMPerfConfig
+
+    return LLMPerfConfig.from_environment()
+
+
+@pytest.fixture(scope="session")
+def compile_job_cache() -> CompileJobCache:
+    from qai_hub_models.models._shared.llm.test import CompileJobCache
+
+    return CompileJobCache()

@@ -28,7 +28,6 @@ def main() -> None:
     warnings.filterwarnings("ignore")
     eval_datasets = Model.eval_datasets()
     supported_precision_runtimes: dict[Precision, list[TargetRuntime]] = {
-        Precision.float: [],
         Precision.w8a16: [
             TargetRuntime.ONNX,
         ],

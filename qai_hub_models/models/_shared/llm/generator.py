@@ -250,7 +250,7 @@ class LLM_Generator(GenerationMixin, torch.nn.Module):
         if input_ids is not None:
             inputs["input_ids"] = input_ids[:, num_processed_tokens:]
         elif inputs_embeds is not None:
-            inputs["input_embeds"] = inputs_embeds[:, num_processed_tokens:, :]
+            inputs["inputs_embeds"] = inputs_embeds[:, num_processed_tokens:, :]
 
         return inputs | {
             "past_key_values": past_key_values,

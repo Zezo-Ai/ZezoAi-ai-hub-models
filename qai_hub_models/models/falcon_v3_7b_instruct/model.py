@@ -21,6 +21,12 @@ from qai_hub_models.models._shared.llama3.model import (
 )
 from qai_hub_models.models._shared.llm.common import LLMIOType
 from qai_hub_models.models._shared.llm.model import (
+    DEFAULT_EXPORT_CONTEXT_LENGTHS as GLOBAL_DEFAULT_EXPORT_CONTEXT_LENGTHS,
+)
+from qai_hub_models.models._shared.llm.model import (
+    DEFAULT_EXPORT_SEQUENCE_LENGTHS as GLOBAL_DEFAULT_EXPORT_SEQUENCE_LENGTHS,
+)
+from qai_hub_models.models._shared.llm.model import (
     LLMBase,
     determine_precision_from_checkpoint,
 )
@@ -28,8 +34,11 @@ from qai_hub_models.models.common import Precision
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.input_spec import InputSpec
 
+DEFAULT_EXPORT_CONTEXT_LENGTHS = GLOBAL_DEFAULT_EXPORT_CONTEXT_LENGTHS
+DEFAULT_EXPORT_SEQUENCE_LENGTHS = GLOBAL_DEFAULT_EXPORT_SEQUENCE_LENGTHS
+
 MODEL_ID = __name__.split(".")[-2]
-MODEL_ASSET_VERSION = 3
+MODEL_ASSET_VERSION = 4
 
 NUM_LAYERS = 28
 NUM_SPLITS = 5

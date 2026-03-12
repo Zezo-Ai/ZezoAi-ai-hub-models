@@ -19,12 +19,17 @@ from qai_hub_models.models.track_anything.app import TrackAnythingApp
 from qai_hub_models.models.track_anything.model import (
     MODEL_ASSET_VERSION,
     MODEL_ID,
-    TrackAnything,
     TrackAnythingWrapper,
 )
-from qai_hub_models.utils.args import get_model_cli_parser, get_on_device_demo_parser
+from qai_hub_models.utils.args import (
+    demo_model_components_from_cli_args,
+    get_model_cli_parser,
+    get_on_device_demo_parser,
+    validate_on_device_demo_args,
+)
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.display import generate_video_from_frames
+from qai_hub_models.utils.evaluate import EvalMode
 
 VIDEO_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "demo.mp4"
@@ -64,13 +69,18 @@ def generate_frames_from_video(video_path: str) -> list[np.ndarray]:
 
 def main(is_test: bool = False) -> None:
     # Demo parameters
-    parser = get_model_cli_parser(TrackAnything)
+    parser = get_model_cli_parser(TrackAnythingWrapper)
     parser = get_on_device_demo_parser(parser, add_output_dir=True)
 
     parser.add_argument(
         "--video",
         type=str,
         help="video file path or URL.",
+    )
+    parser.add_argument(
+        "--num-frames",
+        type=int,
+        help="Number of frames to track. Minimum 5. Defaults to track all frames.",
     )
     parser.add_argument(
         "--model-type",
@@ -92,6 +102,7 @@ def main(is_test: bool = False) -> None:
         help="If True, returns single mask. For multiple points multiple masks could lead to better results.",
     )
     args = parser.parse_args(["--model-type", DEFAULT_MODEL_TYPE] if is_test else None)
+    validate_on_device_demo_args(args, MODEL_ID)
 
     coordinates: list[str] = list(filter(None, args.point_coordinates.split(";")))
 
@@ -104,6 +115,7 @@ def main(is_test: bool = False) -> None:
         [sam_wrapper.encoder],
         sam_wrapper.decoder,
         ResizeLongestSide,
+        sam_wrapper.sam.pixel_mean,
     )
 
     video_input = str(VIDEO_ADDRESS.fetch()) if args.video is None else str(args.video)
@@ -138,16 +150,32 @@ def main(is_test: bool = False) -> None:
 
     # load TrackAnything Application
     wrapper = TrackAnythingWrapper.from_pretrained()
+    if args.eval_mode == EvalMode.ON_DEVICE:
+        (
+            encode_key_with_shrinkage,
+            encode_value,
+            encode_key_without_shrinkage,
+            segment,
+        ) = demo_model_components_from_cli_args(TrackAnythingWrapper, MODEL_ID, args)
+    else:
+        encode_key_with_shrinkage = wrapper.EncodeKeyWithShrinkage
+        encode_value = wrapper.EncodeValue
+        encode_key_without_shrinkage = wrapper.EncodeKeyWithoutShrinkage
+        segment = wrapper.Segment
+
     app = TrackAnythingApp(
-        wrapper.EncodeKeyWithShrinkage,
-        wrapper.EncodeValue,
-        wrapper.EncodeKeyWithoutShrinkage,
-        wrapper.Segment,
+        encode_key_with_shrinkage,  # type: ignore[arg-type]
+        encode_value,  # type: ignore[arg-type]
+        encode_key_without_shrinkage,  # type: ignore[arg-type]
+        segment,  # type: ignore[arg-type]
         wrapper.config,
     )
 
     # Run inference
     print("\n** Tracking object... **\n")
+    num_frames = args.num_frames
+    if num_frames is not None:
+        frames = frames[:num_frames]
     painted_images = app.track(frames, generated_mask)
 
     if not is_test:

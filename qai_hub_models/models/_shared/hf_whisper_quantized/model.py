@@ -157,9 +157,10 @@ class WhisperEncoderQuantizableBase(AIMETOnnxQuantizableMixin, HfWhisperEncoder)
         precision: Precision,
         other_compile_options: str = "",
         device: Device | None = None,
+        context_graph_name: str | None = None,
     ) -> str:
         return super(HfWhisperEncoder, self).get_hub_compile_options(
-            target_runtime, precision, other_compile_options, device
+            target_runtime, precision, other_compile_options, device, context_graph_name
         )
 
 
@@ -269,7 +270,8 @@ class WhisperDecoderQuantizableBase(AIMETOnnxQuantizableMixin, HfWhisperDecoder)
         precision: Precision,
         other_compile_options: str = "",
         device: Device | None = None,
+        context_graph_name: str | None = None,
     ) -> str:
         return super(HfWhisperDecoder, self).get_hub_compile_options(
-            target_runtime, precision, other_compile_options, device
+            target_runtime, precision, other_compile_options, device, context_graph_name
         )

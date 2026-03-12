@@ -34,7 +34,8 @@ class SHADynamicCacheNewValueOnly(DynamicCache):
         if layer_idx == 0 and hasattr(self, "_seen_tokens"):
             # self._seen_tokens += key_states.shape[-2]
             # This line is updated
-            self._seen_tokens += key_states[0].shape[-2]
+            # Transposed key cache dimensions are [num_heads, batch (always 1), head_dim, sequence_length]
+            self._seen_tokens += key_states[0].shape[-1]
 
         # Update the cache
         if hasattr(self, "key_cache"):
@@ -70,8 +71,10 @@ class SHADynamicCacheNewValueOnly(DynamicCache):
             if len(self.key_cache) <= layer_idx:
                 return 0
             # [0] added to get shape since the outermost is list
-            return self.key_cache[layer_idx][0].shape[-2]
+            # Transposed key cache dimensions are [num_heads, batch (always 1), head_dim, sequence_length]
+            return self.key_cache[layer_idx][0].shape[-1]
         if len(self.layers) <= layer_idx:
             return 0
         # [0] added to get shape since the outermost is list
-        return self.layers[layer_idx][0][0].shape[-2]
+        # Transposed key cache dimensions are [num_heads, batch (always 1), head_dim, sequence_length]
+        return self.layers[layer_idx][0][0].shape[-1]

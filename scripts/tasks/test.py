@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from collections.abc import Iterable
 from tempfile import TemporaryDirectory
@@ -22,10 +23,12 @@ from .task import (
     CompositeTask,
     PyTestTask,
     RunCommandsTask,
+    Task,
 )
 from .util import (
     can_support_aimet,
     check_code_gen_field,
+    check_info_field,
     get_is_hub_quantized,
     get_model_python_version_requirements,
     is_quantized_llm_model,
@@ -40,6 +43,58 @@ from .venv import (
     SyncModelRequirementsVenvTask,
     SyncModelVenvTask,
 )
+
+
+def _model_has_nightly_tests(model_name: str) -> bool:
+    """Return True if pytest can collect any nightly-marked tests for this model."""
+    test_path = os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "test.py")
+    if not os.path.exists(test_path):
+        return False
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-m",
+            "nightly",
+            test_path,
+        ],
+        check=False,
+        capture_output=True,
+    )
+    # Exit code 5 = no tests collected → no nightly tests for this model.
+    # Exit code 0 = tests found; exit code 2 = collection error (import failure
+    # because deps aren't installed yet) — treat conservatively as "has tests".
+    return result.returncode != 5
+
+
+def _model_has_llm_perf_tests(model_name: str) -> bool:
+    """Return True if a model has model_type_llm in info.yaml and llm_perf-marked tests in test.py."""
+    if not check_info_field(model_name, "model_type_llm"):
+        return False
+    test_path = os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "test.py")
+    if not os.path.exists(test_path):
+        return False
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-m",
+            "llm_perf",
+            test_path,
+        ],
+        check=False,
+        capture_output=True,
+    )
+    # Exit code 5 = no tests collected → no llm_perf tests for this model.
+    # Exit code 0 = tests found; exit code 2 = collection error (import failure
+    # because deps aren't installed yet) — treat conservatively as "has tests".
+    return result.returncode != 5
 
 
 class PyTestQAIHMTask(PyTestTask):
@@ -124,6 +179,44 @@ class GPUPyTestModelsTask(CompositeTask):
             if model_name == "llama_v2_7b_chat":
                 test_suites = ["compile_ram_intensive"]
 
+            # When running nightly-only, skip models that have no nightly-marked tests.
+            if nightly_only and not _model_has_nightly_tests(model_name):
+                continue
+
+            # Create a per-model virtual environment to isolate dependencies
+            # (mirrors the scorecard approach to avoid cross-model dep conflicts).
+            model_venv = os.path.join(home_dir, "model_envs", model_name)
+            tasks.append(CreateVenvTask(model_venv))
+            tasks.append(
+                SyncModelVenvTask(
+                    model_name,
+                    model_venv,
+                    include_dev_deps=True,
+                )
+            )
+
+            # Install QDC wheel and optional GPU-specific requirements into the model venv.
+            qdc_wheel_glob = os.path.join(REPO_ROOT, "qdc_public_api_client-*.whl")
+            has_gpu_reqs = os.path.exists(
+                os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "requirements-gpu.txt")
+            )
+            gpu_req_rel_path = (
+                f"qai_hub_models/models/{model_name}/requirements-gpu.txt"
+            )
+            install_cmds = [f"pip install $(ls {qdc_wheel_glob})"]
+            if has_gpu_reqs:
+                install_cmds.append("pip uninstall -y onnxruntime")
+                install_cmds.append(f"pip install -r {gpu_req_rel_path}")
+            tasks.append(
+                RunCommandsWithVenvTask(
+                    group_name=f"Install GPU Dependencies For Model {model_name}",
+                    venv=model_venv,
+                    commands=[" && ".join(install_cmds)],
+                    raise_on_failure=False,
+                    ignore_return_codes=[5],
+                )
+            )
+
             for test_suite in test_suites:
                 model_filename = (
                     f"{filename_parts[0]}-{test_suite}-{model_name}{filename_parts[1]}"
@@ -133,23 +226,10 @@ class GPUPyTestModelsTask(CompositeTask):
                     f"{test_suite} and nightly" if nightly_only else test_suite
                 )
                 options = f"-m '{marker_expr}' --junit-xml={model_junit_xml_path}"
-                if model_name == "llama_v2_7b_chat":
-                    tasks.append(
-                        RunCommandsWithVenvTask(
-                            group_name=f"Install Dependencies For Model {model_name}",
-                            venv=venv,
-                            commands=[
-                                f"{common_command} && pip install -r qai_hub_models/models/{model_name}/requirements.txt",
-                            ],
-                            raise_on_failure=False,
-                            # Ignore "no tests collected" return code
-                            ignore_return_codes=[5],
-                        )
-                    )
                 tasks.append(
                     RunCommandsWithVenvTask(
                         group_name=f"Run {test_suite} Tests For Model {model_name}",
-                        venv=venv,
+                        venv=model_venv,
                         commands=[
                             f"{common_command} && pytest -v -s --capture=no qai_hub_models/models/{model_name}/test.py {options}",
                         ],
@@ -158,6 +238,14 @@ class GPUPyTestModelsTask(CompositeTask):
                         ignore_return_codes=[5],
                     )
                 )
+
+            # Remove the per-model venv after its tests complete to free disk space.
+            tasks.append(
+                RunCommandsTask(
+                    f"Remove Model Venv For {model_name}",
+                    f"rm -rf {model_venv}",
+                )
+            )
 
         super().__init__(
             # If a group name is used here, you get two groups per model
@@ -224,18 +312,19 @@ class PyTestModelTask(CompositeTask):
         else:
             # Create test environment
             needs_model_venv = venv is None
+            setup_task: Task | None = None
             if needs_model_venv:
                 model_venv = os.path.join(BUILD_ROOT, "test", "model_envs", model_name)
                 tasks.append(CreateVenvTask(model_venv, python_executable))
                 # Creates a new environment from scratch
-                tasks.append(
-                    SyncModelVenvTask(
-                        model_name,
-                        model_venv,
-                        include_dev_deps=True,
-                        qaihm_wheel_dir=qaihm_wheel_dir,
-                    )
+                setup_task = SyncModelVenvTask(
+                    model_name,
+                    model_venv,
+                    include_dev_deps=True,
+                    qaihm_wheel_dir=qaihm_wheel_dir,
+                    junit_xml_path=junit_xml_path,
                 )
+                tasks.append(setup_task)
             else:
                 model_venv = venv
                 if install_deps:
@@ -317,6 +406,7 @@ class PyTestModelTask(CompositeTask):
                                     ignore_no_tests_return_code=True,
                                     include_pytest_cmd_in_status_message=False,
                                     junit_xml_path=junit_xml_path,
+                                    prereqs=[setup_task] if setup_task else None,
                                 )
                             )
 
@@ -330,7 +420,12 @@ class PyTestModelTask(CompositeTask):
                             [
                                 f'mypy --warn-unused-configs --config-file="{REPO_ROOT}/pyproject.toml" --package qai_hub_models.models.{model_name}'
                             ],
+                            junit_xml_path=junit_xml_path,
+                            junit_testsuite="pytest",
+                            junit_name="mypy",
+                            junit_classname=f"qai_hub_models.models.{model_name}",
                             raise_on_failure=False,
+                            prereqs=[setup_task] if setup_task else None,
                         )
                     )
 
@@ -391,11 +486,7 @@ class PyTestModelsTask(CompositeTask):
             return
         tasks = []
 
-        # Whether or not export tests will be run asynchronously
-        # (submit all jobs for all models at once, rather than one model at a time).
-        test_hub_async: bool = bool(os.environ.get("QAIHM_TEST_HUB_ASYNC", "0"))
-
-        if test_hub_async and not on_ci():
+        if not on_ci():
             for run_test, job_type in [
                 (run_export_quantize, "quantize"),
                 (run_export_compile, "compile"),
@@ -418,7 +509,7 @@ class PyTestModelsTask(CompositeTask):
                     )
 
         has_venv = base_test_venv is not None
-        if not has_venv and (not venv_for_each_model or test_hub_async):
+        if not has_venv:
             # Create Venv
             base_test_venv = os.path.join(BUILD_ROOT, "test", "base_venv")
             tasks.append(CreateVenvTask(base_test_venv, python_executable))
@@ -496,7 +587,7 @@ class PyTestModelsTask(CompositeTask):
                 )
             )
 
-        if test_hub_async and run_export_compile and not has_venv:
+        if run_export_compile and not has_venv:
             # Cleanup venv
             tasks.append(RunCommandsTask(base_test_venv, f"rm -rf {base_test_venv}"))
 
@@ -534,6 +625,8 @@ class GenerateTestSummaryTask(RunCommandsTask):
         self,
         input_dir: str,
         output_dir: str,
+        title: str = "Test",
+        name: str = "Combined",
     ) -> None:
         """
         Initialize the task.
@@ -543,13 +636,146 @@ class GenerateTestSummaryTask(RunCommandsTask):
         input_dir
             Directory containing JUnit XML files (searched recursively).
         output_dir
-            Output directory for combined.xml and summary.md.
+            Output directory for combined-junit.xml and summary.md.
+        title
+            Title for the summary.
+        name
+            Name for the test section.
         """
+        combined_xml = f"{output_dir}/combined-junit.xml"
+        summary_md = f"{output_dir}/summary.md"
         super().__init__(
             group_name="Generate Test Failure Summary",
             commands=[
-                f'python3 scripts/generate_test_summary.py --input="{input_dir}" --output="{output_dir}"'
+                f'python3 scripts/combine_junit_xml.py --junit-xml="{input_dir}" --output="{combined_xml}"',
+                f'python3 qai_hub_models/scripts/generate_test_summary.py --title="{title}" --name="{name}" --junit-xml="{combined_xml}" --output="{summary_md}"',
             ],
+        )
+
+
+class CollectLLMPerfTask(CompositeTask):
+    """Task to collect LLM performance numbers (TPS/TTFT) via pytest.
+
+    Creates a per-model virtual environment for each LLM, installs the model's
+    dependencies (including QDC wheel and GPU requirements), runs pytest with the
+    llm_perf marker, then removes the venv to free disk space.
+
+    Configuration is passed via environment variables:
+    - QAIHM_LLM_MODELS: Comma-separated model IDs, or "all"
+    - QAIHM_TEST_DEVICES: Comma-separated device names
+    - LLM_CONTEXT_LENGTH: Context length (default: 4096)
+    - QAIRT_SDK_PATH: Path to QAIRT SDK zip
+    - QDC_API_TOKEN: QDC API token
+    """
+
+    def __init__(
+        self,
+        venv: str | None,
+        raise_on_failure: bool = False,
+    ) -> None:
+        home_dir = "/local/mnt2/workspace2/qaihm_bot"
+        tmp_dir = os.path.join(home_dir, "tmp")
+
+        models_env = os.environ.get("QAIHM_LLM_MODELS", "all")
+        if models_env.strip().lower() == "all":
+            models_to_test = [
+                model_name
+                for model_name in get_all_models()
+                if _model_has_llm_perf_tests(model_name)
+            ]
+        else:
+            models_to_test = [m.strip() for m in models_env.split(",") if m.strip()]
+
+        junit_xml_path = os.environ.get("QAIHM_JUNIT_XML_PATH")
+
+        tasks = []
+        qdc_wheel_glob = os.path.join(REPO_ROOT, "qdc_public_api_client-*.whl")
+        common_command = (
+            f"export HOME={home_dir} && mkdir -p {tmp_dir} && export TMPDIR={tmp_dir}"
+            f" && rm -rf {home_dir}/.cache/huggingface/hub/models--*"
+            f" {home_dir}/.qaihm/models/* {tmp_dir}/*"
+        )
+
+        for model_name in models_to_test:
+            model_venv = os.path.join(home_dir, "model_envs", model_name)
+
+            # Create per-model venv and install QAIHM + model requirements.
+            tasks.append(CreateVenvTask(model_venv))
+            tasks.append(
+                SyncModelVenvTask(
+                    model_name,
+                    model_venv,
+                    include_dev_deps=True,
+                )
+            )
+
+            # Install QDC wheel and optional GPU-specific requirements.
+            has_gpu_reqs = os.path.exists(
+                os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "requirements-gpu.txt")
+            )
+            gpu_req_rel_path = (
+                f"qai_hub_models/models/{model_name}/requirements-gpu.txt"
+            )
+            install_cmds = [f"pip install $(ls {qdc_wheel_glob})"]
+            if has_gpu_reqs:
+                install_cmds.append("pip uninstall -y onnxruntime")
+                install_cmds.append(f"pip install -r {gpu_req_rel_path}")
+            tasks.append(
+                RunCommandsWithVenvTask(
+                    group_name=f"Install GPU Dependencies For Model {model_name}",
+                    venv=model_venv,
+                    commands=[" && ".join(install_cmds)],
+                    raise_on_failure=False,
+                    ignore_return_codes=[5],
+                )
+            )
+
+            # Build per-model JUnit XML path (matches GPUPyTestModelsTask pattern).
+            model_junit_xml_path = None
+            if junit_xml_path:
+                base_dir = os.path.dirname(junit_xml_path)
+                filename_parts = os.path.splitext(os.path.basename(junit_xml_path))
+                model_filename = (
+                    f"{filename_parts[0]}-llm_perf-{model_name}{filename_parts[1]}"
+                )
+                model_junit_xml_path = os.path.join(base_dir, model_filename)
+
+            # Set up environment and clear caches before running tests.
+            tasks.append(
+                RunCommandsWithVenvTask(
+                    group_name=f"Set Up Environment For Model {model_name}",
+                    venv=model_venv,
+                    commands=[common_command],
+                    raise_on_failure=False,
+                )
+            )
+
+            # Run llm_perf tests for this model.
+            tasks.append(
+                PyTestTask(
+                    group_name=f"Run LLM Perf Tests For Model {model_name}",
+                    venv=model_venv,
+                    files_or_dirs=f"qai_hub_models/models/{model_name}/test.py",
+                    extra_args="-s -m 'llm_perf'",
+                    junit_xml_path=model_junit_xml_path,
+                    raise_on_failure=False,
+                    ignore_no_tests_return_code=True,
+                )
+            )
+
+            # Remove the per-model venv after tests complete to free disk space.
+            tasks.append(
+                RunCommandsTask(
+                    f"Remove Model Venv For {model_name}",
+                    f"rm -rf {model_venv}",
+                )
+            )
+
+        super().__init__(
+            "Collect LLM Performance Numbers",
+            list(tasks),
+            continue_after_single_task_failure=True,
+            raise_on_failure=raise_on_failure,
         )
 
 

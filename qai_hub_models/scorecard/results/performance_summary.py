@@ -64,16 +64,6 @@ from qai_hub_models.scorecard.results.scorecard_job import (
 #   InferenceJob (mapped by ScorecardProfilePath)
 
 
-def _santize_chipset_name(name: str) -> str:
-    """
-    We want some chipset names to appear differently on the website and perf.yaml
-    compared to the name registered in workbench.
-    """
-    if name.endswith("-for-galaxy"):
-        return name[: -len("-for-galaxy")]
-    return name
-
-
 class ScorecardDeviceSummary(Generic[ScorecardJobTypeVar, ScorecardPathOrNoneTypeVar]):
     scorecard_job_type: type[ScorecardJobTypeVar]
 
@@ -414,17 +404,16 @@ class DevicePerfSummary(
     def get_perf_card(
         self,
         include_failed_jobs: bool = True,
-        exclude_paths: Iterable[ScorecardProfilePath] = [],
+        include_internal_runtimes: bool = True,
     ) -> dict[ScorecardProfilePath, QAIHMModelPerf.PerformanceDetails]:
         perf_card: dict[ScorecardProfilePath, QAIHMModelPerf.PerformanceDetails] = {}
         for path, run in self.run_per_path.items():
             if (
                 not run.skipped  # Skipped runs are not included
-                and path
-                not in exclude_paths  # exclude paths that the user does not want included
                 and (
                     include_failed_jobs or not run.failed
                 )  # exclude failed jobs if requested
+                and (include_internal_runtimes or path.is_public)
             ):
                 perf_card[path] = run.performance_metrics
         return perf_card
@@ -443,7 +432,7 @@ class ModelPrecisionPerfSummary(
 
     def get_target_assets(
         self,
-        exclude_paths: Iterable[ScorecardProfilePath] = [],
+        include_internal_runtimes: bool = True,
         exclude_form_factors: Iterable[ScorecardDevice.FormFactor] = [],
         component: str | None = None,
     ) -> tuple[
@@ -461,7 +450,9 @@ class ModelPrecisionPerfSummary(
             if runs_per_device.device.form_factor in exclude_form_factors:
                 continue
             for path, path_run in runs_per_device.run_per_path.items():
-                if path in exclude_paths or not path_run.success:
+                if not path_run.success:
+                    continue
+                if not include_internal_runtimes and not path.is_public:
                     continue
                 if path.compile_path.is_universal:
                     if path not in universal_assets:
@@ -482,8 +473,8 @@ class ModelPrecisionPerfSummary(
     def get_perf_card(
         self,
         include_failed_jobs: bool = True,
+        include_internal_runtimes: bool = True,
         include_internal_devices: bool = True,
-        exclude_paths: Iterable[ScorecardProfilePath] = [],
         exclude_form_factors: Iterable[ScorecardDevice.FormFactor] = [],
         model_name: str | None = None,
         include_precision: bool = False,
@@ -502,7 +493,7 @@ class ModelPrecisionPerfSummary(
                     and summary.device.form_factor not in exclude_form_factors
                 ):
                     device_summary = summary.get_perf_card(
-                        include_failed_jobs, exclude_paths
+                        include_failed_jobs, include_internal_runtimes
                     )
 
                     # If device had no runs, omit it from the card
@@ -516,7 +507,7 @@ class ModelPrecisionPerfSummary(
                 universal_assets,
                 device_assets,
             ) = self.get_target_assets(
-                exclude_paths, exclude_form_factors, component_id
+                include_internal_runtimes, exclude_form_factors, component_id
             )
 
             # Determine original precision
@@ -642,20 +633,18 @@ class ModelPerfSummary(
     def get_perf_card(
         self,
         include_failed_jobs: bool = True,
+        include_internal_runtimes: bool = True,
         include_internal_devices: bool = True,
-        exclude_paths: dict[Precision, list[ScorecardProfilePath]] | None = None,
         exclude_form_factors: Iterable[ScorecardDevice.FormFactor] | None = None,
         model_name: str | None = None,
     ) -> QAIHMModelPerf:
-        if exclude_paths is None:
-            exclude_paths = {}
         if exclude_form_factors is None:
             exclude_form_factors = []
         precision_cards = {
             p: s.get_perf_card(
                 include_failed_jobs,
+                include_internal_runtimes,
                 include_internal_devices,
-                exclude_paths.get(p, []),
                 exclude_form_factors,
                 model_name,
                 p in [Precision.mixed, Precision.mixed_with_float],
@@ -701,12 +690,9 @@ class ModelPerfSummary(
                 ).performance_metrics:
                     supported_chipsets.update(device.extended_supported_chipsets)
 
-        displayed_chipsets = [
-            _santize_chipset_name(chipset) for chipset in supported_chipsets
-        ]
         return QAIHMModelPerf(
             supported_devices=get_supported_devices(supported_chipsets),
-            supported_chipsets=sorted_chipsets(set(displayed_chipsets)),
+            supported_chipsets=sorted_chipsets(supported_chipsets),
             precisions=precision_cards,
         )
 

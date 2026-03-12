@@ -247,7 +247,7 @@ class AIMETOnnxQuantizableMixin(PretrainedHubModelProtocol):
         num_rmsnorm_per_blk: int | None = None,
     ) -> None:
         assert self.quant_sim is not None
-        ensure_min_aimet_onnx_version("2.25.0")
+        ensure_min_aimet_onnx_version("2.26.0")
         from aimet_onnx.experimental.adascale.adascale_optimizer import (
             AdaScale,
             adascale_model_config_dict,

@@ -5,9 +5,8 @@
 
 import pytest
 
-from qai_hub_models.models.common import Precision
+from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.scorecard.envvars import (
-    EnableAsyncTestingEnvvar,
     EnabledPathsEnvvar,
     EnabledPrecisionsEnvvar,
     IgnoreKnownFailuresEnvvar,
@@ -22,13 +21,14 @@ from qai_hub_models.scorecard.execution_helpers import (
 @pytest.fixture(autouse=True)
 def set_env(monkeypatch: pytest.MonkeyPatch) -> None:
     IgnoreKnownFailuresEnvvar.patchenv(monkeypatch, True)
-    EnableAsyncTestingEnvvar.patchenv(monkeypatch, True)
 
 
 def test_get_quantize_precisions(monkeypatch: pytest.MonkeyPatch) -> None:
     EnabledPrecisionsEnvvar.patchenv(monkeypatch, {SpecialPrecisionSetting.DEFAULT})
     quantize_precisions = get_quantize_parameterized_pytest_config(
-        "", {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]}
+        "",
+        {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]},
+        {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]},
     )
     assert set(quantize_precisions) == {Precision.w8a8, Precision.w8a16}
 
@@ -36,7 +36,9 @@ def test_get_quantize_precisions(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch, {SpecialPrecisionSetting.DEFAULT, "w8a8"}
     )
     quantize_precisions = get_quantize_parameterized_pytest_config(
-        "", {k: [] for k in [Precision.float]}
+        "",
+        {k: [] for k in [Precision.float]},
+        {k: [] for k in [Precision.float]},
     )
     assert set(quantize_precisions) == {Precision.w8a8}
 
@@ -44,7 +46,9 @@ def test_get_quantize_precisions(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch, {SpecialPrecisionSetting.DEFAULT_MINUS_FLOAT}
     )
     quantize_precisions = get_quantize_parameterized_pytest_config(
-        "", {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]}
+        "",
+        {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]},
+        {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]},
     )
     assert set(quantize_precisions) == {Precision.w8a8, Precision.w8a16}
 
@@ -52,21 +56,29 @@ def test_get_quantize_precisions(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch, {SpecialPrecisionSetting.DEFAULT_QUANTIZED}
     )
     quantize_precisions = get_quantize_parameterized_pytest_config(
-        "", {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]}
+        "",
+        {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]},
+        {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]},
     )
     assert set(quantize_precisions) == {Precision.w8a16}
 
     quantize_precisions = get_quantize_parameterized_pytest_config(
-        "", {k: [] for k in [Precision.float]}
+        "",
+        {k: [] for k in [Precision.float]},
+        {k: [] for k in [Precision.float]},
     )
     assert set(quantize_precisions) == {Precision.w8a8}
 
 
 def test_get_compile_precisions(monkeypatch: pytest.MonkeyPatch) -> None:
-    EnabledPathsEnvvar.patchenv(monkeypatch, {"onnx"})
+    EnabledPathsEnvvar.patchenv(monkeypatch, {"qnn_context_binary"})
     EnabledPrecisionsEnvvar.patchenv(monkeypatch, {SpecialPrecisionSetting.DEFAULT})
+    precision_mapping = {
+        k: [TargetRuntime.QNN_CONTEXT_BINARY]
+        for k in [Precision.float, Precision.w8a8, Precision.w8a16]
+    }
     compile_paths = get_compile_parameterized_pytest_config(
-        "", {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]}, {}
+        "", precision_mapping, precision_mapping
     )
     compile_precisions = [path[0] for path in compile_paths]
     assert set(compile_precisions) == {Precision.float, Precision.w8a8, Precision.w8a16}
@@ -75,7 +87,7 @@ def test_get_compile_precisions(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch, {SpecialPrecisionSetting.DEFAULT_MINUS_FLOAT}
     )
     compile_paths = get_compile_parameterized_pytest_config(
-        "", {k: [] for k in [Precision.float, Precision.w8a8, Precision.w8a16]}, {}
+        "", precision_mapping, precision_mapping
     )
     compile_precisions = [path[0] for path in compile_paths]
     assert set(compile_precisions) == {Precision.w8a8, Precision.w8a16}
@@ -83,8 +95,11 @@ def test_get_compile_precisions(monkeypatch: pytest.MonkeyPatch) -> None:
     EnabledPrecisionsEnvvar.patchenv(
         monkeypatch, {SpecialPrecisionSetting.DEFAULT_QUANTIZED}
     )
+    precision_mapping = {
+        k: [TargetRuntime.QNN_CONTEXT_BINARY] for k in [Precision.float]
+    }
     compile_paths = get_compile_parameterized_pytest_config(
-        "", {k: [] for k in [Precision.float]}, {}
+        "", precision_mapping, precision_mapping
     )
     compile_precisions = [path[0] for path in compile_paths]
     assert set(compile_precisions) == {Precision.w8a8}
@@ -93,20 +108,23 @@ def test_get_compile_precisions(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch, {SpecialPrecisionSetting.DEFAULT, "w8a8"}
     )
     compile_paths = get_compile_parameterized_pytest_config(
-        "", {k: [] for k in [Precision.float]}, {}
+        "", precision_mapping, precision_mapping
     )
     compile_precisions = [path[0] for path in compile_paths]
     assert set(compile_precisions) == {Precision.float, Precision.w8a8}
 
     EnabledPrecisionsEnvvar.patchenv(monkeypatch, {SpecialPrecisionSetting.BENCH})
+    precision_mapping = {
+        k: [TargetRuntime.QNN_CONTEXT_BINARY] for k in [Precision.float, Precision.w8a8]
+    }
     compile_paths = get_compile_parameterized_pytest_config(
-        "", {k: [] for k in [Precision.float, Precision.w8a8]}, {}
+        "", precision_mapping, precision_mapping
     )
     compile_precisions = [path[0] for path in compile_paths]
     assert set(compile_precisions) == {Precision.float}
 
     compile_paths = get_compile_parameterized_pytest_config(
-        "resnet18", {k: [] for k in [Precision.float, Precision.w8a8]}, {}
+        "resnet18", precision_mapping, precision_mapping
     )
     compile_precisions = [path[0] for path in compile_paths]
     assert set(compile_precisions) == {Precision.float, Precision.w8a8}

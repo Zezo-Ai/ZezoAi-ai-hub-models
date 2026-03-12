@@ -106,3 +106,7 @@ class HRNetFace(BaseModel):
         This can be used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {"image": ((1, 3, height, width), "float32")}
+
+    @staticmethod
+    def get_channel_last_inputs() -> list[str]:
+        return ["image"]

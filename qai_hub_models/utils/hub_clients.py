@@ -136,7 +136,14 @@ def get_hub_client(
             f"https://{deployment_name_url}.aihub.qualcomm.com/",
         )
 
-        client = HubClient(HubClientConfig(api_url, api_url, user_token, True))
+        client = HubClient(
+            HubClientConfig(
+                api_token=user_token,
+                api_url=api_url,
+                web_url=api_url,
+                verbose=True,
+            )
+        )
 
     # If there is no environment variable set, check if there is a 'deploymentname_username.ini' file
     if client is None:

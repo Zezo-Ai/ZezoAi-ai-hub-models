@@ -46,6 +46,7 @@ from tasks.task import (
     Task,
 )
 from tasks.test import (
+    CollectLLMPerfTask,
     GenerateTestSummaryTask,
     GPUPyTestModelsTask,
     InstallGlobalRequirementsTask,
@@ -192,43 +193,6 @@ class TaskLibrary:
     def list_public(self, plan: Plan) -> str:
         return plan.add_step("list_public", ListTasksTask(PUBLIC_TASKS))
 
-    @public_task("precheckin")
-    @depends(
-        [
-            "test_qaihm",
-            "test_changed_models",
-        ]
-    )
-    def precheckin(self, plan: Plan) -> str:
-        # Excludes export tests, and uses the same environment for each model.
-        return plan.add_step("precheckin", NoOpTask())
-
-    @public_task("precheckin_long")
-    @depends(
-        [
-            "test_qaihm",
-            "test_changed_models_long",
-        ]
-    )
-    def precheckin_long(self, plan: Plan) -> str:
-        # Includes export tests, and creates a fresh environment for each model.
-        return plan.add_step("precheckin_long", NoOpTask())
-
-    @public_task("all_tests")
-    @depends(
-        [
-            "test_qaihm",
-            "test_all_models",
-        ]
-    )
-    def all_tests(self, plan: Plan) -> str:
-        return plan.add_step("all_tests", NoOpTask())
-
-    @public_task("all_tests_long")
-    @depends(["test_qaihm"])
-    def all_tests_long(self, plan: Plan) -> str:
-        return plan.add_step("all_tests_long", NoOpTask())
-
     @task
     @depends(["install_deps"])
     def validate_aws_credentials(
@@ -334,6 +298,23 @@ class TaskLibrary:
         return plan.add_step(
             step_id,
             LlamaCppBenchmarkTask(venv=self.venv_path),
+        )
+
+    @public_task("Collect LLM performance numbers (TPS/TTFT) via pytest")
+    def collect_llm_perf(self, plan: Plan, step_id: str = "collect_llm_perf") -> str:
+        """
+        Collect LLM performance numbers (TPS/TTFT) using pytest -m llm_perf.
+
+        Configuration is passed via environment variables:
+        - QAIHM_LLM_MODELS: Comma-separated model IDs, or "all"
+        - QAIHM_TEST_DEVICES: Comma-separated device names
+        - LLM_CONTEXT_LENGTH: Context length (default: 4096)
+        - QAIRT_SDK_PATH: Path to QAIRT SDK zip
+        - QDC_API_TOKEN: QDC API token
+        """
+        return plan.add_step(
+            step_id,
+            CollectLLMPerfTask(venv=self.venv_path),
         )
 
     @public_task("Model Test Setup")
@@ -575,19 +556,19 @@ class TaskLibrary:
             step_id, self._make_hub_scorecard_task(enable_export_end2end=True)
         )
 
-    @public_task("Verify all async compile jobs completed successfully.")
+    @public_task("Verify all async workbench jobs completed successfully.")
     @depends(["install_deps"])
-    def verify_compile_jobs(
-        self, plan: Plan, step_id: str = "verify_compile_jobs"
+    def verify_workbench_jobs(
+        self, plan: Plan, step_id: str = "verify_workbench_jobs"
     ) -> str:
         junit_xml_path = os.environ.get("QAIHM_JUNIT_XML_PATH")
         return plan.add_step(
             step_id,
             PyTestTask(
-                group_name="Verify Compile Jobs Success",
+                group_name="Verify Workbench Jobs Success",
                 venv=self.venv_path,
                 files_or_dirs=os.path.join(
-                    PY_PACKAGE_SRC_ROOT, "test", "test_async_compile_jobs.py"
+                    PY_PACKAGE_SRC_ROOT, "test", "test_assert_workbench_job_success.py"
                 ),
                 parallel=False,
                 extra_args="-s",
@@ -615,6 +596,7 @@ class TaskLibrary:
                 tasks=[
                     # "install_deps" will call this task if the user wants to use the public package for testing.
                     # To avoid a circular dependency, we use an editable install to first build the public package.
+                    CreateVenvTask(self.venv_path, self.python_executable),
                     SyncLocalQAIHMVenvTask(
                         self.venv_path, ["dev"], qaihm_wheel_dir=None
                     ),
@@ -689,7 +671,7 @@ class TaskLibrary:
                 group_name=None,
                 venv=self.venv_path,
                 commands=[
-                    "python qai_hub_models/scripts/generate_hf_model_readme.py --public --models ALL"
+                    "python qai_hub_models/scripts/release_huggingface_model_cards.py --deprecate-removed-models"
                 ],
             ),
         )
