@@ -14,19 +14,22 @@ from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.image_processing import IMAGENET_TRANSFORM
 
 IMAGENETTE_FOLDER_NAME = "imagenette2-320"
-IMAGENETTE_VERSION = 1
+IMAGENETTE_VERSION = 2
 DEVKIT_NAME = "ILSVRC2012_devkit_t12.tar.gz"
+IMAGENETTE_FILENAME = "imagenette2-320.tgz"
 DEVKIT_ASSET = CachedWebDatasetAsset(
     f"https://image-net.org/data/ILSVRC/2012/{DEVKIT_NAME}",
     IMAGENETTE_FOLDER_NAME,
     IMAGENETTE_VERSION,
     DEVKIT_NAME,
+    ci_private_s3_key=f"qai-hub-models/datasets/imagenette/{DEVKIT_NAME}",
 )
 IMAGENETTE_ASSET = CachedWebDatasetAsset(
-    "https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz",
+    f"https://s3.amazonaws.com/fast-ai-imageclas/{IMAGENETTE_FILENAME}",
     IMAGENETTE_FOLDER_NAME,
     IMAGENETTE_VERSION,
     "imagenette2-320.tgz",
+    ci_private_s3_key=f"qai-hub-models/datasets/imagenette/{IMAGENETTE_FILENAME}",
 )
 
 # Imagenette data has 10 classes and are labeled 0-9.
@@ -58,12 +61,10 @@ class ImagenetteDataset(BaseDataset, ImageNet):
         split: DatasetSplit = DatasetSplit.TRAIN,
         transform: object = IMAGENET_TRANSFORM,
     ) -> None:
-        BaseDataset.__init__(
-            self, str(IMAGENETTE_ASSET.path(extracted=True)), split=split
-        )
+        BaseDataset.__init__(self, str(IMAGENETTE_ASSET.extracted_path), split=split)
         ImageNet.__init__(
             self,
-            root=str(IMAGENETTE_ASSET.path()),
+            root=str(IMAGENETTE_ASSET.path),
             split=self.split_str,
             transform=transform,
             target_transform=lambda val: IMAGENETTE_CLASS_MAP[val],
@@ -73,7 +74,7 @@ class ImagenetteDataset(BaseDataset, ImageNet):
         return ImageNet.__len__(self)
 
     def _validate_data(self) -> bool:
-        devkit_path = IMAGENETTE_ASSET.path() / DEVKIT_NAME
+        devkit_path = IMAGENETTE_ASSET.path / DEVKIT_NAME
 
         # Check devkit exists
         if not devkit_path.exists():
@@ -103,11 +104,11 @@ class ImagenetteDataset(BaseDataset, ImageNet):
         os.chmod(
             devkit_path, devkit_st.st_mode | stat.S_IEXEC
         )  # this is a no-op on windows
-        target_path = IMAGENETTE_ASSET.path() / DEVKIT_NAME
+        target_path = IMAGENETTE_ASSET.path / DEVKIT_NAME
         if not target_path.exists():
             # The devkit is tiny (2MB), and symlinks break windows,
             # so copy this instead of symlinking it.
-            shutil.copy(DEVKIT_ASSET.path(), target_path)
+            shutil.copy(DEVKIT_ASSET.path, target_path)
 
     @staticmethod
     def default_samples_per_job() -> int:

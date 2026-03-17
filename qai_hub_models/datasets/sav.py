@@ -6,8 +6,6 @@
 from __future__ import annotations
 
 import os
-import tarfile
-import tempfile
 
 import numpy as np
 import torch
@@ -17,26 +15,30 @@ from torchvision.transforms import Resize
 from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetSplit,
-    UnfetchableDatasetError,
 )
 from qai_hub_models.utils.asset_loaders import (
     ASSET_CONFIG,
     load_image,
 )
-
-try:
-    from qai_hub_models.utils._internal.download_private_datasets import (
-        download_sav_files,
-    )
-except ImportError:
-    download_sav_files = None  # type: ignore[assignment]
 from qai_hub_models.utils.image_processing import numpy_image_to_torch
 from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
 
 SAV_FOLDER_NAME = "sav"
-SAV_VERSION = 1
+SAV_VERSION = 2
 SAV_DIR_NAME = "sav_val"
 SEED = 42
+
+SAV_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+    "qai-hub-models/datasets/sav/sav_val.tar",
+    SAV_FOLDER_NAME,
+    SAV_VERSION,
+    f"{SAV_DIR_NAME}.tar",
+    installation_steps=[
+        "Download sav_val.tar from https://ai.meta.com/datasets/segment-anything-video-downloads/",
+        "Run `python -m qai_hub_models.datasets.configure_dataset --dataset sav --files /path/to/sav_val.tar`",
+    ],
+)
 
 
 class SaVDataset(BaseDataset):
@@ -105,30 +107,8 @@ class SaVDataset(BaseDataset):
     def __len__(self) -> int:
         return len(self.sample)
 
-    def _download_data(self, tar_path: str | None = None) -> None:
-        # Use passed arg if provided, otherwise use instance attribute
-        if tar_path is None:
-            tar_path = self.input_tar
-
-        # If no file provided/set, try auto-download
-        if tar_path is None and download_sav_files is not None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tar_path = os.path.join(tmpdir, f"{SAV_DIR_NAME}.tar")
-                download_sav_files(tar_path)
-                self._download_data(tar_path)
-            return
-
-        if tar_path is None or not tar_path.endswith(SAV_DIR_NAME + ".tar"):
-            raise UnfetchableDatasetError(
-                dataset_name=self.dataset_name(),
-                installation_steps=[
-                    "Download sav_val.tar from https://ai.meta.com/datasets/segment-anything-video-downloads/",
-                    "Run `python -m qai_hub_models.datasets.configure_dataset --dataset sav --files /path/to/sav_val.tar`",
-                ],
-            )
-
-        with tarfile.open(tar_path) as f:
-            f.extractall(self.data_path.parent)
+    def _download_data(self) -> None:
+        SAV_PRIVATE_ASSET.fetch(extract=True, local_path=self.input_tar)
 
     @staticmethod
     def default_samples_per_job() -> int:

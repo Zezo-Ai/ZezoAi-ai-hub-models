@@ -13,6 +13,7 @@ import requests
 from packaging.version import parse as packaging_parse_version
 from pydantic import ValidationError
 
+from qai_hub_models._version import __version__
 from qai_hub_models.configs.devices_and_chipsets_yaml import DevicesAndChipsetsYaml
 from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.utils.asset_loaders import (
@@ -20,14 +21,10 @@ from qai_hub_models.utils.asset_loaders import (
     ModelZooAssetConfig,
     download_file,
 )
+from qai_hub_models.utils.fetch_prerelease_assets import (
+    fetch_prerelease_assets,
+)
 from qai_hub_models.utils.version_helpers import QAIHMVersion
-
-try:
-    from qai_hub_models.utils._internal.fetch_prerelease_assets import (
-        fetch_prerelease_assets,
-    )
-except ImportError:
-    fetch_prerelease_assets = None  # type: ignore[assignment]
 
 
 def fetch_static_assets(
@@ -79,12 +76,10 @@ def fetch_static_assets(
         * if the version tag provided is "current" or None, we will **only** attempt to fetch pre-released assets
         * if the version tag is specific (eg. v0.45.0), we will fetch released assets for that tag
     """
-    if fetch_prerelease_assets is not None and qaihm_version_tag in (
-        None,
-        QAIHMVersion.CURRENT_TAG_ALIAS,
-    ):
+    qaihm_version_tag = qaihm_version_tag or __version__
+    if "dev" in __version__:
         # We always try to fetch assets that correspond with the **installed** version of QAIHM.
-        # If that version is internal, the most up-to-date assets are pre-release assets.
+        # If that version is not a release build, the most up-to-date assets are pre-release assets.
         return fetch_prerelease_assets(
             model_id,
             runtime,

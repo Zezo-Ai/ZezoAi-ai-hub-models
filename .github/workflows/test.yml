@@ -1,0 +1,535 @@
+##
+## Re-usable worfklow for building and testing everything.
+## Do not attempt to change the triggers on this workflow.
+##
+
+name: Test QAIHM
+
+env:
+  # Versions MUST be quoted, otherwise they will be interpreted as a floats
+  # (and version like 3.10 can be interpreted as 3.1).
+  PYTHONUNBUFFERED: 1
+  VENV_PATH: build/ci-envs/qaihm-build
+  QAIHM_CI: 1
+  CMAKE_ARGS: -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+on:
+  # Allows this workflow to be callable
+  workflow_call:
+    inputs:
+      precommit_scope:
+        description: Scope of Pre-Commit Checks
+        type: string
+        # ALL, NO_CODEGEN, NONE
+        default: NONE
+
+      deployment:
+        description: Hub Deployment
+        default: prod
+        type: string
+
+      models:
+        description: Models to test. Use 'all' for all models, 'changed' for only changed models, 'none' to skip, or a comma-separated list.
+        required: false
+        type: string
+        default: all
+
+      python_version:
+        default: "3.10"
+        type: string
+
+      disable_override_compile_job_timeout:
+        default: false
+        type: boolean
+
+      enable_compile_tests:
+        description: Enable compile tests (if false, only unit tests run)
+        default: false
+        type: boolean
+
+      use_public_wheel:
+        description: Whether to build and test against a public wheel instead of installing the repo directly from source.
+        default: false
+        type: boolean
+
+      generate_test_summary:
+        description: Generate a combined test summary
+        default: true
+        type: boolean
+
+      is_pr:
+        description: Whether this run is for a pull request. Enables the check that fails the workflow if any prerequisite jobs failed.
+        default: false
+        type: boolean
+
+  workflow_dispatch:
+    inputs:
+      precommit_scope:
+        description: Scope of Pre-Commit Tests
+        required: true
+        type: choice
+        default: NONE
+        options:
+          - ALL
+          - NO_CODEGEN
+          - NONE
+
+      deployment:
+        description: Hub Deployment
+        default: prod
+        type: string
+
+      models:
+        description: Models to test. Use 'all' for all models, 'changed' for only changed models, 'none' to skip, or a comma-separated list.
+        required: false
+        type: string
+        default: pytorch
+
+      python_version:
+        default: "3.10"
+        type: string
+
+      disable_override_compile_job_timeout:
+        description: Disable shorter compile job timeout used for QAIHM PRs.
+        default: false
+        type: boolean
+
+      enable_compile_tests:
+        description: Enable compile tests (if false, only unit tests run)
+        default: false
+        type: boolean
+
+      use_public_wheel:
+        description: Whether to build and test against a public wheel instead of installing the repo directly from source.
+        default: false
+        type: boolean
+
+      generate_test_summary:
+        description: Generate a combined test summary
+        default: true
+        type: boolean
+
+      is_pr:
+        description: Whether this run is for a pull request. Enables the check that fails the workflow if any prerequisite jobs failed.
+        default: false
+        type: boolean
+
+jobs:
+  ##
+  ## Pre-commit hook rules check
+  ##
+  precommit_check:
+    name: "Pre-commit Hook Rules Check"
+    if: ${{ inputs.precommit_scope != 'NONE' && !inputs.use_public_wheel }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    env:
+      QAIHM_CI_USE_EDITABLE_INSTALL: 1
+      PYTHON_VERSION: ${{inputs.python_version}}
+    steps:
+    - uses: actions/checkout@v6
+
+    - id: install_platform_deps
+      env:
+        SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
+      run: |
+        bash scripts/ci/install-platform-deps.sh
+
+    - id: setup_python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Create Virtual Env, re-generate and install global_requirements.txt
+      run: |
+        python3 scripts/build_and_test.py \
+          --venv="${{ env.VENV_PATH }}" \
+          --python="${{ steps.setup_python.outputs.python-path }}" \
+          install_global_requirements
+
+    - name: Configure Hub Credentials
+      run: |
+        source scripts/ci/set-aihub-credential-vars.sh \
+          prod \
+          ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
+          ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
+          ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
+          ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+          DEFAULT \
+          ${{ env.VENV_PATH }}
+
+    - name: Run Pre-Commit
+      id: pre-commit
+      run: |
+        (source ${{ env.VENV_PATH }}/bin/activate &&
+         pre-commit run --show-diff-on-failure --color=always --all-files &&
+         pre-commit run --config .pre-commit-line-ending-check.yaml --show-diff-on-failure --color=always --all-files) ||
+        (echo "NOTE: If mypy failed and you can't reproduce the failure locally, run 'python scripts/build_and_test.py install_global_requirements' and try again."; exit 1)
+
+    - name: Reset global-requirements for python != 3.10
+      if: ${{ inputs.python_version != '3.10' }}
+      # Global requirements are different per python version. We check in python 3.10 reqs.
+      # We only need to check for 3.10 if the requirements are checked in correctly.
+      run: git checkout qai_hub_models/global_requirements.txt
+
+    - name: Re-run export code-gen
+      if: ${{ inputs.precommit_scope == 'all' }}
+      run: source "${{ env.VENV_PATH }}/bin/activate" && python qai_hub_models/scripts/run_codegen.py -a
+
+    - name: Re-generate devices_and_chipsets
+      if: ${{ inputs.precommit_scope == 'all' }}
+      run: source "${{ env.VENV_PATH }}/bin/activate" && python qai_hub_models/scripts/generate_scorecard_device_yaml.py
+
+    - name: Check for code-gen changes
+      if: ${{ inputs.precommit_scope == 'all' }}
+      run: |
+        if [[ -n $(git diff) ]]; then
+          git diff
+          echo "Detected uncommitted changes when running git diff.\n"
+          echo "Please run \`python qai_hub_models/scripts/run_codegen.py -a\`, "
+          echo "\`python qai_hub_models/scripts/generate_global_requirements.py\`, and "
+          echo "\`python qai_hub_models/scripts/generate_scorecard_device_yaml.py \`, then update the PR.\n"
+          exit 1
+        fi
+
+  test_qaihm_unit:
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    timeout-minutes: 600 # 10 hours
+    env:
+      PYTHON_VERSION: ${{inputs.python_version}}
+      QAIHM_TEST_DEPLOYMENT: ${{ inputs.deployment }}
+      QAIHM_TEST_USE_PUBLIC_WHEEL: ${{ inputs.use_public_wheel }}
+
+    name: "QAIHM Unit Tests"
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: install_platform_deps
+        env:
+          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
+        run: |
+          bash scripts/ci/install-platform-deps.sh
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup AWS Credentials
+        uses: ./.github/actions/configure-multiple-aws-roles
+        with:
+          role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+          role-duration-seconds: 7200
+          profile: qaihm
+          aws-region: us-west-2
+
+      - name: Create Virtual Env
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Configure Hub Credentials
+        run: |
+          source scripts/ci/set-aihub-credential-vars.sh \
+            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
+            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
+            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
+            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
+            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+            DEFAULT \
+            ${{ env.VENV_PATH }}
+
+      - name: Set Environment Variables
+        id: set_env_vars
+        run: |
+          echo "COMPILE_JOBS_FILE=${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/compile-jobs.yaml" >> "$GITHUB_ENV"
+          echo "HF_TOKEN=${{ secrets.HUGGINGFACE_TOKEN }}" >> "$GITHUB_ENV"
+
+      - name: Create Test Results Directory
+        run: |
+          mkdir -p "${{ github.workspace }}/test-results"
+
+      - name: Run Tests
+        id: run-tests
+        env:
+          QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/test-results/qaihm-unit-tests-junit.xml
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            test_qaihm
+
+      - name: Upload Test Results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-unit-py${{ inputs.python_version }}
+          path: ${{ github.workspace }}/test-results
+
+  get_changed_models:
+    name: Get Changed Models
+    if: ${{ inputs.models == 'changed' }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    env:
+      PYTHON_VERSION: ${{ inputs.python_version }}
+    outputs:
+      models: ${{ steps.get_changed.outputs.models }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get Changed Files
+        run: |
+          mkdir -p "${{ github.workspace }}/build"
+          (git diff --name-only -r HEAD^1 HEAD) > "${{ github.workspace }}/build/changed-qaihm-files.txt"
+          (git diff origin/main --name-only) >> "${{ github.workspace }}/build/changed-qaihm-files.txt"
+          cat "${{ github.workspace }}/build/changed-qaihm-files.txt"
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Get Changed Models
+        id: get_changed
+        run: |
+          CHANGED_MODELS=$(python3 scripts/build_and_test.py --venv="${{ env.VENV_PATH }}" get_ci_test_models | tail -1)
+          echo "models=$CHANGED_MODELS" >> "$GITHUB_OUTPUT"
+          echo "Changed models: $CHANGED_MODELS"
+
+  test_qaihm_models:
+    name: QAIHM Model Tests
+    needs: get_changed_models
+    if: ${{ !cancelled() && inputs.models != 'none' && (inputs.models != 'changed' || needs.get_changed_models.outputs.models != '') && !inputs.use_public_wheel }}
+    secrets: inherit
+    uses: ./.github/workflows/test_models_split.yml
+    with:
+      deployment: ${{ inputs.deployment }}
+      models: ${{ inputs.models == 'changed' && needs.get_changed_models.outputs.models || inputs.models }}
+      test_devices: canary
+      test_runtimes: default
+      test_precisions: default
+      test_scope: ${{ inputs.enable_compile_tests && 'unit_and_compile' || 'unit' }}
+      ignore_job_cache: false
+      ignore_known_failures: false
+      max_models_per_split: ${{ inputs.enable_compile_tests && 60 || 10000 }} # no splitting if compile tests are disabled
+      max_num_splits: 4
+      python_version: ${{ inputs.python_version }}
+
+  verify_model_tests:
+    name: Verify Model Tests
+    needs: test_qaihm_models
+    if: ${{ !cancelled() && needs.test_qaihm_models.result != 'skipped' }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    env:
+      PYTHON_VERSION: ${{ inputs.python_version }}
+      QAIHM_TEST_DEPLOYMENT: ${{ inputs.deployment }}
+      QAIHM_TEST_ARTIFACTS_DIR: build/scorecard-yamls/${{ github.run_id }}
+      QAIHM_TEST_DISABLE_WORKBENCH_JOB_TIMEOUT: ${{ inputs.disable_override_compile_job_timeout && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v6
+        if: ${{ inputs.enable_compile_tests }}
+
+      - name: Download Workbench Jobs Artifact
+        id: download_artifact
+        if: ${{ inputs.enable_compile_tests }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: Test Cached Artifact (Flaky-Job-IDs, ${{ github.run_id }}, py${{ inputs.python_version }})
+          path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
+
+      - id: install_platform_deps
+        if: ${{ steps.download_artifact.outcome == 'success' }}
+        env:
+          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
+        run: |
+          bash scripts/ci/install-platform-deps.sh
+
+      - id: setup_python
+        if: ${{ steps.download_artifact.outcome == 'success' }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        if: ${{ steps.download_artifact.outcome == 'success' }}
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Configure Hub Credentials
+        if: ${{ steps.download_artifact.outcome == 'success' }}
+        run: |
+          source scripts/ci/set-aihub-credential-vars.sh \
+            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
+            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
+            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
+            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
+            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+            DEFAULT \
+            ${{ env.VENV_PATH }}
+
+      - name: Create Test Results Directory
+        if: ${{ steps.download_artifact.outcome == 'success' }}
+        run: |
+          mkdir -p "${{ github.workspace }}/test-results"
+
+      - name: Verify Workbench Jobs Success
+        id: verify_workbench_jobs
+        if: ${{ steps.download_artifact.outcome == 'success' }}
+        env:
+          QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/test-results/qaihm-verify-workbench-jobs-junit.xml
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            verify_workbench_jobs
+
+      - name: Upload Test Results
+        if: ${{ always() && steps.download_artifact.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-workbench-jobs-py${{ inputs.python_version }}
+          path: ${{ github.workspace }}/test-results
+
+      - name: Check Job Submissions
+        if: ${{ inputs.is_pr && needs.test_qaihm_models.result != 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "The following jobs failed:"
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs --paginate -q '.jobs[] | select(.conclusion == "failure") | "  - \(.name): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/\(.id)"'
+          exit 1
+
+  combine_test_results:
+    name: Combine Test Results
+    needs: [precommit_check, test_qaihm_unit, test_qaihm_models, verify_model_tests]
+    if: ${{ always() }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    env:
+      PYTHON_VERSION: ${{ inputs.python_version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: setup_python
+        if: ${{ inputs.generate_test_summary }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        if: ${{ inputs.generate_test_summary }}
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Download 'QAIHM Unit Tests' Results
+        id: download_unit_results
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: test-results-unit-py${{ inputs.python_version }}
+          path: build/all-test-results/unit-tests
+
+      - name: Download 'QAIHM Model Tests' Results
+        id: download_model_results
+        if: ${{ needs.test_qaihm_models.result != 'skipped' }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: test-results-models-py${{ inputs.python_version }}
+          path: build/all-test-results/model-tests
+
+      - name: Download 'Verify Model Tests' Results
+        id: download_workbench_results
+        if: ${{ inputs.enable_compile_tests && needs.verify_model_tests.result != 'skipped' }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: test-results-workbench-jobs-py${{ inputs.python_version }}
+          path: build/all-test-results/workbench-jobs
+
+      - name: Generate Test Summary
+        if: ${{ inputs.generate_test_summary }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODEL_TESTS_SKIPPED: ${{ needs.test_qaihm_models.result == 'skipped' }}
+          VERIFY_TESTS_SKIPPED: ${{ !inputs.enable_compile_tests || needs.verify_model_tests.result == 'skipped' }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          mkdir -p build/combined-test-results
+
+          # Build failure arguments from failed workflow jobs
+          FAILURE_ARGS=()
+          while IFS=$'\t' read -r name url; do
+            FAILURE_ARGS+=("--workflow-failure" "$name" "--workflow-failure-url" "$url")
+          done < <(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs --paginate -q '.jobs[] | select(.conclusion == "failure") | "\(.name)\t${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/\(.id)"')
+
+          # Build test input arguments, excluding skipped tests
+          TEST_ARGS=(
+            --name "Unit Tests" --junit-xml build/all-test-results/unit-tests/qaihm-unit-tests-junit.xml
+          )
+          if [[ "$MODEL_TESTS_SKIPPED" != "true" ]]; then
+            TEST_ARGS+=(--name "Model Tests" --junit-xml build/all-test-results/model-tests/qaihm-model-tests-junit.xml)
+          fi
+          if [[ "$VERIFY_TESTS_SKIPPED" != "true" ]]; then
+            TEST_ARGS+=(--name "Verify Workbench Jobs Passed" --junit-xml build/all-test-results/workbench-jobs/qaihm-verify-workbench-jobs-junit.xml)
+          fi
+
+          python qai_hub_models/scripts/generate_test_summary.py \
+            --title "py${{ inputs.python_version }} Test" \
+            "${FAILURE_ARGS[@]}" \
+            "${TEST_ARGS[@]}" \
+            --output build/combined-test-results/summary.md
+
+      - name: Copy XML Files to Combined Results
+        run: |
+          mkdir -p build/combined-test-results
+          if [ -d build/all-test-results ]; then
+            find build/all-test-results -name "*.xml" -exec cp {} build/combined-test-results/ \; || true
+          fi
+
+      - name: Upload Combined Test Results
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-py${{ inputs.python_version }}
+          path: build/combined-test-results
+
+      - name: Delete Individual Test Results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Delete unit test results
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name == \"test-results-unit-py${{ inputs.python_version }}\") | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done
+          # Delete model test results (split artifacts)
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name == \"test-results-models-py${{ inputs.python_version }}\") | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done
+          # Delete workbench jobs test results
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name == \"test-results-workbench-jobs-py${{ inputs.python_version }}\") | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done

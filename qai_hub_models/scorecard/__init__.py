@@ -4,12 +4,6 @@
 # ---------------------------------------------------------------------
 
 
-import contextlib
-
 from .device import ScorecardDevice  # noqa: F401
 from .path_compile import ScorecardCompilePath  # noqa: F401
 from .path_profile import ScorecardProfilePath  # noqa: F401
-
-with contextlib.suppress(ImportError):
-    # Register private devices
-    from . import device_private  # noqa: F401

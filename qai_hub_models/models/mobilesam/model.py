@@ -247,7 +247,7 @@ class MobileSAMLoader:
             MODEL_ID, MODEL_ASSET_VERSION, MODEL_REGISTRY[model_type]
         )
         weight_asset.fetch()
-        return sam_model_registry[model_type](weight_asset.path())
+        return sam_model_registry[model_type](weight_asset.path)
 
     @staticmethod
     def _patch_mobilesam_for_qnn_comatibility(sam: Sam) -> None:

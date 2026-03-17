@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools >= 77.0.3"]
+requires = ["setuptools >= 80", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -35,8 +35,8 @@ qai_hub_models = ["**/*.yaml", "**/*.txt", "**/*.json", "**/*.diff", "**/*.md", 
 [tool.setuptools.packages.find]
 include = ["qai_hub_models*"]
 
-[tool.setuptools.dynamic]
-version = {attr = "qai_hub_models._version.__version__"}
+[tool.setuptools_scm]
+version_file = "qai_hub_models/_version.py"
 
 [tool.ruff]
 target-version = "py310"
@@ -121,11 +121,10 @@ skip-checking-short-docstrings = true
 skip-checking-raises = true
 allow-init-docstring = true
 check-style-mismatch = true
-exclude = 'qai_hub_models/extern/.*|qai_hub_models/models/_internal/*|qai_hub_models/models/llama_v2_7b_chat/modeling_llama.py'
+exclude = 'qai_hub_models/extern/.*|qai_hub_models/models/llama_v2_7b_chat/modeling_llama.py'
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["INP", "PERF"]
-"qai_hub_models/models/_internal/*" = ["INP", "PL", "ANN"]
 "qai_hub_models/models/llama_v2_7b_chat/modeling_llama.py" = ["D", "ANN"] # Transformers does some odd docstring validation that this breaks.
 "qai_hub_models/extern/*" = ["PGH004", "TID251", "ANN"] # these files are copied from other packages
 
@@ -187,10 +186,6 @@ markers = [
     "nightly: marks tests to run as part of nightly GPU test suite",
     "compute_device_accuracy: marks tests to run as on-device accuracy suite",
 ]
-
-[[tool.mypy.overrides]]
-module = "qai_hub_models.models._internal.*"
-ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "qai_hub_models.models.*.conftest"

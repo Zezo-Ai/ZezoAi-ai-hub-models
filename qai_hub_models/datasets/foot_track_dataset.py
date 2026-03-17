@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -17,21 +15,20 @@ from PIL import Image
 from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetSplit,
-    UnfetchableDatasetError,
 )
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, extract_zip_file
-
-try:
-    from qai_hub_models.utils._internal.download_private_datasets import (
-        download_foot_track_files,
-    )
-except ImportError:
-    download_foot_track_files = None  # type: ignore[assignment]
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
 
-FOOTTRACK_DATASET_VERSION = 3
+FOOTTRACK_DATASET_VERSION = 4
 FOOTTRACK_DATASET_ID = "foottrack_dataset"
 FOOTTRACK_DATASET_DIR_NAME = "foottrackv3_trainvaltest"
+
+FOOTTRACK_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+    "qai-hub-models/datasets/foottrack/foottrackv3_trainvaltest.zip",
+    FOOTTRACK_DATASET_ID,
+    FOOTTRACK_DATASET_VERSION,
+    f"data/{FOOTTRACK_DATASET_DIR_NAME}.zip",
+)
 
 CLASS_STR2IDX = {"face": "0", "person": "1", "hand": "2"}
 
@@ -45,11 +42,9 @@ class FootTrackDataset(BaseDataset):
         input_data_zip: str | None = None,
         max_boxes: int = 100,
     ) -> None:
-        self.data_path = ASSET_CONFIG.get_local_store_dataset_path(
-            FOOTTRACK_DATASET_ID, FOOTTRACK_DATASET_VERSION, "data"
-        )
-        self.images_path = self.data_path / FOOTTRACK_DATASET_DIR_NAME
-        self.gt_path = self.data_path / FOOTTRACK_DATASET_DIR_NAME
+        self.data_path = FOOTTRACK_PRIVATE_ASSET.extracted_path
+        self.images_path = self.data_path
+        self.gt_path = self.data_path
 
         self.input_data_zip = input_data_zip
         self.max_boxes = max_boxes
@@ -127,29 +122,8 @@ class FootTrackDataset(BaseDataset):
             self.gt_list.append(gt_path)
         return True
 
-    def _download_data(self, zip_path: str | None = None) -> None:
-        # Use passed arg if provided, otherwise use instance attribute
-        if zip_path is None:
-            zip_path = self.input_data_zip
-
-        # If no file provided/set, try auto-download
-        if zip_path is None and download_foot_track_files is not None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                zip_path = os.path.join(tmpdir, f"{FOOTTRACK_DATASET_DIR_NAME}.zip")
-                download_foot_track_files(zip_path)
-                self._download_data(zip_path)
-            return
-
-        if zip_path is None or not zip_path.endswith(
-            FOOTTRACK_DATASET_DIR_NAME + ".zip"
-        ):
-            raise UnfetchableDatasetError(
-                dataset_name=self.dataset_name(),
-                installation_steps=None,
-            )
-
-        os.makedirs(self.images_path.parent, exist_ok=True)
-        extract_zip_file(zip_path, self.images_path)
+    def _download_data(self) -> None:
+        FOOTTRACK_PRIVATE_ASSET.fetch(extract=True, local_path=self.input_data_zip)
 
     @staticmethod
     def default_samples_per_job() -> int:

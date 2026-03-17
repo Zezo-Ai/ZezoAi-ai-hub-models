@@ -1,7 +1,7 @@
 # [Qualcomm® AI Hub Models](https://aihub.qualcomm.com/)
 
-[![Release](https://img.shields.io/github/v/release/quic/ai-hub-models)](https://github.com/quic/ai-hub-models/releases/latest)
-[![Tag](https://img.shields.io/github/v/tag/quic/ai-hub-models)](https://github.com/quic/ai-hub-models/releases/latest)
+[![Release](https://img.shields.io/github/v/release/quic/ai-hub-models)](https://github.com/qualcomm/ai-hub-models/releases/latest)
+[![Tag](https://img.shields.io/github/v/tag/quic/ai-hub-models)](https://github.com/qualcomm/ai-hub-models/releases/latest)
 [![PyPi](https://img.shields.io/pypi/v/qai-hub-models)](https://pypi.org/project/qai-hub-models/)
 ![Python 3.10, 3.11, 3.12, 3.13](https://img.shields.io/badge/python-3.10%20(Recommended)%2C%203.11%2C%203.12%2C%203.13-yellow)
 
@@ -10,7 +10,7 @@ state-of-the-art machine learning models optimized for deployment on Qualcomm® 
 
 * [List of Models by Category](#model-directory)
 * [On-Device Performance Data](https://aihub.qualcomm.com/models)
-* [Device-Native Sample Apps](https://github.com/quic/ai-hub-apps)
+* [Device-Native Sample Apps](https://github.com/qualcomm/ai-hub-apps)
 
 See supported: [On-Device Runtimes](#on-device-runtimes), [Hardware Targets & Precision](#device-hardware--precision), [Chipsets](#chipsets), [Devices](#devices)
 
@@ -30,8 +30,8 @@ The package is available via pip:
 pip install qai_hub_models
 ```
 
-Some models (e.g. [YOLOv7](https://github.com/quic/ai-hub-models/tree/main/qai_hub_models/models/yolov7)) require
-additional dependencies. View the model README (at [qai_hub_models/models/model_id](https://github.com/quic/ai-hub-models/tree/main/qai_hub_models/models/yolov7)) for installation instructions.
+Some models (e.g. [YOLOv7](https://github.com/qualcomm/ai-hub-models/tree/main/qai_hub_models/models/yolov7)) require
+additional dependencies. View the model README (at [qai_hub_models/models/model_id](https://github.com/qualcomm/ai-hub-models/tree/main/qai_hub_models/models/yolov7)) for installation instructions.
 
 &nbsp;
 
@@ -88,9 +88,9 @@ _End-to-end_ demos:
 
 ### Sample Applications
 
-**Native** applications that can run our models (with pre- and post-processing) on physical devices are published in the [AI Hub Apps repository](https://github.com/quic/ai-hub-apps/).
+**Native** applications that can run our models (with pre- and post-processing) on physical devices are published in the [AI Hub Apps repository](https://github.com/qualcomm/ai-hub-apps/).
 
-**Python** applications are defined for all models [(from qai_hub_models.models.\<model_name> import App)](https://github.com/quic/ai-hub-models/blob/main/qai_hub_models/models/yolov7/app.py). These apps wrap model inference with pre- and post-processing steps written using torch & numpy. **These apps are optimized to be an easy-to-follow example, rather than to minimize prediction time.**
+**Python** applications are defined for all models [(from qai_hub_models.models.\<model_name> import App)](https://github.com/qualcomm/ai-hub-models/blob/main/qai_hub_models/models/yolov7/app.py). These apps wrap model inference with pre- and post-processing steps written using torch & numpy. **These apps are optimized to be an easy-to-follow example, rather than to minimize prediction time.**
 
 &nbsp;
 
@@ -182,18 +182,16 @@ and many more.
 | [LaMa-Dilated](https://aihub.qualcomm.com/models/lama_dilated) | [qai_hub_models.models.lama_dilated](qai_hub_models/models/lama_dilated/README.md) |
 | | |
 | **Super Resolution**
-| [ESRGAN](qai_hub_models/models/esrgan/README.md) | [qai_hub_models.models.esrgan](qai_hub_models/models/esrgan/README.md) |
-| [QuickSRNetLarge](qai_hub_models/models/quicksrnetlarge/README.md) | [qai_hub_models.models.quicksrnetlarge](qai_hub_models/models/quicksrnetlarge/README.md) |
-| [QuickSRNetMedium](qai_hub_models/models/quicksrnetmedium/README.md) | [qai_hub_models.models.quicksrnetmedium](qai_hub_models/models/quicksrnetmedium/README.md) |
-| [QuickSRNetSmall](qai_hub_models/models/quicksrnetsmall/README.md) | [qai_hub_models.models.quicksrnetsmall](qai_hub_models/models/quicksrnetsmall/README.md) |
-| [Real-ESRGAN-General-x4v3](qai_hub_models/models/real_esrgan_general_x4v3/README.md) | [qai_hub_models.models.real_esrgan_general_x4v3](qai_hub_models/models/real_esrgan_general_x4v3/README.md) |
+| [ESRGAN](https://aihub.qualcomm.com/models/esrgan) | [qai_hub_models.models.esrgan](qai_hub_models/models/esrgan/README.md) |
+| [QuickSRNetLarge](https://aihub.qualcomm.com/models/quicksrnetlarge) | [qai_hub_models.models.quicksrnetlarge](qai_hub_models/models/quicksrnetlarge/README.md) |
+| [QuickSRNetMedium](https://aihub.qualcomm.com/models/quicksrnetmedium) | [qai_hub_models.models.quicksrnetmedium](qai_hub_models/models/quicksrnetmedium/README.md) |
+| [QuickSRNetSmall](https://aihub.qualcomm.com/models/quicksrnetsmall) | [qai_hub_models.models.quicksrnetsmall](qai_hub_models/models/quicksrnetsmall/README.md) |
+| [Real-ESRGAN-General-x4v3](https://aihub.qualcomm.com/models/real_esrgan_general_x4v3) | [qai_hub_models.models.real_esrgan_general_x4v3](qai_hub_models/models/real_esrgan_general_x4v3/README.md) |
 | [Real-ESRGAN-x4plus](https://aihub.qualcomm.com/models/real_esrgan_x4plus) | [qai_hub_models.models.real_esrgan_x4plus](qai_hub_models/models/real_esrgan_x4plus/README.md) |
-| [SESR-M5](qai_hub_models/models/sesr_m5/README.md) | [qai_hub_models.models.sesr_m5](qai_hub_models/models/sesr_m5/README.md) |
+| [SESR-M5](https://aihub.qualcomm.com/models/sesr_m5) | [qai_hub_models.models.sesr_m5](qai_hub_models/models/sesr_m5/README.md) |
 | [XLSR](https://aihub.qualcomm.com/models/xlsr) | [qai_hub_models.models.xlsr](qai_hub_models/models/xlsr/README.md) |
 | | |
 | **Semantic Segmentation**
-| [BGNet](https://aihub.qualcomm.com/models/bgnet) | [qai_hub_models.models.bgnet](qai_hub_models/models/bgnet/README.md) |
-| [BiseNet](https://aihub.qualcomm.com/models/bisenet) | [qai_hub_models.models.bisenet](qai_hub_models/models/bisenet/README.md) |
 | [DDRNet23-Slim](https://aihub.qualcomm.com/models/ddrnet23_slim) | [qai_hub_models.models.ddrnet23_slim](qai_hub_models/models/ddrnet23_slim/README.md) |
 | [DeepLabV3-Plus-MobileNet](https://aihub.qualcomm.com/models/deeplabv3_plus_mobilenet) | [qai_hub_models.models.deeplabv3_plus_mobilenet](qai_hub_models/models/deeplabv3_plus_mobilenet/README.md) |
 | [DeepLabXception](https://aihub.qualcomm.com/models/deeplab_xception) | [qai_hub_models.models.deeplab_xception](qai_hub_models/models/deeplab_xception/README.md) |
@@ -212,6 +210,7 @@ and many more.
 | [MobileSam](https://aihub.qualcomm.com/models/mobilesam) | [qai_hub_models.models.mobilesam](qai_hub_models/models/mobilesam/README.md) |
 | [PSPNet](https://aihub.qualcomm.com/models/pspnet) | [qai_hub_models.models.pspnet](qai_hub_models/models/pspnet/README.md) |
 | [PidNet](https://aihub.qualcomm.com/models/pidnet) | [qai_hub_models.models.pidnet](qai_hub_models/models/pidnet/README.md) |
+| [PointNet](https://aihub.qualcomm.com/models/pointnet) | [qai_hub_models.models.pointnet](qai_hub_models/models/pointnet/README.md) |
 | [SINet](https://aihub.qualcomm.com/models/sinet) | [qai_hub_models.models.sinet](qai_hub_models/models/sinet/README.md) |
 | [SalsaNext](https://aihub.qualcomm.com/models/salsanext) | [qai_hub_models.models.salsanext](qai_hub_models/models/salsanext/README.md) |
 | [Segformer-Base](https://aihub.qualcomm.com/models/segformer_base) | [qai_hub_models.models.segformer_base](qai_hub_models/models/segformer_base/README.md) |
@@ -241,7 +240,6 @@ and many more.
 | [DETR-ResNet101-DC5](https://aihub.qualcomm.com/models/detr_resnet101_dc5) | [qai_hub_models.models.detr_resnet101_dc5](qai_hub_models/models/detr_resnet101_dc5/README.md) |
 | [DETR-ResNet50](https://aihub.qualcomm.com/models/detr_resnet50) | [qai_hub_models.models.detr_resnet50](qai_hub_models/models/detr_resnet50/README.md) |
 | [DETR-ResNet50-DC5](https://aihub.qualcomm.com/models/detr_resnet50_dc5) | [qai_hub_models.models.detr_resnet50_dc5](qai_hub_models/models/detr_resnet50_dc5/README.md) |
-| [DeformableDETR](https://aihub.qualcomm.com/models/deformable_detr) | [qai_hub_models.models.deformable_detr](qai_hub_models/models/deformable_detr/README.md) |
 | [Detectron2-Detection](https://aihub.qualcomm.com/models/detectron2_detection) | [qai_hub_models.models.detectron2_detection](qai_hub_models/models/detectron2_detection/README.md) |
 | [Facial-Attribute-Detection](https://aihub.qualcomm.com/models/face_attrib_net) | [qai_hub_models.models.face_attrib_net](qai_hub_models/models/face_attrib_net/README.md) |
 | [HRNetFace](https://aihub.qualcomm.com/models/hrnet_face) | [qai_hub_models.models.hrnet_face](qai_hub_models/models/hrnet_face/README.md) |
@@ -364,11 +362,10 @@ and many more.
 | [Qwen2.5-7B-Instruct](https://aihub.qualcomm.com/models/qwen2_5_7b_instruct) | [qai_hub_models.models.qwen2_5_7b_instruct](qai_hub_models/models/qwen2_5_7b_instruct/README.md) |
 | [Qwen3-4B](https://aihub.qualcomm.com/models/qwen3_4b) | [qai_hub_models.models.qwen3_4b](qai_hub_models/models/qwen3_4b/README.md) |
 
-
 ## Need help?
 Slack: https://aihub.qualcomm.com/community/slack
 
-GitHub Issues: https://github.com/quic/ai-hub-models/issues
+GitHub Issues: https://github.com/qualcomm/ai-hub-models/issues
 
 Email: ai-hub-support@qti.qualcomm.com.
 

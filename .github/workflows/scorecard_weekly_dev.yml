@@ -1,0 +1,24 @@
+name: QAI Hub Models Weekly Dev Scorecard ("Bench")
+
+on:
+    workflow_dispatch: # Allows users to start this manually from the GitHub Actions UI.
+    schedule:
+        # 11 PM PST (12 AM PDT) on Wednesday Night / Thursday Morning -- (Cron is in UTC, since GitHub Actions run in UTC)
+        - cron: '0 7 * * THU'
+jobs:
+    run-scorecard:
+        name: Run Dev ("Bench") Scorecard
+        secrets: inherit
+        uses: ./.github/workflows/scorecard.yml
+        with:
+          deployment: dev
+          models: bench
+          test_devices: default
+          test_runtimes: default, qnn_dlc_via_qnn_ep
+          test_precisions: default
+          qairt_version: latest
+          delay: scorecard_collection_8h_delay
+          test_scope: perf
+          release_scope: none
+          ignore_job_cache: false
+          tableau_branch_name: weekly-dev

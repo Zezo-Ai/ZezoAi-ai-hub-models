@@ -171,7 +171,6 @@ class ScorecardDevice:
         profile_paths: list[ScorecardProfilePath] | None = None,
         mirror_device: ScorecardDevice | None = None,
         npu_count: int | None = None,
-        public: bool = True,
         register: bool = True,
         is_default: bool = False,
     ) -> None:
@@ -196,9 +195,6 @@ class ScorecardDevice:
             If set, jobs are not run on this device. Instead, results for this will "mirror" of the given device.
         npu_count
             How many NPUs this device has. If undefined, uses the NPU count of the mirror device or defaults to 1.
-        public
-            Whether this device is publicly available on AI Hub Workbench.
-            NOTE: Private devices are not included when "all" devices are selected. They must be explicitly included in the list of devices to test.
         register
             Whether to register this device in the list of all devices.
         is_default
@@ -231,7 +227,6 @@ class ScorecardDevice:
         self._profile_paths = profile_paths
         self.mirror_device: ScorecardDevice | None = mirror_device
         self._npu_count = npu_count
-        self.public = public
         self.is_default = is_default
 
         if register:
@@ -284,7 +279,7 @@ class ScorecardDevice:
             )
 
         return self.name in ScorecardDevice._registry and (
-            (self.public and SpecialDeviceSetting.ALL in valid_test_devices)
+            SpecialDeviceSetting.ALL in valid_test_devices
             or self.name == UNIVERSAL_DEVICE_SCORECARD_NAME
             or self.name in valid_test_devices
             or (

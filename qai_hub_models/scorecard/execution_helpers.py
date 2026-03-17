@@ -20,21 +20,11 @@ from qai_hub_models.scorecard.envvars import (
     IgnoreKnownFailuresEnvvar,
     SpecialPrecisionSetting,
 )
+from qai_hub_models.scorecard.static.list_models import (
+    get_bench_pytorch_w8a8_models,
+    get_bench_pytorch_w8a16_models,
+)
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
-
-try:
-    from qai_hub_models.scorecard.internal.list_models import (
-        get_bench_pytorch_w8a8_models,
-        get_bench_pytorch_w8a16_models,
-    )
-
-except ImportError:
-
-    def get_bench_pytorch_w8a8_models() -> list[str]:  # type: ignore[misc]
-        return []
-
-    def get_bench_pytorch_w8a16_models() -> list[str]:  # type: ignore[misc]
-        return []
 
 
 def get_enabled_test_precisions() -> tuple[
@@ -67,9 +57,7 @@ def get_enabled_test_precisions() -> tuple[
 
 
 def get_quantized_bench_models_path() -> Path:
-    return (
-        QAIHM_MODELS_ROOT / "scorecard" / "internal" / "pytorch_bench_models_w8a8.txt"
-    )
+    return QAIHM_MODELS_ROOT / "scorecard" / "static" / "pytorch_bench_models_w8a8.txt"
 
 
 @lru_cache(maxsize=1)

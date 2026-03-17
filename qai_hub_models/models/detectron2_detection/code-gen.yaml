@@ -1,0 +1,9 @@
+supported_precisions:
+- float
+- w8a8
+- w8a16
+has_on_target_demo: true
+is_collection_model: true
+global_requirements_incompatible: true
+pip_pre_build_reqs: wheel==0.45.1 "torch>=2.1,<2.9.0" "setuptools>=77.0.3"
+pip_install_flags: git+https://github.com/facebookresearch/detectron2.git@d38d716 --no-build-isolation

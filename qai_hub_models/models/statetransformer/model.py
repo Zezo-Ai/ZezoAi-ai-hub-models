@@ -28,7 +28,7 @@ from qai_hub_models.utils.input_spec import InputSpec
 STR_SOURCE_REPOSITORY = "https://github.com/Tsinghua-MARS-Lab/StateTransformer.git"
 STR_SOURCE_REPO_COMMIT = "b82f9bcf5c9056d0fc5afe9da3350d9bd1c5a9c5"
 MODEL_ID = __name__.split(".")[-2]
-MODEL_ASSET_VERSION = 2
+MODEL_ASSET_VERSION = 3
 STR_SOURCE_PATCHES = [
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "patches", "str_patch.diff")
@@ -101,9 +101,7 @@ class StateTransformer(BaseModel):
             )
 
             if isinstance(weights_path, CachedWebModelAsset):
-                weights_path = weights_path.fetch(extract=True).joinpath(
-                    "checkpoint-66000"
-                )
+                weights_path = weights_path.fetch(extract=True)
             model = build_model_from_path(str(weights_path))
         return cls(model)
 

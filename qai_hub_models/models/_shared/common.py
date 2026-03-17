@@ -6,14 +6,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TypeVar
 
 import torch
+
+ReplaceT = TypeVar("ReplaceT", bound=torch.nn.Module)
 
 
 def apply_module_function_recursively(
     module: torch.nn.Module,
-    tgt_cls: type[torch.nn.Module],
-    apply_fn: Callable[[torch.nn.Module, torch.nn.Module, str], None],
+    tgt_cls: type[ReplaceT],
+    apply_fn: Callable[[ReplaceT, torch.nn.Module, str], None],
     parent_module: type[torch.nn.Module] | None = None,
 ) -> None:
     """

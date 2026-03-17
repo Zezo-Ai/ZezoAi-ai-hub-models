@@ -17,12 +17,11 @@ from qai_hub_models.models.eyegaze.app import preprocess_eye_crop
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.input_spec import InputSpec
 
-MPII_GAZE_FOLDER_NAME = "MPIIGaze"
-MPII_GAZE_VERSION = 1
+MPII_GAZE_VERSION = 2
 
 MPII_GAZE_ASSET = CachedWebDatasetAsset(
     "http://datasets.d2.mpi-inf.mpg.de/MPIIGaze/MPIIGaze.tar.gz",
-    MPII_GAZE_FOLDER_NAME,
+    "MPIIGaze",
     MPII_GAZE_VERSION,
     "MPIIGaze.tar.gz",
 )
@@ -37,7 +36,7 @@ class MPIIGazeDataset(BaseDataset):
         input_spec: InputSpec | None = None,
     ) -> None:
         """Initialize the MPIIGaze dataset."""
-        self.mpii_path = MPII_GAZE_ASSET.path(extracted=True).parent / "MPIIGaze"
+        self.mpii_path = MPII_GAZE_ASSET.extracted_path
         BaseDataset.__init__(self, self.mpii_path, split)
 
         input_spec = input_spec or {"image": ((1, 96, 160), "")}

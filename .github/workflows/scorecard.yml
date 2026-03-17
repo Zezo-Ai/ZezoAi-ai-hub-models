@@ -1,0 +1,378 @@
+name: QAI Hub Models Scorecard
+
+on:
+    # Allows you to run this workflow manually from the Actions tab
+    workflow_dispatch:
+      inputs:
+        deployment:
+          description: Hub Deployment
+          default: prod
+          type: string
+
+        models:
+          description: Test Models. Model names match folder names in `qai_hub_models/models`. Comma Separated.
+          required: false
+          type: string
+          default: pytorch
+
+        test_devices:
+          description: Test Devices. See `qai_hub_models/scorecard/device.py`. Comma Separated.
+          type: string
+          default: default
+
+        test_runtimes:
+          description: Test Paths (runtimes). See `qai_hub_models/scorecard/path_profile.py`. Comma Separated.
+          type: string
+          default: default
+
+        test_precisions:
+          description: Test Precisions (float, w8a8, etc.)
+          required: false
+          type: string
+          default: default
+
+        qairt_version:
+          description: Qualcomm AI Runtime Version
+          required: false
+          type: string
+          default: qaihm_default
+
+        delay:
+          description: Result Collection Time Delay
+          required: true
+          default: scorecard_collection_immediate
+          type: choice
+          options:
+            - scorecard_collection_32h_delay
+            - scorecard_collection_8h_delay
+            - scorecard_collection_immediate
+
+        test_scope:
+          description: Test Scope
+          default: perf
+          type: choice
+          options:
+            - compile_only
+            - perf
+            - accuracy
+            - perf_and_accuracy
+
+        release_scope:
+          description: Release Scope
+          default: none
+          type: choice
+          options:
+            - none
+            - create_pr
+            - upload_export_assets
+            - upload_export_assets_and_create_pr
+
+        ignore_job_cache:
+          description: Force run profile jobs for compiled models that haven't changed since the last scorecard run (only applicable on PROD deployment)
+          default: false
+          type: boolean
+
+
+    workflow_call:
+      inputs:
+        deployment:
+          default: prod
+          type: string
+
+        test_devices:
+          default: all
+          type: string
+
+        test_runtimes:
+          default: default
+          type: string
+
+        test_precisions:
+          default: default
+          type: string
+
+        qairt_version:
+          type: string
+          default: qaihm_default
+
+        models:
+          type: string
+          default: all
+
+        delay:
+          type: string
+          default: scorecard_collection_8h_delay
+
+        test_scope:
+          description: Test Scope
+          type: string
+          default: perf
+
+        release_scope:
+          default: none
+          type: string
+
+        ignore_job_cache:
+          default: true
+          type: boolean
+
+        tableau_branch_name:
+          default: ''
+          type: string
+
+        generate_test_summary:
+          description: Generate a combined test summary
+          default: true
+          type: boolean
+
+env:
+  # Versions MUST be quoted, otherwise they will be interpreted as a floats
+  # (and version like 3.10 can be interpreted as 3.1).
+  PYTHON_VERSION: '3.10'
+  PYTHONUNBUFFERED: 1
+  QAIHM_CI: 1
+  VENV_PATH: build/ci-envs/qaihm-build
+  CMAKE_ARGS: -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+jobs:
+  wait_workbench_deployment:
+    name: Wait For Workbench to Finish Deploying
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    timeout-minutes: 180
+    env:
+      QAIHM_TEST_DEPLOYMENT: ${{ inputs.deployment }}
+    steps:
+    - id: setup_python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    - uses: actions/checkout@v6
+    - name: Create Virtual Env
+      run: |
+        python3 scripts/build_and_test.py \
+          --venv="${{ env.VENV_PATH }}" \
+          --python="${{ steps.setup_python.outputs.python-path }}" \
+          install_deps
+    - name: Configure Hub Credentials
+      run: |
+        # Add envvars for "public" client (jobs accessible to anyone in the company)
+        source scripts/ci/set-aihub-credential-vars.sh \
+          ${{ env.QAIHM_TEST_DEPLOYMENT }},prod \
+          ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
+          ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
+          ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
+          ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+          DEFAULT \
+          ${{ env.VENV_PATH }}
+
+        # Add envvars for "private" client (jobs accessible to AI Hub team)
+        source scripts/ci/set-aihub-credential-vars.sh \
+          ${{ env.QAIHM_TEST_DEPLOYMENT }},prod \
+          ${{ secrets['HUB_PRIVATE_USER_TOKEN_PROD'] }} \
+          ${{ secrets['HUB_PRIVATE_USER_TOKEN_STAGING'] }} \
+          ${{ secrets['HUB_PRIVATE_USER_TOKEN_DEV'] }} \
+          ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+          PRIVATE
+    - name: Wait until workbench is deployed
+      run: |
+        source "${{env.VENV_PATH}}/bin/activate"
+        while true; do
+            OUTPUT=$(qai-hub list-devices)
+            echo "$OUTPUT"
+            if [[ "$OUTPUT" != *"Qualcomm AI Hub is unavailable"* ]]; then
+            echo "workbench is available, ending"
+            break
+            fi
+            echo "workbench is unavailable. Waiting 5 minutes..."
+            sleep 300
+        done
+
+  sync_assets:
+    name: Sync Static Model Assets
+    needs: wait_workbench_deployment
+    secrets: inherit
+    uses: ./.github/workflows/scorecard_sync_static_assets.yml
+    with:
+      models: ${{ inputs.models }}
+      deployments: ${{ inputs.deployment }}
+      create_pr: ${{ !contains(inputs.deployment, '.sandbox') }}
+
+  submit_split_jobs:
+    name: Submit Workbench Jobs
+    needs: [wait_workbench_deployment, sync_assets]
+    if: ${{ !cancelled() && (needs.sync_assets.result == 'success' || needs.sync_assets.result == 'skipped') }}
+    secrets: inherit
+    uses: ./.github/workflows/test_models_split.yml
+    with:
+      deployment: ${{ inputs.deployment }}
+      models: ${{ inputs.models }}
+      test_devices: ${{ inputs.test_devices }}
+      test_runtimes: ${{ inputs.test_runtimes }}
+      test_precisions: ${{ inputs.test_precisions }}
+      qairt_version: ${{ inputs.qairt_version }}
+      test_scope: ${{ inputs.test_scope }}
+      ignore_job_cache: ${{ inputs.ignore_job_cache }}
+      sync_assets_branch: ${{ needs.sync_assets.outputs.branch_name }}
+      max_models_per_split: ${{ (inputs.test_scope == 'accuracy' || inputs.test_scope == 'perf_and_accuracy') && 30 || 60 }}
+      max_num_splits: 8
+
+  fix_flaky_jobs:
+    name: Fix Flaky Profile Jobs
+    needs: submit_split_jobs
+    if: ${{ !cancelled() && needs.submit_split_jobs.result != 'skipped' }}
+    secrets: inherit
+    uses: ./.github/workflows/scorecard_fix_flaky_jobs.yml
+    with:
+      action_id: ${{ github.run_id }}
+      delay: ${{ inputs.delay }}
+      deployment: ${{ inputs.deployment }}
+      test_mode: false
+      python_version: "3.10"
+
+  collect_accuracy:
+    name: Compute On-Device Accuracy Metrics
+    needs: [submit_split_jobs, fix_flaky_jobs]
+    secrets: inherit
+    if: ${{ !cancelled() && needs.submit_split_jobs.result != 'skipped' && ( inputs.test_scope == 'accuracy' || inputs.test_scope == 'perf_and_accuracy' ) }}
+    uses: ./.github/workflows/scorecard_compute_device_accuracy.yml
+    with:
+      action_id: ${{ github.run_id }}
+
+  test_export_scripts:
+    name: Test Export Scripts & Upload Zip Files
+    needs: [submit_split_jobs, fix_flaky_jobs]
+    secrets: inherit
+    if: ${{ !cancelled() && needs.submit_split_jobs.result != 'skipped' }}
+    uses: ./.github/workflows/scorecard_test_export_scripts.yml
+    with:
+      action_id: ${{ github.run_id }}
+      upload_to_s3: ${{ contains(inputs.release_scope, 'upload_export_assets') }}
+
+  collect_results:
+    name: Collect Scorecard Results
+    needs: [submit_split_jobs, fix_flaky_jobs, collect_accuracy, test_export_scripts]
+    if: ${{ !cancelled() && needs.submit_split_jobs.result != 'skipped' }}
+    secrets: inherit
+    uses: ./.github/workflows/scorecard_collect_results.yml
+    with:
+      action_id: ${{ github.run_id }}
+      notify_slack: ${{ github.event_name == 'schedule' && github.workflow != 'QAI Hub Models Nightly' }}
+      create_pr: ${{ contains(inputs.release_scope, 'create_pr') }}
+      previous_results_branch: ${{ github.ref_name }}
+      use_previous_results_branch_as_base: true
+      publish_to_tableau: ${{ github.event_name == 'schedule' && github.workflow != 'QAI Hub Models Nightly' }}
+      tableau_branch_name: ${{ inputs.tableau_branch_name }}
+
+  combine_test_results:
+    name: Combine Test Results
+    needs: [submit_split_jobs, collect_accuracy, test_export_scripts]
+    if: ${{ always() && needs.submit_split_jobs.result != 'skipped' }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: setup_python
+        if: ${{ format('{0}', inputs.generate_test_summary) != 'false' }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        if: ${{ format('{0}', inputs.generate_test_summary) != 'false' }}
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Download Model Test Results
+        id: download_model_results
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: test-results-scorecard-models-py${{ env.PYTHON_VERSION }}
+          path: build/all-test-results/model-tests
+
+      - name: Download Accuracy Test Results
+        id: download_accuracy_results
+        if: ${{ needs.collect_accuracy.result != 'skipped' }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: test-results-accuracy
+          path: build/all-test-results/accuracy
+
+      - name: Download Export Test Results
+        id: download_export_results
+        if: ${{ needs.test_export_scripts.result != 'skipped' }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: test-results-export
+          path: build/all-test-results/export
+
+      - name: Generate Test Summary
+        if: ${{ format('{0}', inputs.generate_test_summary) != 'false' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACCURACY_SKIPPED: ${{ needs.collect_accuracy.result == 'skipped' }}
+          EXPORT_SKIPPED: ${{ needs.test_export_scripts.result == 'skipped' }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          mkdir -p build/combined-test-results
+
+          # Build failure arguments from failed workflow jobs
+          FAILURE_ARGS=()
+          while IFS=$'\t' read -r name url; do
+            FAILURE_ARGS+=("--workflow-failure" "$name" "--workflow-failure-url" "$url")
+          done < <(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs --paginate -q '.jobs[] | select(.conclusion == "failure") | "\(.name)\t${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/\(.id)"')
+
+          # Build test input arguments, excluding skipped tests
+          TEST_ARGS=(
+            --name "Workbench Job Submission (Quantize, Compile, Profile, Inference)" --junit-xml build/all-test-results/model-tests/qaihm-model-tests-junit.xml
+          )
+          if [[ "$ACCURACY_SKIPPED" != "true" ]]; then
+            TEST_ARGS+=(--name "On-Device Accuracy Results Collection" --junit-xml build/all-test-results/accuracy/qaihm-device-accuracy-tests-junit.xml)
+          fi
+          if [[ "$EXPORT_SKIPPED" != "true" ]]; then
+            TEST_ARGS+=(--name "Export Script Test & Zip File Upload" --junit-xml build/all-test-results/export/qaihm-export-zip-tests-junit.xml)
+          fi
+
+          python qai_hub_models/scripts/generate_test_summary.py \
+            --title "Scorecard" \
+            "${FAILURE_ARGS[@]}" \
+            "${TEST_ARGS[@]}" \
+            --output build/combined-test-results/summary.md
+
+      - name: Copy XML Files to Combined Results
+        run: |
+          mkdir -p build/combined-test-results
+          if [ -d build/all-test-results ]; then
+            find build/all-test-results -name "*.xml" -exec cp {} build/combined-test-results/ \; || true
+          fi
+
+      - name: Upload Combined Test Results
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-scorecard
+          path: build/combined-test-results
+
+      - name: Delete Individual Test Results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Delete model test results
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name == \"test-results-scorecard-models-py${{ env.PYTHON_VERSION }}\") | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done
+          # Delete accuracy test results
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name == \"test-results-accuracy\") | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done
+          # Delete export test results
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name == \"test-results-export\") | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done

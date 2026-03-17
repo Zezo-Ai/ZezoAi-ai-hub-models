@@ -16,12 +16,11 @@ from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
 from qai_hub_models.utils.input_spec import InputSpec
 
-eg1880_FOLDER_NAME = "eg1800"
-eg1880_VERSION = 1
+eg1880_VERSION = 2
 
 # originally from https://github.com/clovaai/ext_portrait_segmentation
 eg1880_ASSET = CachedWebDatasetAsset.from_asset_store(
-    eg1880_FOLDER_NAME,
+    "eg1800",
     eg1880_VERSION,
     "Portrait.zip",
 )
@@ -35,7 +34,7 @@ class eg1800SegmentationDataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.VAL,
         input_spec: InputSpec | None = None,
     ) -> None:
-        self.eg1800_path = eg1880_ASSET.path(extracted=True)
+        self.eg1800_path = eg1880_ASSET.extracted_path
 
         BaseDataset.__init__(self, self.eg1800_path, split)
 

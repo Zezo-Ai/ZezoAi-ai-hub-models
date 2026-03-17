@@ -50,7 +50,7 @@ HF_REPO_URL = f"https://huggingface.co/{HF_REPO_NAME}"
 
 # Minimum memory (RAM+swap) recommended for export.
 MODEL_ID = __name__.split(".")[-2]
-MODEL_ASSET_VERSION = 4
+MODEL_ASSET_VERSION = 5
 MIN_MEMORY_RECOMMENDED = 80
 DEFAULT_PRECISION = Precision.w4a16
 SUPPORTED_PRECISIONS = [Precision.w4a16, Precision.w4]
@@ -211,11 +211,10 @@ class Llama3_2_3B_AIMETOnnx(Llama3Base_AIMETOnnx):
                     f"Checkpoints are available in the following precisions: {','.join(available_checkpoints)}."
                 )
             precision_checkpoint = DEFAULT_CHECKPOINT[precision]
-            checkpoint = os.path.join(
+            checkpoint = str(
                 CachedWebModelAsset.from_asset_store(
                     MODEL_ID, MODEL_ASSET_VERSION, precision_checkpoint + ".zip"
-                ).fetch(extract=True),
-                precision_checkpoint,
+                ).fetch(extract=True)
             )
             # Generate necessary ONNX models
             if fp_model is not None:

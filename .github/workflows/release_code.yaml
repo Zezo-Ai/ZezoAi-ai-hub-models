@@ -1,0 +1,59 @@
+name: Release - Code & Repository
+run-name: Release - Code & Repository (${{ github.ref_name }})
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+      inputs:
+          force:
+            required: false
+            type: boolean
+            default: false
+            description: Force replace an existing tag
+  workflow_call:
+
+jobs:
+  release_code_repo:
+      name: Release Code
+      runs-on: [tetra-ubuntu-2204, self-hosted]
+
+      steps:
+      - name: Verify running on a tag
+        run: |
+          if [[ "${{ github.ref }}" != refs/tags/* ]]; then
+            echo "Error: This workflow must be run from a tag, got ${{ github.ref }}"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+
+      - name: Push to public repository
+        env:
+          QAIHM_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.PROD_GH_TOKEN }}
+        run: |
+          git config --local credential.helper '!f() { echo "username=x-access-token"; echo "password=$GH_TOKEN"; }; f'
+          git remote add public https://github.com/qualcomm/ai-hub-models.git
+          git fetch public main --depth=1
+
+          FORCE_FLAG=""
+          if [ "${{ inputs.force }}" == "true" ]; then
+            FORCE_FLAG="-f"
+          else
+            if git ls-remote --tags public | grep -q "refs/tags/$QAIHM_TAG$"; then
+              echo "Tag $QAIHM_TAG already exists. Aborting release. Use force to replace."
+              exit 1
+            fi
+          fi
+
+          # Squash all changes into a single commit on top of public main
+          git reset public/main
+          git add -A
+          git commit -m "$QAIHM_TAG
+
+          See https://github.com/qualcomm/ai-hub-models/releases/$QAIHM_TAG for changelog.
+
+          Signed-off-by: The AI Hub Models Team <ai-hub-support@qti.qualcomm.com>"
+
+          git tag -a $FORCE_FLAG "$QAIHM_TAG" -m "$QAIHM_TAG"
+          git push $FORCE_FLAG public "$QAIHM_TAG"

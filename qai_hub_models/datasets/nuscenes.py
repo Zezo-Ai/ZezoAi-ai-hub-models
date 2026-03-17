@@ -6,8 +6,6 @@
 from __future__ import annotations
 
 import os
-import tarfile
-import tempfile
 from dataclasses import dataclass
 
 import numpy as np
@@ -17,25 +15,30 @@ from PIL import Image
 from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetSplit,
-    UnfetchableDatasetError,
 )
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, load_json
-
-try:
-    from qai_hub_models.utils._internal.download_private_datasets import (
-        download_nuscenes_files,
-    )
-except ImportError:
-    download_nuscenes_files = None  # type: ignore[assignment]
+from qai_hub_models.utils.asset_loaders import load_json
 from qai_hub_models.utils.image_processing import (
     app_to_net_image_inputs,
     get_post_rot_and_tran,
 )
 from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
 
 NUSCENE_ID = "nuscenes"
 NUSCENE_FILE = "v1.0-mini"
-NUSCENE_VERSION = 1
+NUSCENE_VERSION = 2
+
+NUSCENES_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+    f"qai-hub-models/datasets/nuscenes/v{NUSCENE_VERSION}/v1.0-mini.tgz",
+    NUSCENE_ID,
+    NUSCENE_VERSION,
+    f"data/{NUSCENE_FILE}.tgz",
+    installation_steps=[
+        "Create an account and login in https://www.nuscenes.org/nuscenes#download",
+        "Download the v1.0-mini.tgz file from the website.",
+        "Run `python -m qai_hub_models.datasets.configure_dataset --dataset nuscenes --files /path/to/v1.0-mini.tgz`",
+    ],
+)
 
 
 @dataclass
@@ -79,9 +82,7 @@ class NuscenesDataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.TRAIN,
         input_spec: InputSpec | None = None,
     ) -> None:
-        self.data_path = ASSET_CONFIG.get_local_store_dataset_path(
-            NUSCENE_ID, NUSCENE_VERSION, "data"
-        )
+        self.data_path = NUSCENES_PRIVATE_ASSET.extracted_path
         self.source_dataset_file = source_dataset_file
         BaseDataset.__init__(self, str(self.data_path), split)
 
@@ -102,7 +103,7 @@ class NuscenesDataset(BaseDataset):
         self.id_to_token = {idx: sample["token"] for idx, sample in enumerate(samples)}
 
         self.nusc = NuScenes(
-            version="v1.0-mini", dataroot=self.data_path, verbose=False
+            version="v1.0-mini", dataroot=str(self.data_path), verbose=False
         )
 
         if split == DatasetSplit.TRAIN:
@@ -410,31 +411,8 @@ class NuscenesDataset(BaseDataset):
     def __len__(self) -> int:
         return len(self.data_infos)
 
-    def _download_data(self, tgz_path: str | None = None) -> None:
-        # Use passed arg if provided, otherwise use instance attribute
-        if tgz_path is None:
-            tgz_path = self.source_dataset_file
-
-        # If no file provided/set, try auto-download
-        if tgz_path is None and download_nuscenes_files is not None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tgz_path = os.path.join(tmpdir, f"{NUSCENE_FILE}.tgz")
-                download_nuscenes_files(tgz_path, NUSCENE_VERSION)
-                self._download_data(tgz_path)
-            return
-
-        if tgz_path is None or not tgz_path.endswith(NUSCENE_FILE + ".tgz"):
-            raise UnfetchableDatasetError(
-                dataset_name=self.dataset_name(),
-                installation_steps=[
-                    "Create an account and login in https://www.nuscenes.org/nuscenes#download",
-                    "Download the v1.0-mini.tgz file from the website.",
-                    "Run `python -m qai_hub_models.datasets.configure_dataset --dataset nuscenes --files /path/to/v1.0-mini.tgz`",
-                ],
-            )
-
-        with tarfile.open(tgz_path) as f:
-            f.extractall(self.data_path)
+    def _download_data(self) -> None:
+        NUSCENES_PRIVATE_ASSET.fetch(extract=True, local_path=self.source_dataset_file)
 
     @staticmethod
     def default_samples_per_job() -> int:

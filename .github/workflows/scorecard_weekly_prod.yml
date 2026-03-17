@@ -1,0 +1,24 @@
+name: QAI Hub Models Weekly Prod Scorecard
+
+on:
+    workflow_dispatch: # Allows users to start this manually from the GitHub Actions UI.
+    schedule:
+        # 10 PM PST (11 PM PDT) on Fridays -- (Cron is in UTC, since GitHub Actions run in UTC)
+        - cron: '0 6 * * SAT'
+jobs:
+    run-scorecard:
+        name: Run Prod ("Release") Scorecard
+        secrets: inherit
+        uses: ./.github/workflows/scorecard.yml
+        with:
+          deployment: prod
+          models: all
+          test_devices: all
+          test_runtimes: default, qnn_dlc_via_qnn_ep
+          test_precisions: default
+          qairt_version: qaihm_default
+          delay: scorecard_collection_32h_delay
+          test_scope: perf_and_accuracy
+          release_scope: upload_export_assets_and_create_pr
+          ignore_job_cache: false
+          tableau_branch_name: weekly-prod

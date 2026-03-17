@@ -34,7 +34,7 @@ from qai_hub_models.datasets import (
     DatasetSplit,
     get_dataset_from_name,
 )
-from qai_hub_models.datasets.common import UnfetchableDatasetError, get_folder_name
+from qai_hub_models.datasets.common import get_folder_name
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.models.protocols import ExecutableModelProtocol
 from qai_hub_models.utils.asset_loaders import (
@@ -56,6 +56,7 @@ from qai_hub_models.utils.onnx.torch_wrapper import (
     OnnxModelTorchWrapper,
     OnnxSessionTorchWrapper,
 )
+from qai_hub_models.utils.private_asset_loaders import UnfetchableDatasetError
 from qai_hub_models.utils.transpose_channel import transpose_channel_last_to_first
 
 CACHE_SAMPLES_PER_JOB_FILE = "current_samples_per_job.txt"

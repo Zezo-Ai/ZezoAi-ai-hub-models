@@ -239,7 +239,7 @@ class DevicesAndChipsetsYaml(BaseQAIHMConfig):
         }
 
         for profile_path in ScorecardProfilePath:
-            if profile_path.is_public:
+            if profile_path.is_published:
                 out.scorecard_path_to_website_runtime[profile_path] = (
                     profile_path.website_runtime_name
                 )

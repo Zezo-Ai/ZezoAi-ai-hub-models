@@ -33,7 +33,7 @@ def _get_all_models(
         if (subdir / "info.yaml").exists():
             if (
                 public_only
-                and load_yaml(subdir / "info.yaml").get("status") != "public"
+                and load_yaml(subdir / "info.yaml").get("status") != "published"
             ):
                 continue
             all_models.append(subdir.name)

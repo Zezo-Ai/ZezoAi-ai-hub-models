@@ -1,0 +1,189 @@
+name: Sync Static Scorecard Assets
+
+env:
+  # Versions MUST be quoted, otherwise they will be interpreted as a floats
+  # (and version like 3.10 can be interpreted as 3.1).
+  PYTHON_VERSION: '3.10'
+  PYTHONUNBUFFERED: 1
+  VENV_PATH: build/ci-envs/qaihm-build
+  QAIHM_CI: 1
+  QAIHM_CI_USE_EDITABLE_INSTALL: 1
+
+on:
+  # Allows this workflow to be callable
+  workflow_call:
+    inputs:
+      models:
+        description: Models to Sync
+        required: false
+        type: string
+        default: all
+
+      deployments:
+        default: prod,staging,dev
+        type: string
+
+      branch_name:
+        description: Branch name to push updated configs to (dev/qaihm_bot/<name>).
+        type: string
+        required: false
+
+      create_pr:
+        description: Put up a PR with updated asset configs
+        default: false
+        type: boolean
+
+    outputs:
+      branch_name:
+        value: ${{ jobs.sync_models.outputs.branch_name }}
+
+  workflow_dispatch:
+    inputs:
+      models:
+        description: Models to Sync
+        required: false
+        type: string
+        default: all
+
+      branch_name:
+        description: Branch name to push updated configs to (dev/qaihm_bot/<name>).
+        type: string
+        required: false
+
+      deployments:
+        default: prod,staging,dev
+        type: string
+
+      create_pr:
+        description: Put up a PR with updated asset configs
+        default: true
+        type: boolean
+
+jobs:
+  ##
+  ## Pre-commit hook rules check
+  ##
+  sync_models:
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    env:
+      PR_REF_NAME: dev/qaihm_bot/update-scorecard-assets-${{ inputs.branch_name == '' && github.run_id || inputs.branch_name }}
+      QAIHM_TEST_MODELS: ${{inputs.models}}
+      QAIHM_TEST_DEPLOYMENTS: ${{ inputs.deployments }}
+
+    outputs:
+      branch_name: ${{ steps.push_results.conclusion == 'success' && env.PR_REF_NAME || ''}}
+
+    name: Sync Static Model Assets to Hub Target Deployment
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: install_platform_deps
+        env:
+          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
+        run: |
+          bash scripts/ci/install-platform-deps.sh
+
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Configure Hub Credentials
+        run: |
+          source scripts/ci/set-aihub-credential-vars.sh \
+            ${{ env.QAIHM_TEST_DEPLOYMENTS }},prod \
+            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
+            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
+            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
+            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+            DEFAULT \
+            ${{ env.VENV_PATH }}
+
+          # Add envvars for "private" client (jobs accessible to AI Hub team)
+          source scripts/ci/set-aihub-credential-vars.sh \
+            ${{ env.QAIHM_TEST_DEPLOYMENTS }},prod \
+            ${{ secrets['HUB_PRIVATE_USER_TOKEN_PROD'] }} \
+            ${{ secrets['HUB_PRIVATE_USER_TOKEN_STAGING'] }} \
+            ${{ secrets['HUB_PRIVATE_USER_TOKEN_DEV'] }} \
+            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+            PRIVATE
+
+      - name: Sync Models
+        id: sync-models
+        run: |
+          source ${{env.VENV_PATH}}/bin/activate
+          python qai_hub_models/scorecard/static/scripts/sync_model_assets.py
+
+      - name: Commit & Push Changes
+        id: push_results
+        run: |
+          # Checkout branch
+          git checkout -b ${{ env.PR_REF_NAME }}
+          #
+          # This commit should target main, so reset our ref to main and reset to main's history.
+          # We don't check out main because we want to keep any other changes in this branch.
+          # This makes sure this action is executing code from the branch it was kicked off with.
+          #
+          git fetch origin main
+          git reset origin/main
+          #
+          # git ls-files -co includes tracked and untracked files
+          # `git add` only perf yamls that have changed compared to main, and commit them.
+          #
+          git add qai_hub_models/scorecard/static/models/*.yaml
+          git -c user.name='qaihm-bot_QCOM' -c user.email=qaihm_bot@qti.qualcomm.com commit -m "[Automated] Sync Scorecard Model Assets | Models: ${{inputs.models}}" || true
+          git push --set-upstream origin ${{ env.PR_REF_NAME }} -f
+
+      - name: Create QAIHM PR
+        if: ${{ inputs.create_pr }}
+        id: create-qaihm-pr
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.STAGING_GH_TOKEN }}
+          result-encoding: string
+          script: |
+            const { repo, owner } = context.repo;
+            const head = '${{ env.PR_REF_NAME }}';
+            const base = 'main';
+
+            // Check for file changes. If we don't do this manually,
+            // we get an error message related to the PR being empty.
+            const { data: files } = await github.rest.repos.compareCommitsWithBasehead({
+                owner,
+                repo,
+                basehead: `${base}...${head}`,
+            });
+            if (files.files.length === 0) {
+                console.log('No changes detected, skipping PR creation.');
+                return 'No changes';
+            }
+
+            const result = await github.rest.pulls.create({
+                title: '[Automated] Sync Scorecard Model Assets',
+                owner,
+                repo,
+                head: head,
+                base: base,
+                body: [
+                'Sync assets for the following scorecard models:',
+                '',
+                '${{inputs.models}}',
+                ].join('\n')
+            });
+            const reviewerResult = await github.request(`POST /repos/${owner}/${repo}/pulls/${result.data.number}/requested_reviewers`, {
+                owner: owner,
+                repo: repo,
+                pull_number: result.data.number,
+                team_reviewers: ['ai-hub-models-reviewers'],
+            })
+            return result.data.html_url

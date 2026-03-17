@@ -37,6 +37,9 @@ class LLMDetails(BaseQAIHMConfig):
     call_to_action: LLM_CALL_TO_ACTION
     genie_compatible: bool = False
 
+    # Whether the model runs with llama.cpp. If True, llama_cpp_model_url must be set.
+    llama_cpp_compatible: bool = False
+
     # Global llama.cpp model URL - used when genie_compatible is False
     # This allows specifying the URL once instead of per device
     llama_cpp_model_url: str | None = None
@@ -74,19 +77,10 @@ class LLMDetails(BaseQAIHMConfig):
                 "In LLM details, genie_compatible must not be True if the call to action is contact for purchase."
             )
 
-        # Validate URL specification based on genie_compatible flag
-        if self.genie_compatible:
-            # Genie-compatible models should use devices section, not llama_cpp_model_url
-            if self.llama_cpp_model_url:
-                raise ValueError(
-                    "In LLM details, llama_cpp_model_url should not be set when genie_compatible is True. "
-                    "Use the devices section instead."
-                )
-        # Non-genie models (llama.cpp) should use llama_cpp_model_url, not devices
-        elif self.devices:
+        # llama_cpp_compatible requires a llama_cpp_model_url
+        if self.llama_cpp_compatible and not self.llama_cpp_model_url:
             raise ValueError(
-                "In LLM details, devices section should not be set when genie_compatible is False. "
-                "Use llama_cpp_model_url instead."
+                "In LLM details, llama_cpp_model_url must be set when llama_cpp_compatible is True."
             )
 
         return self

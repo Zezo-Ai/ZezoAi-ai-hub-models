@@ -165,13 +165,8 @@ def extract_onnx_zip(
     """
     assert os.path.splitext(path)[1].endswith(".zip")
     path = extract_zip_file(path, out_path)
-
-    contents = os.listdir(path=path)
-    # Sometimes an extraneous subfolder is created
-    onnx_path = path / contents[0] if len(contents) == 1 else path
-
-    model_path = onnx_path / "model.onnx"
-    weights_path = onnx_path / "model.data"
+    model_path = path / "model.onnx"
+    weights_path = path / "model.data"
     if validate_exists and not os.path.exists(model_path):
         raise ValueError(
             f"model.onnx could not be found at path {model_path}. Was the parent directory created by AI Hub Workbench?"

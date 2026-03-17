@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 
 import torch
@@ -15,23 +13,21 @@ from PIL import Image
 from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetSplit,
-    UnfetchableDatasetError,
 )
 from qai_hub_models.models.face_attrib_net.model import OUT_NAMES, FaceAttribNet
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, extract_zip_file
-
-try:
-    from qai_hub_models.utils._internal.download_private_datasets import (
-        download_face_attrib_files,
-    )
-except ImportError:
-    download_face_attrib_files = None  # type: ignore[assignment]
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resize_pad
 from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
 
-FACEATTRIB_DATASET_VERSION = 3
+FACEATTRIB_DATASET_VERSION = 4
 FACEATTRIB_DATASET_ID = "faceattrib"
 FACEATTRIB_DATASET_DIR_NAME = "faceattrib_trainvaltest"
+FACEATTRIB_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+    f"qai-hub-models/datasets/faceattrib/v{FACEATTRIB_DATASET_VERSION}/faceattrib_trainvaltest.zip",
+    FACEATTRIB_DATASET_ID,
+    FACEATTRIB_DATASET_VERSION,
+    f"data/{FACEATTRIB_DATASET_DIR_NAME}.zip",
+)
 
 
 def load_annotations(file_path: Path) -> dict[str, int]:
@@ -90,9 +86,7 @@ class FaceAttribDataset(BaseDataset):
         input_spec
             name, shape, type of sample data.
         """
-        self.data_path = ASSET_CONFIG.get_local_store_dataset_path(
-            FACEATTRIB_DATASET_ID, FACEATTRIB_DATASET_VERSION, "data"
-        )
+        self.data_path = FACEATTRIB_PRIVATE_ASSET.extracted_path
         self.input_data_zip = input_data_zip
         self.image_list: list[Path] = []
         self.gt_list: list[int] = []
@@ -200,10 +194,8 @@ class FaceAttribDataset(BaseDataset):
             True: data is valid and loaded successfully
             False: otherwise
         """
-        image_path = (
-            self.data_path / FACEATTRIB_DATASET_DIR_NAME / "images" / self.split_str
-        )
-        gt_path = self.data_path / FACEATTRIB_DATASET_DIR_NAME / "labels"
+        image_path = self.data_path / "images" / self.split_str
+        gt_path = self.data_path / "labels"
         if not image_path.exists():
             print(f"Missing image {image_path}")
             return False
@@ -243,30 +235,8 @@ class FaceAttribDataset(BaseDataset):
 
         return True
 
-    def _download_data(self, zip_path: str | None = None) -> None:
-        """Helper function to unzip and setup dataset."""
-        # Use passed arg if provided, otherwise use instance attribute
-        if zip_path is None:
-            zip_path = self.input_data_zip
-
-        # If no file provided/set, try auto-download
-        if zip_path is None and download_face_attrib_files is not None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                zip_path = os.path.join(tmpdir, f"{FACEATTRIB_DATASET_DIR_NAME}.zip")
-                download_face_attrib_files(zip_path, FACEATTRIB_DATASET_VERSION)
-                self._download_data(zip_path)
-            return
-
-        if zip_path is None or not zip_path.endswith(
-            FACEATTRIB_DATASET_DIR_NAME + ".zip"
-        ):
-            raise UnfetchableDatasetError(
-                dataset_name=self.dataset_name(),
-                installation_steps=None,
-            )
-
-        os.makedirs(self.data_path, exist_ok=True)
-        extract_zip_file(zip_path, self.data_path / FACEATTRIB_DATASET_DIR_NAME)
+    def _download_data(self) -> None:
+        FACEATTRIB_PRIVATE_ASSET.fetch(extract=True, local_path=self.input_data_zip)
 
     @staticmethod
     def default_samples_per_job() -> int:

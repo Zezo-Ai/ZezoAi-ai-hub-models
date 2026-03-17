@@ -50,7 +50,7 @@ HF_REPO_URL = f"https://huggingface.co/{HF_REPO_NAME}"
 
 # Minimum memory (RAM+swap) recommended for export.
 MODEL_ID = __name__.split(".")[-2]
-MODEL_ASSET_VERSION = 2
+MODEL_ASSET_VERSION = 3
 MIN_MEMORY_RECOMMENDED = 40
 DEFAULT_PRECISION = Precision.w4a16
 SUPPORTED_PRECISIONS = [Precision.w4a16]
@@ -229,11 +229,12 @@ class Qwen3_4B_AIMETOnnx(Qwen3Base_AIMETOnnx):
                     f"Checkpoints are available in the following precisions: {','.join(available_checkpoints)}."
                 )
             precision_checkpoint = DEFAULT_CHECKPOINT[precision]
-            checkpoint = os.path.join(
+            checkpoint = str(
                 CachedWebModelAsset.from_asset_store(
-                    MODEL_ID, MODEL_ASSET_VERSION, precision_checkpoint + ".zip"
-                ).fetch(extract=True),
-                precision_checkpoint,
+                    MODEL_ID,
+                    MODEL_ASSET_VERSION,
+                    precision_checkpoint + ".zip",
+                ).fetch(extract=True)
             )
             # Generate necessary ONNX models
             if fp_model is not None:

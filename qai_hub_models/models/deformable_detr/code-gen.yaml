@@ -1,0 +1,17 @@
+supported_precisions:
+- float
+- w8a16
+has_on_target_demo: true
+disabled_paths:
+  float:
+    onnx:
+      scorecard_failure: 'Profiling Failure(s): jgo16xeq5'
+    tflite:
+      scorecard_failure: 'Profiling Failure(s): jgo16x1q5'
+    qnn_dlc:
+      scorecard_failure: 'Profiling Failure(s): j5mwx7vdp'
+  w8a16:
+    qnn_dlc:
+      scorecard_failure: 'Profiling Failure(s): jp1dz938p'
+    onnx:
+      scorecard_failure: 'Profiling Failure(s): jp83yn8og'

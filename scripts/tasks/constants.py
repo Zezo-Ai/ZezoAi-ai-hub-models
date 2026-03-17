@@ -55,12 +55,10 @@ PY_PACKAGE_LOCAL_CACHE = os.environ.get(
 PY_PACKAGE_MODELS_ROOT = os.path.join(
     PY_PACKAGE_INSTALL_ROOT, PY_PACKAGE_RELATIVE_MODELS_ROOT
 )
-STATIC_MODELS_ROOT = os.path.join(
-    PY_PACKAGE_SRC_ROOT, "scorecard", "internal", "models"
-)
+STATIC_MODELS_ROOT = os.path.join(PY_PACKAGE_SRC_ROOT, "scorecard", "static", "models")
 
 PUBLIC_BENCH_MODELS = os.path.join(
-    PY_PACKAGE_SRC_ROOT, "scorecard", "internal", "pytorch_bench_models_float.txt"
+    PY_PACKAGE_SRC_ROOT, "scorecard", "static", "pytorch_bench_models_float.txt"
 )
 
 # Requirements Path

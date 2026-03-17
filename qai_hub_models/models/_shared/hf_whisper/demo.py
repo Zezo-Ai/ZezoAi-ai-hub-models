@@ -22,7 +22,7 @@ TEST_AUDIO_PATH = CachedWebModelAsset.from_asset_store(
 
 def load_demo_audio() -> tuple[np.ndarray, int]:
     TEST_AUDIO_PATH.fetch()
-    with np.load(TEST_AUDIO_PATH.path()) as f:
+    with np.load(TEST_AUDIO_PATH.path) as f:
         return f["audio"], SAMPLE_RATE
 
 

@@ -1,0 +1,29 @@
+supported_devices:
+- SA8295P ADP
+supported_chipsets:
+- qualcomm-sa8295p
+precisions:
+  float:
+    components:
+      Simple-Bev:
+        universal_assets:
+          tflite:
+            model_id: mmdoo1zon
+            tool_versions:
+              tflite: 2.17.0
+        performance_metrics:
+          SA8295P ADP:
+            tflite:
+              job_id: jpy43mzlp
+              job_status: Passed
+              inference_time_milliseconds: 2001.503
+              estimated_peak_memory_range_mb:
+                min: 1263
+                max: 1759
+              primary_compute_unit: CPU
+              layer_counts:
+                total: 401
+                gpu: 183
+                cpu: 218
+              tool_versions:
+                tflite: 2.17.0

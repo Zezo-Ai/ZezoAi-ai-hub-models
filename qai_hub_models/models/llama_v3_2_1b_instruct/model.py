@@ -38,7 +38,7 @@ DEFAULT_EXPORT_CONTEXT_LENGTHS = GLOBAL_DEFAULT_EXPORT_CONTEXT_LENGTHS
 DEFAULT_EXPORT_SEQUENCE_LENGTHS = GLOBAL_DEFAULT_EXPORT_SEQUENCE_LENGTHS
 
 MODEL_ID = __name__.split(".")[-2]
-MODEL_ASSET_VERSION = 4
+MODEL_ASSET_VERSION = 5
 
 NUM_LAYERS = 16
 NUM_SPLITS = 3
@@ -216,11 +216,12 @@ class Llama3_2_1B_AIMETOnnx(Llama3Base_AIMETOnnx):
                     f"Checkpoints are available in the following precisions: {','.join(available_checkpoints)}."
                 )
             precision_checkpoint = DEFAULT_CHECKPOINT[precision]
-            checkpoint = os.path.join(
+            checkpoint = str(
                 CachedWebModelAsset.from_asset_store(
-                    MODEL_ID, MODEL_ASSET_VERSION, precision_checkpoint + ".zip"
-                ).fetch(extract=True),
-                precision_checkpoint,
+                    MODEL_ID,
+                    MODEL_ASSET_VERSION,
+                    precision_checkpoint + ".zip",
+                ).fetch(extract=True)
             )
             # Generate necessary ONNX models
             if fp_model is not None:

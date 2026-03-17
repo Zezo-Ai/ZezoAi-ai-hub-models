@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import warnings
 from pathlib import Path
 
@@ -18,28 +16,27 @@ from PIL import Image
 from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetSplit,
-    UnfetchableDatasetError,
 )
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, extract_zip_file
-
-try:
-    from qai_hub_models.utils._internal.download_private_datasets import (
-        download_gear_guard_files,
-    )
-except ImportError:
-    download_gear_guard_files = None  # type: ignore[assignment]
 from qai_hub_models.utils.image_processing import (
     app_to_net_image_inputs,
     resize_pad,
     transform_resize_pad_coordinates,
 )
 from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
 
-GEARGUARD_DATASET_VERSION = 1
+GEARGUARD_DATASET_VERSION = 2
 GEARGUARD_DATASET_ID = "gearguard_dataset"
 GEARGUARD_DATASET_DIR_NAME = "gearguard_trainvaltest"
 
 VALID_CLASS_IDX = [0, 1]
+
+GEARGUARD_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+    "qai-hub-models/datasets/gearguard/gearguard_trainvaltest.zip",
+    GEARGUARD_DATASET_ID,
+    GEARGUARD_DATASET_VERSION,
+    f"data/{GEARGUARD_DATASET_DIR_NAME}.zip",
+)
 
 
 class GearGuardDataset(BaseDataset):
@@ -84,9 +81,7 @@ class GearGuardDataset(BaseDataset):
 
             If a sample has more than this many boxes, a ValueError is raised.
         """
-        self.data_path = ASSET_CONFIG.get_local_store_dataset_path(
-            GEARGUARD_DATASET_ID, GEARGUARD_DATASET_VERSION, "data"
-        )
+        self.data_path = GEARGUARD_PRIVATE_ASSET.extracted_path
 
         # input_spec is (h, w) and target_image_size is (w, h)
         input_spec = input_spec or {"image": ((1, 3, 320, 192), "")}
@@ -387,12 +382,8 @@ class GearGuardDataset(BaseDataset):
         bool
             True if all dataset files are valid and properly structured, False otherwise.
         """
-        images_path = (
-            self.data_path / GEARGUARD_DATASET_DIR_NAME / "images" / self.split_str
-        )
-        gt_path = (
-            self.data_path / GEARGUARD_DATASET_DIR_NAME / "labels" / self.split_str
-        )
+        images_path = self.data_path / "images" / self.split_str
+        gt_path = self.data_path / "labels" / self.split_str
         if not images_path.exists() or not gt_path.exists():
             return False
 
@@ -409,48 +400,8 @@ class GearGuardDataset(BaseDataset):
             self.gt_list.append(_gt_path)
         return True
 
-    def _download_data(self, zip_path: str | None = None) -> None:
-        """Download and extract the GearGuard dataset from a zip file.
-
-        This method extracts the dataset from the provided zip file path
-        to the local data directory. If no zip file is provided, it will
-        attempt to auto-download the dataset if the internal download
-        function is available.
-
-        Parameters
-        ----------
-        zip_path
-            Path to the zip file. If None, uses self.input_data_zip or
-            attempts auto-download.
-
-        Raises
-        ------
-        UnfetchableDatasetError
-            If no zip file is available and auto-download is not possible,
-            or if the zip file does not point to a valid GearGuard dataset.
-        """
-        # Use passed arg if provided, otherwise use instance attribute
-        if zip_path is None:
-            zip_path = self.input_data_zip
-
-        # If no file provided/set, try auto-download
-        if zip_path is None and download_gear_guard_files is not None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                zip_path = os.path.join(tmpdir, f"{GEARGUARD_DATASET_DIR_NAME}.zip")
-                download_gear_guard_files(zip_path)
-                self._download_data(zip_path)
-            return
-
-        if zip_path is None or not zip_path.endswith(
-            GEARGUARD_DATASET_DIR_NAME + ".zip"
-        ):
-            raise UnfetchableDatasetError(
-                dataset_name=self.dataset_name(),
-                installation_steps=None,
-            )
-
-        os.makedirs(self.data_path, exist_ok=True)
-        extract_zip_file(zip_path, self.data_path / GEARGUARD_DATASET_DIR_NAME)
+    def _download_data(self) -> None:
+        GEARGUARD_PRIVATE_ASSET.fetch(extract=True, local_path=self.input_data_zip)
 
     @staticmethod
     def default_samples_per_job() -> int:

@@ -1,3 +1,6 @@
+> [!WARNING]
+> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
+
 # [DeformableDETR: Transformer based object detector with ResNet-50 backbone](https://aihub.qualcomm.com/models/deformable_detr)
 
 Deformable DETR is a machine learning model that can detect objects (trained on COCO dataset).

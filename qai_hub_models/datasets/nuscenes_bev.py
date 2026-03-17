@@ -21,7 +21,7 @@ from qai_hub_models.utils.input_spec import InputSpec
 
 NUSCENE_ID = "nuscenes"
 NUSCENE_FILE = "v1.0-mini"
-NUSCENE_VERSION = 1
+NUSCENE_VERSION = 2
 NUM_CLASSES = 12  # Based on CLASSES = STATIC + DIVIDER + DYNAMIC
 NUSCENE_LABEL = CachedWebDatasetAsset.from_asset_store(
     NUSCENE_ID,
@@ -51,9 +51,7 @@ class NuscenesBevDataset(NuscenesDataset):
         self.top_crop = top_crop if top_crop is not None else 46
         self.input_height = input_spec["image"][0][3]
         self.input_width = input_spec["image"][0][4]
-        self.bev_labels_dir = (
-            str(NUSCENE_LABEL.path(extracted=True).parent) + "/cvt_labels_nuscenes_v2/"
-        )
+        self.bev_labels_dir = NUSCENE_LABEL.extracted_path
         if not os.path.exists(self.bev_labels_dir):
             NUSCENE_LABEL.fetch(extract=True)
 

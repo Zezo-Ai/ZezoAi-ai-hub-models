@@ -214,7 +214,7 @@ def test_profile_qnn_version() -> None:
 def test_single_public_path_per_runtime() -> None:
     public_paths_per_runtime: dict[TargetRuntime, ScorecardProfilePath] = {}
     for path in ScorecardProfilePath:
-        if path.is_public:
+        if path.is_published:
             if other_path := public_paths_per_runtime.get(path.runtime):
                 raise ValueError(
                     f"Only one ScorecardProfilePath can be public for each runtime. Both {path} and {other_path} are public and use {path.runtime}."

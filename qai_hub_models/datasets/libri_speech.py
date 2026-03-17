@@ -12,7 +12,7 @@ from qai_hub_models.datasets.common import BaseDataset, DatasetMetadata, Dataset
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 
 LIBRISPEECH_FOLDER_NAME = "librispeech"
-LIBRISPEECH_VERSION = 1
+LIBRISPEECH_VERSION = 2
 # LibriSpeech test-clean dataset from: www.openslr.org/12 (test-clean.tar.gz)
 LIBRISPEECH_CLEAN_ASSET = CachedWebDatasetAsset.from_asset_store(
     LIBRISPEECH_FOLDER_NAME,
@@ -30,7 +30,7 @@ class LibriSpeechDataset(BaseDataset):
         max_sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
         max_text_length: int = 200,
     ) -> None:
-        self.base_path = LIBRISPEECH_CLEAN_ASSET.path(extracted=True).parent
+        self.base_path = LIBRISPEECH_CLEAN_ASSET.extracted_path
         BaseDataset.__init__(self, self.base_path, split)
         self.target_sample_rate = target_sample_rate
         self.max_sequence_length = max_sequence_length
@@ -92,9 +92,9 @@ class LibriSpeechDataset(BaseDataset):
         return audio, gt_tensor
 
     def _validate_data(self) -> bool:
-        dataset_path = self.base_path / "LibriSpeech" / "test-clean"
         self.audio_files = []
         self.transcriptions = []
+        dataset_path = self.base_path / "test-clean"
 
         # Check if dataset path exists
         if not dataset_path.exists():

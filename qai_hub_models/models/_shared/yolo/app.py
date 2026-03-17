@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal, overload
 
 import numpy as np
 import torch
@@ -91,6 +91,32 @@ class YoloObjectDetectionApp:
     ):
         # See predict_boxes_from_image.
         return self.predict_boxes_from_image(*args, **kwargs)
+
+    @overload
+    def predict_boxes_from_image(
+        self,
+        pixel_values_or_image: (
+            torch.Tensor | np.ndarray | Image.Image | list[Image.Image]
+        ),
+        raw_output: Literal[False],
+    ) -> list[np.ndarray]: ...
+
+    @overload
+    def predict_boxes_from_image(
+        self,
+        pixel_values_or_image: (
+            torch.Tensor | np.ndarray | Image.Image | list[Image.Image]
+        ),
+        raw_output: Literal[True],
+    ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]: ...
+
+    @overload
+    def predict_boxes_from_image(
+        self,
+        pixel_values_or_image: (
+            torch.Tensor | np.ndarray | Image.Image | list[Image.Image]
+        ),
+    ) -> list[np.ndarray]: ...
 
     def predict_boxes_from_image(
         self,

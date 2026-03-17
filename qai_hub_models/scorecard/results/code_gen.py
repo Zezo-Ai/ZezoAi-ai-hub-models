@@ -57,7 +57,7 @@ def _clean_old_failure_reasons(
     for precision, reasons_by_runtime in code_gen_config.disabled_paths.data.items():
         if precision in precisions:
             for path in ScorecardProfilePath:
-                if (not path.is_public or path.enabled) and (
+                if (not path.is_published or path.enabled) and (
                     reasons := reasons_by_runtime.get(path.runtime)
                 ):
                     if clean_general:
@@ -101,7 +101,7 @@ def update_code_gen_failure_reasons(
 
     # Limit to only public paths. If a path is not public, then we don't track it in code-gen.yaml.
     enabled_test_paths = {
-        p: [path for path in paths if path.is_public]
+        p: [path for path in paths if path.is_published]
         for p, paths in enabled_test_paths.items()
     }
 
@@ -235,7 +235,7 @@ def update_code_gen_accuracy_failure_reasons(
         path = disabled_path[5]
         if (
             diff_model_id != model_id
-            or not path.is_public
+            or not path.is_published
             or not path.enabled
             or precision not in supported_precisions
         ):
@@ -257,20 +257,20 @@ def update_model_publish_status(model_info: QAIHMModelInfo) -> bool:
     # Update model status & reason, if applicable
     SCORECARD_STATUS_REASON = "No successful runtimes in scorecard (this field was auto-populated by the scorecard run)"
     if cg.supports_at_least_1_runtime:
-        # Promote PENDING or PRIVATE (with scorecard reason) to PUBLIC
+        # Promote PENDING or UNPUBLISHED (with scorecard reason) to PUBLISHED
         if model_info.status == MODEL_STATUS.PENDING or (
-            model_info.status == MODEL_STATUS.PRIVATE
+            model_info.status == MODEL_STATUS.UNPUBLISHED
             and model_info.status_reason == SCORECARD_STATUS_REASON
         ):
-            model_info.status = MODEL_STATUS.PUBLIC
+            model_info.status = MODEL_STATUS.PUBLISHED
             model_info.status_reason = None
-            print(f"{model_info.id} | Set model to PUBLIC")
+            print(f"{model_info.id} | Set model to PUBLISHED")
             return True
-    elif model_info.status == MODEL_STATUS.PUBLIC:
-        # Demote PUBLIC to PRIVATE if no longer eligible
-        model_info.status = MODEL_STATUS.PRIVATE
+    elif model_info.status == MODEL_STATUS.PUBLISHED:
+        # Demote PUBLISHED to UNPUBLISHED if no longer eligible
+        model_info.status = MODEL_STATUS.UNPUBLISHED
         model_info.status_reason = SCORECARD_STATUS_REASON
-        print(f"{model_info.id} | Set model to PRIVATE: {SCORECARD_STATUS_REASON}")
+        print(f"{model_info.id} | Set model to UNPUBLISHED: {SCORECARD_STATUS_REASON}")
         return True
     # Note: PENDING stays PENDING if no successful runtimes yet
 

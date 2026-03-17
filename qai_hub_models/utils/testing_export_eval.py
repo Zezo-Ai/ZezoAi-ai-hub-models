@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import itertools
 import math
 import os
@@ -42,6 +43,12 @@ from qai_hub_models.scorecard.results.yaml import (
     ToolVersionsByPathYaml,
 )
 from qai_hub_models.utils.asset_loaders import load_yaml
+from qai_hub_models.utils.aws import (
+    QAIHM_PRIVATE_S3_BUCKET,
+    Bucket,
+    get_qaihm_s3,
+    s3_multipart_upload,
+)
 from qai_hub_models.utils.base_model import BaseModel, CollectionModel
 from qai_hub_models.utils.evaluate import (
     DEFAULT_NUM_EVAL_SAMPLES,
@@ -80,17 +87,6 @@ from qai_hub_models.utils.testing_async_utils import (
     str_with_async_test_metadata,
     write_accuracy,
 )
-
-try:
-    from qai_hub_models.utils._internal.aws import (
-        QAIHM_PRIVATE_S3_BUCKET,
-        get_qaihm_s3,
-        s3_multipart_upload,
-    )
-except ImportError:
-    get_qaihm_s3 = None  # type: ignore[assignment]
-    s3_multipart_upload = None  # type: ignore[assignment]
-    QAIHM_PRIVATE_S3_BUCKET = None  # type: ignore[assignment]
 
 ExportFunc = Callable[..., ExportResult | CollectionExportResult]
 JobFunc = Callable[..., hub.Job | dict[str, hub.Job]]
@@ -951,10 +947,10 @@ def fetch_compile_or_link_jobs(
     CachedScorecardJobError
         If no cached jobs are found.
     """
-    is_aot = scorecard_path.runtime.is_aot_compiled
+    # is_aot = scorecard_path.runtime.is_aot_compiled
 
     jobs: Mapping[str | None, hub.Job] | None
-    if is_aot:
+    if False:  # TODO: enable this when link jobs are enabled in CI.
         # For AOT runtimes, fetch link jobs (context binaries)
         jobs = fetch_async_test_jobs(
             hub.JobType.LINK,
@@ -1248,11 +1244,13 @@ def export_test_e2e(
         profile_job_patch,
         tempfile.TemporaryDirectory() as tmpdir,
     ):
+        s3_bucket: Bucket | None = None
+        with contextlib.suppress(ValueError):
+            s3_bucket = get_qaihm_s3(QAIHM_PRIVATE_S3_BUCKET)[0]
+
         skip_upload_to_s3 = (
-            not scorecard_path.is_public
-            or get_qaihm_s3 is None
-            or s3_multipart_upload is None
-            or QAIHM_PRIVATE_S3_BUCKET is None
+            not scorecard_path.is_published
+            or s3_bucket is None
             or S3ArtifactsDirEnvvar.is_default()
         )
 
@@ -1269,11 +1267,7 @@ def export_test_e2e(
             zip_assets=True,
         )
 
-        if result.download_path is not None:
-            assert s3_multipart_upload is not None
-            assert get_qaihm_s3 is not None
-            assert QAIHM_PRIVATE_S3_BUCKET is not None
-
+        if result.download_path is not None and s3_bucket is not None:
             assets_cache_path = get_release_assets_file()
             assets_cache = ScorecardAssetYaml.from_yaml(
                 assets_cache_path, create_empty_if_no_file=True
@@ -1287,7 +1281,6 @@ def export_test_e2e(
                 # Asset for this runtime (device agnostic) or runtime + chipset exists already.
                 return
 
-            s3_bucket = get_qaihm_s3(QAIHM_PRIVATE_S3_BUCKET)[0]
             s3_key = str(S3ArtifactsDirEnvvar.get() / result.download_path.name)
 
             s3_multipart_upload(

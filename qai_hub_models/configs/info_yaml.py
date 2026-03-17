@@ -85,7 +85,7 @@ class QAIHMModelInfo(BaseQAIHMConfig):
     # If unsure what to put here, default to `Phone` and `Tablet`.
     form_factors: list[ScorecardDevice.FormFactor]
 
-    # Whether the model has a static image uploaded in S3. All public models must have this.
+    # Whether the model has a static image uploaded in S3. All published models must have this.
     has_static_banner: bool
 
     # Whether the model has an animated asset uploaded in S3. This is optional.
@@ -134,7 +134,7 @@ class QAIHMModelInfo(BaseQAIHMConfig):
     # If set, model assets shouldn't distributed.
     restrict_model_sharing: bool = False
 
-    # If status is private, this must have a reference to an internal issue with an explanation.
+    # If status is private, this must have a reference to an issue with an explanation.
     status_reason: str | None = None
 
     # It is a large language model (LLM) or not.
@@ -189,7 +189,7 @@ class QAIHMModelInfo(BaseQAIHMConfig):
             )
 
         # Whether this model has a page on the website
-        model_is_available = self.status == MODEL_STATUS.PUBLIC
+        model_is_available = self.status == MODEL_STATUS.PUBLISHED
         # Whether this model can actually be downloaded by the public
         model_is_accessible = not self.restrict_model_sharing
 
@@ -206,35 +206,37 @@ class QAIHMModelInfo(BaseQAIHMConfig):
             )
 
         # Status Reason
-        if self.status == MODEL_STATUS.PRIVATE and not self.status_reason:
+        if self.status == MODEL_STATUS.UNPUBLISHED and not self.status_reason:
             raise ValueError(
-                "Private models must set `status_reason` in info.yaml with a link to the related issue."
+                "Unpublished models must set `status_reason` in info.yaml with a link to the related issue."
             )
 
-        if self.status == MODEL_STATUS.PUBLIC and self.status_reason:
+        if self.status == MODEL_STATUS.PUBLISHED and self.status_reason:
             raise ValueError(
-                "`status_reason` in info.yaml should not be set for public models."
+                "`status_reason` in info.yaml should not be set for published models."
             )
 
         # Required assets exist
-        if self.status == MODEL_STATUS.PUBLIC:
+        if self.status == MODEL_STATUS.PUBLISHED:
             if not os.path.exists(self.get_package_path() / "info.yaml"):
-                raise ValueError("All public models must have an info.yaml")
+                raise ValueError("All published models must have an info.yaml")
 
-            # If a model is not running in scorecard and is public,
+            # If a model is not running in scorecard and is published,
             # there must be a perf yaml
             if (not self.code_gen_config.runs_in_scorecard) and not os.path.exists(
                 self.get_package_path() / "perf.yaml"
             ):
                 raise ValueError(
-                    "All public models that don't run in scorecard must have a perf.yaml"
+                    "All published models that don't run in scorecard must have a perf.yaml"
                 )
 
             if not self.code_gen_config.supports_at_least_1_runtime:
-                raise ValueError("Public models must support at least one export path")
+                raise ValueError(
+                    "Published models must support at least one export path"
+                )
 
             if not self.has_static_banner:
-                raise ValueError("Public models must have a static asset.")
+                raise ValueError("Published models must have a static asset.")
 
         session = create_session()
         if validate_urls_exist and self.has_static_banner:

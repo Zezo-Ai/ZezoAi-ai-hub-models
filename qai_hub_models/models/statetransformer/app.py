@@ -148,11 +148,11 @@ class StateTransformerApp:
             Temporal context actions.
         """
         if isinstance(model_path, CachedWebModelAsset):
-            model_path = model_path.fetch(extract=True).joinpath("checkpoint-66000")
+            model_path = model_path.fetch(extract=True)
         if isinstance(map_path, CachedWebModelAsset):
             map_path = map_path.fetch(extract=True).joinpath("maps")
         if isinstance(data_path, CachedWebModelAsset):
-            data_path = data_path.fetch(extract=True).joinpath("nuplan-v1.1_test")
+            data_path = data_path.fetch(extract=True)
 
         with SourceAsRoot(
             STR_SOURCE_REPOSITORY,

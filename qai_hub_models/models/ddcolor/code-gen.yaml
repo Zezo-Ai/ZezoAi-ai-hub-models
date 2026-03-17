@@ -1,0 +1,21 @@
+supported_precisions:
+- w8a16
+- float
+- w8a8
+has_on_target_demo: true
+disabled_paths:
+  w8a16:
+    qnn_dlc:
+      scorecard_failure: 'Profiling Failure(s): jp340l6ng'
+    onnx:
+      scorecard_accuracy_failure: Torch and On-device accuracy diff (57.100 ) above threshold (10.0 )
+  float:
+    onnx:
+      scorecard_accuracy_failure: Torch and On-device accuracy diff (-29.290 ) above threshold (10.0 )
+    tflite:
+      scorecard_accuracy_failure: Torch and On-device accuracy diff (-28.410 ) above threshold (10.0 )
+  w8a8:
+    onnx:
+      scorecard_accuracy_failure: Torch and On-device accuracy diff (76.700 ) above threshold (10.0 )
+    qnn_dlc:
+      scorecard_accuracy_failure: Torch and On-device accuracy diff (71.700 ) above threshold (10.0 )

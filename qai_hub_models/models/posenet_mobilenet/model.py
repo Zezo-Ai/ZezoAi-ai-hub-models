@@ -58,11 +58,11 @@ class PosenetMobilenet(BaseModel):
         ) as repo_path:
             # Built in weights downloading is sometimes flaky.
             # Download default weights from Qualcomm AWS
-            ckpt_path = Path(repo_path) / "_models" / DEFAULT_MODEL_WEIGHTS.path().name
+            ckpt_path = Path(repo_path) / "_models" / DEFAULT_MODEL_WEIGHTS.path.name
             if not ckpt_path.exists():
                 DEFAULT_MODEL_WEIGHTS.fetch()
                 os.makedirs(ckpt_path.parent, exist_ok=True)
-                os.symlink(DEFAULT_MODEL_WEIGHTS.path(), ckpt_path)
+                os.symlink(DEFAULT_MODEL_WEIGHTS.path, ckpt_path)
 
             import posenet
 

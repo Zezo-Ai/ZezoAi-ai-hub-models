@@ -404,7 +404,7 @@ class DevicePerfSummary(
     def get_perf_card(
         self,
         include_failed_jobs: bool = True,
-        include_internal_runtimes: bool = True,
+        include_unpublished_runtimes: bool = True,
     ) -> dict[ScorecardProfilePath, QAIHMModelPerf.PerformanceDetails]:
         perf_card: dict[ScorecardProfilePath, QAIHMModelPerf.PerformanceDetails] = {}
         for path, run in self.run_per_path.items():
@@ -413,7 +413,7 @@ class DevicePerfSummary(
                 and (
                     include_failed_jobs or not run.failed
                 )  # exclude failed jobs if requested
-                and (include_internal_runtimes or path.is_public)
+                and (include_unpublished_runtimes or path.is_published)
             ):
                 perf_card[path] = run.performance_metrics
         return perf_card
@@ -432,7 +432,7 @@ class ModelPrecisionPerfSummary(
 
     def get_target_assets(
         self,
-        include_internal_runtimes: bool = True,
+        include_unpublished_runtimes: bool = True,
         exclude_form_factors: Iterable[ScorecardDevice.FormFactor] = [],
         component: str | None = None,
     ) -> tuple[
@@ -452,7 +452,7 @@ class ModelPrecisionPerfSummary(
             for path, path_run in runs_per_device.run_per_path.items():
                 if not path_run.success:
                     continue
-                if not include_internal_runtimes and not path.is_public:
+                if not include_unpublished_runtimes and not path.is_published:
                     continue
                 if path.compile_path.is_universal:
                     if path not in universal_assets:
@@ -473,8 +473,7 @@ class ModelPrecisionPerfSummary(
     def get_perf_card(
         self,
         include_failed_jobs: bool = True,
-        include_internal_runtimes: bool = True,
-        include_internal_devices: bool = True,
+        include_unpublished_runtimes: bool = True,
         exclude_form_factors: Iterable[ScorecardDevice.FormFactor] = [],
         model_name: str | None = None,
         include_precision: bool = False,
@@ -488,12 +487,9 @@ class ModelPrecisionPerfSummary(
             for device, summary in sorted(
                 summary_per_device.items(), key=lambda dk: dk[0].reference_device_name
             ):
-                if include_internal_devices or (
-                    summary.device.public
-                    and summary.device.form_factor not in exclude_form_factors
-                ):
+                if summary.device.form_factor not in exclude_form_factors:
                     device_summary = summary.get_perf_card(
-                        include_failed_jobs, include_internal_runtimes
+                        include_failed_jobs, include_unpublished_runtimes
                     )
 
                     # If device had no runs, omit it from the card
@@ -507,7 +503,7 @@ class ModelPrecisionPerfSummary(
                 universal_assets,
                 device_assets,
             ) = self.get_target_assets(
-                include_internal_runtimes, exclude_form_factors, component_id
+                include_unpublished_runtimes, exclude_form_factors, component_id
             )
 
             # Determine original precision
@@ -633,8 +629,7 @@ class ModelPerfSummary(
     def get_perf_card(
         self,
         include_failed_jobs: bool = True,
-        include_internal_runtimes: bool = True,
-        include_internal_devices: bool = True,
+        include_unpublished_runtimes: bool = True,
         exclude_form_factors: Iterable[ScorecardDevice.FormFactor] | None = None,
         model_name: str | None = None,
     ) -> QAIHMModelPerf:
@@ -643,8 +638,7 @@ class ModelPerfSummary(
         precision_cards = {
             p: s.get_perf_card(
                 include_failed_jobs,
-                include_internal_runtimes,
-                include_internal_devices,
+                include_unpublished_runtimes,
                 exclude_form_factors,
                 model_name,
                 p in [Precision.mixed, Precision.mixed_with_float],

@@ -96,7 +96,16 @@ def tmp_os_env(env_values: dict[str, str]) -> Generator[None, None, None]:
         os.environ.update(previous_env)
 
 
-def _query_yes_no(question: str, default: str | None = "yes") -> bool:
+UNPUBLISHED_MODEL_WARNING = (
+    "This model is not published. Use with caution; "
+    "it may not meet performance/accuracy standards "
+    "and may not support some runtimes or chipsets/devices. "
+    "We do not provide support for unpublished models. "
+    "If this model was previously published, use earlier releases."
+)
+
+
+def query_yes_no(question: str, default: str | None = "yes") -> bool:
     """
     Ask a yes/no question and return their answer.
 
@@ -157,7 +166,7 @@ def maybe_clone_git_repo(
         should_clone = (
             True
             if not ask_to_clone
-            else _query_yes_no(
+            else query_yes_no(
                 f"{model_name} requires repository {git_file_path} . Ok to clone?",
             )
         )
@@ -627,12 +636,9 @@ class ModelZooAssetConfig:
     def from_cfg(
         asset_cfg_path: str = ASSET_BASES_DEFAULT_PATH,
         local_store_path: str = LOCAL_STORE_DEFAULT_PATH,
-        verify_env_has_all_variables: bool = False,
     ) -> ModelZooAssetConfig:
         # Load CFG and params
-        asset_cfg = ModelZooAssetConfig.load_asset_cfg(
-            asset_cfg_path, verify_env_has_all_variables
-        )
+        asset_cfg = ModelZooAssetConfig.load_asset_cfg(asset_cfg_path)
 
         return ModelZooAssetConfig(
             asset_cfg["store_url"],
@@ -680,41 +686,13 @@ class ModelZooAssetConfig:
     )
 
     @staticmethod
-    def load_asset_cfg(
-        path: str, verify_env_has_all_variables: bool = False
-    ) -> dict[str, Any]:
+    def load_asset_cfg(path: str) -> dict[str, Any]:
         data = load_yaml(path)
         try:
             # Validate high level-schema
             ModelZooAssetConfig.ASSET_CFG_SCHEMA.validate(data)
         except SchemaError as e:
             raise ValueError(f"{e.code} in {path}") from None
-
-        for key, value in data.items():
-            # Environment variable replacement
-            if isinstance(value, str) and value.startswith("env::"):
-                values = value.split("::")
-                if len(values) == 2:
-                    _, env_var_name = values
-                    default = value
-                elif len(values) == 3:
-                    _, env_var_name, default = values
-                else:
-                    raise NotImplementedError(
-                        "Environment vars should be specified in asset_bases using format env::<var_name>::<default>"
-                    )
-
-                data[key] = os.environ.get(env_var_name, default)
-                if (
-                    verify_env_has_all_variables
-                    and default == value
-                    and env_var_name not in os.environ
-                ):
-                    raise ValueError(
-                        f"Environment variable '{env_var_name}' was specified in "
-                        f"asset_bases.yaml for key '{key}', but is not defined."
-                    )
-
         return data
 
 
@@ -727,11 +705,12 @@ class CachedWebAsset:
     def __init__(
         self,
         url: str,
-        local_cache_path: Path,
+        local_cache_path: str | os.PathLike,
         asset_config: ModelZooAssetConfig = ASSET_CONFIG,
         model_downloader: Callable[[str, str, int], str] | None = None,
         downloader_num_retries: int = 4,
         ci_private_s3_key: str | None = None,
+        local_cache_extracted_path: str | os.PathLike | None = None,
     ) -> None:
         """
         Parameters
@@ -743,36 +722,53 @@ class CachedWebAsset:
         asset_config
             Asset config to use to save this file.
         model_downloader
-            Callable to download the file. Defaults to ``download_file``.
+            Callable to download the file. Defaults to `download_file`.
         downloader_num_retries
             Number of retries when downloading.
         ci_private_s3_key
             If set, the asset will be fetched from the private S3 bucket
             using this key when running on CI (`QAIHM_CI=1`).
+        local_cache_extracted_path
+            Path where extracted archive
+            contents will live. Defaults to `local_cache_path` with its
+            file extension stripped (e.g. `data/foo.zip` → `data/foo`).
+            Set this explicitly when the archive already contains a top-level
+            directory to avoid double-nesting.
         """
         if ci_private_s3_key and IsOnCIEnvvar.get():
-            from qai_hub_models.utils._internal.aws import QAIHM_PRIVATE_S3_BUCKET
+            from qai_hub_models.utils.aws import QAIHM_PRIVATE_S3_BUCKET
 
             url = f"s3://{QAIHM_PRIVATE_S3_BUCKET}/{ci_private_s3_key}"
             model_downloader = download_from_private_s3
 
         self.url = url
-        self.local_cache_path = local_cache_path
+        self.local_cache_path = Path(local_cache_path).absolute()
         self.asset_config: ModelZooAssetConfig = asset_config
         self._downloader: Callable = model_downloader or download_file
         self.downloader_num_retries = downloader_num_retries
+        self._local_cache_extracted_path: Path | None
 
-        # Append file name to local path if no file name is present
-        path, ext = os.path.splitext(self.local_cache_path)
-        if not ext:
-            file_name = self.url.rsplit("/", 1)[-1]
-            self.local_cache_path = Path(path) / file_name
+        # Determine whether this is an archive, and what path to extract that archive to.
+        assert self.local_cache_path.suffixes, (
+            "CachedWebAsset does not support fetching directories."
+        )
+        self.archive_ext: str | None = None
+        for ext in [".zip", ".tar", ".tar.gz", ".tgz"]:
+            if str(self.local_cache_path).endswith(ext):
+                self.archive_ext = ext
+                break
 
-        # Set is_extracted if already extracted on disk
-        file, _ = os.path.splitext(self.local_cache_path)
-        self.is_extracted = list(
-            filter(str(local_cache_path).endswith, [".zip", ".tar", ".tar.gz", ".tgz"])
-        ) != [] and os.path.isdir(file)
+        if self.archive_ext:
+            if local_cache_extracted_path is not None:
+                self._local_cache_extracted_path = Path(
+                    local_cache_extracted_path
+                ).absolute()
+            else:
+                self._local_cache_extracted_path = Path(
+                    str(self.local_cache_path).removesuffix(self.archive_ext)
+                )
+        else:
+            self._local_cache_extracted_path = None
 
     def __repr__(self) -> str:
         return self.url
@@ -844,102 +840,105 @@ class CachedWebAsset:
             num_retries,
         )
 
-    def path(self, extracted: bool | None = None) -> Path:
+    @property
+    def is_extracted(self) -> bool:
+        ext_path = self.extracted_path
+        return ext_path.is_dir() and any(ext_path.iterdir())
+
+    @property
+    def extracted_path(self) -> Path:
+        """Get the path of this asset on disk (when extracted)."""
+        if self._local_cache_extracted_path is None:
+            raise ValueError(
+                "Cannot determine extracted path of an asset that is not an archive."
+            )
+        return self._local_cache_extracted_path
+
+    @property
+    def path(self) -> Path:
         """
         Get the path of this asset on disk.
-
-        By default, for archived (.zip, .tar, .etc) assets, path() will return the extracted path if the asset
-        has been extracted, and the original archive file's path if it has not been extracted.
-
-        Parameters
-        ----------
-        extracted
-            If true, return the path of the extracted asset on disk.
-            If false, return the path of the archive path on disk.
 
         Returns
         -------
         path : Path
             Path to the asset on disk.
+
+            For archived (.zip, .tar, .etc) assets, path() will return the extracted path if the asset
+            has been extracted, and the original archive file's path if it has not been extracted.
         """
-        file: str | Path
-        if (extracted is None and self.is_extracted) or extracted:
-            file, _ = os.path.splitext(self.local_cache_path)
-        else:
-            file = self.local_cache_path
+        if self.archive_ext is not None and self.is_extracted:
+            return self.extracted_path
+        return self.local_cache_path
 
-        return self.asset_config.get_local_store_path() / file
-
-    def fetch(self, force: bool = False, extract: bool = False) -> Any:
+    def fetch(
+        self,
+        extract: bool = False,
+        local_path: str | Path | None = None,
+    ) -> Any:
         """
         Fetch this file from the web if it does not exist on disk.
 
         Parameters
         ----------
-        force
-            If the file exists on disk already, discard it and download it again.
         extract
-            Extract the asset after downloading it.
+            Extract the asset after downloading it. Ignored if the asset is already extracted.
+
+        local_path
+            Path to a local file to use instead of downloading.
+            The file is copied into the asset cache so the original is
+            not modified.
 
         Returns
         -------
         path : Any
-            Path to the fetched asset on disk.
+            Path to the fetched asset on disk. If the asset has been extracted (or extract is True), the extracted path will always be returned.
         """
-        path = self.path()
+        if self.archive_ext and self.is_extracted:
+            return self.extracted_path
 
-        # Delete existing asset if requested
-        if path.exists():
-            if force:
-                if os.path.isdir(path):
-                    shutil.rmtree(path)
-                else:
-                    os.remove(path)
-                self.is_extracted = False
+        # Download file
+        if not self.local_cache_path.exists():
+            # Create dirs
+            os.makedirs(os.path.dirname(p=self.local_cache_path), exist_ok=True)
+
+            if local_path is not None:
+                shutil.copy2(local_path, self.local_cache_path)
             else:
-                return path
-        elif self.is_extracted:
-            # Someone deleted the extracted path. Fetch it again.
-            self.is_extracted = False
-            path = self.path()
-
-        # Create dirs
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-
-        # Downloader should return path we expect.
-        p1 = self._downloader(self.url, self.local_cache_path)
-        assert str(p1) == str(path)
+                # Downloader should return path we expect.
+                p1 = self._downloader(self.url, self.local_cache_path)
+                assert str(p1) == str(self.local_cache_path)
 
         # Extract asset if requested
         if extract:
-            self.extract(force)
+            self.extract()
+            return self.extracted_path
 
-        return self.path()
+        return self.local_cache_path
 
-    def extract(self, force: bool = True) -> Path:
+    def extract(self) -> Path:
         """Extract this asset if it is compressed. Updates the path of this asset to the folder to which the zip file was extracted."""
-        if self.is_extracted:
-            if force:
-                os.remove(self.path())
-                self.is_extracted = False
-            else:
-                return self.path()
+        if not self.archive_ext:
+            raise ValueError("Cannot extract an asset that is not an archive.")
+        if not self.is_extracted:
+            try:
+                if self.archive_ext == ".zip":
+                    extract_zip_file(self.local_cache_path, self.extracted_path)
+                    os.remove(self.local_cache_path)  # Deletes zip file
+                elif self.archive_ext in [".tar", ".tar.gz", ".tgz"]:
+                    extract_tar_file(self.local_cache_path, self.extracted_path)
+                    os.remove(self.local_cache_path)  # Deletes tar file
+                else:
+                    raise ValueError(
+                        f"Unsupported compressed file type: {self.archive_ext}"
+                    )
+            except:
+                # Cleanup the folder if the extraction failed, so we don't falsely think the asset was extracted already.
+                if self.extracted_path.exists():
+                    shutil.rmtree(self.extracted_path)
+                raise
 
-        _, ext = os.path.splitext(self.local_cache_path)
-        if ext == ".zip":
-            # Update local cache path to point to the extracted zip folder.
-            extract_zip_file(str(self.path()))
-            os.remove(self.path())  # Deletes zip file
-            self.is_extracted = True  # Updates path() to return extracted path
-        elif ext in [".tar", ".gz", ".tgz"]:
-            with tarfile.open(self.path()) as f:
-                f.extractall(os.path.dirname(self.path()))
-            os.remove(self.path())  # Deletes tar file
-            self.is_extracted = True  # Updates path() to return extracted path
-        else:
-            raise ValueError(f"Unsupported compressed file type: {ext}")
-
-        return self.path()
+        return self.extracted_path
 
 
 class CachedWebModelAsset(CachedWebAsset):
@@ -1086,7 +1085,7 @@ class CachedWebDatasetAsset(CachedWebAsset):
         asset_config
             Asset config to use to save this file.
         model_downloader
-            Callable to download the file. Defaults to ``download_file``.
+            Callable to download the file. Defaults to `download_file`.
         downloader_num_retries
             Number of retries when downloading.
         ci_private_s3_key
@@ -1215,7 +1214,7 @@ def download_from_private_s3(
     """
     dst_path = str(dst_path)
     if not os.path.exists(dst_path):
-        from qai_hub_models.utils._internal.aws import get_qaihm_s3, s3_download
+        from qai_hub_models.utils.aws import get_qaihm_s3, s3_download
 
         if not s3_url.startswith("s3://"):
             raise ValueError(f"Expected s3:// URL, got: {s3_url}")
@@ -1374,20 +1373,78 @@ def copyfile(src: str, dst: str, num_retries: int = 4) -> str:
     return dst
 
 
+def extract_tar_file(
+    tar_path: os.PathLike | str, out_path: str | os.PathLike | None = None
+) -> Path:
+    """
+    Extract a tar file's contents into out_path.
+
+    If the archive contains a single top-level directory, its contents
+    are unwrapped directly into out_path. If the archive contains multiple
+    top-level entries, they are all placed into out_path as-is.
+
+    Parameters
+    ----------
+    tar_path
+        Path to the tar file.
+    out_path
+        Destination directory. If None, defaults to the tar file path
+        without its archive extension. Must not already exist.
+
+    Returns
+    -------
+    out_path : Path
+        Path to the extracted directory.
+    """
+    archive_ext: str | None = None
+    for ext in [".tar", ".tar.gz", ".tgz"]:
+        if str(tar_path).endswith(ext):
+            archive_ext = ext
+            break
+
+    if not archive_ext:
+        raise ValueError(f"{tar_path} is not an archive.")
+
+    out_path = Path(out_path if out_path else str(tar_path).removesuffix(archive_ext))
+
+    if out_path.exists():
+        raise ValueError(f"Cannot extract to an existing directory: {out_path}")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        with tarfile.open(tar_path) as f:
+            f.extractall(tmp)
+
+        top_level_files = list(Path(tmp).iterdir())
+        if len(top_level_files) == 1 and top_level_files[0].is_dir():
+            # Single top-level dir. Extract contents directly to out_path.
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(top_level_files[0], out_path)
+        else:
+            # Multiple top-level entries: extract everything directly into out_path
+            out_path.mkdir(parents=True, exist_ok=True)
+            for file in top_level_files:
+                shutil.move(file, out_path / file.name)
+
+    return out_path
+
+
 def extract_zip_file(
     filepath_str: os.PathLike | str, out_path: str | os.PathLike | None = None
 ) -> Path:
     """
-    Given a local filepath to a zip file, extract its contents. into a folder
-    in the same directory. The directory with the contents will have the same
-    name as the .zip file without the `.zip` extention.
+    Extract a zip file's contents into out_path.
+
+    If the archive contains a single top-level directory, its contents
+    are unwrapped directly into out_path. If the archive contains multiple
+    top-level entries, they are all placed into out_path as-is.
 
     Parameters
     ----------
     filepath_str
-        String of the path to the zip file in the local directory.
+        Path to the zip file.
     out_path
-        Path to which contents should be extracted.
+        Destination directory. If None, defaults to the zip file path
+        without the .zip extension. Must not already exist.
 
     Returns
     -------
@@ -1395,11 +1452,27 @@ def extract_zip_file(
         Path to the extracted directory.
     """
     filepath = Path(filepath_str)
-    with ZipFile(filepath, "r") as zf:
-        if out_path is None:
-            out_path = filepath.parent / filepath.stem
-        zf.extractall(path=out_path)
-    return Path(out_path)
+    out_path = Path(out_path if out_path else filepath.parent / filepath.stem)
+
+    if out_path.exists():
+        raise ValueError(f"Cannot extract to an existing directory: {out_path}")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        with ZipFile(filepath, "r") as zf:
+            zf.extractall(path=tmp)
+
+        top_level_files = list(Path(tmp).iterdir())
+        if len(top_level_files) == 1 and top_level_files[0].is_dir():
+            # Single top-level dir. Extract contents directly to out_path.
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(top_level_files[0], out_path)
+        else:
+            # Multiple top-level entries: extract everything directly into out_path
+            out_path.mkdir(parents=True, exist_ok=True)
+            for file in top_level_files:
+                shutil.move(file, out_path / file.name)
+
+    return out_path
 
 
 # TODO (#12708): Remove this and rely on client

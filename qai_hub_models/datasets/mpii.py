@@ -23,7 +23,7 @@ from qai_hub_models.utils.image_processing import (
 from qai_hub_models.utils.input_spec import InputSpec
 
 MPII_FOLDER_NAME = "mpii"
-MPII_VERSION = 1
+MPII_VERSION = 2
 MPII_ASSET = CachedWebDatasetAsset.from_asset_store(
     MPII_FOLDER_NAME,
     MPII_VERSION,
@@ -69,9 +69,7 @@ class MPIIDataset(BaseDataset):
         input_spec: InputSpec | None = None,
         num_samples: int = -1,
     ) -> None:
-        BaseDataset.__init__(
-            self, str(MPII_ASSET.path().parent / "images_train_val"), split
-        )
+        BaseDataset.__init__(self, MPII_ASSET.extracted_path.parent, split)
         assert self.split_str in ["train", "val"]
         input_spec = input_spec or {"image": ((1, 3, 256, 192), "")}
         self.num_joints = 16
@@ -106,10 +104,9 @@ class MPIIDataset(BaseDataset):
             # we should first convert to 0-based index
             c = c - 1
 
-            image_dir = str(anno_path.parent / "images_train_val")
             self.images_dict_list.append(
                 {
-                    "image_path": os.path.join(image_dir, image_name),
+                    "image_path": os.path.join(MPII_ASSET.extracted_path, image_name),
                     "center": c,
                     "scale": s,
                 }

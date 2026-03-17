@@ -22,7 +22,7 @@ class QAIHMModelReleaseAssets(BaseQAIHMConfig):
 
     class AssetDetails(BaseQAIHMConfig):
         # Key for object in the AI Hub Models S3 Bucket
-        # (see qai_hub_models/utils/_internal/aws.py)
+        # (see qai_hub_models/utils/aws.py)
         s3_key: str
 
         # Tool versions used to generate this asset.

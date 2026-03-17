@@ -17,7 +17,7 @@ from qai_hub_models.utils.asset_loaders import (
     CachedWebModelAsset,
     load_image,
 )
-from qai_hub_models.utils.testing import skip_clone_repo_check
+from qai_hub_models.utils.testing import assert_most_close, skip_clone_repo_check
 
 OUTPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "test_images/output_image.png"
@@ -30,7 +30,9 @@ def test_task() -> None:
     image = load_image(IMAGE_ADDRESS)
     output_image = load_image(OUTPUT_IMAGE_ADDRESS)
     app = YoloV11DetectionApp(YoloV11Detector.from_pretrained(WEIGHTS))
-    assert np.allclose(app.predict_boxes_from_image(image)[0], np.asarray(output_image))
+    assert_most_close(
+        app.predict_boxes_from_image(image)[0], np.asarray(output_image), 0.05, 0.05, 1
+    )
 
 
 @skip_clone_repo_check

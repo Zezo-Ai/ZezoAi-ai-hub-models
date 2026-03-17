@@ -27,7 +27,7 @@ def test_task() -> None:
 
     img = load_image(SOURCE_IMAGE_ADDRESS)
     DRIVING_VIDEO_ADDRESS.fetch()
-    video_path = DRIVING_VIDEO_ADDRESS.path()
+    video_path = DRIVING_VIDEO_ADDRESS.path
     video_frames = load_video_frames(video_path)
 
     output_frames = app.predict(np.array(img), video_frames)

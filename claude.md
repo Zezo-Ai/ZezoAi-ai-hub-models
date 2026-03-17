@@ -1,6 +1,6 @@
 # Qualcomm AI Hub Models - Development Guide
 
-This is the internal repository for Qualcomm AI Hub Models - a collection of ML models optimized for Qualcomm chipsets.
+Qualcomm AI Hub Models is a collection of ML models optimized for Qualcomm chipsets.
 
 ## Project Structure
 
@@ -11,7 +11,7 @@ qai_hub_models/
 ├── datasets/         # Dataset loaders for training/evaluation
 ├── evaluators/       # Accuracy evaluation classes
 ├── scorecard/        # Performance benchmarking
-├── scripts/          # Internal tooling (codegen, autofill, etc.)
+├── scripts/          # tooling (codegen, autofill, etc.)
 ├── test/             # Shared test utilities
 ├── utils/            # Common utilities (base_model.py, image_processing.py, asset_loaders.py)
 └── extern/           # External dependencies wrapped for safe import
@@ -27,7 +27,7 @@ scripts/              # Build, CI, and release tooling
 
 ### Type Checking
 - **mypy** with `ignore_missing_imports = true`
-- All code in `qai_hub_models/` must pass mypy (except `models/_internal/`, LLM modules)
+- All code in `qai_hub_models/` must pass mypy
 - Use type hints for function signatures
 
 ### Pre-commit Hooks

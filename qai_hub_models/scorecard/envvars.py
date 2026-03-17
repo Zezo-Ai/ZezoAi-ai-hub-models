@@ -68,7 +68,7 @@ class EnabledModelsEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialModelSetting]):
     Discussion:
         This envvar be parsed to a list of valid model ID via this snippet:
         ```
-        from qai_hub_models.scorecard.internal.list_models import validate_and_split_enabled_models
+        from qai_hub_models.scorecard.static.list_models import validate_and_split_enabled_models
 
         validate_and_split_enabled_models()
         ```
@@ -77,11 +77,11 @@ class EnabledModelsEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialModelSetting]):
     VARNAME = "QAIHM_TEST_MODELS"
     CLI_ARGNAMES = ["--models"]
     CLI_HELP_MESSAGE = """Comma-separated list of models to enable.
-Models are identified by their folder name in qai_hub_models/models or by their yaml file name in qai_hub_models/scorecard/internal/static_models.
+Models are identified by their folder name in qai_hub_models/models or by their yaml file name in qai_hub_models/scorecard/static/static_models.
 Special options:
  * 'all' -- Enable all models
  * 'pytorch' -- Enable pytorch model recipes (all models under qai_hub_models/models)
- * 'static' -- Enable internal test models in qai_hub_models/scorecard/internal
+ * 'static' -- Enable test models in qai_hub_models/scorecard/static
 """
     SPECIAL_SETTING_ENUM = SpecialModelSetting
 
@@ -376,7 +376,7 @@ class StaticModelsDirEnvvar(QAIHMPathEnvvar):
 
     @classmethod
     def default(cls) -> Path:
-        return Path(os.path.dirname(__file__)) / "internal" / "models"
+        return Path(os.path.dirname(__file__)) / "static" / "models"
 
 
 @pytest_cli_envvar

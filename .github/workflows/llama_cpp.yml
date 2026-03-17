@@ -1,0 +1,197 @@
+##
+## Llama.CPP: Build for hexagon for Qualcomm hardware and get performance numbers.
+##
+name: Llama.CPP (performance numbers)
+
+env:
+  VENV_PATH: build/ci-envs/qaihm-build
+  PYTHON_VERSION: "3.10"
+
+on:
+  schedule:
+    # Run every Sunday at 4pm PDT
+    - cron: '0 23 * * 0'
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Models to benchmark (comma-separated). Default: all"
+        required: false
+        type: string
+        default: "all"
+      create_pr:
+        description: "Create a PR with updated perf.yaml files"
+        required: false
+        type: boolean
+        default: true
+jobs:
+  build_llama_cpp_hexagon_android:
+    name: Build Llama.CPP (android)
+    container:
+      image: 'ghcr.io/snapdragon-toolchain/arm64-android:v0.3'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      id-token: write
+      packages: read
+      contents: read
+    steps:
+      - name: Clone llama.cpp repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+          repository: 'ggml-org/llama.cpp'
+          path: llama_cpp
+      - name: Build Llama.CPP for Hexagon Android
+        id: build_llama_cpp_hexagon_android
+        run: |
+          cd "$GITHUB_WORKSPACE"/llama_cpp
+          cp docs/backend/snapdragon/CMakeUserPresets.json .
+          cmake --preset arm64-android-snapdragon-release -B build-snapdragon
+          cmake --build build-snapdragon
+          cmake --install build-snapdragon --prefix pkg-adb/llama.cpp
+      - name: Upload Llama.CPP Hexagon Android Build Artifact
+        if: ${{ always() && steps.build_llama_cpp_hexagon_android.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-cpp-android-artifact
+          path: llama_cpp/pkg-adb/llama.cpp/
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf "$GITHUB_WORKSPACE"/llama_cpp
+
+  run_llama_cpp_qdc_benchmark:
+    name: Run Llama.CPP QDC Benchmark
+    needs: build_llama_cpp_hexagon_android
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+    env:
+      LLAMA_CPP_PATH: llama.cpp
+      QAIHM_TEST_MODELS: ${{ inputs.models }}
+      QAIHM_TEST_DEVICES: "Snapdragon 8 Elite QRD,Snapdragon 8 Elite Gen 5 QRD"
+      QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
+      PR_REF_NAME: dev/qaihm_bot/llama-cpp-perf-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup AWS Credentials
+        uses: ./.github/actions/configure-multiple-aws-roles
+        with:
+          role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+          role-duration-seconds: 7200
+          profile: qaihm
+          aws-region: us-west-2
+
+      - id: setup_python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download QDC wheel
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            download_qdc_wheel
+          rm -rf "$GITHUB_WORKSPACE"/build/*
+          mv "$HOME"/qdc_public_api_client-*.whl "$GITHUB_WORKSPACE"/
+
+      - name: Install dependencies
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+          source "${{ env.VENV_PATH }}/bin/activate"
+          pip install "$GITHUB_WORKSPACE"/qdc_public_api_client-*.whl
+
+      - name: Download Llama.CPP Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: llama-cpp-android-artifact
+          path: llama.cpp
+
+      - name: Run Llama.CPP QDC Benchmarks
+        env:
+          LLAMA_CPP_RESULTS_DIR: llama_cpp_results
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --only \
+            run_llama_cpp_benchmark
+
+      - name: Upload perf.yaml artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-cpp-perf-results
+          path: llama_cpp_results/
+          if-no-files-found: ignore
+
+      - name: Copy results to model directories
+        if: ${{ inputs.create_pr }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python3 -c "
+          from qai_hub_models.scripts.run_llama_cpp_benchmarks import copy_results_to_model_dirs
+          copy_results_to_model_dirs('llama_cpp_results')
+          "
+
+      - name: Check for changes
+        if: ${{ inputs.create_pr }}
+        id: check_changes
+        run: |
+          if git diff --quiet qai_hub_models/models/*/perf.yaml 2>/dev/null; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit & Push Changes
+        if: ${{ inputs.create_pr && steps.check_changes.outputs.has_changes == 'true' }}
+        run: |
+          git checkout -b ${{ env.PR_REF_NAME }}
+          git add qai_hub_models/models/*/perf.yaml
+          git -c user.name='qaihm-bot_QCOM' -c user.email=qaihm_bot@qti.qualcomm.com commit -m "[Automated] Update Llama.CPP perf.yaml files for run ${{ github.run_id }}"
+          git push --set-upstream origin ${{ env.PR_REF_NAME }} -f
+
+      - name: Create PR
+        if: ${{ inputs.create_pr && steps.check_changes.outputs.has_changes == 'true' }}
+        uses: actions/github-script@v6.4.1
+        with:
+          github-token: ${{ secrets.STAGING_GH_TOKEN }}
+          result-encoding: string
+          script: |
+            const { repo, owner } = context.repo;
+            const result = await github.rest.pulls.create({
+              title: '[Automated] Update Llama.CPP Performance Data',
+              owner,
+              repo,
+              head: '${{ env.PR_REF_NAME }}',
+              base: 'main',
+              body: [
+                'Update perf.yaml files with Llama.CPP benchmark results.',
+                '',
+                'Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+                '',
+                'This PR updates performance data for LLM models compatible with Llama.cpp.',
+              ].join('\n')
+            });
+            return result.data.html_url
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf "$GITHUB_WORKSPACE"/qdc_public_api_client-*.whl
+          rm -rf llama.cpp
+          rm -rf llama_cpp_results

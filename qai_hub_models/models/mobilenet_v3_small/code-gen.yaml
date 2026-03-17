@@ -1,0 +1,8 @@
+supported_precisions:
+- float
+- w8a16
+has_on_target_demo: true
+disabled_paths:
+  w8a16:
+    onnx:
+      scorecard_accuracy_failure: Torch and On-device accuracy diff (-64.800 %) above threshold (10.0 %)

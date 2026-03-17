@@ -1,0 +1,221 @@
+name: Release - Public Website
+run-name: ${{ inputs.create_pr && 'Release - Public Website Import and Create PR' || 'Test Public Website Import' }}
+
+on:
+    # Allows you to run this workflow manually from the Actions tab
+    workflow_dispatch:
+      inputs:
+        source_branch_name:
+          description: (Optional) AI Hub Models branch to fetch perf numbers from
+          required: false
+          type: string
+
+        create_pr:
+          description: Put up a PR with updated performance numbers
+          default: false
+          type: boolean
+
+        dst_branch_name:
+          description: (Optional) Branch to push to tetra-public-website
+          required: false
+          type: string
+
+        scorecard_action_id:
+          description: (Optional) Run ID of associated GitHub scorecard action
+          required: false
+          type: string
+
+        datestr:
+          description: (Optional) Date of scorecard creation
+          required: false
+          type: string
+
+        perf_diff_url:
+          description: (Optional) URL to perf diff txt for this scorecard
+          required: false
+          type: string
+
+        results_url:
+          description: (Optional) URL to associated scorecard results
+          required: false
+          type: string
+
+        fast_test_mode:
+          description: Faster import that should be used only for testing.
+          type: boolean
+          default: false
+
+    # Used by other workflows to trigger this workflow
+    workflow_call:
+      inputs:
+        source_branch_name:
+          required: false
+          type: string
+
+        dst_branch_name:
+          required: false
+          type: string
+
+        datestr:
+          required: false
+          type: string
+
+        scorecard_action_id:
+          required: false
+          type: string
+
+        create_pr:
+          default: false
+          type: boolean
+
+        perf_diff_url:
+          required: false
+          type: string
+
+        results_url:
+          required: false
+          type: string
+
+        fast_test_mode:
+          type: boolean
+          default: false
+
+      outputs:
+        website_pr_url:
+          description: "Public Website PR URL"
+          value: ${{ jobs.sync_public_website.outputs.website_pr_url }}
+
+jobs:
+    sync_public_website:
+        name: ${{ inputs.create_pr && 'Release - Public Website Import and Create PR' || 'Test Public Website Import' }}
+        runs-on: [tetra-ubuntu-2204, self-hosted]
+        outputs:
+          website_pr_url: ${{ steps.create-public-website-pr.outputs.result }}
+
+        permissions:
+          contents: write
+          actions: read
+          pull-requests: write
+
+        env:
+          SRC_BRANCH_NAME: ${{ inputs.source_branch_name || 'curr_ref' }}
+          DST_BRANCH_NAME: ${{ inputs.dst_branch_name || format('dev/qaihm_bot-QCOM/{0}', inputs.scorecard_action_id || github.run_id ) }}
+          NODE_VERSION: 22.x
+          PYTHON_VERSION: '3.10'
+          VENV_PATH: build/ci-envs/release
+          FAST_TEST_MODE: ${{ inputs.fast_test_mode }}
+
+        steps:
+          - uses: actions/checkout@v6
+            id: checkout_custom_ref
+            if: ${{ env.SRC_BRANCH_NAME != 'curr_ref' }}
+            name: Clone AI Hub Models (${{ env.SRC_BRANCH_NAME }})
+            with:
+              path: ai-hub-models-internal
+              ref: ${{ env.SRC_BRANCH_NAME }}
+
+          - uses: actions/checkout@v6
+            if: ${{ steps.checkout_custom_ref.conclusion == 'skipped' }}
+            name: Clone AI Hub Models
+            with:
+              path: ai-hub-models-internal
+
+          - id: install_platform_deps
+            env:
+              SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
+            working-directory: ai-hub-models-internal
+            run: bash scripts/ci/install-platform-deps.sh
+
+          - uses: actions/checkout@v6
+            name: Clone Tetra Public Website
+            with:
+              path: tetra-public-website
+              repository: qcom-ai-hub/tetra-public-website
+              token: ${{ secrets.STAGING_GH_TOKEN }}
+
+          - uses: actions/setup-node@v6
+            name: Setup Node
+            with:
+              node-version: ${{ env.NODE_VERSION }}
+
+          - name: Website Scorecard Import
+            working-directory: tetra-public-website
+            run: |
+              cp .env.local.example .env.local
+              sed -i -e "s/DJANGO_API_TOKEN=/DJANGO_API_TOKEN=${{ secrets.HUB_USER_TOKEN_PROD }}/g" .env.local
+              bash scripts/setup.sh
+              if [[ "${{ env.FAST_TEST_MODE }}" == "true" ]]; then
+                bash scripts/import-zoo.sh model --no-verify-jobs
+              else
+                bash scripts/import-zoo.sh model
+              fi
+
+          - name: Commit Changes
+            id: commit_changes
+            working-directory: tetra-public-website
+            run: |
+              git checkout -b ${{ env.DST_BRANCH_NAME }}
+              #
+              # This commit should target main, so reset our ref to main and reset to main's history.
+              # We don't check out main because we want to keep any other changes in this branch.
+              # This makes sure this action is executing code from the branch it was kicked off with.
+              #
+              git fetch origin main
+              git reset origin/main
+              #
+              git add -A src/database/model-zoo/server/data
+              if git diff --cached --quiet; then
+                echo "No changes to commit"
+                echo "committed=false" >> $GITHUB_OUTPUT
+              else
+                git -c user.name='qaihm-bot_QCOM' -c user.email=qaihm_bot@qti.qualcomm.com commit -a -n -m "[Automated] Update Performance Data for ${{ inputs.scorecard_action_id && inputs.datestr || format('QAIHM Branch {0}', env.SRC_BRANCH_NAME) }}"
+                echo "committed=true" >> $GITHUB_OUTPUT
+              fi
+
+          - name: Run Pre-commit Hooks
+            id: run_precommit_hooks
+            # No need to run the precommit if there are no changes against the website's main branch. In that case, there is nothing to check.
+            if: steps.commit_changes.outputs.committed == 'true'
+            working-directory: tetra-public-website
+            run: pnpm run precommit
+
+          - name: Push changes
+            # We push even if the pre-commit fails. This allows the user to check out the branch and fix any issues.
+            if: steps.commit_changes.outputs.committed == 'true' && !cancelled() && (inputs.create_pr || steps.run_precommit_hooks.conclusion == 'failure')
+            working-directory: tetra-public-website
+            run: git push --set-upstream origin ${{ env.DST_BRANCH_NAME }} -f
+
+          - name: Create Public Website PR
+            if: inputs.create_pr && steps.commit_changes.outputs.committed == 'true'
+            id: create-public-website-pr
+            uses: actions/github-script@v8
+            with:
+              github-token: ${{ secrets.STAGING_GH_TOKEN }}
+              result-encoding: string
+              script: |
+                const result = await github.rest.pulls.create({
+                  title: '[Automated] Update Performance Data for ${{ inputs.scorecard_action_id && inputs.datestr || format('QAIHM Branch {0}', env.SRC_BRANCH_NAME) }}',
+                  owner: 'qcom-ai-hub',
+                  repo: 'tetra-public-website',
+                  head: '${{ env.DST_BRANCH_NAME }}',
+                  base: 'main',
+                  body: [
+                    'Update performance data for ${{ inputs.scorecard_action_id && format('[{0} scorecard]({1}/{2}/actions/runs/{3})', inputs.datestr, github.server_url, github.repository, inputs.scorecard_action_id) || format('QAIHM Branch {0}', env.SRC_BRANCH_NAME) }}.',
+                    '',
+                    '${{ inputs.perf_diff_url && format('[Performance Diff (txt)]({0})', inputs.perf_diff_url) || ''}}',
+                    '',
+                    '${{ inputs.perf_diff_url && format('[All Results + Hub Job YAML (zip)]({0})', inputs.results_url) || ''}}',
+                  ].join('\n')
+                });
+                try {
+                  await github.request(`POST /repos/qcom-ai-hub/tetra-public-website/pulls/${result.data.number}/requested_reviewers`, {
+                    owner: 'qcom-ai-hub',
+                    repo: 'tetra-public-website',
+                    pull_number: result.data.number,
+                    reviewers: ['rockwood_QCOM'],
+                    team_reviewers: ['ai-hub-models-reviewers'],
+                  })
+                } catch (e) {
+                  console.log(`Warning: Failed to add reviewers to PR #${result.data.number}: ${e.message}`)
+                }
+                return result.data.html_url

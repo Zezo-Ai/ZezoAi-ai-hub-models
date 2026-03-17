@@ -5,9 +5,6 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-import tempfile
 from typing import Any, cast
 
 import cv2
@@ -21,25 +18,29 @@ from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetMetadata,
     DatasetSplit,
-    UnfetchableDatasetError,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
-
-try:
-    from qai_hub_models.utils._internal.download_private_datasets import (
-        download_nyuv2_files,
-    )
-except ImportError:
-    download_nyuv2_files = None  # type: ignore[assignment]
 from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
 
 NYUV2_FOLDER_NAME = "nyuv2"
 FILE_NAME = "nyu_depth_v2_labeled.mat"
-NYUV2_VERSION = 1
+NYUV2_VERSION = 2
 SPLIT_ASSET = CachedWebDatasetAsset.from_asset_store(
     NYUV2_FOLDER_NAME,
     NYUV2_VERSION,
     "splits.mat",
+)
+
+NYUV2_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+    "qai-hub-models/datasets/nyuv2/nyu_depth_v2_labeled.mat",
+    NYUV2_FOLDER_NAME,
+    NYUV2_VERSION,
+    FILE_NAME,
+    installation_steps=[
+        "Download the dataset from https://www.kaggle.com/datasets/rmzhang0526/nyu-depth-v2-labeled",
+        f"Run `python -m qai_hub_models.datasets.configure_dataset --dataset nyuv2 --files /path/to/{FILE_NAME}`",
+    ],
 )
 
 
@@ -54,7 +55,7 @@ class NyUv2Dataset(BaseDataset):
         source_dataset_file: str | None = None,
     ) -> None:
         self.num_samples = num_samples
-        self.dataset_path = SPLIT_ASSET.path().parent / FILE_NAME
+        self.dataset_path = SPLIT_ASSET.path.parent / FILE_NAME
         self.source_dataset_file = source_dataset_file
         BaseDataset.__init__(self, str(self.dataset_path), split)
         assert self.split_str in ["train", "val"]
@@ -118,33 +119,8 @@ class NyUv2Dataset(BaseDataset):
     def __len__(self) -> int:
         return len(self.image_list)
 
-    def _download_data(self, source_file: str | None = None) -> None:
-        if self.dataset_path.exists():
-            return
-
-        # Use passed arg if provided, otherwise use instance attribute
-        if source_file is None:
-            source_file = self.source_dataset_file
-
-        # If no file provided/set, try auto-download
-        if source_file is None and download_nyuv2_files is not None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                source_file = os.path.join(tmpdir, FILE_NAME)
-                download_nyuv2_files(source_file)
-                self._download_data(source_file)
-            return
-
-        if source_file is None or not source_file.endswith(FILE_NAME):
-            raise UnfetchableDatasetError(
-                dataset_name=self.dataset_name(),
-                installation_steps=[
-                    "Download the dataset from https://www.kaggle.com/datasets/rmzhang0526/nyu-depth-v2-labeled",
-                    f"Run `python -m qai_hub_models.datasets.configure_dataset --dataset nyuv2 --files /path/to/{FILE_NAME}`",
-                ],
-            )
-
-        os.makedirs(self.dataset_path.parent, exist_ok=True)
-        shutil.copy(source_file, self.dataset_path)
+    def _download_data(self) -> None:
+        NYUV2_PRIVATE_ASSET.fetch(local_path=self.source_dataset_file)
 
     @staticmethod
     def default_samples_per_job() -> int:

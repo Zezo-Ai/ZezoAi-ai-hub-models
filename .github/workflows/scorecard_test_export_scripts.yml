@@ -1,0 +1,176 @@
+name: Scorecard - Test Export Scripts and Upload ZIP Assets to S3
+
+on:
+    # Allows you to run this workflow manually from the Actions tab
+    workflow_dispatch:
+      inputs:
+        action_id:
+          description: Scorecard Kickoff GitHub Action Run ID
+          required: true
+          type: string
+
+        upload_to_s3:
+          description: Upload export-generated ZIP files to S3
+          type: boolean
+          default: false
+
+        models:
+          description: Models for which to run the tests. If unset, tests all models run in the scorecard action above.
+          type: string
+          required: false
+
+    # Used by other workflows to trigger this workflow
+    workflow_call:
+      inputs:
+        action_id:
+          type: string
+          required: true
+
+        upload_to_s3:
+          description: Upload export-generated ZIP files to S3
+          type: boolean
+          default: false
+
+env:
+  # Versions MUST be quoted, otherwise they will be interpreted as a floats
+  # (and version like 3.10 can be interpreted as 3.1).
+  PYTHON_VERSION: '3.10'
+  PYTHONUNBUFFERED: 1
+  VENV_PATH: build/ci-envs/qaihm-build
+  QAIHM_CI: 1
+  CMAKE_ARGS: -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+  QAIHM_CI_USE_EDITABLE_INSTALL: 1
+
+jobs:
+  test_export_scripts:
+    name: Test Export Scripts and Upload ZIP Files (using jobs from ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{inputs.action_id}})
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    timeout-minutes: 1440 # 24 hours
+    env:
+      QAIHM_TEST_ARTIFACTS_DIR: ${{ inputs.action_id == '' && 'qai_hub_models/scorecard/intermediates' || format('build/scorecard-yamls/{0}', inputs.action_id) }}
+      QAIHM_TEST_S3_ARTIFACTS_DIR: ${{ inputs.upload_to_s3 && format('pre_release_assets/gh_actions/{0}', inputs.action_id) || '' }}
+
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: install_platform_deps
+        env:
+          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
+        run: |
+          bash scripts/ci/install-platform-deps.sh
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Download Post-Flaky-Job-Retry Artifacts
+        id: download-post-flaky-job-retry-artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+            run-id: ${{ inputs.action_id }}
+            github-token: ${{ github.token }}
+            name: Scorecard Cached Artifact (Job-IDs, ${{ inputs.action_id }})
+            path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
+
+      - name: Download Flaky-Job Artifacts
+        # If the "without Flaky Jobs" artifact doesn't exist (e.g., flaky jobs fix step failed),
+        # download the original intermediates created by the main scorecard workflow.
+        if: steps.download-post-flaky-job-retry-artifacts.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        with:
+            run-id: ${{ inputs.action_id }}
+            github-token: ${{ github.token }}
+            name: Scorecard Cached Artifact (Flaky-Job-IDs, ${{ inputs.action_id }})
+            path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
+
+      - name: Restore Scorecard Environment Variables
+        id: restore_env_vars
+        run: |
+          # Restore environment variables from scorecard action
+          cat "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/environment.env" >> "$GITHUB_ENV"
+
+      - name: Set Models Environment Variable
+        if: ${{ inputs.models }}
+        run: echo "QAIHM_TEST_MODELS=${{ inputs.models }}" >> "$GITHUB_ENV"
+
+      - name: Setup AWS Credentials
+        uses: ./.github/actions/configure-multiple-aws-roles
+        with:
+          role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+          role-duration-seconds: 43200 # 12 hours
+          profile: qaihm
+          aws-region: us-west-2
+
+      - name: Configure Hub Credentials
+        id: set_hub_creds
+        run: |
+          source scripts/ci/set-aihub-credential-vars.sh \
+            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
+            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
+            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
+            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
+            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+            DEFAULT \
+            ${{ env.VENV_PATH }}
+
+          # Add envvars for "private" client (jobs accessible to AI Hub team)
+          source scripts/ci/set-aihub-credential-vars.sh \
+            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
+            ${{ secrets['HUB_PRIVATE_USER_TOKEN_PROD'] }} \
+            ${{ secrets['HUB_PRIVATE_USER_TOKEN_STAGING'] }} \
+            ${{ secrets['HUB_PRIVATE_USER_TOKEN_DEV'] }} \
+            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+            PRIVATE
+
+      - name: Create Test Results Directory
+        run: |
+          mkdir -p ${{ github.workspace }}/test-results
+
+      - name: Run All Export Scripts
+        id: run-export-scripts
+        continue-on-error: true
+        env:
+          QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/test-results/qaihm-export-zip-tests-junit.xml
+        run: |
+            python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            test_export_scripts
+
+      - name: Upload Cached Asset Locations
+        id: upload-asset-cache
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }})
+          path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets.yaml
+
+      - name: Combine Per-Model JUnit XMLs
+        if: ${{ always() }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          mkdir -p ${{ github.workspace }}/combined-test-results
+          python scripts/combine_junit_xml.py \
+            --junit-xml ${{ github.workspace }}/test-results \
+            --output ${{ github.workspace }}/combined-test-results/qaihm-export-zip-tests-junit.xml
+
+      - name: Upload Test Results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-export
+          path: ${{ github.workspace }}/combined-test-results

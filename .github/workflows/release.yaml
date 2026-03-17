@@ -1,0 +1,64 @@
+name: Release QAI Hub Models
+run-name: Release QAI Hub Models (${{ inputs.target }})
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+      inputs:
+          target:
+              required: true
+              type: choice
+              default: staging
+              description: Release Target
+              options:
+              - staging
+              - prod
+
+jobs:
+  test_public_wheel:
+    name: Unit Tests on Public Wheel
+    secrets: inherit
+    uses: ./.github/workflows/test.yml
+    with:
+      deployment: prod
+      models: none # only enable unit tests
+      use_public_wheel: true
+
+  release_code:
+      name: Release code to Repository
+      secrets: inherit
+      needs: [test_public_wheel]
+      uses: ./.github/workflows/release_code.yaml
+
+  release_pypi:
+      name: Release wheel to ${{ inputs.target == 'prod' && 'PyPi' || 'test PyPi' }}
+      secrets: inherit
+      needs: [test_public_wheel]
+      uses: ./.github/workflows/release_pypi.yaml
+      with:
+          target: ${{ inputs.target }}
+
+  release_huggingface:
+      name: Release Hugging Face Model Cards
+      if: ${{ inputs.target == 'prod' }}
+      secrets: inherit
+      needs: [test_public_wheel]
+      uses: ./.github/workflows/release_huggingface.yaml
+
+  release_assets:
+      name: Release Assets
+      if: ${{ inputs.target == 'prod' }}
+      secrets: inherit
+      needs: [test_public_wheel]
+      uses: ./.github/workflows/release_assets.yaml
+
+  sync_public_website:
+    name: Sync Public Website & Create Public Website PR
+    secrets: inherit
+    if: ${{ inputs.target == 'prod' }}
+    needs: [test_public_wheel]
+    uses: ./.github/workflows/release_website.yml
+    with:
+      source_branch_name: ${{ github.ref }}
+      dst_branch_name: ${{ format('dev/qaihm_bot-QCOM/qaihm_release/{0}', github.ref_name) }}
+      create_pr: ${{ inputs.target == 'prod' }}

@@ -1,0 +1,249 @@
+name: Fix Flaky Profile Jobs
+
+on:
+    # Allows you to run this workflow manually from the Actions tab
+    workflow_dispatch:
+      inputs:
+        action_id:
+          description: Scorecard Kickoff GitHub Action Run ID. Unused if the branch with new scorecard jobs is set.
+          required: false
+          type: string
+
+        delay:
+          description: Time Delay after Scorecard Kickoff
+          required: true
+          default: scorecard_collection_immediate
+          type: choice
+          options:
+            - scorecard_collection_32h_delay
+            - scorecard_collection_8h_delay
+            - scorecard_collection_immediate
+
+        latest_results_branch:
+          description: The branch with new scorecard jobs (in qai_hub_models/scorecard/intermediates). Unused if the Github Action Run ID is set.
+          required: false
+          type: string
+
+        deployment:
+          description: Hub Deployment
+          default: prod
+          type: string
+
+        test_mode:
+          description: Testing mode - resubmit all jobs regardless of failure status
+          default: false
+          type: boolean
+
+        python_version:
+          description: Python version used for artifact naming
+          default: "3.10"
+          type: string
+
+    # Used by other workflows to trigger this workflow
+    workflow_call:
+      inputs:
+        action_id:
+          type: string
+          required: false
+
+        delay:
+          required: true
+          type: string
+
+        latest_results_branch:
+          type: string
+          required: false
+
+        deployment:
+          default: prod
+          type: string
+
+        test_mode:
+          default: false
+          type: boolean
+
+        python_version:
+          type: string
+          default: "3.10"
+
+      outputs:
+        updated_artifacts_url:
+          value: ${{ jobs.fix_flaky_profile_jobs.outputs.updated_artifacts_url || 'N/A' }}
+
+env:
+  # Versions MUST be quoted, otherwise they will be interpreted as a floats
+  # (and version like 3.10 can be interpreted as 3.1).
+  PYTHON_VERSION: ${{ inputs.python_version || '3.10' }}
+  PYTHONUNBUFFERED: 1
+  VENV_PATH: build/ci-envs/qaihm-build
+  QAIHM_CI: 1
+  CMAKE_ARGS: -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+jobs:
+  fix_flaky_profile_jobs:
+    name: Fix Flaky Jobs for ${{ inputs.action_id == '' && inputs.latest_results_branch || format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, inputs.action_id) }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    timeout-minutes: 1200 # 20 hours, this waits for the scorecard jobs to finish.
+
+    env:
+      QAIHM_TEST_ARTIFACTS_DIR: ${{ inputs.action_id == '' && 'qai_hub_models/scorecard/intermediates' || format('build/scorecard-yamls/{0}', inputs.action_id) }}
+      QAIHM_TEST_DEPLOYMENT: ${{ inputs.deployment }}
+
+    permissions:
+      contents: read
+      actions: read
+
+    outputs:
+      updated_artifacts_url: ${{ steps.upload-updated-artifacts.outputs.artifact-url || 'N/A' }}
+
+    environment:
+      name: ${{ inputs.delay }}
+
+    steps:
+      - name: Check Options
+        run: |
+          if [[ -n "${{ inputs.action_id }}" && -n "${{ inputs.latest_results_branch }}" ]]; then
+            echo "Error: Both "GitHub Action Run ID" and "branch with new scorecard jobs" GitHub action inputs are set. Only one should be set."
+            exit 1
+          elif [[ -z "${{ inputs.action_id }}" && -z "${{ inputs.latest_results_branch }}" ]]; then
+            echo "Error: Neither "GitHub Action Run ID" nor "branch with new scorecard jobs" GitHub action inputs are set. Exactly one should be set."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+
+      - id: install_platform_deps
+        env:
+          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
+        run: |
+          bash scripts/ci/install-platform-deps.sh
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download Scorecard Artifacts
+      # This step is only executed if inputs.action_id is not empty, which means the workflow is being run with an action_id instead of a latest_results_branch.
+        if: inputs.action_id != ''
+        uses: actions/download-artifact@v8
+        with:
+            run-id: ${{ inputs.action_id }}
+            github-token: ${{ github.token }}
+            name: Scorecard Cached Artifact (Flaky-Job-IDs, ${{ inputs.action_id }}, py${{ inputs.python_version }})
+            path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
+
+      - name: Check Out Scorecard Artifacts
+      # This step is only executed if inputs.action_id is empty, which means the workflow is being run with a latest_results_branch instead of an action_id.
+        if: inputs.action_id == ''
+        run: |
+          git fetch origin ${{ inputs.latest_results_branch }}
+          git checkout origin/${{ inputs.latest_results_branch }} -- ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
+
+      - name: Restore Scorecard Environment Variables
+        id: restore_env_vars
+        run: |
+          # Restore environment variables from scorecard action
+          # From previous exec_scorecard  run, need QAIHM_TEST_DEPLOYMENT,QAIHM_TEST_MODELS,QAIHM_TEST_DEVICES, etc. and appending to GITHUB_ENV for entirety of this workflow.
+          if [ -f "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/environment.env" ]; then
+            cat ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/environment.env >> "$GITHUB_ENV"
+          else
+            echo "Warning: environment.env file not found in artifacts directory"
+          fi
+
+      - name: Create Virtual Env
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Configure Hub Credentials
+        id: set_hub_creds
+        run: |
+          source scripts/ci/set-aihub-credential-vars.sh \
+            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
+            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
+            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
+            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
+            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+            DEFAULT \
+            ${{ env.VENV_PATH }}
+          echo "qaihm_test_deployment=$QAIHM_TEST_DEPLOYMENT" >> "$GITHUB_OUTPUT"
+
+      - name: Fix Flaky Profile Jobs
+        id: fix-flaky-jobs
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          # Create directory for flaky jobs output
+          mkdir -p ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/flaky_jobs
+
+          if [ "${{ inputs.test_mode }}" == "true" ]; then
+            echo "Running in TEST MODE - will resubmit all jobs regardless of failure status"
+            python -m qai_hub_models.scripts.retry_failed_profile_jobs \
+              --artifacts-dir ${{ env.QAIHM_TEST_ARTIFACTS_DIR }} \
+              --test-mode \
+              --wait-for-jobs \
+              --flaky-jobs-output ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/flaky_jobs/flaky_jobs.yaml
+          else
+            python -m qai_hub_models.scripts.retry_failed_profile_jobs \
+              --artifacts-dir ${{ env.QAIHM_TEST_ARTIFACTS_DIR }} \
+              --wait-for-jobs \
+              --flaky-jobs-output ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/flaky_jobs/flaky_jobs.yaml
+          fi
+
+          # Check if flaky jobs file exists and set output
+          if [ -f "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/flaky_jobs/flaky_jobs.yaml" ]; then
+            echo "flaky_jobs_found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "flaky_jobs_found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Format Flaky Jobs Report
+        if: steps.fix-flaky-jobs.outputs.flaky_jobs_found == 'true'
+        env:
+          QAIHM_TEST_ARTIFACTS_DIR: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python qai_hub_models/scripts/format_flaky_jobs_report.py \
+            --flaky-jobs-file ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/flaky_jobs/flaky_jobs.yaml \
+            --output-file ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/flaky_jobs/formatted_report.txt
+
+      - name: Upload Updated Scorecard Intermediates
+        id: upload-updated-artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Scorecard Cached Artifact (Job-IDs, ${{ inputs.action_id }})
+          path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
+
+      - name: Upload Flaky Jobs Report
+        id: upload-flaky-jobs
+        uses: actions/upload-artifact@v7
+        with:
+          name: Flaky Jobs Report (${{ inputs.action_id }})
+          path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/flaky_jobs/
+          if-no-files-found: ignore # to prevent the workflow from failing if no flaky jobs are found
+
+      - name: Prepare Slack Message
+        if: steps.fix-flaky-jobs.outputs.flaky_jobs_found == 'true'
+        run: |
+          # Read the formatted report (which was generated by format_flaky_jobs_report.py)
+          FORMATTED_REPORT=$(cat "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/flaky_jobs/formatted_report.txt")
+
+          # Create the complete Slack message and store in environment variable
+          {
+            echo "SLACK_MESSAGE<<EOF"
+            echo "$FORMATTED_REPORT"
+            echo ""
+            echo "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View detailed flaky jobs report>"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Notify AI Hub Interesting Jobs Channel about Flaky Jobs
+        if: github.event_name == 'schedule' && steps.fix-flaky-jobs.outputs.flaky_jobs_found == 'true'
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: ${{ secrets.AI_HUB_INTERESTING_JOBS }}
+          slack-message: ${{ env.SLACK_MESSAGE }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_NOTIFIER_TOKEN }}

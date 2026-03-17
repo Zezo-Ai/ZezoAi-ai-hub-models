@@ -18,13 +18,12 @@ from qai_hub_models.datasets.common import BaseDataset, DatasetMetadata, Dataset
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.image_processing import preprocess_PIL_image
 
-HUMAN_MATTING_FOLDER_NAME = "human_matting"
-HUMAN_MATTING_VERSION = 1
+HUMAN_MATTING_VERSION = 2
 
 # orginally from the https://datasetninja.com/aisegmentcom-human-matting
 
 HUMAN_MATTING_ASSET = CachedWebDatasetAsset.from_asset_store(
-    HUMAN_MATTING_FOLDER_NAME,
+    "human_matting",
     HUMAN_MATTING_VERSION,
     "human_matting.tar",
 )
@@ -37,9 +36,7 @@ class HumanMattingDataset(BaseDataset):
         input_height: int = 256,
         input_width: int = 256,
     ) -> None:
-        BaseDataset.__init__(
-            self, HUMAN_MATTING_ASSET.path(extracted=True).parent, split
-        )
+        BaseDataset.__init__(self, HUMAN_MATTING_ASSET.extracted_path, split)
 
         self.input_height = input_height
         self.input_width = input_width

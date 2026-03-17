@@ -1,0 +1,315 @@
+##
+## QAI Hub Models LLM Performance Collection
+##
+## Collects TPS (tokens per second) and TTFT (time to first token) metrics
+## for LLM models across specified devices using QDC (Qualcomm Device Cloud).
+##
+
+name: LLM Performance Collection
+run-name: "LLM Perf (${{ inputs.model || 'all' }}, ${{ inputs.device || 'Snapdragon X Elite CRD,Snapdragon X2 Elite CRD,Snapdragon 8 Elite QRD,Snapdragon 8 Elite Gen 5 QRD' }})"
+
+env:
+  VENV_PATH: build/ci-envs/qaihm-build
+  QAIHM_CI: 1
+
+on:
+  # Allows this workflow to be manually triggered.
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'LLM Model(s) to test. Comma-separated for multiple, or "all" for all LLMs.'
+        required: true
+        default: 'all'
+        type: string
+
+      device:
+        description: 'Target device(s). See `qai_hub_models/scorecard/device.py`. Comma-separated for multiple (e.g., "cs_x2_elite,cs_auto_lemans_8775")'
+        required: true
+        default: cs_x2_elite
+        type: string
+
+      deployment:
+        description: 'Hub Deployment'
+        default: prod
+        type: choice
+        options:
+          - prod
+          - staging
+          - dev
+
+      context_length:
+        description: 'Context length for LLM inference (default: 4096). You can specify a comma separated list as well (e.g., "2048,4096").'
+        required: false
+        default: '4096'
+        type: string
+
+      create_pr:
+        description: 'Create PR with perf.yaml changes'
+        default: true
+        type: boolean
+
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  setup_docker_gpu:
+    name: "Setup GPU Docker Image"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      packages: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        lfs: false
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # DockerHub login to avoid rate limits when pulling nvidia/cuda base image
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: shreyajn104
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Log in to Github Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Get tag
+      id: tag
+      run: |
+        echo "image_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: docker/Dockerfile
+        push: true
+        tags: ghcr.io/${{ github.repository }}/gpu_builder:${{ steps.tag.outputs.image_tag }}
+        cache-from: type=gha,scope=gpu_builder
+        cache-to: type=gha,scope=gpu_builder,mode=max
+        build-args: |
+          QAIHM_CI=${{ env.QAIHM_CI }}
+
+  collect_llm_perf:
+    name: "Collect LLM Performance Numbers"
+    needs: setup_docker_gpu
+    runs-on:
+      group: GPU
+    timeout-minutes: 2880 # 2 days for multiple models/devices
+    container:
+      image: ghcr.io/${{ github.repository }}/gpu_builder:${{ needs.setup_docker_gpu.outputs.image_tag }}
+      options: --gpus all -v /local:/local
+    permissions:
+      contents: write
+      actions: read
+      id-token: write
+      packages: read
+      pull-requests: write
+    env:
+      HF_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+      QDC_API_TOKEN: ${{ secrets.QDC_API_KEY }}
+      QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/test-results/models-junit.xml
+      CUDA_VISIBLE_DEVICES: "7"
+      DOCKER_USER: qaihm_bot
+      DOCKER_GROUP: qaihm_bot_group
+      DOCKER_USER_ID: 4552456
+      DOCKER_GROUP_ID: 200
+      HOME: /local/mnt2/workspace2/qaihm_bot
+      TMPDIR: /local/mnt2/workspace2/qaihm_bot/tmp
+    outputs:
+      branch_name: ${{ steps.push_changes.outputs.branch_name }}
+      has_changes: ${{ steps.check_changes.outputs.has_changes }}
+
+    steps:
+    - name: Setup group/user and TMPDIR
+      run: |
+        groupadd -g ${{ env.DOCKER_GROUP_ID }} ${{ env.DOCKER_GROUP }} || true
+        useradd -m -u ${{ env.DOCKER_USER_ID }} -g ${{ env.DOCKER_GROUP_ID }} -d /home/${{ env.DOCKER_USER }} -s /bin/bash ${{ env.DOCKER_USER }} || true
+        mkdir -p "$TMPDIR"
+        chown ${{ env.DOCKER_USER_ID }}:${{ env.DOCKER_GROUP_ID }} "$TMPDIR"
+
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup AWS Credentials
+      uses: ./.github/actions/configure-multiple-aws-roles
+      with:
+        role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+        role-duration-seconds: 7200
+        profile: qaihm
+        aws-region: us-west-2
+
+    - name: Download QDC tools
+      run: |
+        python3 scripts/build_and_test.py \
+          --venv="${{ env.VENV_PATH }}" \
+          --python="$(which python3)" \
+          download_qdc_wheel
+        rm -rf "$GITHUB_WORKSPACE"/build/*
+        mv "$HOME"/qdc_public_api_client-*.whl "$GITHUB_WORKSPACE"/
+        mv "$HOME"/qairt_auto_sdk.zip "$GITHUB_WORKSPACE"/
+
+    - name: Install basic dependencies
+      run: |
+        git config --global --add safe.directory $GITHUB_WORKSPACE
+        python scripts/build_and_test.py --venv='${{ env.VENV_PATH }}' install_deps
+
+    - name: Configure Hub Credentials
+      run: |
+        cd $GITHUB_WORKSPACE && \
+          source scripts/ci/set-aihub-credential-vars.sh \
+            ${{ inputs.deployment || 'dev' }} \
+            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
+            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
+            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
+            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+            DEFAULT \
+            ${{ env.VENV_PATH }}
+
+    - name: Run LLM Performance Collection
+      continue-on-error: true
+      env:
+        QAIHM_LLM_MODELS: ${{ inputs.model || 'all' }}
+        QAIHM_TEST_DEVICES: ${{ inputs.device || 'Snapdragon X Elite CRD,Snapdragon X2 Elite CRD,Snapdragon 8 Elite QRD,Snapdragon 8 Elite Gen 5 QRD' }}
+        LLM_CONTEXT_LENGTH: ${{ inputs.context_length }}
+        QAIRT_SDK_PATH: ${{ github.workspace }}/qairt_auto_sdk.zip
+      run: |
+        cd $GITHUB_WORKSPACE && \
+          python scripts/build_and_test.py \
+            --venv='${{ env.VENV_PATH }}' \
+            --only \
+            collect_llm_perf
+
+    - name: Generate Test Failure Summary
+      if: always()
+      run: |
+        source "${{ env.VENV_PATH }}/bin/activate"
+        pip install -q six
+        python3 scripts/build_and_test.py --venv="${{ env.VENV_PATH }}" generate_test_summary
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: ${{ github.workspace }}/test-results
+
+    - name: Check for changes
+      if: ${{ inputs.create_pr }}
+      continue-on-error: true
+      id: check_changes
+      run: |
+        # Check for both modified and new/untracked perf.yaml files
+        has_modified=$(git diff --quiet qai_hub_models/models/*/perf.yaml 2>/dev/null && echo "false" || echo "true")
+        has_untracked=$(git ls-files --others --exclude-standard | grep -q 'perf\.yaml$' && echo "true" || echo "false")
+
+        if [ "$has_modified" = "true" ] || [ "$has_untracked" = "true" ]; then
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          echo "Detected changes: modified=$has_modified, untracked=$has_untracked"
+        else
+          echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          echo "No perf.yaml changes detected"
+        fi
+
+    - name: Commit & Push Changes
+      id: push_changes
+      if: ${{ (inputs.create_pr) && steps.check_changes.outputs.has_changes == 'true' }}
+      continue-on-error: true
+      env:
+        QAIHM_TEST_MODELS: ${{ inputs.model || 'all' }}
+        QAIHM_TEST_DEVICES: ${{ inputs.device || 'Snapdragon X Elite CRD,Snapdragon X2 Elite CRD,Snapdragon 8 Elite QRD,Snapdragon 8 Elite Gen 5 QRD' }}
+      run: |
+        branch_name="perf/llm-perf-${{ github.run_id }}"
+        cd $GITHUB_WORKSPACE && \
+          git config --global --add safe.directory $GITHUB_WORKSPACE && \
+          git config user.name 'github-actions[bot]' && \
+          git config user.email 'github-actions[bot]@users.noreply.github.com' && \
+          git checkout -b $branch_name && \
+          git ls-files -co --exclude-standard | grep 'perf.yaml' | xargs git add && \
+          git commit -m "Add LLM performance numbers
+
+        Models: $QAIHM_TEST_MODELS
+        Devices: $QAIHM_TEST_DEVICES
+
+        Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>" && \
+          git push -u origin $branch_name
+        echo "branch_name=$branch_name" >> "$GITHUB_OUTPUT"
+
+    - name: Upload CSV Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: llm-perf-results
+        path: ${{ github.workspace }}/*.csv
+
+    - name: Add CSV to GitHub summary
+      if: always()
+      run: |
+        source "${{ env.VENV_PATH }}/bin/activate"
+        pip install -q pandas tabulate
+        python -c 'import os, pandas as pd; print("## On-device Results"); fn="test_perf_on_device.csv"; print(pd.read_csv(fn).to_markdown(index=False)) if os.path.exists(fn) else print(f"File {fn} not found.")' >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload updated perf.yaml files
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: updated-perf-yamls
+        path: |
+          ${{ github.workspace }}/qai_hub_models/models/**/perf.yaml
+
+    - name: Create Pull Request
+      if: ${{ (inputs.create_pr) && steps.push_changes.outputs.branch_name != '' && steps.check_changes.outputs.has_changes == 'true' }}
+      uses: actions/github-script@v6.4.1
+      env:
+        QAIHM_TEST_MODELS: ${{ inputs.model || 'all' }}
+        QAIHM_TEST_DEVICES: ${{ inputs.device || 'Snapdragon X Elite CRD,Snapdragon X2 Elite CRD,Snapdragon 8 Elite QRD,Snapdragon 8 Elite Gen 5 QRD' }}
+      with:
+        github-token: ${{ secrets.STAGING_GH_TOKEN }}
+        result-encoding: string
+        script: |
+          const { repo, owner } = context.repo;
+          const models = process.env.QAIHM_TEST_MODELS;
+          const devices = process.env.QAIHM_TEST_DEVICES;
+          const result = await github.rest.pulls.create({
+            title: `[Automated] Add LLM performance numbers`,
+            owner,
+            repo,
+            head: '${{ steps.push_changes.outputs.branch_name }}',
+            base: 'main',
+            body: [
+              'Generated automatically by LLM Performance Collection workflow.',
+              '',
+              `Models: ${models}`,
+              `Devices: ${devices}`,
+              '',
+              'Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+            ].join('\n')
+          });
+          console.log('PR created:', result.data.html_url);
+          return result.data.html_url;
+
+    - name: Cleanup (always runs)
+      if: always()
+      run: |
+        # Cleanup temporary files
+        if [ -n "$HOME" ]; then
+          rm -rf "$HOME"/.aws "$HOME"/qdc*.whl
+        fi
+        rm -rf "$GITHUB_WORKSPACE"/qdc_public_api_client-*.whl
+        rm -rf "$GITHUB_WORKSPACE"/genie_bundles/*
+        rm -rf "$TMPDIR"

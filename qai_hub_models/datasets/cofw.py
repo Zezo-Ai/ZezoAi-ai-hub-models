@@ -16,12 +16,11 @@ from qai_hub_models.utils.bounding_box_processing import box_xywh_to_cs
 from qai_hub_models.utils.image_processing import pre_process_with_affine
 from qai_hub_models.utils.input_spec import InputSpec
 
-COFW_FOLDER_NAME = "cofw"
-COFW_VERSION = 1
+COFW_VERSION = 2
 
 # originally from the https://1drv.ms/u/s!AiWjZ1LamlxzdmYbSkHpPYhI8Ms
 COFW_ASSET = CachedWebDatasetAsset.from_asset_store(
-    COFW_FOLDER_NAME,
+    "cofw",
     COFW_VERSION,
     "cofw.zip",
 )
@@ -37,7 +36,7 @@ class COFWDataset(BaseDataset):
         self.target_h = int(input_spec["image"][0][2])
         self.target_w = int(input_spec["image"][0][3])
 
-        self.dataset_path = COFW_ASSET.path(extracted=True) / COFW_FOLDER_NAME
+        self.dataset_path = COFW_ASSET.extracted_path
         BaseDataset.__init__(self, self.dataset_path, split)
 
         # Select .mat file based on split

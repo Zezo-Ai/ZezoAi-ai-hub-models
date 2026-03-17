@@ -22,7 +22,7 @@ from qai_hub_models.utils.image_processing import app_to_net_image_inputs
 from qai_hub_models.utils.input_spec import InputSpec
 
 DATASET_ID = "hagrid"
-DATASET_VERSION = 1
+DATASET_VERSION = 2
 IMAGES_DIR_NAME = "images"  # full frames (palm detector)
 ROI_DIR_NAME = "rois"  # cropped hand images (landmarks)
 ANNOTATIONS_NAME = "landmarks_dump.csv"
@@ -73,7 +73,7 @@ class PalmDetectorDataset(BaseDataset):
         input_width: int = 256,
         input_height: int = 256,
     ) -> None:
-        self.data_path = HAGRID_CLEAN_ASSET.path(extracted=True) / "data"
+        self.data_path = HAGRID_CLEAN_ASSET.extracted_path
         self.images_path = self.data_path / IMAGES_DIR_NAME
         self.roi_path = self.data_path / ROI_DIR_NAME
         self.annotations_path = self.data_path / ANNOTATIONS_NAME

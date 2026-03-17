@@ -29,7 +29,7 @@ def test_task() -> None:
     app = RTMPosebody2dApp(model, model.inferencer)
     pred_output = app.predict_pose_keypoints(image, True)
     OUTPUT_IMAGE_ADDRESS.fetch()
-    gt_output = np.load(OUTPUT_IMAGE_ADDRESS.path())
+    gt_output = np.load(OUTPUT_IMAGE_ADDRESS.path)
     assert_most_close(
         np.asarray(pred_output, dtype=np.float32) / 255,
         np.asarray(gt_output, dtype=np.float32) / 255,

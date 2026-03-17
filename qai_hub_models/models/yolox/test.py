@@ -27,7 +27,7 @@ def test_task() -> None:
     app = YoloXDetectionApp(YoloX.from_pretrained(), nms_score_threshold=0.5)
     boxes = app.predict_boxes_from_image(image, raw_output=True)[0][0].numpy()
     boxes_gt = load_numpy(GT_BOXES)
-    boxes = sorted(boxes, key=lambda box: box[0])
+    boxes = sorted(boxes, key=lambda box: box[0])  # type: ignore[assignment]
     boxes_gt = sorted(boxes_gt, key=lambda box: box[0])
     assert len(boxes) == len(boxes_gt)
     ious = [get_iou(box, box_gt) for box, box_gt in zip(boxes, boxes_gt, strict=False)]

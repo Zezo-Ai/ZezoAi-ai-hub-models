@@ -56,7 +56,7 @@ def main(is_test: bool = False) -> None:
                 MODEL_ID, MODEL_ASSET_VERSION, file
             )
             asset.fetch()
-            image_paths.append(asset.path())
+            image_paths.append(asset.path)
 
     predictions = app.predict_similarity(image_paths, [args.text]).flatten()
 

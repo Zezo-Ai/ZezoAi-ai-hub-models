@@ -1,4 +1,5 @@
 supported_devices:
+- Snapdragon X2 Elite CRD
 - Snapdragon X Elite CRD
 - Samsung Galaxy S24
 - Samsung Galaxy S24 Ultra
@@ -22,9 +23,9 @@ supported_devices:
 - Samsung Galaxy S25 Ultra
 - Samsung Galaxy S25+
 - Snapdragon 8 Elite Gen 5 QRD
-- Snapdragon X2 Elite CRD
 supported_chipsets:
 - qualcomm-snapdragon-8-elite
+- qualcomm-snapdragon-x2-elite
 - qualcomm-snapdragon-x-elite
 - qualcomm-snapdragon-8gen3
 - qualcomm-snapdragon-8gen2
@@ -34,23 +35,22 @@ supported_chipsets:
 - qualcomm-qcs8550-proxy
 - qualcomm-qcs9075
 - qualcomm-snapdragon-8-elite-gen5
-- qualcomm-snapdragon-x2-elite
 precisions:
   float:
     components:
       HRNet-W48-OCR:
         universal_assets:
           onnx:
-            model_id: mn1px434n
+            model_id: mq9005w2q
             tool_versions:
               qairt: 2.42.0.251225135753_193295
               onnx_runtime: 1.24.1
         performance_metrics:
           Dragonwing IQ-9075 EVK:
             onnx:
-              job_id: j5617696p
+              job_id: jgdr16z6p
               job_status: Passed
-              inference_time_milliseconds: 1389.278
+              inference_time_milliseconds: 1389.09
               estimated_peak_memory_range_mb:
                 min: 24
                 max: 51
@@ -63,12 +63,12 @@ precisions:
                 onnx_runtime: 1.24.1
           QCS8550 (Proxy):
             onnx:
-              job_id: jglkxn9jp
+              job_id: jp1dzovnp
               job_status: Passed
-              inference_time_milliseconds: 1204.67
+              inference_time_milliseconds: 1238.254
               estimated_peak_memory_range_mb:
                 min: 0
-                max: 168
+                max: 169
               primary_compute_unit: NPU
               layer_counts:
                 total: 821
@@ -78,12 +78,12 @@ precisions:
                 onnx_runtime: 1.24.1
           Samsung Galaxy S24:
             onnx:
-              job_id: jpydxek8p
+              job_id: jgj0n3w1p
               job_status: Passed
-              inference_time_milliseconds: 972.202
+              inference_time_milliseconds: 894.418
               estimated_peak_memory_range_mb:
-                min: 1
-                max: 3922
+                min: 37
+                max: 3961
               primary_compute_unit: NPU
               layer_counts:
                 total: 821
@@ -93,12 +93,12 @@ precisions:
                 onnx_runtime: 1.24.1
           Samsung Galaxy S25:
             onnx:
-              job_id: jp0rjy89p
+              job_id: jperm6l8g
               job_status: Passed
-              inference_time_milliseconds: 784.286
+              inference_time_milliseconds: 778.304
               estimated_peak_memory_range_mb:
                 min: 13
-                max: 2553
+                max: 2550
               primary_compute_unit: NPU
               layer_counts:
                 total: 821
@@ -108,9 +108,9 @@ precisions:
                 onnx_runtime: 1.24.1
           Snapdragon 8 Elite Gen 5 QRD:
             onnx:
-              job_id: jp87xodk5
+              job_id: jgzxdz445
               job_status: Passed
-              inference_time_milliseconds: 687.218
+              inference_time_milliseconds: 692.032
               estimated_peak_memory_range_mb:
                 min: 35
                 max: 2714
@@ -123,9 +123,9 @@ precisions:
                 onnx_runtime: 1.24.1
           Snapdragon X Elite CRD:
             onnx:
-              job_id: jgky4zwwp
+              job_id: j5wd6y14g
               job_status: Passed
-              inference_time_milliseconds: 1089.986
+              inference_time_milliseconds: 1095.719
               estimated_peak_memory_range_mb:
                 min: 146
                 max: 146
@@ -138,12 +138,12 @@ precisions:
                 onnx_runtime: 1.24.1
           Snapdragon X2 Elite CRD:
             onnx:
-              job_id: j5q2y8xn5
+              job_id: jg93noxmg
               job_status: Passed
-              inference_time_milliseconds: 636.212
+              inference_time_milliseconds: 635.889
               estimated_peak_memory_range_mb:
-                min: 148
-                max: 148
+                min: 149
+                max: 149
               primary_compute_unit: NPU
               layer_counts:
                 total: 820

@@ -23,7 +23,7 @@ from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.input_spec import InputSpec
 
 KINETICS400_FOLDER_NAME = "kinetics400"
-KINETICS400_VERSION = 1
+KINETICS400_VERSION = 2
 
 # Some of the video files in the training data downloaded from the Internet
 # have corrupted video files that can't be opened. If we try to load these samples
@@ -104,7 +104,7 @@ class Kinetics400Dataset(BaseDataset):
             KINETICS400_VERSION,
             os.path.join("annotations", f"{self.split_str}.csv"),
         )
-        self.videos_folder = self.videos_asset.path().parent
+        self.videos_folder = self.videos_asset.extracted_path
         input_spec = input_spec or KineticsClassifier.get_input_spec()
         self.video_dim = input_spec["video"][0][-1]
         assert self.video_dim in [112, 224], "Video dimension must be 112 or 224."
@@ -117,15 +117,15 @@ class Kinetics400Dataset(BaseDataset):
         return 993 if self.split == DatasetSplit.TRAIN else 1000
 
     def _validate_data(self) -> bool:
-        if not self.csv_asset.path().exists():
+        if not self.csv_asset.path.exists():
             return False
 
-        videos_folder = self.videos_asset.path().parent
+        videos_folder = self.videos_asset.path.parent
         if not videos_folder.exists():
             return False
 
         self.mp4_files, self.label_indices = _get_labeled_data(
-            self.videos_folder, self.csv_asset.path()
+            self.videos_folder, self.csv_asset.path
         )
 
         if len(self.mp4_files) != len(self):

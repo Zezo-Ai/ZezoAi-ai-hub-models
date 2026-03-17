@@ -15,11 +15,10 @@ from qai_hub_models.datasets.common import (
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.input_spec import InputSpec
 
-CommonVoice_FOLDER_NAME = "common_voice"
-CommonVoice_VERSION = 1
+CommonVoice_VERSION = 2
 
 CommonVoice_ASSET = CachedWebDatasetAsset.from_asset_store(
-    CommonVoice_FOLDER_NAME,
+    "common_voice",
     CommonVoice_VERSION,
     "common_voice.zip",
 )
@@ -28,16 +27,16 @@ CommonVoice_ASSET = CachedWebDatasetAsset.from_asset_store(
 class CommonVoiceText(BaseDataset):
     def __init__(
         self,
-        lang: str | Path,
+        lang: str | Path = "EN",
         split: DatasetSplit = DatasetSplit.TRAIN,
         input_spec: InputSpec | None = None,
     ) -> None:
         self.common_voice_text = CachedWebDatasetAsset.from_asset_store(
-            CommonVoice_FOLDER_NAME,
+            "common_voice",
             CommonVoice_VERSION,
             f"train_{lang}.tsv",
         )
-        super().__init__(self.common_voice_text.path(), split, input_spec)
+        super().__init__(self.common_voice_text.path, split, input_spec)
 
         df = pd.read_csv(self.dataset_path, sep="\t")
         texts_list = df["sentence"].head(n=self.default_samples_per_job()).tolist()
@@ -90,9 +89,7 @@ class CommonVoiceDataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.TRAIN,
         input_spec: InputSpec | None = None,
     ) -> None:
-        common_voice_path = (
-            CommonVoice_ASSET.path(extracted=True) / CommonVoice_FOLDER_NAME
-        )
+        common_voice_path = CommonVoice_ASSET.extracted_path
         BaseDataset.__init__(self, common_voice_path, split)
 
         self.wav_list = []

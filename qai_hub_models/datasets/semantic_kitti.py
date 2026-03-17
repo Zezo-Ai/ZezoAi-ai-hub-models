@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import tempfile
 
 import numpy as np
 import torch
@@ -16,21 +15,34 @@ from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetMetadata,
     DatasetSplit,
-    UnfetchableDatasetError,
 )
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, extract_zip_file
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
 
-try:
-    from qai_hub_models.utils._internal.download_private_datasets import (
-        download_semantic_kitti_files,
-    )
-except ImportError:
-    download_semantic_kitti_files = None  # type: ignore[assignment]
-
-SEMANTIC_KITTI_VERSION = 1
+SEMANTIC_KITTI_VERSION = 2
 SEMANTIC_KITTI_ID = "semantic_kitti"
-SEMANTIC_KITTI_LIDARS_DIR_NAME = "data_odometry_velodyne"
-SEMANTIC_KITTI_GT_DIR_NAME = "data_odometry_labels"
+
+SEMANTIC_KITTI_INSTALLATION_STEPS = [
+    "Open http://www.cvlibs.net/download.php?file=data_odometry_velodyne.zip, provide your Email address, and click the request download link button",
+    "Download the data_odometry_velodyne.zip file by the link sent to your email.",
+    "Download the data_odometry_labels.zip file at https://semantic-kitti.org/assets/data_odometry_labels.zip",
+    "Run `python -m qai_hub_models.datasets.configure_dataset --dataset semantic_kitti --files /path/to/data_odometry_velodyne.zip /path/to/data_odometry_labels.zip`",
+]
+
+SEMANTIC_KITTI_LIDARS_ASSET = CachedPrivateCIDatasetAsset(
+    f"qai-hub-models/datasets/semantic_kitti/v{SEMANTIC_KITTI_VERSION}/partial_data_odometry_velodyne.zip",
+    SEMANTIC_KITTI_ID,
+    SEMANTIC_KITTI_VERSION,
+    "data/data_odometry_velodyne.zip",
+    installation_steps=SEMANTIC_KITTI_INSTALLATION_STEPS,
+)
+
+SEMANTIC_KITTI_GT_ASSET = CachedPrivateCIDatasetAsset(
+    f"qai-hub-models/datasets/semantic_kitti/v{SEMANTIC_KITTI_VERSION}/partial_data_odometry_labels.zip",
+    SEMANTIC_KITTI_ID,
+    SEMANTIC_KITTI_VERSION,
+    "data/data_odometry_labels.zip",
+    installation_steps=SEMANTIC_KITTI_INSTALLATION_STEPS,
+)
 
 # Pick a single sequence for train and validation to save disk space
 # (full dataset is 22 sequences; 80GB)
@@ -50,13 +62,13 @@ class SemanticKittiDataset(BaseDataset):
     ) -> None:
         self.input_lidars_zip = input_lidars_zip
         self.input_gt_zip = input_gt_zip
-        self.data_path = ASSET_CONFIG.get_local_store_dataset_path(
-            SEMANTIC_KITTI_ID, SEMANTIC_KITTI_VERSION, "data"
+        self.velodyne_seq_path = (
+            SEMANTIC_KITTI_LIDARS_ASSET.extracted_path / "sequences"
         )
-        self.sequences_path = os.path.join(self.data_path, "dataset/sequences")
-        self.lidars_path = self.data_path / SEMANTIC_KITTI_LIDARS_DIR_NAME
-        self.gt_path = self.data_path / SEMANTIC_KITTI_GT_DIR_NAME
-        BaseDataset.__init__(self, self.data_path, split=split)
+        self.labels_seq_path = SEMANTIC_KITTI_GT_ASSET.extracted_path / "sequences"
+        BaseDataset.__init__(
+            self, SEMANTIC_KITTI_LIDARS_ASSET.extracted_path.parent, split=split
+        )
 
         self.proj_H = input_height
         self.proj_W = input_width
@@ -75,8 +87,8 @@ class SemanticKittiDataset(BaseDataset):
         )  # range,x,y,z,signal
 
         # get paths for each
-        scan_path = os.path.join(self.sequences_path, sequence, "velodyne")
-        label_path = os.path.join(self.sequences_path, sequence, "labels")
+        scan_path = os.path.join(self.velodyne_seq_path, sequence, "velodyne")
+        label_path = os.path.join(self.labels_seq_path, sequence, "labels")
 
         # get files
         self.scan_files = [
@@ -99,10 +111,10 @@ class SemanticKittiDataset(BaseDataset):
 
     def _validate_data(self) -> bool:
         paths = [
-            os.path.join(self.sequences_path, TRAIN_SEQUENCE, "velodyne"),
-            os.path.join(self.sequences_path, TRAIN_SEQUENCE, "labels"),
-            os.path.join(self.sequences_path, VAL_SEQUENCE, "velodyne"),
-            os.path.join(self.sequences_path, VAL_SEQUENCE, "labels"),
+            os.path.join(self.velodyne_seq_path, TRAIN_SEQUENCE, "velodyne"),
+            os.path.join(self.labels_seq_path, TRAIN_SEQUENCE, "labels"),
+            os.path.join(self.velodyne_seq_path, VAL_SEQUENCE, "velodyne"),
+            os.path.join(self.labels_seq_path, VAL_SEQUENCE, "labels"),
         ]
 
         return all(os.path.exists(path) for path in paths)
@@ -187,55 +199,20 @@ class SemanticKittiDataset(BaseDataset):
     def __len__(self) -> int:
         return len(self.scan_files)
 
-    def _download_data(
-        self, lidars_zip: str | None = None, gt_zip: str | None = None
-    ) -> None:
-        # Use passed args if provided, otherwise use instance attributes
-        if lidars_zip is None:
-            lidars_zip = self.input_lidars_zip
-        if gt_zip is None:
-            gt_zip = self.input_gt_zip
-
-        # If no files provided/set, try auto-download
-        if lidars_zip is None and download_semantic_kitti_files is not None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                lidars_zip = os.path.join(
-                    tmpdir, f"{SEMANTIC_KITTI_LIDARS_DIR_NAME}.zip"
-                )
-                gt_zip = os.path.join(tmpdir, f"{SEMANTIC_KITTI_GT_DIR_NAME}.zip")
-                download_semantic_kitti_files(
-                    lidars_zip, gt_zip, SEMANTIC_KITTI_VERSION
-                )
-                self._download_data(lidars_zip, gt_zip)
-            return
-
-        if (
-            lidars_zip is None
-            or not lidars_zip.endswith(SEMANTIC_KITTI_LIDARS_DIR_NAME + ".zip")
-            or gt_zip is None
-            or not gt_zip.endswith(SEMANTIC_KITTI_GT_DIR_NAME + ".zip")
-        ):
-            raise UnfetchableDatasetError(
-                dataset_name=self.dataset_name(),
-                installation_steps=[
-                    "Open http://www.cvlibs.net/download.php?file=data_odometry_velodyne.zip, provide your Email address, and click the request download link button",
-                    "Download the data_odometry_velodyne.zip file by the link sent to your email.",
-                    "Download the data_odometry_labels.zip file at https://semantic-kitti.org/assets/data_odometry_labels.zip",
-                    "Run `python -m qai_hub_models.datasets.configure_dataset --dataset semantic_kitti --files /path/to/data_odometry_velodyne.zip /path/to/data_odometry_labels.zip`",
-                ],
-            )
-
-        os.makedirs(self.lidars_path.parent, exist_ok=True)
-        extract_zip_file(lidars_zip, self.lidars_path.parent)
-        extract_zip_file(gt_zip, self.gt_path.parent)
+    def _download_data(self) -> None:
+        SEMANTIC_KITTI_LIDARS_ASSET.fetch(
+            extract=True, local_path=self.input_lidars_zip
+        )
+        SEMANTIC_KITTI_GT_ASSET.fetch(extract=True, local_path=self.input_gt_zip)
 
         # Remove extraneous directories to save space
-        for sequence in os.listdir(self.sequences_path):
-            if sequence in [VAL_SEQUENCE, TRAIN_SEQUENCE]:
-                continue
-            subdir = os.path.join(self.sequences_path, sequence)
-            if os.path.isdir(subdir):
-                shutil.rmtree(subdir)
+        for path in [self.velodyne_seq_path, self.labels_seq_path]:
+            for sequence in os.listdir(path):
+                if sequence in [VAL_SEQUENCE, TRAIN_SEQUENCE]:
+                    continue
+                subdir = path / sequence
+                if subdir.is_dir():
+                    shutil.rmtree(subdir)
 
     @staticmethod
     def default_samples_per_job() -> int:

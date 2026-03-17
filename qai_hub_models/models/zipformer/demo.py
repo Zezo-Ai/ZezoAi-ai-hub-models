@@ -16,7 +16,7 @@ def load_demo_audio() -> str:
         "hf_whisper_asr_shared", "1", "audio/common_voice_en_19653650.wav"
     )
     TEST_AUDIO_PATH.fetch()
-    return TEST_AUDIO_PATH.path()
+    return TEST_AUDIO_PATH.path
 
 
 def main(is_test: bool = False) -> None:

@@ -5,13 +5,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
-from torch import nn
+from torch import Tensor, nn
 from typing_extensions import Self
 
+from qai_hub_models.models._shared.common import apply_module_function_recursively
 from qai_hub_models.models.common import Precision, SampleInputsType
 from qai_hub_models.models.mediapipe_hand.model import (
     DETECT_MIN_SCORE_THRESH,
@@ -777,6 +778,78 @@ class HandLandmarkDetector(BaseModel):
         return "hagrid_handlandmark"
 
 
+class MulAdd1d(nn.Module):
+    """
+    A lightweight layer that applies per-channel affine transform:
+        y = x * mul + add
+    where mul and add are precomputed 1D tensors broadcast
+    over any extra dimensions (e.g., sequence length, time steps).
+    """
+
+    def __init__(self, mul: Tensor, add: Tensor) -> None:
+        super().__init__()
+        # shaped as (1, C) initially so they can broadcast over batch.
+        self.register_buffer("mul", mul.view(1, -1))
+        self.register_buffer("add", add.view(1, -1))
+
+    @classmethod
+    def from_bn1d(cls, bn: nn.BatchNorm1d) -> Self:
+        if (
+            not bn.track_running_stats
+            and (bn.running_mean is not None)
+            and (bn.running_var is not None)
+        ):
+            raise ValueError(
+                "convert_bn1d requires a BatchNorm1d with track_running_stats=True "
+                "and populated running_mean/running_var."
+            )
+
+        rm = cast(Tensor, bn.running_mean).detach()
+        rv = cast(Tensor, bn.running_var).detach()
+        eps_f: float = bn.eps
+
+        # If affine parameters exist, use them; otherwise fall back to identity
+        if bn.affine and (bn.weight is not None) and (bn.bias is not None):
+            gamma: Tensor = bn.weight.detach()
+            beta: Tensor = bn.bias.detach()
+        else:
+            gamma = torch.ones_like(rm)
+            beta = torch.zeros_like(rm)
+        eps_t: Tensor = torch.as_tensor(eps_f, dtype=rv.dtype, device=rv.device)
+        denom: Tensor = torch.sqrt(rv + eps_t)
+        mul: Tensor = gamma / denom
+        add: Tensor = beta - rm * mul
+        return cls(mul.detach(), add.detach())
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Apply per-channel affine transform (x * mul + add), broadcasting across
+        all extra dimensions beyond N and C.
+
+        Parameters
+        ----------
+        x
+            Input tensor of shape (N, C, *), where * are optional extra dims.
+
+        Returns
+        -------
+        Tensor
+            The transformed tensor with the same shape and dtype/device as x.
+        """
+        extras = x.dim() - 2
+        bshape = (1, x.size(1)) + (1,) * extras
+        mul_buf = cast(Tensor, self.mul)
+        add_buf = cast(Tensor, self.add)
+        if extras:
+            bshape = (1, x.size(1)) + (1,) * extras
+            mul_view = mul_buf.view(bshape)
+            add_view = add_buf.view(bshape)
+        else:
+            mul_view = mul_buf
+            add_view = add_buf
+        return x * mul_view + add_view
+
+
 # ------------------------------------------------------------------------------------
 # Inner MLP used by GestureEmbedder
 # ------------------------------------------------------------------------------------
@@ -920,6 +993,11 @@ class CannedGestureClassifier(BaseModel):
         classifier_weights = torch.load(classifier_weights_path, map_location="cpu")
         model.load_state_dict(classifier_weights, strict=False)
         model.eval()
+        apply_module_function_recursively(
+            model,
+            nn.BatchNorm1d,
+            lambda bn, parent, name: setattr(parent, name, MulAdd1d.from_bn1d(bn)),
+        )
         return model
 
     @staticmethod

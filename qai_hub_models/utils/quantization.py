@@ -14,13 +14,13 @@ from qai_hub.client import DatasetEntries
 from torch.utils.data import DataLoader, TensorDataset
 
 from qai_hub_models.datasets import DatasetSplit, get_dataset_from_name
-from qai_hub_models.datasets.common import UnfetchableDatasetError
 from qai_hub_models.models.common import Precision
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset, load_torch
 from qai_hub_models.utils.base_app import CollectionAppProtocol
 from qai_hub_models.utils.base_model import BaseModel, CollectionModel
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.input_spec import InputSpec, get_batch_size
+from qai_hub_models.utils.private_asset_loaders import UnfetchableDatasetError
 from qai_hub_models.utils.qai_hub_helpers import make_hub_dataset_entries
 
 DATA_ID = "image_quantziation_samples"

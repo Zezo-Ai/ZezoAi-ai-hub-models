@@ -14,7 +14,7 @@ from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.image_processing import IMAGENET_TRANSFORM
 
 IMAGENET_FOLDER_NAME = "imagenet"
-IMAGENET_VERSION = 1
+IMAGENET_VERSION = 2
 
 IMAGENET_ASSET = CachedWebDatasetAsset(
     "https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar",
@@ -55,7 +55,7 @@ class ImagenetDataset(BaseDataset, ImageNet):
         """
         if split != DatasetSplit.VAL:
             raise ValueError("Imagenet dataset currently only supports `val` split")
-        BaseDataset.__init__(self, IMAGENET_ASSET.path().parent, split)
+        BaseDataset.__init__(self, IMAGENET_ASSET.path.parent, split)
         ImageNet.__init__(
             self,
             root=str(self.dataset_path),
@@ -97,13 +97,13 @@ class ImagenetDataset(BaseDataset, ImageNet):
         DEVKIT_ASSET.fetch()
         VAL_PREP_ASSET.fetch()
 
-        os.rename(VAL_PREP_ASSET.path(), val_path / VAL_PREP_ASSET.path().name)
+        os.rename(VAL_PREP_ASSET.path, val_path / VAL_PREP_ASSET.path.name)
         for filepath in self.dataset_path.iterdir():
             if filepath.name.endswith(".JPEG"):
                 os.rename(filepath, val_path / filepath.name)
 
         print("Moving images to appropriate class folder. This may take a few minutes.")
-        subprocess.call(f"sh {VAL_PREP_ASSET.path().name}", shell=True, cwd=val_path)
+        subprocess.call(f"sh {VAL_PREP_ASSET.path.name}", shell=True, cwd=val_path)
 
     @staticmethod
     def default_samples_per_job() -> int:

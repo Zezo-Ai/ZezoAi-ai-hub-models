@@ -1,0 +1,274 @@
+##
+## QAI Hub Models GPU Weekly Tests
+##
+
+name: GPU Weekly
+run-name: "GPU Weekly (${{ inputs.deployment || 'prod' }}, ${{ inputs.models || 'all' }})"
+
+env:
+  TEST_SUITE: ${{ inputs.test_suite || 'weekly' }}
+  VENV_PATH: build/ci-envs/qaihm-build
+  QAIHM_CI: 1
+
+on:
+  # Allows this workflow to be callable
+  workflow_call:
+    inputs:
+      models:
+        description: Models to Run
+        required: false
+        type: string
+        default: all
+
+      deployment:
+        description: Hub Deployment
+        default: prod
+        type: string
+
+      test_suite:
+        description: Test Suite to Run
+        required: false
+        type: string
+        default: weekly
+
+  # Allows this workflow to be manually triggered.
+  workflow_dispatch:
+    inputs:
+      models:
+        description: Models to Run
+        required: false
+        type: string
+        default: all
+
+      deployment:
+        description: Hub Deployment
+        default: prod
+        type: string
+
+
+  schedule:
+    - cron: '0 2 * * 3' # Weekly: Tuesday at 6pm PST (7pm PDT) = Wednesday 2am UTC
+
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  setup_docker_gpu:
+    name: "Setup GPU Docker Image"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      packages: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        lfs: false
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # DockerHub login to avoid rate limits when pulling nvidia/cuda base image
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: shreyajn104
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Log in to Github Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Get tag
+      id: tag
+      run: |
+        echo "image_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: docker/Dockerfile
+        push: true
+        tags: ghcr.io/${{ github.repository }}/gpu_builder:${{ steps.tag.outputs.image_tag }}
+        cache-from: type=gha,scope=gpu_builder
+        cache-to: type=gha,scope=gpu_builder,mode=max
+        build-args: |
+          QAIHM_CI=${{ env.QAIHM_CI }}
+          QAIHM_TEST_MODELS=${{ inputs.models }}
+
+  run_tests:
+    name: "Run GPU Tests"
+    needs: setup_docker_gpu
+    runs-on:
+      group: GPU
+    timeout-minutes: 2160 # 1.5 days (36 hours)
+    container:
+      image: ghcr.io/${{ github.repository }}/gpu_builder:${{ needs.setup_docker_gpu.outputs.image_tag }}
+      options: --gpus all -v /local:/local
+    permissions:
+      id-token: write
+      packages: read
+      contents: read
+    env:
+      HF_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+      QDC_API_TOKEN: ${{ secrets.QDC_API_KEY }}
+      QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/test-results/models-junit.xml
+      CUDA_VISIBLE_DEVICES: "7"
+      DOCKER_USER: qaihm_bot
+      DOCKER_GROUP: qaihm_bot_group
+      DOCKER_USER_ID: 4552456
+      DOCKER_GROUP_ID: 200
+      HOME: /local/mnt2/workspace2/qaihm_bot
+      TMPDIR: /local/mnt2/workspace2/qaihm_bot/tmp
+    steps:
+    - name: Setup group/user and TMPDIR
+      run: |
+        groupadd -g ${{ env.DOCKER_GROUP_ID }} ${{ env.DOCKER_GROUP }} || true
+        useradd -m -u ${{ env.DOCKER_USER_ID }} -g ${{ env.DOCKER_GROUP_ID }} -d /home/${{ env.DOCKER_USER }} -s /bin/bash ${{ env.DOCKER_USER }} || true
+        mkdir -p "$TMPDIR"
+        chown ${{ env.DOCKER_USER_ID }}:${{ env.DOCKER_GROUP_ID }} "$TMPDIR"
+
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup AWS Credentials
+      uses: ./.github/actions/configure-multiple-aws-roles
+      with:
+        role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+        role-duration-seconds: 7200
+        profile: qaihm
+        aws-region: us-west-2
+
+    - name: Download QDC wheel
+      run: |
+        python3 scripts/build_and_test.py \
+          --venv="${{ env.VENV_PATH }}" \
+          --python="$(which python3)" \
+          download_qdc_wheel
+        rm -rf "$GITHUB_WORKSPACE"/build/*
+        mv "$HOME"/qdc_public_api_client-*.whl "$GITHUB_WORKSPACE"/
+
+    - name: Install basic dependencies
+      run: |
+        git config --global --add safe.directory $GITHUB_WORKSPACE
+        python scripts/build_and_test.py --venv='${{ env.VENV_PATH }}' install_deps
+        source ${{ env.VENV_PATH }}/bin/activate
+        pip install --upgrade pip setuptools
+        pip install qdc_public_api_client-*.whl
+        pip uninstall -y onnxruntime
+
+    - name: Configure Hub Credentials
+      run: |
+        cd $GITHUB_WORKSPACE && \
+          source scripts/ci/set-aihub-credential-vars.sh \
+            ${{ inputs.deployment || 'prod' }} \
+            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
+            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
+            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
+            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
+            DEFAULT \
+            ${{ env.VENV_PATH }}
+
+    - name: Install model specific dependencies and run tests
+      run: |
+        cd $GITHUB_WORKSPACE && \
+          python3 scripts/build_and_test.py \
+              --venv="${{ env.VENV_PATH }}" \
+              "test_gpu_models_${{ env.TEST_SUITE }}"
+
+    - name: Generate Test Failure Summary
+      if: always()
+      run: |
+        rm -rf "$GITHUB_WORKSPACE"/build
+        python3 scripts/build_and_test.py --venv="${{ env.VENV_PATH }}" install_deps
+        source "${{ env.VENV_PATH }}/bin/activate"
+        pip install six
+        python3 scripts/build_and_test.py --venv="${{ env.VENV_PATH }}" generate_test_summary
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: ${{ github.workspace }}/test-results
+
+    - name: Upload CSV Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pytest-results
+        path: ${{ github.workspace }}/*.csv
+
+    - name: Add CSV to GitHub summary
+      if: always()
+      run: |
+        source "${{ env.VENV_PATH }}/bin/activate"
+        python -c 'import os, pandas as pd; print("## 🧪 Evaluate Results"); fn="test_evaluate.csv"; print(pd.read_csv(fn).to_markdown(index=False)) if os.path.exists(fn) else print(f"File {fn} not found.")' >> "$GITHUB_STEP_SUMMARY"
+        python -c 'import os, pandas as pd; print("## 🖥️ On-device Results"); fn="test_perf_on_device.csv"; print(pd.read_csv(fn).to_markdown(index=False)) if os.path.exists(fn) else print(f"File {fn} not found.")' >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Cleanup (always runs)
+      if: always()
+      run: |
+        # Cleanup temporary files
+        if [ -n "$HOME" ]; then
+          rm -rf "$HOME"/.aws "$HOME"/qdc*.whl
+        fi
+        rm -rf "$GITHUB_WORKSPACE"/qdc_public_api_client-*.whl
+        rm -rf "$GITHUB_WORKSPACE"/genie_bundle/*
+        rm -rf "$TMPDIR"
+
+  notify_failure:
+    if: ${{ failure() && github.event_name == 'schedule' }}
+    name: Notify Failure
+    needs: [setup_docker_gpu, run_tests]
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+
+    steps:
+    - name: Create GitHub Issue
+      id: create-github-issue
+      uses: actions/github-script@v6.4.1
+      with:
+        github-token: ${{ secrets.STAGING_GH_TOKEN }}
+        script: |
+          const today = new Date().toISOString().split('T')[0];
+          const runUrl = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}';
+
+          const result = await github.rest.issues.create({
+            owner: 'qcom-ai-hub',
+            repo: 'tetracode',
+            title: `GPU ${{ env.TEST_SUITE }} Tests Failed - ${today}`,
+            body: `[View Workflow Run](${runUrl})\n\nPlease assign the appropriate ML Tech Team member.\n\n📊 [Update the Nightly Failure Log spreadsheet](https://qualcomm.sharepoint.com/:x:/r/teams/TetraAI2/Shared%20Documents/model-zoo/QAIHM%20Nightly%20Failure%20Log.xlsx?d=w73cc2ddb0d7b4fe58a9a8ba9efc10fd8) (GPU tab)`,
+            labels: ['p0', 'ai-hub-models', 'gen-ai']
+          });
+
+          core.setOutput('issue_url', result.data.html_url);
+
+    # Send result to Slack channel
+    - name: Send Slack Notification
+      id: slack_notification
+      uses: slackapi/slack-github-action@v1.25.0
+      with:
+        channel-id: C06UY9XU212
+        slack-message: |
+          🚨 GPU ${{ env.TEST_SUITE }} Tests Failed
+
+          Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+
+          GitHub Issue: ${{ steps.create-github-issue.outputs.issue_url }}
+      env:
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_NOTIFIER_TOKEN }}

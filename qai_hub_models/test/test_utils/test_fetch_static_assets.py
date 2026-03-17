@@ -15,7 +15,6 @@ import qai_hub as hub
 from qai_hub_models.configs.devices_and_chipsets_yaml import DevicesAndChipsetsYaml
 from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.utils.fetch_static_assets import fetch_static_assets
-from qai_hub_models.utils.version_helpers import QAIHMVersion
 
 
 def requests_head_patch(status_code: int = 200) -> mock._patch[object]:
@@ -40,6 +39,11 @@ def download_file_patch(success: bool = True) -> mock._patch[object]:
     return mock.patch(
         "qai_hub_models.utils.fetch_static_assets.download_file", _download_file
     )
+
+
+def version_patch(version: str) -> mock._patch[object]:
+    """Patches __version__ in fetch_static_assets to simulate release or dev installs."""
+    return mock.patch("qai_hub_models.utils.fetch_static_assets.__version__", version)
 
 
 def fetch_prerelease_assets_patch(
@@ -69,20 +73,13 @@ def fetch_prerelease_assets_patch(
     )
 
 
-def fetch_prerelease_assets_unavailable_patch() -> mock._patch[object]:
-    """Patches fetch_prerelease_assets to be None (like in the public version of QAIHM)."""
-    return mock.patch(
-        "qai_hub_models.utils.fetch_static_assets.fetch_prerelease_assets", None
-    )
-
-
 class TestFetchStaticAssetsPublicAsset:
     """Tests for fetching assets from public release URLs."""
 
     def test_fetch_universal_asset_success(self) -> None:
         """Test successful fetch of a universal asset (non-AOT)."""
         with (
-            fetch_prerelease_assets_unavailable_patch(),
+            version_patch("0.45.0"),
             requests_head_patch(200),
             download_file_patch(success=True),
             TemporaryDirectory() as tmpdir,
@@ -103,7 +100,7 @@ class TestFetchStaticAssetsPublicAsset:
     def test_fetch_device_specific_asset_success(self) -> None:
         """Test successful fetch of a device-specific asset."""
         with (
-            fetch_prerelease_assets_unavailable_patch(),
+            version_patch("0.45.0"),
             requests_head_patch(200),
             download_file_patch(success=True),
             TemporaryDirectory() as tmpdir,
@@ -129,7 +126,7 @@ class TestFetchStaticAssetsPublicAsset:
             return DevicesAndChipsetsYaml.load()
 
         with (
-            fetch_prerelease_assets_unavailable_patch(),
+            version_patch("0.45.0"),
             requests_head_patch(200),
             download_file_patch(success=True),
             mock.patch(
@@ -153,7 +150,7 @@ class TestFetchStaticAssetsPublicAsset:
     def test_fetch_aot_without_device_raises_error(self) -> None:
         """Test that fetching AOT asset without device raises ValueError."""
         with (
-            fetch_prerelease_assets_unavailable_patch(),
+            version_patch("0.45.0"),
             pytest.raises(
                 ValueError,
                 match=r"You must specify a device or chipset",
@@ -166,12 +163,13 @@ class TestFetchStaticAssetsPublicAsset:
             )
 
 
-class TestFetchStaticAssetsPrereleaseFirst:
-    """Tests for prerelease asset fetching (called before public release)."""
+class TestFetchStaticAssetsDevVersion:
+    """Tests for prerelease asset fetching (dev version installed)."""
 
-    def test_prerelease_called_first_when_available_version_none(self) -> None:
-        """Test that fetch_prerelease_assets is called first when available and version is None."""
+    def test_prerelease_used_when_dev_version(self) -> None:
+        """Test that fetch_prerelease_assets is used when __version__ contains 'dev'."""
         with (
+            version_patch("0.45.0.dev123"),
             fetch_prerelease_assets_patch(success=True),
             TemporaryDirectory() as tmpdir,
         ):
@@ -186,9 +184,10 @@ class TestFetchStaticAssetsPrereleaseFirst:
             # URL is empty when using prerelease assets
             assert url == ""
 
-    def test_prerelease_called_when_version_is_current_alias(self) -> None:
-        """Test that fetch_prerelease_assets is called when version is 'current' alias."""
+    def test_prerelease_used_even_with_specific_version_tag(self) -> None:
+        """Test that prerelease is used when __version__ is dev, even with a specific version tag."""
         with (
+            version_patch("0.45.0.dev123"),
             fetch_prerelease_assets_patch(success=True),
             TemporaryDirectory() as tmpdir,
         ):
@@ -196,17 +195,16 @@ class TestFetchStaticAssetsPrereleaseFirst:
                 "mobilenet_v2",
                 TargetRuntime.TFLITE,
                 Precision.float,
-                qaihm_version_tag="current",
+                qaihm_version_tag="v0.44.0",
                 output_folder=tmpdir,
             )
             assert str(path) == "/mock/prerelease/asset.tflite"
-            # URL is empty when using prerelease assets
             assert url == ""
 
-    def test_public_release_when_no_prerelease_version_none(self) -> None:
-        """Test that public release is used when prerelease unavailable and version is None."""
+    def test_public_release_used_when_release_version(self) -> None:
+        """Test that public release is used when __version__ does not contain 'dev'."""
         with (
-            fetch_prerelease_assets_unavailable_patch(),
+            version_patch("0.45.0"),
             requests_head_patch(200),
             download_file_patch(success=True),
             TemporaryDirectory() as tmpdir,
@@ -222,31 +220,10 @@ class TestFetchStaticAssetsPrereleaseFirst:
             assert str(path).startswith(tmpdir)
             assert "mobilenet_v2" in url
 
-    def test_public_release_when_no_prerelease_version_current_alias(self) -> None:
-        """Test that public release is used when prerelease unavailable and version is 'current'."""
+    def test_public_release_with_specific_version(self) -> None:
+        """Test that public release uses the specified version tag when not dev."""
         with (
-            fetch_prerelease_assets_unavailable_patch(),
-            requests_head_patch(200),
-            download_file_patch(success=True),
-            TemporaryDirectory() as tmpdir,
-        ):
-            path, url = fetch_static_assets(
-                "mobilenet_v2",
-                TargetRuntime.TFLITE,
-                Precision.float,
-                qaihm_version_tag="current",
-                output_folder=tmpdir,
-            )
-            assert path is not None
-            assert str(path).startswith(tmpdir)
-            assert "mobilenet_v2" in url
-            # "current" gets resolved to the actual current version tag
-            assert QAIHMVersion.current_tag in url
-
-    def test_public_release_used_when_specific_version_requested(self) -> None:
-        """Test that public release is used when a specific (non-current) version is requested."""
-        with (
-            fetch_prerelease_assets_patch(success=True),
+            version_patch("0.45.0"),
             requests_head_patch(200),
             download_file_patch(success=True),
             TemporaryDirectory() as tmpdir,
@@ -258,15 +235,14 @@ class TestFetchStaticAssetsPrereleaseFirst:
                 qaihm_version_tag="v0.44.0",
                 output_folder=tmpdir,
             )
-            # Should use public release, not prerelease
             assert path is not None
             assert str(path).startswith(tmpdir)
             assert "v0.44.0" in url
 
     def test_error_when_public_release_not_found(self) -> None:
-        """Test error when public release returns 404 (no fallback)."""
+        """Test error when public release returns 404."""
         with (
-            fetch_prerelease_assets_unavailable_patch(),
+            version_patch("0.45.0"),
             requests_head_patch(404),
             pytest.raises(ValueError, match=r"No release found"),
         ):
@@ -283,7 +259,7 @@ class TestFetchStaticAssetsVersionRequirements:
     def test_old_version_raises_error(self) -> None:
         """Test that fetching from old QAIHM version (< 0.44.0) raises error."""
         with (
-            fetch_prerelease_assets_unavailable_patch(),
+            version_patch("0.45.0"),
             pytest.raises(
                 ValueError,
                 match=r"Fetching device-specific assets is not supported for QAIHM versions < v0.44.0",
@@ -299,7 +275,7 @@ class TestFetchStaticAssetsVersionRequirements:
     def test_valid_version_allowed(self) -> None:
         """Test that valid QAIHM versions (>= 0.44.0) are allowed."""
         with (
-            fetch_prerelease_assets_unavailable_patch(),
+            version_patch("0.45.0"),
             requests_head_patch(200),
             download_file_patch(success=True),
             TemporaryDirectory() as tmpdir,

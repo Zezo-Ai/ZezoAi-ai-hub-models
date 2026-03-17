@@ -107,14 +107,14 @@ class PyTestQAIHMTask(PyTestTask):
             if x not in {"models", "__pycache__", "scorecard"}
         ]
 
-        # Internal scorecard tests are expensive (calls to Hub), so only run them if the internal scorecard changes.
+        # Static scorecard tests are expensive (calls to Hub), so only run them if the static scorecard changes.
         scorecard_files = [
             os.path.join(PY_PACKAGE_SRC_ROOT, "scorecard", x)
             for x in os.listdir(os.path.join(PY_PACKAGE_SRC_ROOT, "scorecard"))
         ]
 
-        if not get_changed_files_in_package("qai_hub_models/scorecard/internal"):
-            scorecard_files.remove(f"{PY_PACKAGE_SRC_ROOT}/scorecard/internal")
+        if not get_changed_files_in_package("qai_hub_models/scorecard/static"):
+            scorecard_files.remove(f"{PY_PACKAGE_SRC_ROOT}/scorecard/static")
         all_dirs_except_models.extend(scorecard_files)
 
         all_dirs_except_models = [x for x in all_dirs_except_models if os.path.isdir(x)]
@@ -472,14 +472,9 @@ class PyTestModelsTask(CompositeTask):
         exit_after_single_model_failure: bool = False,
         raise_on_failure: bool = True,
         qaihm_wheel_dir: str | os.PathLike | None = None,
-        junit_xml_path: str | None = None,
+        junit_xml_path: str | None = os.environ.get("QAIHM_JUNIT_XML_PATH"),
     ) -> None:
         self.exit_after_single_model_failure = exit_after_single_model_failure
-
-        # Get base JUnit XML path from environment variable if not provided
-        base_junit_xml_path = None
-        if junit_xml_path is None:
-            base_junit_xml_path = os.environ.get("QAIHM_MODELS_JUNIT_XML_PATH")
 
         if len(models_for_testing) == 0 and len(models_to_test_export) == 0:
             super().__init__("All Per-Model Tests (Skipped)", [])
@@ -552,11 +547,10 @@ class PyTestModelsTask(CompositeTask):
             is_global_model = model_name in global_models
 
             # Create a model-specific JUnit XML path if base path is provided
-            model_junit_xml_path = junit_xml_path
-            if base_junit_xml_path and not model_junit_xml_path:
-                base_dir = os.path.dirname(base_junit_xml_path)
-                base_filename = os.path.basename(base_junit_xml_path)
-
+            model_junit_xml_path = None
+            if junit_xml_path:
+                base_dir = os.path.dirname(junit_xml_path)
+                base_filename = os.path.basename(junit_xml_path)
                 filename_parts = os.path.splitext(base_filename)
                 model_filename = f"{filename_parts[0]}-{model_name}{filename_parts[1]}"
                 model_junit_xml_path = os.path.join(base_dir, model_filename)

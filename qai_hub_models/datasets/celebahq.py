@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import math
 import os
-import tempfile
 from glob import glob
 
 import numpy as np
@@ -19,22 +18,24 @@ from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetMetadata,
     DatasetSplit,
-    UnfetchableDatasetError,
 )
 from qai_hub_models.models._shared.repaint.utils import preprocess_inputs
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, extract_zip_file
-
-try:
-    from qai_hub_models.utils._internal.download_private_datasets import (
-        download_celebahq_files,
-    )
-except ImportError:
-    download_celebahq_files = None  # type: ignore[assignment]
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
 
-CELEBAHQ_VERSION = 1
+CELEBAHQ_VERSION = 2
 CELEBAHQ_DATASET_ID = "celebahq"
-IMAGES_DIR_NAME = "celeba_hq"
+
+CELEBAHQ_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+    f"qai-hub-models/datasets/celebahq/v{CELEBAHQ_VERSION}/celeba_hq.zip",
+    CELEBAHQ_DATASET_ID,
+    CELEBAHQ_VERSION,
+    "data.zip",
+    installation_steps=[
+        "Download `image.zip` from the Google Drive: https://www.kaggle.com/datasets/lamsimon/celebahq",
+        "Run `python -m qai_hub_models.datasets.configure_dataset --dataset celebahq --files /path/to/celeba_hq.zip",
+    ],
+)
 
 
 class CelebAHQDataset(BaseDataset):
@@ -48,12 +49,10 @@ class CelebAHQDataset(BaseDataset):
         random_seed: int = 42,
     ) -> None:
         """Initialize CelebA-HQ dataset for inpainting tasks."""
-        self.data_path = ASSET_CONFIG.get_local_store_dataset_path(
-            CELEBAHQ_DATASET_ID, CELEBAHQ_VERSION, "data"
-        )
+        self.data_path = CELEBAHQ_PRIVATE_ASSET.extracted_path
         self.input_images_zip = input_images_zip
         split_name = "val" if split.name.lower() == "train" else split.name.lower()
-        self.image_dir = self.data_path / IMAGES_DIR_NAME / split_name / "female"
+        self.image_dir = self.data_path / split_name / "female"
         self.mask_dir = self.data_path / "mask"
         self.random_seed = random_seed
         BaseDataset.__init__(self, self.data_path, split)
@@ -183,30 +182,8 @@ class CelebAHQDataset(BaseDataset):
 
         return True
 
-    def _download_data(self, images_zip: str | None = None) -> None:
-        # Use passed arg if provided, otherwise use instance attribute
-        if images_zip is None:
-            images_zip = self.input_images_zip
-
-        # If no file provided/set, try auto-download
-        if images_zip is None and download_celebahq_files is not None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                images_zip = os.path.join(tmpdir, f"{IMAGES_DIR_NAME}.zip")
-                download_celebahq_files(images_zip, CELEBAHQ_VERSION)
-                self._download_data(images_zip)
-            return
-
-        if images_zip is None or not images_zip.endswith(IMAGES_DIR_NAME + ".zip"):
-            raise UnfetchableDatasetError(
-                dataset_name=self.dataset_name(),
-                installation_steps=[
-                    "Download `image.zip` from the Google Drive: https://www.kaggle.com/datasets/lamsimon/celebahq",
-                    "Run `python -m qai_hub_models.datasets.configure_dataset --dataset celebahq --files /path/to/celeba_hq.zip",
-                ],
-            )
-
-        os.makedirs(self.data_path, exist_ok=True)
-        extract_zip_file(images_zip, self.data_path)
+    def _download_data(self) -> None:
+        CELEBAHQ_PRIVATE_ASSET.fetch(extract=True, local_path=self.input_images_zip)
 
     @staticmethod
     def default_samples_per_job() -> int:

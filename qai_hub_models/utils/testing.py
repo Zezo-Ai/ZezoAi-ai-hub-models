@@ -152,8 +152,9 @@ def assert_most_close(
         If input arrays are different size, or too many values are not close.
     """
     not_close_values = ~np.isclose(arr1, arr2, atol=atol, rtol=rtol)
-    assert np.mean(not_close_values) <= diff_tol, (
-        f"More than {diff_tol * 100}% of values were not close."
+    value_percentage = np.mean(not_close_values)
+    assert value_percentage <= diff_tol, (
+        f"{value_percentage * 100}% of values were not close (expected: < {diff_tol * 100}% of values)."
     )
 
 

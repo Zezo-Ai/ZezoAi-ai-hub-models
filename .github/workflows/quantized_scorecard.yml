@@ -1,0 +1,75 @@
+name: Quantized Scorecard
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      deployment:
+        description: Hub Deployment
+        default: prod
+        type: string
+
+      test_devices:
+        description: Test Devices. See `qai_hub_models/scorecard/device.py`. Comma Separated.
+        type: string
+        default: cs_8_gen_3
+
+      test_runtimes:
+        description: Test Paths (runtimes). See `qai_hub_models/scorecard/path_profile.py`. Comma Separated.
+        type: string
+        default: ALL
+
+      qairt_version:
+        description: Qualcomm AI Runtime Version
+        required: false
+        type: string
+        default: "default"
+
+      delay:
+        description: Result Collection Time Delay
+        required: true
+        default: scorecard_collection_immediate
+        type: choice
+        options:
+          - scorecard_collection_32h_delay
+          - scorecard_collection_8h_delay
+          - scorecard_collection_immediate
+
+  workflow_call:
+    inputs:
+      deployment:
+        default: PROD
+        type: string
+
+      test_devices:
+        default: cs_8_gen_3
+        type: string
+
+      test_runtimes:
+        default: ALL
+        type: string
+
+      qairt_version:
+        type: string
+        default: default
+
+      delay:
+        type: string
+        default: "scorecard_collection_8h_delay"
+
+jobs:
+    run-scorecard:
+        name: Run Scorecard
+        secrets: inherit
+        uses: ./.github/workflows/scorecard.yml
+        with:
+          deployment: ${{ inputs.deployment }}
+          test_devices: ${{ inputs.test_devices }}
+          test_runtimes: ${{ inputs.test_runtimes }}
+          test_precisions: "default_quantized"
+          qairt_version: ${{ inputs.qairt_version }}
+          models: "pytorch"
+          delay: ${{ inputs.delay }}
+          test_scope: accuracy
+          release_scope: none
+          tableau_branch_name: quantize-everything

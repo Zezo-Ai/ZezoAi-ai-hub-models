@@ -197,12 +197,10 @@ class MODEL_TAG(Enum):
 
 @unique
 class MODEL_STATUS(Enum):
-    PUBLIC = "public"
-    PRIVATE = "private"
-    # pending models are waiting for scorecard to collect perf data before going public
+    PUBLISHED = "published"
+    UNPUBLISHED = "unpublished"
+    # pending models are waiting for scorecard to collect perf data before being published
     PENDING = "pending"
-    # proprietary models are released only internally
-    PROPRIETARY = "proprietary"
 
 
 @unique
@@ -262,3 +260,36 @@ class MODEL_USE_CASE(Enum):
         if self.name == "DRIVER_ASSISTANCE":
             return "other"
         return self.name.replace("_", "-").lower()
+
+
+MODEL_DOMAIN_USE_CASES: dict[MODEL_DOMAIN, list[MODEL_USE_CASE]] = {
+    MODEL_DOMAIN.COMPUTER_VISION: [
+        MODEL_USE_CASE.IMAGE_CLASSIFICATION,
+        MODEL_USE_CASE.IMAGE_EDITING,
+        MODEL_USE_CASE.IMAGE_GENERATION,
+        MODEL_USE_CASE.SUPER_RESOLUTION,
+        MODEL_USE_CASE.SEMANTIC_SEGMENTATION,
+        MODEL_USE_CASE.VIDEO_CLASSIFICATION,
+        MODEL_USE_CASE.VIDEO_GENERATION,
+        MODEL_USE_CASE.VIDEO_OBJECT_TRACKING,
+        MODEL_USE_CASE.OBJECT_DETECTION,
+        MODEL_USE_CASE.POSE_ESTIMATION,
+        MODEL_USE_CASE.GAZE_ESTIMATION,
+        MODEL_USE_CASE.DEPTH_ESTIMATION,
+        MODEL_USE_CASE.IMAGE_TO_TEXT,
+        MODEL_USE_CASE.DRIVER_ASSISTANCE,
+        MODEL_USE_CASE.ROBOTICS,
+    ],
+    MODEL_DOMAIN.AUDIO: [
+        MODEL_USE_CASE.SPEECH_RECOGNITION,
+        MODEL_USE_CASE.AUDIO_ENHANCEMENT,
+        MODEL_USE_CASE.AUDIO_CLASSIFICATION,
+        MODEL_USE_CASE.AUDIO_GENERATION,
+    ],
+    MODEL_DOMAIN.MULTIMODAL: [],  # Anything is OK
+    MODEL_DOMAIN.GENERATIVE_AI: [
+        MODEL_USE_CASE.IMAGE_GENERATION,
+        MODEL_USE_CASE.TEXT_GENERATION,
+        MODEL_USE_CASE.AUDIO_GENERATION,
+    ],
+}

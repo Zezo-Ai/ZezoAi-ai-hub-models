@@ -1,0 +1,10 @@
+supported_precisions:
+- float
+- w8a8
+disabled_paths:
+  w8a8:
+    qnn_context_binary:
+      scorecard_accuracy_failure: Torch and On-device accuracy diff (-81.000 %) above threshold (10.0 %)
+    precompiled_qnn_onnx:
+      scorecard_accuracy_failure: Torch and On-device accuracy diff (-81.000 %) above threshold (10.0 %)
+requires_aot_prepare: true

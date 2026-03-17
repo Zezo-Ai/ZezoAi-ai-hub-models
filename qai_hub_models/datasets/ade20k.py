@@ -14,12 +14,13 @@ from qai_hub_models.utils.image_processing import app_to_net_image_inputs
 from qai_hub_models.utils.input_spec import InputSpec
 
 ADE_FOLDER_NAME = "ade"
-ADE_VERSION = 1
+ADE_VERSION = 2
 ADE_ASSET = CachedWebDatasetAsset(
     "http://data.csail.mit.edu/places/ADEchallenge/ADEChallengeData2016.zip",
     ADE_FOLDER_NAME,
     ADE_VERSION,
     "ADEdataset.zip",
+    ci_private_s3_key="qai-hub-models/datasets/ade20k/ADEChallengeData2016.zip",
 )
 
 
@@ -29,9 +30,7 @@ class ADESegmentationDataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.VAL,
         input_spec: InputSpec | None = None,
     ) -> None:
-        BaseDataset.__init__(
-            self, ADE_ASSET.path(extracted=True) / "ADEChallengeData2016", split
-        )
+        BaseDataset.__init__(self, ADE_ASSET.extracted_path, split)
         assert self.split_str in ["train", "val"]
 
         base_path = self.dataset_path

@@ -64,6 +64,7 @@ MANUAL_EDGES = {
     "qai_hub_models/utils/path_helpers.py": REPRESENTATIVE_EXPORT_FILES,
     "qai_hub_models/utils/runtime_torch_wrapper.py": REPRESENTATIVE_EXPORT_FILES,
     "qai_hub_models/utils/transpose_channel.py": REPRESENTATIVE_EXPORT_FILES,
+    "qai_hub_models/utils/testing.py": REPRESENTATIVE_EXPORT_FILES,
     "qai_hub_models/utils/tflite/torch_wrapper.py": REPRESENTATIVE_EXPORT_FILES,
     "qai_hub_models/configs/code_gen_yaml.py": REPRESENTATIVE_EXPORT_FILES,
     "qai_hub_models/configs/_info_yaml_enums.py": REPRESENTATIVE_EXPORT_FILES,
@@ -173,7 +174,7 @@ def resolve_affected_models(
     for f in affected_files:
         file_path = Path(f)
         # Only consider directories directly in the top-level `models/` folder
-        # (i.e. ignore `models/_shared`, `models/_internal`)
+        # (i.e. ignore `models/_shared`)
         if str(file_path.parent.parent) == PY_PACKAGE_RELATIVE_MODELS_ROOT:
             if file_path.name not in [
                 "model.py",

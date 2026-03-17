@@ -10,7 +10,7 @@ from collections.abc import Callable
 import numpy as np
 import torch
 
-from qai_hub_models.datasets.kitti import KittiDataset
+from qai_hub_models.datasets.kitti import KITTI_LABELS_ASSET
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
 from qai_hub_models.evaluators.utils.kitti import eval_class
 from qai_hub_models.models.centernet_3d.util import ddd_post_process
@@ -46,7 +46,8 @@ class KittiEvaluator(BaseEvaluator):
         self.decode = decode
         self.max_dets = max_dets
         self.peak_thresh = peak_thresh
-        self.data_path = KittiDataset().data_path
+        KITTI_LABELS_ASSET.fetch(extract=True)
+        self.calib_data_path = KITTI_LABELS_ASSET.extracted_path / "label_2"
         self.reset()
 
     def reset(self) -> None:
@@ -135,7 +136,7 @@ class KittiEvaluator(BaseEvaluator):
                 self.dt_annos.append(dt_annotations)
 
                 # gt annotations
-                label_path = self.data_path / f"label_2/{int(img_id[i]):06d}.txt"
+                label_path = self.calib_data_path / f"{int(img_id[i]):06d}.txt"
                 with open(label_path) as f:
                     lines = f.readlines()
                 content = [line.strip().split(" ") for line in lines]

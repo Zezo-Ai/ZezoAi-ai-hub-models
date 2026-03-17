@@ -1,0 +1,40 @@
+##
+## Pull Request Workflow
+##
+
+name: PR Workflow
+
+on:
+  push:
+    branches: [ main , release-* ]
+  pull_request:
+    branches: [ main , release-* ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# only one active job per PR. this will cause jobs to be immediately
+# cancelled on subsequent pushes in PRs.
+# ref: https://docs.github.com/en/actions/using-jobs/using-concurrency#example-using-a-fallback-value
+concurrency:
+  group: pr-workflow-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test-workflow:
+    name: Test QAIHM (py3.10)
+    secrets: inherit
+    uses: ./.github/workflows/test.yml
+    with:
+      precommit_scope: ALL # never skippable
+      models: ${{ contains(github.event.pull_request.body, '%ALL_MODELS%') && 'all' || (contains(github.event.pull_request.body, '%SKIP_ALL_CI%') && 'none' || 'changed') }}
+      enable_compile_tests: true
+      deployment: prod
+      is_pr: true
+
+  website-import-workflow:
+    name: Test Website Import
+    secrets: inherit
+    uses: ./.github/workflows/release_website.yml
+    with:
+      fast_test_mode: true

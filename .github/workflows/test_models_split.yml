@@ -1,0 +1,222 @@
+name: Split Models for Testing
+
+on:
+  workflow_call:
+    inputs:
+      deployment:
+        description: Hub Deployment
+        default: prod
+        type: string
+
+      models:
+        description: Models to run. Model names match folder names in `qai_hub_models/models`. Comma separated.
+        type: string
+        default: all
+
+      test_devices:
+        description: Test Devices
+        default: default
+        type: string
+
+      test_runtimes:
+        description: Test Runtimes
+        default: default
+        type: string
+
+      test_precisions:
+        description: Test Precisions
+        default: default
+        type: string
+
+      qairt_version:
+        description: Qualcomm AI Runtime Version
+        type: string
+        default: qaihm_default
+
+      test_scope:
+        # Options: unit, unit_and_compile, compile_only, perf, accuracy, perf_and_accuracy
+        description: Test Scope
+        type: string
+        default: perf
+
+      ignore_job_cache:
+        description: Force run profile jobs
+        default: true
+        type: boolean
+
+      ignore_known_failures:
+        description: Ignore known failures (do not fail tests for models with known issues)
+        default: true
+        type: boolean
+
+      max_models_per_split:
+        description: Maximum number of PyTorch models per split when auto-splitting
+        default: 30
+        type: number
+
+      max_num_splits:
+        description: Maximum number of PyTorch model splits to create (0 = no limit)
+        type: number
+        default: 0
+
+      sync_assets_branch:
+        description: Branch containing synced static asset configs
+        type: string
+        default: ''
+
+      python_version:
+        description: Python version for artifact naming
+        type: string
+        default: '3.10'
+
+env:
+  PYTHON_VERSION: ${{ inputs.python_version }}
+  VENV_PATH: build/ci-envs/qaihm-build
+
+jobs:
+  split_models:
+    name: Split Models
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    outputs:
+      matrix: ${{ steps.split.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Split Models
+        id: split
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          SPLIT_ARGS="--models ${{ inputs.models }} --max-models-per-pt-split ${{ inputs.max_models_per_split }}"
+          if [[ "${{ inputs.max_num_splits }}" != "0" ]]; then
+            SPLIT_ARGS="$SPLIT_ARGS --max-num-pt-splits ${{ inputs.max_num_splits }}"
+          fi
+          MATRIX=$(python qai_hub_models/scripts/split_torch_models.py $SPLIT_ARGS --output-format github)
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          NUM_SPLITS=$(echo "$MATRIX" | python -c "import sys, json; print(len(json.load(sys.stdin)))")
+          echo "num_splits=$NUM_SPLITS" >> "$GITHUB_OUTPUT"
+          echo "Splits: $MATRIX"
+          echo "Number of splits: $NUM_SPLITS"
+
+  start_jobs:
+    name: Submit Jobs (${{ matrix.split.split_name }})
+    needs: split_models
+    secrets: inherit
+    strategy:
+      matrix:
+        split: ${{ fromJson(needs.split_models.outputs.matrix) }}
+      fail-fast: false
+    uses: ./.github/workflows/test_models.yml
+    with:
+      deployment: ${{ inputs.deployment }}
+      models: ${{ matrix.split.models }}
+      test_devices: ${{ inputs.test_devices }}
+      test_runtimes: ${{ inputs.test_runtimes }}
+      test_precisions: ${{ inputs.test_precisions }}
+      qairt_version: ${{ inputs.qairt_version }}
+      test_scope: ${{ inputs.test_scope }}
+      ignore_job_cache: ${{ inputs.ignore_job_cache }}
+      ignore_known_failures: ${{ inputs.ignore_known_failures }}
+      split_name: ${{ matrix.split.split_name }}
+      sync_assets_branch: ${{ inputs.sync_assets_branch }}
+      python_version: ${{ inputs.python_version }}
+
+  combine_artifacts:
+    name: Combine Split Artifacts
+    needs: [split_models, start_jobs]
+    if: ${{ !cancelled() && needs.split_models.result == 'success' }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Download All Split Artifacts
+        if: ${{ inputs.test_scope != 'unit' }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ inputs.test_scope == 'unit_and_compile' && 'Test' || 'Scorecard' }} Cached Artifact (Flaky-Job-IDs, ${{ github.run_id }}, py${{ inputs.python_version }}, *)
+          path: build/split-artifacts
+
+      - name: Combine Artifacts
+        if: ${{ inputs.test_scope != 'unit' }}
+        env:
+          QAIHM_TEST_MODELS: ${{ inputs.models }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python qai_hub_models/scripts/combine_split_artifacts.py \
+            --input-dir build/split-artifacts \
+            --output-dir build/scorecard-yamls/${{ github.run_id }}
+
+      - name: Upload Combined Artifacts
+        if: ${{ inputs.test_scope != 'unit' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.test_scope == 'unit_and_compile' && 'Test' || 'Scorecard' }} Cached Artifact (Flaky-Job-IDs, ${{ github.run_id }}, py${{ inputs.python_version }})
+          path: build/scorecard-yamls/${{ github.run_id }}
+
+      - name: Delete Split Artifacts
+        if: ${{ inputs.test_scope != 'unit' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARTIFACT_PREFIX="${{ inputs.test_scope == 'unit_and_compile' && 'Test' || 'Scorecard' }} Cached Artifact (Flaky-Job-IDs, ${{ github.run_id }}, py${{ inputs.python_version }}, "
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name | startswith(\"$ARTIFACT_PREFIX\")) | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done
+
+      - name: Download All Split Test Results
+        id: download_test_results
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: test-results-${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && 'models' || 'scorecard-models' }}-py${{ inputs.python_version }}-*
+          path: build/split-test-results
+
+      - name: Combine JUnit XML Files
+        id: combine_test_results
+        if: ${{ steps.download_test_results.outcome == 'success' }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python scripts/combine_junit_xml.py \
+            --junit-xml build/split-test-results \
+            --output build/combined-test-results/qaihm-model-tests-junit.xml
+
+      - name: Upload Combined Test Results
+        if: ${{ steps.combine_test_results.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && 'models' || 'scorecard-models' }}-py${{ inputs.python_version }}
+          path: build/combined-test-results
+
+      - name: Delete Split Test Results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARTIFACT_PREFIX="test-results-${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && 'models' || 'scorecard-models' }}-py${{ inputs.python_version }}-"
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name | startswith(\"$ARTIFACT_PREFIX\")) | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done

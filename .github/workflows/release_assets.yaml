@@ -1,0 +1,57 @@
+name: Release - Assets
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  QAIHM_CI: 1
+  PYTHON_VERSION: '3.10'
+  VENV_PATH: build/ci-envs/release
+
+jobs:
+  release_assets:
+      name: Release - Assets
+      runs-on: [tetra-ubuntu-2204, self-hosted]
+      permissions:
+        id-token: write # Required for OIDC auth to AWS
+        contents: read
+
+      steps:
+      - name: Verify running on a tag
+        run: |
+          if [[ "${{ github.ref }}" != refs/tags/* ]]; then
+            echo "Error: This workflow must be run from a tag, got ${{ github.ref }}"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+
+      - id: install_platform_deps
+        env:
+          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
+        run: |
+          bash scripts/ci/install-platform-deps.sh
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup AWS Credentials
+        uses: ./.github/actions/configure-multiple-aws-roles
+        with:
+          role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+          role-duration-seconds: 7200
+          profile: qaihm
+          aws-region: us-west-2
+
+      - name: Release Assets
+        shell: bash
+        env:
+          QAIHM_HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            release_assets

@@ -1,0 +1,66 @@
+name: Release - PyPI
+run-name: Release - ${{ inputs.target == 'prod' && 'PyPI' || 'test PyPI' }}
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+      inputs:
+          target:
+              required: true
+              type: choice
+              default: staging
+              description: Release Target
+              options:
+              - staging
+              - prod
+  workflow_call:
+      inputs:
+          target:
+              required: true
+              type: string
+
+env:
+  QAIHM_CI: 1
+  PYTHON_VERSION: '3.10'
+  VENV_PATH: build/ci-envs/release
+
+jobs:
+  release_pypi:
+      name: Release to ${{ inputs.target == 'prod' && 'PyPI' || 'test PyPI' }}
+      runs-on: [tetra-ubuntu-2204, self-hosted]
+
+      steps:
+      - name: Verify running on a tag
+        run: |
+          if [[ "${{ github.ref }}" != refs/tags/* ]]; then
+            echo "Error: This workflow must be run from a tag, got ${{ github.ref }}"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+
+      - id: install_platform_deps
+        env:
+          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
+        run: |
+          bash scripts/ci/install-platform-deps.sh
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build public wheel
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" build_release_wheel
+
+      - name: Upload to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ inputs.target == 'prod' && secrets.PYPI_TOKEN || secrets.TEST_PYPI_TOKEN }}
+          TWINE_REPOSITORY_URL: ${{ inputs.target == 'prod' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+        run: |
+          source ${{ env.VENV_PATH }}/bin/activate
+          pip install twine
+          twine upload --verbose build/release/wheel/*.whl

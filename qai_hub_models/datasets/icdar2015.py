@@ -19,7 +19,7 @@ ICDAR2015_URL = "http://rrc.cvc.uab.es/downloads/ch4_training_images.zip"
 ICDAR2015_GT_URL = (
     "http://rrc.cvc.uab.es/downloads/ch4_training_localization_transcription_gt.zip"
 )
-ICDAR2015_VERSION = 1
+ICDAR2015_VERSION = 2
 ICDAR2015_IMGS_ASSET = CachedWebDatasetAsset(
     ICDAR2015_URL,
     ICDAR2015_FOLDER_NAME,
@@ -42,7 +42,7 @@ class ICDAR2015Dataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.TRAIN,
         input_spec: InputSpec | None = None,
     ) -> None:
-        self.dataset_path = ICDAR2015_IMGS_ASSET.path(extracted=True)
+        self.dataset_path = ICDAR2015_IMGS_ASSET.extracted_path.parent
         BaseDataset.__init__(self, self.dataset_path, split)
 
         input_spec = input_spec or {"image": ((1, 3, 640, 640), "float32")}
@@ -50,7 +50,7 @@ class ICDAR2015Dataset(BaseDataset):
         self.input_width = input_spec["image"][0][3]
 
     def _validate_data(self) -> bool:
-        imgs_dir = self.dataset_path
+        imgs_dir = self.dataset_path / "ch4_training_images"
         gt_dir = imgs_dir.parent / "ch4_training_localization_transcription_gt"
 
         if not imgs_dir.exists() or not gt_dir.exists():

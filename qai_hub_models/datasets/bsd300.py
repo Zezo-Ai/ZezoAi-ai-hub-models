@@ -21,7 +21,7 @@ BSD300_URL = (
     "https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/bsds/BSDS300-images.tgz"
 )
 BSD300_FOLDER_NAME = "BSDS300"
-BSD300_VERSION = 1
+BSD300_VERSION = 3
 BSD300_ASSET = CachedWebDatasetAsset(
     BSD300_URL, BSD300_FOLDER_NAME, BSD300_VERSION, "BSDS300.tgz"
 )
@@ -38,7 +38,7 @@ class BSD300Dataset(BaseDataset):
         input_spec: InputSpec | None = None,
         scaling_factor: int = 4,
     ) -> None:
-        self.bsd_path = BSD300_ASSET.path(extracted=True)
+        self.bsd_path = BSD300_ASSET.extracted_path
 
         # bsd300 doesn't have a val split, so use the test split for this purpose
         split = DatasetSplit.TEST if split == DatasetSplit.VAL else split
@@ -65,7 +65,9 @@ class BSD300Dataset(BaseDataset):
         """Convert jpg to png."""
         train_path = self.bsd_path / "images" / "train"
         test_path = self.bsd_path / "images" / "test"
-        for i, filepath in enumerate(chain(train_path.iterdir(), test_path.iterdir())):
+        for i, filepath in enumerate(
+            chain(sorted(train_path.iterdir()), sorted(test_path.iterdir()))
+        ):
             if filepath.name.endswith(".jpg"):
                 with Image.open(filepath) as img:
                     img.save(filepath.parent / f"img_{i + 1:03d}_HR.png")

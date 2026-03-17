@@ -3,7 +3,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
-from qai_hub_models.configs.info_yaml import MODEL_USE_CASE, QAIHMModelInfo
+from qai_hub_models.configs._info_yaml_enums import MODEL_DOMAIN_USE_CASES
+from qai_hub_models.configs.info_yaml import (
+    MODEL_DOMAIN,
+    MODEL_USE_CASE,
+    QAIHMModelInfo,
+)
 from qai_hub_models.utils.path_helpers import MODEL_IDS
 
 HF_PIPELINE_TAGS = {
@@ -59,6 +64,15 @@ HF_PIPELINE_TAGS = {
     "video-object-tracking",
     "other",
 }
+
+
+def test_all_domains_accounted_for() -> None:
+    # Verify all use cases and domains are accounted for in the mapping
+    assert len(MODEL_DOMAIN_USE_CASES) == len(MODEL_DOMAIN)
+    use_cases = {
+        ucase for ucases in MODEL_DOMAIN_USE_CASES.values() for ucase in ucases
+    }
+    assert len(use_cases) == len(MODEL_USE_CASE)
 
 
 def test_model_usecase_to_hf_pipeline_tag() -> None:

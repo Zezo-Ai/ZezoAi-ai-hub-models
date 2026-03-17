@@ -16,11 +16,12 @@ from qai_hub_models.utils.input_spec import InputSpec
 
 VOC_FOLDER_NAME = "pascal_voc"
 DEVKIT_FOLDER_NAME = "VOCdevkit"
-VOC_VERSION = 1
+VOC_VERSION = 2
 VOC_ASSET = CachedWebDatasetAsset.from_asset_store(
     VOC_FOLDER_NAME,
     VOC_VERSION,
-    "VOCtrainval_11-May-2012.tar",
+    # VOCtrainval_11-May-2012.tar
+    "VOCdevkit.tar",
 )
 
 
@@ -39,7 +40,7 @@ class VOCSegmentationDataset(BaseDataset):
         self.input_height = input_spec["image"][0][2]
         self.input_width = input_spec["image"][0][3]
         BaseDataset.__init__(
-            self, str(VOC_ASSET.path().parent / DEVKIT_FOLDER_NAME), split
+            self, str(VOC_ASSET.path.parent / DEVKIT_FOLDER_NAME), split
         )
         assert self.split_str in ["train", "val", "trainval"]
 

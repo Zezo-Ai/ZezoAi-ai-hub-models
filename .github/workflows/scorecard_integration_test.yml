@@ -1,0 +1,149 @@
+name: Scorecard Integration Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      generate_test_summary:
+        description: Generate Test Summary
+        type: boolean
+        default: true
+  # Allows you to run this via actions tab on a branch
+
+  workflow_call:
+    inputs:
+      generate_test_summary:
+        description: Generate Test Summary
+        type: boolean
+        default: true
+  # Allows other workflows to invoke this workflow
+
+env:
+  # Versions MUST be quoted, otherwise they will be interpreted as a floats
+  # (and version like 3.10 can be interpreted as 3.1).
+  PYTHON_VERSION: '3.10'
+  PYTHONUNBUFFERED: 1
+  VENV_PATH: build/ci-envs/qaihm-build
+  QAIHM_CI: 1
+  CMAKE_ARGS: -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+jobs:
+  run_scorecard:
+    name: Run Scorecard
+    secrets: inherit
+    uses: ./.github/workflows/scorecard.yml
+    with:
+      deployment: dev
+      models: yolov8_det,mask2former,mediapipe_face,amt_torchscript,efficientformer_onnx
+      test_devices: default,cs_6490,cs_x_elite,cs_auto_makena_8295
+      test_runtimes: default
+      test_precisions: default
+      qairt_version: qaihm_default
+      delay: scorecard_collection_immediate
+      test_scope: perf_and_accuracy
+      release_scope: none
+      ignore_job_cache: true
+      generate_test_summary: false
+
+  validate_scorecard_outputs:
+    name: Validate Scorecard Outputs
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    needs: run_scorecard
+    if: ${{ !cancelled() }}
+    timeout-minutes: 60
+    env:
+      QAIHM_TEST_ARTIFACTS_DIR: build/scorecard_artifacts
+
+    permissions:
+      contents: read
+      actions: write
+      id-token: write
+
+    environment:
+      name: validate_scorecard_outputs
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Download Scorecard Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          name: All Scorecard Artifacts (${{ github.run_id }})
+          path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
+
+      - name: Validate Outputs
+        run: |
+          source ${{env.VENV_PATH}}/bin/activate
+          python qai_hub_models/scorecard/static/scripts/validate_integration_test.py \
+            --junit-xml ${{ github.workspace }}/test-results/qaihm-scorecard-integration-test-junit.xml
+
+      - name: Download Scorecard Test Results
+        if: ${{ always() }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: test-results-scorecard
+          path: build/all-test-results/scorecard
+
+      - name: Generate Test Summary
+        if: ${{ always() && inputs.generate_test_summary }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source ${{ env.VENV_PATH }}/bin/activate
+          mkdir -p build/combined-test-results
+
+          FAILURE_ARGS=()
+          while IFS=$'\t' read -r name url; do
+            FAILURE_ARGS+=("--workflow-failure" "$name" "--workflow-failure-url" "$url")
+          done < <(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs --paginate -q '.jobs[] | select(.conclusion == "failure") | "\(.name)\t${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/\(.id)"')
+
+          python qai_hub_models/scripts/generate_test_summary.py \
+            --title "Scorecard Integration Test" \
+            "${FAILURE_ARGS[@]}" \
+            --name "Scorecard Job Submission" --junit-xml build/all-test-results/scorecard/qaihm-model-tests-junit.xml \
+            --name "Scorecard Accuracy Collection" --junit-xml build/all-test-results/scorecard/qaihm-device-accuracy-tests-junit.xml \
+            --name "Scorecard Export Tests" --junit-xml build/all-test-results/scorecard/qaihm-export-zip-tests-junit.xml \
+            --name "Scorecard Integration Test" --junit-xml ${{ github.workspace }}/test-results/qaihm-scorecard-integration-test-junit.xml \
+            --output build/combined-test-results/summary.md
+
+      - name: Copy XML Files to Combined Results
+        if: ${{ always() }}
+        run: |
+          mkdir -p build/combined-test-results
+          if [ -d build/all-test-results ]; then
+            find build/all-test-results -name "*.xml" -exec cp {} build/combined-test-results/ \; || true
+          fi
+          if [ -d ${{ github.workspace }}/test-results ]; then
+            find ${{ github.workspace }}/test-results -name "*.xml" -exec cp {} build/combined-test-results/ \; || true
+          fi
+
+      - name: Upload Combined Test Results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-scorecard-integration
+          path: build/combined-test-results
+
+      - name: Delete Individual Test Results
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name == \"test-results-scorecard\") | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done

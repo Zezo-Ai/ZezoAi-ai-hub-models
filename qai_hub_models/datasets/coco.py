@@ -36,9 +36,9 @@ class CocoDatasetClass(Enum):
 
 
 DATASET_ID = "coco"
-DATASET_ASSET_VERSION = 2
+DATASET_ASSET_VERSION = 3
 
-COCO_DATASET = CachedWebDatasetAsset(
+COCO_VAL_DATASET = CachedWebDatasetAsset(
     "http://images.cocodataset.org/zips/val2017.zip",
     DATASET_ID,
     DATASET_ASSET_VERSION,
@@ -124,7 +124,7 @@ class CocoDataset(BaseDataset, CocoDetection):
         self.num_classes = num_classes
         self.train_samples: list[dict[str, Any]] = []
         self.max_train_samples = max_train_samples
-        self.coco_base = COCO_DATASET.path(extracted=True).parent
+        self.coco_base = COCO_VAL_DATASET.extracted_path.parent
 
         anno_file = (
             "instances_val2017.json"
@@ -132,7 +132,7 @@ class CocoDataset(BaseDataset, CocoDetection):
             else "instances_train2017.json"
         )
         self.root = (
-            COCO_DATASET.path(extracted=True) / "val2017"
+            COCO_VAL_DATASET.extracted_path
             if split == DatasetSplit.VAL
             else self.coco_base / "train2017"
         )
@@ -140,7 +140,7 @@ class CocoDataset(BaseDataset, CocoDetection):
         CocoDetection.__init__(
             self,
             root=self.root,
-            annFile=COCO_ANNOTATIONS.path(extracted=True) / "annotations" / anno_file,
+            annFile=str(COCO_ANNOTATIONS.extracted_path / anno_file),
         )
         if split == DatasetSplit.TRAIN:
             if self.train_samples == []:
@@ -269,7 +269,7 @@ class CocoDataset(BaseDataset, CocoDetection):
             return False
 
         # Check annotations exist
-        if not COCO_ANNOTATIONS.path(extracted=True).exists():
+        if not COCO_ANNOTATIONS.extracted_path.exists():
             return False
 
         if self.split == DatasetSplit.TRAIN:
@@ -278,7 +278,7 @@ class CocoDataset(BaseDataset, CocoDetection):
         return len(os.listdir(self.root)) == TOTAL_VAL_SAMPLES
 
     def _download_data(self) -> None:
-        COCO_DATASET.fetch(extract=True)
+        COCO_VAL_DATASET.fetch(extract=True)
         COCO_ANNOTATIONS.fetch(extract=True)
 
         if self.split == DatasetSplit.TRAIN:
@@ -296,10 +296,7 @@ class CocoDataset(BaseDataset, CocoDetection):
     def _resolve_train_samples(self) -> None:
         if self.split == DatasetSplit.TRAIN:
             with open(
-                self.coco_base
-                / "annotations_trainval2017"
-                / "annotations"
-                / "instances_train2017.json"
+                COCO_ANNOTATIONS.extracted_path / "instances_train2017.json"
             ) as f:
                 train_metadata = json.loads(f.read())
             all_samples = sorted(train_metadata["images"], key=lambda k: k["id"])

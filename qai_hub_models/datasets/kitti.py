@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from typing import Any
 
 import numpy as np
@@ -15,26 +13,17 @@ import torch
 from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetSplit,
-    UnfetchableDatasetError,
 )
 from qai_hub_models.utils.asset_loaders import (
-    ASSET_CONFIG,
     CachedWebDatasetAsset,
-    extract_zip_file,
     load_image,
 )
-
-try:
-    from qai_hub_models.utils._internal.download_private_datasets import (
-        download_kitti_files,
-    )
-except ImportError:
-    download_kitti_files = None  # type: ignore[assignment]
 from qai_hub_models.utils.image_processing import pre_process_with_affine
 from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
 
 KITTI_FOLDER_NAME = "kitti"
-KITTI_VERSION = 1
+KITTI_VERSION = 2
 KITTI_IMAGES_DIR_NAME = "data_object_image_2"
 KITTI_LABELS_DIR_NAME = "data_object_label_2"
 KITTI_CALIBS_DIR_NAME = "data_object_calib"
@@ -52,6 +41,37 @@ TRAIN_TXT = CachedWebDatasetAsset.from_asset_store(
     "train.txt",
 )
 
+KITTI_INSTALLATION_STEPS = [
+    "Download images from https://www.cvlibs.net/download.php?file=data_object_image_2.zip",
+    "Download annotations from https://www.cvlibs.net/download.php?file=data_object_label_2.zip",
+    "Download calibrations from https://www.cvlibs.net/download.php?file=data_object_calib.zip",
+    "Run `python -m qai_hub_models.datasets.configure_dataset --dataset kitti --files /path/to/data_object_image_2.zip /path/to/data_object_label_2.zip /path/to/data_object_calib.zip`",
+]
+
+KITTI_IMAGES_ASSET = CachedPrivateCIDatasetAsset(
+    f"qai-hub-models/datasets/kitti/v{KITTI_VERSION}/data_object_image_2.zip",
+    KITTI_FOLDER_NAME,
+    KITTI_VERSION,
+    f"{KITTI_IMAGES_DIR_NAME}.zip",
+    installation_steps=KITTI_INSTALLATION_STEPS,
+)
+
+KITTI_LABELS_ASSET = CachedPrivateCIDatasetAsset(
+    f"qai-hub-models/datasets/kitti/v{KITTI_VERSION}/data_object_label_2.zip",
+    KITTI_FOLDER_NAME,
+    KITTI_VERSION,
+    f"{KITTI_LABELS_DIR_NAME}.zip",
+    installation_steps=KITTI_INSTALLATION_STEPS,
+)
+
+KITTI_CALIBS_ASSET = CachedPrivateCIDatasetAsset(
+    f"qai-hub-models/datasets/kitti/v{KITTI_VERSION}/data_object_calib.zip",
+    KITTI_FOLDER_NAME,
+    KITTI_VERSION,
+    f"{KITTI_CALIBS_DIR_NAME}.zip",
+    installation_steps=KITTI_INSTALLATION_STEPS,
+)
+
 
 class KittiDataset(BaseDataset):
     def __init__(
@@ -65,13 +85,19 @@ class KittiDataset(BaseDataset):
         self.input_images_zip = input_images_zip
         self.input_labels_zip = input_labels_zip
         self.input_calibs_zip = input_calibs_zip
-        self.root_path = ASSET_CONFIG.get_local_store_dataset_path(
-            KITTI_FOLDER_NAME, KITTI_VERSION, ""
+        self.calib_data_path = (
+            KITTI_CALIBS_ASSET.extracted_path
+            / ("training" if split == DatasetSplit.TRAIN else "testing")
+            / "calib"
         )
-        self.data_path = self.root_path / (
-            "training" if split == DatasetSplit.TRAIN else "testing"
+        self.image2_data_path = (
+            KITTI_IMAGES_ASSET.extracted_path
+            / ("training" if split == DatasetSplit.TRAIN else "testing")
+            / "image_2"
         )
-        BaseDataset.__init__(self, self.data_path, split=split)
+        BaseDataset.__init__(
+            self, KITTI_CALIBS_ASSET.extracted_path.parent, split=split
+        )
 
         input_spec = input_spec or {"image": ((1, 3, 384, 1280), "")}
         self.input_width = input_spec["image"][0][3]
@@ -91,8 +117,8 @@ class KittiDataset(BaseDataset):
             self.sample.append(
                 {
                     "img_id": image_id,
-                    "img_path": self.data_path / f"image_2/{line}.png",
-                    "calib_path": self.data_path / f"calib/{line}.txt",
+                    "img_path": self.image2_data_path / f"{line}.png",
+                    "calib_path": self.calib_data_path / f"{line}.txt",
                 }
             )
 
@@ -143,52 +169,10 @@ class KittiDataset(BaseDataset):
     def __len__(self) -> int:
         return len(self.sample)
 
-    def _download_data(
-        self,
-        images_zip: str | None = None,
-        labels_zip: str | None = None,
-        calibs_zip: str | None = None,
-    ) -> None:
-        # Use passed args if provided, otherwise use instance attributes
-        if images_zip is None:
-            images_zip = self.input_images_zip
-        if labels_zip is None:
-            labels_zip = self.input_labels_zip
-        if calibs_zip is None:
-            calibs_zip = self.input_calibs_zip
-
-        # If no files provided/set, try auto-download
-        if images_zip is None and download_kitti_files is not None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                images_zip = os.path.join(tmpdir, f"{KITTI_IMAGES_DIR_NAME}.zip")
-                labels_zip = os.path.join(tmpdir, f"{KITTI_LABELS_DIR_NAME}.zip")
-                calibs_zip = os.path.join(tmpdir, f"{KITTI_CALIBS_DIR_NAME}.zip")
-                download_kitti_files(images_zip, labels_zip, calibs_zip, KITTI_VERSION)
-                self._download_data(images_zip, labels_zip, calibs_zip)
-            return
-
-        if (
-            images_zip is None
-            or not images_zip.endswith(f"{KITTI_IMAGES_DIR_NAME}.zip")
-            or labels_zip is None
-            or not labels_zip.endswith(f"{KITTI_LABELS_DIR_NAME}.zip")
-            or calibs_zip is None
-            or not calibs_zip.endswith(f"{KITTI_CALIBS_DIR_NAME}.zip")
-        ):
-            raise UnfetchableDatasetError(
-                dataset_name=self.dataset_name(),
-                installation_steps=[
-                    "Download images from https://www.cvlibs.net/download.php?file=data_object_image_2.zip",
-                    "Download annotations from https://www.cvlibs.net/download.php?file=data_object_label_2.zip",
-                    "Download calibrations from https://www.cvlibs.net/download.php?file=data_object_calib.zip",
-                    "Run `python -m qai_hub_models.datasets.configure_dataset --dataset kitti --files /path/to/data_object_image_2.zip /path/to/data_object_label_2.zip /path/to/data_object_calib.zip`",
-                ],
-            )
-
-        os.makedirs(self.root_path, exist_ok=True)
-        extract_zip_file(images_zip, self.root_path)
-        extract_zip_file(labels_zip, self.root_path)
-        extract_zip_file(calibs_zip, self.root_path)
+    def _download_data(self) -> None:
+        KITTI_IMAGES_ASSET.fetch(extract=True, local_path=self.input_images_zip)
+        KITTI_LABELS_ASSET.fetch(extract=True, local_path=self.input_labels_zip)
+        KITTI_CALIBS_ASSET.fetch(extract=True, local_path=self.input_calibs_zip)
 
     @staticmethod
     def default_samples_per_job() -> int:

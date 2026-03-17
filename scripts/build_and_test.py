@@ -12,7 +12,7 @@ import sys
 import textwrap
 from collections.abc import Callable
 
-from tasks.aws import REPO_ROOT, ValidateAwsCredentialsTask
+from tasks.aws import ValidateAwsCredentialsTask
 from tasks.changes import (
     PrintCITestModelsTask,
     get_all_models,
@@ -30,14 +30,10 @@ from tasks.plan import (
     task,
 )
 from tasks.release import (
-    BuildPublicRepositoryTask,
     BuildWheelTask,
     CreateReleaseVenv,
-    PublishWheelTask,
-    PushRepositoryTask,
 )
 from tasks.task import (
-    CompositeTask,
     ConditionalTask,
     ListTasksTask,
     NoOpTask,
@@ -221,8 +217,8 @@ class TaskLibrary:
     @depends_if(
         get_test_venv_wheel_dir(),
         eq=[
-            (RELEASE_WHEEL_DIR, ["build_public_wheel", "create_venv"]),
-            (PRIVATE_WHEEL_DIR, ["build_internal_wheel", "create_venv"]),
+            (RELEASE_WHEEL_DIR, ["build_release_wheel", "create_venv"]),
+            (PRIVATE_WHEEL_DIR, ["build_dev_wheel", "create_venv"]),
             # no dependencies (editable install) otherwise
         ],
         default=["create_venv"],
@@ -583,69 +579,24 @@ class TaskLibrary:
         release_venv_task = CreateReleaseVenv(RELEASE_VENV, self.python_executable)
         return plan.add_step(step_id, release_venv_task)
 
-    @public_task(
-        "Build Public Copy of the Repository (with internal information removed)"
-    )
-    def build_public_repository(
-        self, plan: Plan, step_id: str = "build_public_repository"
-    ) -> str:
-        return plan.add_step(
-            step_id,
-            CompositeTask(
-                group_name=None,
-                tasks=[
-                    # "install_deps" will call this task if the user wants to use the public package for testing.
-                    # To avoid a circular dependency, we use an editable install to first build the public package.
-                    CreateVenvTask(self.venv_path, self.python_executable),
-                    SyncLocalQAIHMVenvTask(
-                        self.venv_path, ["dev"], qaihm_wheel_dir=None
-                    ),
-                    BuildPublicRepositoryTask(
-                        self.venv_path,
-                        RELEASE_REPO_DIR,
-                    ),
-                ],
-            ),
-        )
-
-    @public_task(description="Build Public Python Wheel")
-    @depends(["install_release_deps", "build_public_repository"])
-    def build_public_wheel(
-        self, plan: Plan, step_id: str = "build_public_wheel"
+    @public_task(description="Build Release Python Wheel")
+    @depends(["install_release_deps"])
+    def build_release_wheel(
+        self, plan: Plan, step_id: str = "build_release_wheel"
     ) -> str:
         return plan.add_step(
             step_id,
             BuildWheelTask(
-                RELEASE_VENV,
-                RELEASE_REPO_DIR,
-                wheel_dir=RELEASE_WHEEL_DIR,
+                RELEASE_VENV, wheel_dir=RELEASE_WHEEL_DIR, release_wheel=True
             ),
         )
 
-    @public_task("Build Internal Python Wheel")
+    @public_task("Build Development Python Wheel")
     @depends(["install_release_deps"])
-    def build_internal_wheel(
-        self, plan: Plan, step_id: str = "build_internal_wheel"
-    ) -> str:
+    def build_dev_wheel(self, plan: Plan, step_id: str = "build_dev_wheel") -> str:
         return plan.add_step(
             step_id,
-            BuildWheelTask(RELEASE_VENV, REPO_ROOT, PRIVATE_WHEEL_DIR),
-        )
-
-    @public_task("Release QAIHM Wheel to PyPi")
-    @depends(["build_public_wheel"])
-    def release_wheel(self, plan: Plan, step_id: str = "release_wheel") -> str:
-        return plan.add_step(
-            step_id,
-            PublishWheelTask(RELEASE_WHEEL_DIR, RELEASE_VENV),
-        )
-
-    @public_task("Push QAIHM Code to GitHub")
-    @depends(["build_public_repository"])
-    def release_code(self, plan: Plan, step_id: str = "release_code") -> str:
-        return plan.add_step(
-            step_id,
-            PushRepositoryTask(RELEASE_REPO_DIR),
+            BuildWheelTask(RELEASE_VENV, PRIVATE_WHEEL_DIR, release_wheel=False),
         )
 
     @public_task("Push QAIHM Assets to AWS S3")
@@ -679,7 +630,7 @@ class TaskLibrary:
     @public_task(
         "Push QAIHM Code, Wheel, and Assets (build repo & wheel, push repo, push assets, push HF model cards)"
     )
-    @depends(["release_assets", "release_code", "release_wheel", "release_huggingface"])
+    @depends(["release_assets", "release_huggingface"])
     def release(self, plan: Plan, step_id: str = "release") -> str:
         return plan.add_step(
             step_id,

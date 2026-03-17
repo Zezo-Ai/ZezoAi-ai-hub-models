@@ -17,7 +17,7 @@ from qai_hub_models.datasets.common import BaseDataset, DatasetSplit
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 
 AUDIOSET_FOLDER_NAME = "audioset"
-AUDIOSET_VERSION = 1
+AUDIOSET_VERSION = 2
 DEFAULT_SEQUENCE_LENGTH = 96000  # 0.96s at 16kHz
 DEFAULT_NUM_CLASSES = 521
 FRAME_DURATION = 0.96  # Duration of one frame in seconds
@@ -26,7 +26,7 @@ FRAME_DURATION = 0.96  # Duration of one frame in seconds
 AUDIOSET_ASSET = CachedWebDatasetAsset.from_asset_store(
     AUDIOSET_FOLDER_NAME,
     AUDIOSET_VERSION,
-    "eval.tar",
+    "audio.tar",
 )
 # originally comes from http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/eval_segments.csv
 AUDIOSET_CSV = CachedWebDatasetAsset.from_asset_store(
@@ -49,9 +49,9 @@ class AudioSetDataset(BaseDataset):
         target_sample_rate: int = 16000,
         max_sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
     ) -> None:
-        self.csv_path = AUDIOSET_CSV.path()
-        self.audio_dir = AUDIOSET_ASSET.path(extracted=True).parent
-        self.class_map_path = AUDIOSET_CLASS_MAP.path()
+        self.csv_path = AUDIOSET_CSV.path
+        self.audio_dir = AUDIOSET_ASSET.extracted_path
+        self.class_map_path = AUDIOSET_CLASS_MAP.path
         self.num_classes = DEFAULT_NUM_CLASSES
         BaseDataset.__init__(self, self.audio_dir, split)
         self.target_sample_rate = target_sample_rate
@@ -149,7 +149,7 @@ class AudioSetDataset(BaseDataset):
 
         csv_lookup = {row["YTID"]: row for _, row in self.csv_data.iterrows()}
 
-        self.audio_dir = self.audio_dir / "audio" / "eval"
+        self.audio_dir = self.audio_dir / "eval"
 
         # Find all audio files
         audio_files = sorted(self.audio_dir.glob("*.flac"))

@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 import warnings
 from pathlib import Path
 
@@ -18,21 +16,19 @@ from PIL import Image
 from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetSplit,
-    UnfetchableDatasetError,
 )
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, extract_zip_file
-
-try:
-    from qai_hub_models.utils._internal.download_private_datasets import (
-        download_face_det_lite_files,
-    )
-except ImportError:
-    download_face_det_lite_files = None  # type: ignore[assignment]
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resize_pad
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
 
-FACEDETLITE_DATASET_VERSION = 1
+FACEDETLITE_DATASET_VERSION = 2
 FACEDETLITE_DATASET_ID = "facedetlite_dataset"
-FACEDETLITE_DATASET_DIR_NAME = "facedetlite_trainvaltest"
+
+FACEDETLITE_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+    "qai-hub-models/datasets/facedetlite/facedetlite_trainvaltest.zip",
+    FACEDETLITE_DATASET_ID,
+    FACEDETLITE_DATASET_VERSION,
+    "data/facedetlite_trainvaltest.zip",
+)
 
 
 class FaceDetLiteDataset(BaseDataset):
@@ -44,11 +40,9 @@ class FaceDetLiteDataset(BaseDataset):
         input_data_zip: str | None = None,
         max_boxes: int = 20,
     ) -> None:
-        self.data_path = ASSET_CONFIG.get_local_store_dataset_path(
-            FACEDETLITE_DATASET_ID, FACEDETLITE_DATASET_VERSION, "data"
-        )
-        self.images_path = self.data_path / FACEDETLITE_DATASET_DIR_NAME
-        self.gt_path = self.data_path / FACEDETLITE_DATASET_DIR_NAME
+        self.data_path = FACEDETLITE_PRIVATE_ASSET.extracted_path
+        self.images_path = self.data_path
+        self.gt_path = self.data_path
 
         self.input_data_zip = input_data_zip
         self.max_boxes = max_boxes
@@ -158,29 +152,8 @@ class FaceDetLiteDataset(BaseDataset):
             self.gt_list.append(gt_path)
         return True
 
-    def _download_data(self, zip_path: str | None = None) -> None:
-        # Use passed arg if provided, otherwise use instance attribute
-        if zip_path is None:
-            zip_path = self.input_data_zip
-
-        # If no file provided/set, try auto-download
-        if zip_path is None and download_face_det_lite_files is not None:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                zip_path = os.path.join(tmpdir, f"{FACEDETLITE_DATASET_DIR_NAME}.zip")
-                download_face_det_lite_files(zip_path)
-                self._download_data(zip_path)
-            return
-
-        if zip_path is None or not zip_path.endswith(
-            FACEDETLITE_DATASET_DIR_NAME + ".zip"
-        ):
-            raise UnfetchableDatasetError(
-                dataset_name=self.dataset_name(),
-                installation_steps=None,
-            )
-
-        os.makedirs(self.images_path.parent, exist_ok=True)
-        extract_zip_file(zip_path, self.images_path)
+    def _download_data(self) -> None:
+        FACEDETLITE_PRIVATE_ASSET.fetch(extract=True, local_path=self.input_data_zip)
 
     @staticmethod
     def default_samples_per_job() -> int:
