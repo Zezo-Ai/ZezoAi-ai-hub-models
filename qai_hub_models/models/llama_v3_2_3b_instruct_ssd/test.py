@@ -25,25 +25,23 @@ from qai_hub_models.models._shared.llm.perf_collection import (
 )
 from qai_hub_models.models._shared.llm.test import CompileJobCache
 from qai_hub_models.models.common import Precision, TargetRuntime
-from qai_hub_models.models.llama_v3_1_8b_instruct import (
+from qai_hub_models.models.llama_v3_2_3b_instruct_ssd import (
     MODEL_ID,
     FP_Model,
     Model,
     PositionProcessor,
     QNN_Model,
 )
-from qai_hub_models.models.llama_v3_1_8b_instruct.demo import llama_3_1_chat_demo
-from qai_hub_models.models.llama_v3_1_8b_instruct.export import (
+from qai_hub_models.models.llama_v3_2_3b_instruct_ssd.export import (
     DEFAULT_EXPORT_DEVICE,
     NUM_LAYERS_PER_SPLIT,
     NUM_SPLITS,
 )
-from qai_hub_models.models.llama_v3_1_8b_instruct.export import main as export_main
-from qai_hub_models.models.llama_v3_1_8b_instruct.model import (
+from qai_hub_models.models.llama_v3_2_3b_instruct_ssd.export import main as export_main
+from qai_hub_models.models.llama_v3_2_3b_instruct_ssd.model import (
     DEFAULT_CONTEXT_LENGTH,
     DEFAULT_EXPORT_CONTEXT_LENGTHS,
     DEFAULT_EXPORT_SEQUENCE_LENGTHS,
-    DEFAULT_PRECISION,
     HF_REPO_NAME,
     MODEL_ASSET_VERSION,
 )
@@ -66,17 +64,29 @@ DEFAULT_EVAL_SEQLEN = 2048
 
 @pytest.mark.unmarked
 def test_create_genie_config() -> None:
-    context_length = 4096
+    context_length = 1024
     llm_config = AutoConfig.from_pretrained(HF_REPO_NAME)
-    model_list = [f"llama_v3_1_8b_instruct_part_{i}_of_5.bin" for i in range(1, 6)]
+    model_list = [f"llama_v3_2_3b_instruct_ssd_part_{i}_of_3.bin" for i in range(1, 4)]
     actual_config = create_genie_config(context_length, llm_config, "rope", model_list)
+    # SSD fields are applied separately after create_genie_config (in LLM_SSD_AIMETOnnx.prepare_genie_assets)
+    actual_config["dialog"]["type"] = "ssd-q1"
+    actual_config["dialog"]["ssd-q1"] = {
+        "version": 1,
+        "ssd-version": 1,
+        "forecast-token-count": 4,
+        "forecast-prefix": 16,
+        "forecast-prefix-name": "forecast-prefix",
+        "branches": [3, 2],
+        "n-streams": 1,
+        "p-threshold": 0.0,
+    }
     expected_config: dict[str, Any] = {
         "dialog": {
             "version": 1,
-            "type": "basic",
+            "type": "ssd-q1",
             "context": {
                 "version": 1,
-                "size": 4096,
+                "size": 1024,
                 "n-vocab": 128256,
                 "bos-token": 128000,
                 "eos-token": [128001, 128008, 128009],
@@ -128,8 +138,19 @@ def test_create_genie_config() -> None:
                     },
                 },
             },
+            "ssd-q1": {
+                "version": 1,
+                "ssd-version": 1,
+                "forecast-token-count": 4,
+                "forecast-prefix": 16,
+                "forecast-prefix-name": "forecast-prefix",
+                "branches": [3, 2],
+                "n-streams": 1,
+                "p-threshold": 0.0,
+            },
         }
     }
+
     assert expected_config == actual_config
 
 
@@ -141,10 +162,6 @@ def test_create_genie_config() -> None:
         (True, False, TargetRuntime.GENIE),
         (False, True, TargetRuntime.GENIE),
         (False, False, TargetRuntime.GENIE),
-        (True, True, TargetRuntime.ONNXRUNTIME_GENAI),
-        (False, True, TargetRuntime.ONNXRUNTIME_GENAI),
-        (True, False, TargetRuntime.ONNXRUNTIME_GENAI),
-        (False, False, TargetRuntime.ONNXRUNTIME_GENAI),
     ],
 )
 def test_cli_device_with_skips(
@@ -166,22 +183,12 @@ def test_cli_device_with_skips(
     )
 
 
-def test_cli_device_with_skips_unsupported_precision_device(
-    tmp_path: Path,
-) -> None:
-    test.test_cli_device_with_skips_unsupported_precision_device(
-        export_main, Model, tmp_path, MODEL_ID
-    )
-
-
 @pytest.mark.unmarked
 @pytest.mark.parametrize(
     ("chipset", "context_length", "sequence_length", "target_runtime"),
     [
         ("qualcomm-snapdragon-8gen2", 2048, 256, TargetRuntime.GENIE),
         ("qualcomm-snapdragon-x-elite", 4096, 128, TargetRuntime.GENIE),
-        ("qualcomm-snapdragon-8gen2", 2048, 256, TargetRuntime.ONNXRUNTIME_GENAI),
-        ("qualcomm-snapdragon-x-elite", 4096, 128, TargetRuntime.ONNXRUNTIME_GENAI),
     ],
 )
 def test_cli_chipset_with_options(
@@ -211,9 +218,6 @@ def test_cli_chipset_with_options(
         (CacheMode.ENABLE, True, True, TargetRuntime.GENIE),
         (CacheMode.DISABLE, True, False, TargetRuntime.GENIE),
         (CacheMode.OVERWRITE, False, False, TargetRuntime.GENIE),
-        (CacheMode.ENABLE, True, True, TargetRuntime.ONNXRUNTIME_GENAI),
-        (CacheMode.DISABLE, True, False, TargetRuntime.ONNXRUNTIME_GENAI),
-        (CacheMode.OVERWRITE, False, False, TargetRuntime.ONNXRUNTIME_GENAI),
     ],
 )
 def test_cli_default_device_select_component(
@@ -234,11 +238,16 @@ def test_cli_default_device_select_component(
         skip_download,
         skip_summary,
         target_runtime,
-        decode_sequence_length=1,
+        decode_sequence_length=DEFAULT_EXPORT_SEQUENCE_LENGTHS[1],
     )
 
 
-# Full model tests
+def test_cli_device_with_skips_unsupported_context_length(tmp_path: Path) -> None:
+    test.test_cli_device_with_skips_unsupported_context_length(
+        export_main, Model, tmp_path, MODEL_ID
+    )
+
+
 @pytest.mark.evaluate
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="This test can be run on GPU only."
@@ -246,10 +255,10 @@ def test_cli_default_device_select_component(
 @pytest.mark.parametrize(
     ("checkpoint", "task", "expected_metric", "num_samples"),
     [
-        ("DEFAULT", "wikitext", 8.02, 0),
-        ("DEFAULT", "tiny_mmlu", 0.58, 0),
-        ("DEFAULT_UNQUANTIZED", "wikitext", 6.77, 0),
-        ("DEFAULT_UNQUANTIZED", "tiny_mmlu", 0.63, 0),
+        ("DEFAULT_W4A16", "wikitext", 12.273, 0),
+        ("DEFAULT_W4A16", "mmlu", 0.567, 1000),
+        ("DEFAULT_UNQUANTIZED", "wikitext", 10.165, 0),
+        ("DEFAULT_UNQUANTIZED", "mmlu", 0.607, 1000),
     ],
 )
 def test_evaluate(
@@ -282,74 +291,9 @@ def test_evaluate(
     np.testing.assert_allclose(actual_metric, expected_metric, rtol=0.03, atol=0)
 
 
-@pytest.mark.demo
-@pytest.mark.skipif(
-    not torch.cuda.is_available(), reason="This test can be run on GPU only."
+@pytest.mark.skip(
+    reason="This test is skipped till we use it to get automatic performance numbers for the LLMs."
 )
-def test_demo_default(capsys: pytest.CaptureFixture[str]) -> None:
-    cleanup()
-    llama_3_1_chat_demo(
-        fp_model_cls=FP_Model,
-        default_prompt="What is the capital of France?",
-        test_checkpoint="DEFAULT",
-    )
-    captured = capsys.readouterr()
-    assert "Paris" in captured.out
-
-
-@pytest.mark.nightly
-@pytest.mark.demo
-@pytest.mark.skipif(
-    not torch.cuda.is_available(), reason="This test can be run on GPU only."
-)
-def test_quantize_demo_eval(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Quantize the DeepSeek model, verify 'Paris' response, and evaluate tiny_mmlu."""
-    cleanup()
-    checkpoint_path = test.setup_test_quantization(
-        Model,
-        FP_Model,
-        str(tmp_path),
-        precision=DEFAULT_PRECISION,
-        checkpoint="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-        use_seq_mse=False,
-    )
-
-    # Demo test
-    llama_3_1_chat_demo(
-        fp_model_cls=FP_Model,
-        default_prompt="<｜begin▁of▁sentence｜><|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful AI assistant. Be concise.\n<|start_header_id|>user<|end_header_id|>\n\nWhat is the capital of France?<|eot_id|><|start_header_id|>assistant<|end_header_id|><think>\n",  # noqa: RUF001
-        test_checkpoint=checkpoint_path,
-        raw=True,
-        # Note: DeepSeek sometimes uses non-ascii characters
-        end_tokens={"<|eot_id|>", "<｜end▁of▁sentence｜>"},  # noqa: RUF001
-    )
-    captured = capsys.readouterr()
-    assert "Paris" in captured.out
-
-    # Evaluate tiny_mmlu
-    cleanup()
-    actual_metric, _ = evaluate(
-        quantized_model_cls=Model,
-        fp_model_cls=FP_Model,
-        qnn_model_cls=QNN_Model,
-        task="tiny_mmlu",
-        num_samples=0,
-        kwargs=dict(
-            checkpoint=checkpoint_path,
-            sequence_length=DEFAULT_EVAL_SEQLEN,
-            context_length=DEFAULT_CONTEXT_LENGTH,
-        ),
-    )
-    log_evaluate_test_result(
-        model_name=MODEL_ID,
-        checkpoint="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-        metric="tiny_mmlu",
-        value=actual_metric,
-    )
-    np.testing.assert_allclose(actual_metric, 0.48, rtol=0.03, atol=0)
-    cleanup()
-
-
 @pytest.mark.skipif(
     not torch.cuda.is_available(),
     reason="This test can be run on GPU only.",
@@ -404,9 +348,12 @@ def test_compile(
     assert (genie_bundle_path / "htp_backend_ext_config.json").exists()
 
 
+@pytest.mark.skip(
+    reason="This test is skipped till we use it to get automatic performance numbers for the LLMs."
+)
 @pytest.mark.skipif(
     not torch.cuda.is_available()
-    or not importlib.util.find_spec("qualcomm_device_cloud_sdk"),
+    or not importlib.util.find_spec("qdc_public_api_client"),
     reason="This test can be run on GPU only. Also needs QDC package to run.",
 )
 @pytest.mark.parametrize(
@@ -427,8 +374,6 @@ def test_qdc(
     ) / ASSET_CONFIG.get_release_asset_name(
         MODEL_ID, TargetRuntime.GENIE, precision, device.chipset
     )
-    if scorecard_path.runtime == TargetRuntime.ONNXRUNTIME_GENAI:
-        pytest.skip("This test is only valid for Genie runtime.")
     if not (genie_bundle_path / "genie_config.json").exists():
         pytest.fail("The genie bundle does not exist.")
     from qai_hub_models.utils.qdc.genie_jobs import (
@@ -450,8 +395,9 @@ def test_qdc(
         tps=tps,
         ttft_ms=min_ttft,
     )
-    assert tps > 6.0
-    assert min_ttft < 250000.0
+    if precision == Precision.w4a16:
+        assert tps > 25.0
+        assert min_ttft < 150000.0
 
 
 def _get_llm_perf_params() -> list[tuple[Precision, ScorecardDevice]]:
@@ -466,8 +412,8 @@ def _get_llm_perf_params() -> list[tuple[Precision, ScorecardDevice]]:
 @pytest.mark.llm_perf
 @pytest.mark.skipif(
     not torch.cuda.is_available()
-    or not importlib.util.find_spec("qualcomm_device_cloud_sdk"),
-    reason="This test requires GPU and the qualcomm_device_cloud_sdk package.",
+    or not importlib.util.find_spec("qdc_public_api_client"),
+    reason="This test requires GPU and the qdc_public_api_client package.",
 )
 @pytest.mark.parametrize(("precision", "device"), _get_llm_perf_params())
 def test_llm_perf(

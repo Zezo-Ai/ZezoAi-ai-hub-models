@@ -539,6 +539,7 @@ def test_cli_default_device_select_component(
     skip_download: bool,
     skip_summary: bool,
     target_runtime: TargetRuntime,
+    decode_sequence_length: int,
 ) -> None:
     context_length = 4096
     sequence_length = 128
@@ -610,7 +611,7 @@ def test_cli_default_device_select_component(
                 instantiation_name = (
                     f"ar{sequence_length}_cl{context_length}"
                     if i < parts
-                    else f"ar1_cl{context_length}"
+                    else f"ar{decode_sequence_length}_cl{context_length}"
                 )
                 assert (
                     call.kwargs["name"]

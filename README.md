@@ -353,6 +353,7 @@ and many more.
 | [Llama-v3.1-8B-Instruct](https://aihub.qualcomm.com/models/llama_v3_1_8b_instruct) | [qai_hub_models.models.llama_v3_1_8b_instruct](qai_hub_models/models/llama_v3_1_8b_instruct/README.md) |
 | [Llama-v3.2-1B-Instruct](https://aihub.qualcomm.com/models/llama_v3_2_1b_instruct) | [qai_hub_models.models.llama_v3_2_1b_instruct](qai_hub_models/models/llama_v3_2_1b_instruct/README.md) |
 | [Llama-v3.2-3B-Instruct](https://aihub.qualcomm.com/models/llama_v3_2_3b_instruct) | [qai_hub_models.models.llama_v3_2_3b_instruct](qai_hub_models/models/llama_v3_2_3b_instruct/README.md) |
+| [Llama-v3.2-3B-Instruct-SSD](https://aihub.qualcomm.com/models/llama_v3_2_3b_instruct_ssd) | [qai_hub_models.models.llama_v3_2_3b_instruct_ssd](qai_hub_models/models/llama_v3_2_3b_instruct_ssd/README.md) |
 | [Llama3-TAIDE-LX-8B-Chat-Alpha1](https://aihub.qualcomm.com/models/llama_v3_taide_8b_chat) | [qai_hub_models.models.llama_v3_taide_8b_chat](qai_hub_models/models/llama_v3_taide_8b_chat/README.md) |
 | [Mistral-7B-Instruct-v0.3](https://aihub.qualcomm.com/models/mistral_7b_instruct_v0_3) | [qai_hub_models.models.mistral_7b_instruct_v0_3](qai_hub_models/models/mistral_7b_instruct_v0_3/README.md) |
 | [Mobile-Bert-Uncased-Google](https://aihub.qualcomm.com/models/mobile_bert_uncased_google) | [qai_hub_models.models.mobile_bert_uncased_google](qai_hub_models/models/mobile_bert_uncased_google/README.md) |

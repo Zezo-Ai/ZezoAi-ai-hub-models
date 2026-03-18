@@ -212,6 +212,7 @@ def test_cli_default_device_select_component(
         skip_download,
         skip_summary,
         target_runtime,
+        decode_sequence_length=1,
     )
 
 
