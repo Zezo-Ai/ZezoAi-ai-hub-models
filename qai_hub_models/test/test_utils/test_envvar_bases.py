@@ -75,7 +75,7 @@ def test_bool_envvar(monkeypatch: pytest.MonkeyPatch) -> None:
         assert DefaultTrueEnvvar.get(False)
         assert DefaultFalseEnvvar.get(False)
 
-    for value in ("0", "false", "", "abc"):
+    for value in ("0", "false", "abc"):
         # Parsing every value should return false.
         assert not DefaultTrueEnvvar.parse(value)
         assert not DefaultFalseEnvvar.parse(value)
@@ -91,6 +91,15 @@ def test_bool_envvar(monkeypatch: pytest.MonkeyPatch) -> None:
         # If the user passes their own default, the envvar still takes precidence.
         assert not DefaultTrueEnvvar.get(True)
         assert not DefaultFalseEnvvar.get(True)
+
+    # Empty string is falsy in Python, so get() treats it as unset
+    # and returns the class default.
+    assert not DefaultTrueEnvvar.parse("")
+    assert not DefaultFalseEnvvar.parse("")
+    DefaultTrueEnvvar.patchenv(monkeypatch, "")
+    DefaultFalseEnvvar.patchenv(monkeypatch, "")
+    assert DefaultTrueEnvvar.get()
+    assert not DefaultFalseEnvvar.get()
 
     # Verify parser behavior when no envvars are set.
     parser = ArgumentParser()

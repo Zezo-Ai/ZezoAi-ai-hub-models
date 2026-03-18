@@ -80,7 +80,7 @@ class QAIHMEnvvar(Generic[ParsedT]):
             The parsed environment variable value, or the default.
         """
         envvar = os.environ.get(cls.VARNAME)
-        if envvar is not None:
+        if envvar:
             return cls.parse(envvar)
         if default is None:
             default = cls.default()
