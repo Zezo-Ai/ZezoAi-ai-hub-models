@@ -243,10 +243,12 @@ jobs:
     needs: [submit_split_jobs, fix_flaky_jobs]
     secrets: inherit
     if: ${{ !cancelled() && needs.submit_split_jobs.result != 'skipped' }}
-    uses: ./.github/workflows/scorecard_test_export_scripts.yml
+    uses: ./.github/workflows/scorecard_test_export_scripts_split.yml
     with:
       action_id: ${{ github.run_id }}
       upload_to_s3: ${{ contains(inputs.release_scope, 'upload_export_assets') }}
+      max_models_per_split: 60
+      max_num_splits: 8
 
   collect_results:
     name: Collect Scorecard Results

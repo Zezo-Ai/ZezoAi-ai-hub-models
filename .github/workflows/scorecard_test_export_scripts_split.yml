@@ -1,0 +1,201 @@
+name: Split Export Script Tests
+
+on:
+  workflow_call:
+    inputs:
+      action_id:
+        type: string
+        required: true
+
+      upload_to_s3:
+        description: Upload export-generated ZIP files to S3
+        type: boolean
+        default: false
+
+      models:
+        description: Models for which to run the tests. If unset, tests all models run in the scorecard action above.
+        type: string
+        required: false
+
+      max_models_per_split:
+        description: Maximum number of PyTorch models per split when auto-splitting
+        default: 30
+        type: number
+
+      max_num_splits:
+        description: Maximum number of PyTorch model splits to create (0 = no limit)
+        type: number
+        default: 0
+
+env:
+  PYTHON_VERSION: '3.10'
+  VENV_PATH: build/ci-envs/qaihm-build
+
+jobs:
+  split_models:
+    name: Split Models
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    outputs:
+      matrix: ${{ steps.split.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Download Post-Flaky-Job-Retry Artifacts
+        id: download-post-flaky-job-retry-artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+            run-id: ${{ inputs.action_id }}
+            github-token: ${{ github.token }}
+            name: Scorecard Cached Artifact (Job-IDs, ${{ inputs.action_id }})
+            path: build/scorecard-yamls/${{ inputs.action_id }}
+
+      - name: Download Flaky-Job Artifacts
+        if: steps.download-post-flaky-job-retry-artifacts.outcome == 'failure'
+        uses: actions/download-artifact@v8
+        with:
+            run-id: ${{ inputs.action_id }}
+            github-token: ${{ github.token }}
+            name: Scorecard Cached Artifact (Flaky-Job-IDs, ${{ inputs.action_id }})
+            path: build/scorecard-yamls/${{ inputs.action_id }}
+
+      - name: Determine Models
+        id: determine_models
+        run: |
+          if [[ -n "${{ inputs.models }}" ]]; then
+            echo "models=${{ inputs.models }}" >> "$GITHUB_OUTPUT"
+          else
+            # Read models from scorecard environment file
+            MODELS=$(grep '^QAIHM_TEST_MODELS=' build/scorecard-yamls/${{ inputs.action_id }}/environment.env | cut -d= -f2)
+            echo "models=$MODELS" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Split Models
+        id: split
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          SPLIT_ARGS="--models ${{ steps.determine_models.outputs.models }} --max-models-per-pt-split ${{ inputs.max_models_per_split }}"
+          if [[ "${{ inputs.max_num_splits }}" != "0" ]]; then
+            SPLIT_ARGS="$SPLIT_ARGS --max-num-pt-splits ${{ inputs.max_num_splits }}"
+          fi
+          MATRIX=$(python qai_hub_models/scripts/split_torch_models.py $SPLIT_ARGS --output-format github)
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          NUM_SPLITS=$(echo "$MATRIX" | python -c "import sys, json; print(len(json.load(sys.stdin)))")
+          echo "num_splits=$NUM_SPLITS" >> "$GITHUB_OUTPUT"
+          echo "Splits: $MATRIX"
+          echo "Number of splits: $NUM_SPLITS"
+
+  start_jobs:
+    name: Test Exports (${{ matrix.split.split_name }})
+    needs: split_models
+    secrets: inherit
+    strategy:
+      matrix:
+        split: ${{ fromJson(needs.split_models.outputs.matrix) }}
+      fail-fast: false
+    uses: ./.github/workflows/scorecard_test_export_scripts.yml
+    with:
+      action_id: ${{ inputs.action_id }}
+      upload_to_s3: ${{ inputs.upload_to_s3 }}
+      models: ${{ matrix.split.models }}
+      split_name: ${{ matrix.split.split_name }}
+
+  combine_artifacts:
+    name: Combine Split Artifacts
+    needs: [split_models, start_jobs]
+    if: ${{ !cancelled() && needs.split_models.result == 'success' }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: setup_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create Virtual Env
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            install_deps
+
+      - name: Download All Split Release Asset Artifacts
+        id: download_release_assets
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: "Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }}, *)"
+          path: build/split-release-assets
+
+      - name: Combine Release Assets
+        if: ${{ steps.download_release_assets.outcome == 'success' }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python qai_hub_models/scripts/combine_split_artifacts.py \
+            --input-dir build/split-release-assets \
+            --output-dir build/combined-release-assets
+
+      - name: Upload Combined Release Assets
+        if: ${{ steps.download_release_assets.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }})
+          path: build/combined-release-assets/release-assets.yaml
+
+      - name: Delete Split Release Asset Artifacts
+        if: ${{ steps.download_release_assets.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARTIFACT_PREFIX="Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }}, "
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name | startswith(\"$ARTIFACT_PREFIX\")) | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done
+
+      - name: Download All Split Test Results
+        id: download_test_results
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: test-results-export-*
+          path: build/split-test-results
+
+      - name: Combine JUnit XML Files
+        id: combine_test_results
+        if: ${{ steps.download_test_results.outcome == 'success' }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python scripts/combine_junit_xml.py \
+            --junit-xml build/split-test-results \
+            --output build/combined-test-results/qaihm-export-zip-tests-junit.xml
+
+      - name: Upload Combined Test Results
+        if: ${{ steps.combine_test_results.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-export
+          path: build/combined-test-results
+
+      - name: Delete Split Test Results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARTIFACT_PREFIX="test-results-export-"
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name | startswith(\"$ARTIFACT_PREFIX\")) | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done

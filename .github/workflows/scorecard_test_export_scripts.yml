@@ -31,6 +31,17 @@ on:
           type: boolean
           default: false
 
+        models:
+          description: Models for which to run the tests. If unset, tests all models run in the scorecard action above.
+          type: string
+          required: false
+
+        split_name:
+          description: When split into sub-actions for parallel execution, this is the name of the split.
+          required: false
+          type: string
+          default: ''
+
 env:
   # Versions MUST be quoted, otherwise they will be interpreted as a floats
   # (and version like 3.10 can be interpreted as 3.1).
@@ -43,7 +54,7 @@ env:
 
 jobs:
   test_export_scripts:
-    name: Test Export Scripts and Upload ZIP Files (using jobs from ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{inputs.action_id}})
+    name: Test Export Scripts and Upload ZIP Files${{ inputs.split_name != '' && format(' ({0})', inputs.split_name) || '' }} (using jobs from ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{inputs.action_id}})
     runs-on: [tetra-ubuntu-2204, self-hosted]
     timeout-minutes: 1440 # 24 hours
     env:
@@ -156,7 +167,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
-          name: Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }})
+          name: Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }}${{ inputs.split_name != '' && format(', {0}', inputs.split_name) || '' }})
           path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets.yaml
 
       - name: Combine Per-Model JUnit XMLs
@@ -166,11 +177,11 @@ jobs:
           mkdir -p ${{ github.workspace }}/combined-test-results
           python scripts/combine_junit_xml.py \
             --junit-xml ${{ github.workspace }}/test-results \
-            --output ${{ github.workspace }}/combined-test-results/qaihm-export-zip-tests-junit.xml
+            --output ${{ github.workspace }}/combined-test-results/qaihm-export-zip-tests${{ inputs.split_name != '' && format('-{0}', inputs.split_name) || '' }}-junit.xml
 
       - name: Upload Test Results
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-results-export
+          name: test-results-export${{ inputs.split_name != '' && format('-{0}', inputs.split_name) || '' }}
           path: ${{ github.workspace }}/combined-test-results
