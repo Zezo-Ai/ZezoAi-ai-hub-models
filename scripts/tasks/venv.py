@@ -188,7 +188,28 @@ class DownloadQDCWheelTask(RunCommandsWithVenvTask):
         super().__init__(
             "Download QDC Wheel",
             venv,
-            ["python -m qai_hub_models.scripts.download_qdc_tools"],
+            [
+                f"bash {REPO_ROOT}/scripts/ci/download-qdc-wheel.sh '{REPO_ROOT}'",
+            ],
+            env,
+            raise_on_failure,
+            ignore_return_codes or [],
+        )
+
+
+class DownloadQAIRTAutoSDKTask(RunCommandsWithVenvTask):
+    # Downloads the QAIRT SDK for automotive devices from S3 (requires AWS credentials)
+    def __init__(
+        self,
+        venv: str | None,
+        env: dict[str, str] | None = None,
+        raise_on_failure: bool = True,
+        ignore_return_codes: list[int] | None = None,
+    ) -> None:
+        super().__init__(
+            "Download QAIRT Auto SDK",
+            venv,
+            ["python -m qai_hub_models.scripts.download_auto_qairt"],
             env,
             raise_on_failure,
             ignore_return_codes or [],

@@ -196,7 +196,7 @@ class GPUPyTestModelsTask(CompositeTask):
             )
 
             # Install QDC wheel and optional GPU-specific requirements into the model venv.
-            qdc_wheel_glob = os.path.join(REPO_ROOT, "qdc_public_api_client-*.whl")
+            qdc_wheel_glob = os.path.join(REPO_ROOT, "qualcomm_device_cloud_sdk-*.whl")
             has_gpu_reqs = os.path.exists(
                 os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "requirements-gpu.txt")
             )
@@ -683,7 +683,7 @@ class CollectLLMPerfTask(CompositeTask):
         junit_xml_path = os.environ.get("QAIHM_JUNIT_XML_PATH")
 
         tasks = []
-        qdc_wheel_glob = os.path.join(REPO_ROOT, "qdc_public_api_client-*.whl")
+        qdc_wheel_glob = os.path.join(REPO_ROOT, "qualcomm_device_cloud_sdk-*.whl")
         common_command = (
             f"export HOME={home_dir} && mkdir -p {tmp_dir} && export TMPDIR={tmp_dir}"
             f" && rm -rf {home_dir}/.cache/huggingface/hub/models--*"

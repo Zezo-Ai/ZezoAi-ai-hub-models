@@ -142,14 +142,6 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup AWS Credentials
-      uses: ./.github/actions/configure-multiple-aws-roles
-      with:
-        role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
-        role-duration-seconds: 7200
-        profile: qaihm
-        aws-region: us-west-2
-
     - name: Download QDC wheel
       run: |
         python3 scripts/build_and_test.py \
@@ -157,7 +149,6 @@ jobs:
           --python="$(which python3)" \
           download_qdc_wheel
         rm -rf "$GITHUB_WORKSPACE"/build/*
-        mv "$HOME"/qdc_public_api_client-*.whl "$GITHUB_WORKSPACE"/
 
     - name: Install basic dependencies
       run: |
@@ -165,7 +156,7 @@ jobs:
         python scripts/build_and_test.py --venv='${{ env.VENV_PATH }}' install_deps
         source ${{ env.VENV_PATH }}/bin/activate
         pip install --upgrade pip setuptools
-        pip install qdc_public_api_client-*.whl
+        pip install qualcomm_device_cloud_sdk-*.whl
         pip uninstall -y onnxruntime
 
     - name: Configure Hub Credentials
@@ -222,9 +213,9 @@ jobs:
       run: |
         # Cleanup temporary files
         if [ -n "$HOME" ]; then
-          rm -rf "$HOME"/.aws "$HOME"/qdc*.whl
+          rm -rf "$HOME"/.aws
         fi
-        rm -rf "$GITHUB_WORKSPACE"/qdc_public_api_client-*.whl
+        rm -rf "$GITHUB_WORKSPACE"/qualcomm_device_cloud_sdk-*.whl
         rm -rf "$GITHUB_WORKSPACE"/genie_bundle/*
         rm -rf "$TMPDIR"
 
@@ -253,7 +244,8 @@ jobs:
             repo: 'tetracode',
             title: `GPU ${{ env.TEST_SUITE }} Tests Failed - ${today}`,
             body: `[View Workflow Run](${runUrl})\n\nPlease assign the appropriate ML Tech Team member.\n\n📊 [Update the Nightly Failure Log spreadsheet](https://qualcomm.sharepoint.com/:x:/r/teams/TetraAI2/Shared%20Documents/model-zoo/QAIHM%20Nightly%20Failure%20Log.xlsx?d=w73cc2ddb0d7b4fe58a9a8ba9efc10fd8) (GPU tab)`,
-            labels: ['p0', 'ai-hub-models', 'gen-ai']
+            labels: ['p0', 'ai-hub-models', 'gen-ai'],
+            assignees: ['shreyajn_QCOM']
           });
 
           core.setOutput('issue_url', result.data.html_url);

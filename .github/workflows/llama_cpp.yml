@@ -103,7 +103,6 @@ jobs:
             --python="${{ steps.setup_python.outputs.python-path }}" \
             download_qdc_wheel
           rm -rf "$GITHUB_WORKSPACE"/build/*
-          mv "$HOME"/qdc_public_api_client-*.whl "$GITHUB_WORKSPACE"/
 
       - name: Install dependencies
         run: |
@@ -112,7 +111,7 @@ jobs:
             --python="${{ steps.setup_python.outputs.python-path }}" \
             install_deps
           source "${{ env.VENV_PATH }}/bin/activate"
-          pip install "$GITHUB_WORKSPACE"/qdc_public_api_client-*.whl
+          pip install "$GITHUB_WORKSPACE"/qualcomm_device_cloud_sdk-*.whl
 
       - name: Download Llama.CPP Build Artifact
         uses: actions/download-artifact@v4
@@ -192,6 +191,6 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          rm -rf "$GITHUB_WORKSPACE"/qdc_public_api_client-*.whl
+          rm -rf "$GITHUB_WORKSPACE"/qualcomm_device_cloud_sdk-*.whl
           rm -rf llama.cpp
           rm -rf llama_cpp_results

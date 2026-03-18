@@ -13,7 +13,7 @@ import time
 import zipfile
 from abc import ABC, abstractmethod
 
-from qdc_public_api_client.models import ArtifactType
+from qualcomm_device_cloud_sdk.models import ArtifactType
 
 from qai_hub_models.utils.qdc.qdc_jobs import (
     HUB_DEVICE_TO_QDC_DEVICE_MAP,
@@ -541,7 +541,7 @@ if __name__ == "__main__":
         args.api_token,
         args.device,
         args.genie_bundle_path,
-        args.job_name,
+        args.job_name[:32],  # QDC job names have a 32-character limit
         args.qairt_sdk_path,
         args.qairt_version,
     )

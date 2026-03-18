@@ -160,14 +160,18 @@ jobs:
           --venv="${{ env.VENV_PATH }}" \
           --python="$(which python3)" \
           download_qdc_wheel
+        python3 scripts/build_and_test.py \
+          --venv="${{ env.VENV_PATH }}" \
+          download_qairt_auto_sdk
         rm -rf "$GITHUB_WORKSPACE"/build/*
-        mv "$HOME"/qdc_public_api_client-*.whl "$GITHUB_WORKSPACE"/
         mv "$HOME"/qairt_auto_sdk.zip "$GITHUB_WORKSPACE"/
 
     - name: Install basic dependencies
       run: |
         git config --global --add safe.directory $GITHUB_WORKSPACE
         python scripts/build_and_test.py --venv='${{ env.VENV_PATH }}' install_deps
+        source ${{ env.VENV_PATH }}/bin/activate
+        pip install qualcomm_device_cloud_sdk-*.whl
 
     - name: Configure Hub Credentials
       run: |
@@ -308,8 +312,8 @@ jobs:
       run: |
         # Cleanup temporary files
         if [ -n "$HOME" ]; then
-          rm -rf "$HOME"/.aws "$HOME"/qdc*.whl
+          rm -rf "$HOME"/.aws
         fi
-        rm -rf "$GITHUB_WORKSPACE"/qdc_public_api_client-*.whl
+        rm -rf "$GITHUB_WORKSPACE"/qualcomm_device_cloud_sdk-*.whl
         rm -rf "$GITHUB_WORKSPACE"/genie_bundles/*
         rm -rf "$TMPDIR"

@@ -7,15 +7,23 @@ from __future__ import annotations
 import time
 
 import qai_hub as hub
-from qdc_public_api_client.models import (
+from qualcomm_device_cloud_sdk.api import qdc_api
+from qualcomm_device_cloud_sdk.models import (
     ArtifactType,
     JobMode,
+    JobState,
     JobSubmissionParameter,
     JobType,
     TestFramework,
 )
 
-from qai_hub_models.extern.qdc import qdc_api
+# States in which a job is still in progress (not yet terminal)
+_RUNNING_STATES = {
+    JobState.DISPATCHED.value,
+    JobState.RUNNING.value,
+    JobState.SETUP.value,
+    JobState.SUBMITTED.value,
+}
 
 # Map from hub device names to QDC target device names
 HUB_DEVICE_TO_QDC_DEVICE_MAP = {
@@ -126,6 +134,7 @@ class QDCJobs:
         self.client = qdc_api.get_public_api_client_using_api_key(
             api_key_header=api_key,
             app_name_header=app_name_header,
+            on_behalf_of_header="ai_hub_models",
             client_type_header="Python",
         )
 
@@ -155,12 +164,16 @@ class QDCJobs:
         elapsed = 0
         while elapsed < timeout:
             job_status = qdc_api.get_job_status(self.client, job_id)
-            if job_status in {"Completed", "Canceled", "Failed", "Error", "Aborted"}:
+            if job_status not in _RUNNING_STATES:
                 time.sleep(POLL_INTERVAL)
                 return job_status
             time.sleep(POLL_INTERVAL)
             elapsed += POLL_INTERVAL
 
+        job_status = qdc_api.get_job_status(self.client, job_id)
+        if job_status in {"Completed", "Canceled", "Failed", "Error", "Aborted"}:
+            return job_status
+        qdc_api.abort_job(self.client, job_id)
         raise TimeoutError(
             f"Job {job_id} did not complete within {timeout} seconds. "
             f"Last status: {job_status}"

@@ -54,6 +54,7 @@ from tasks.util import echo, get_env_bool, on_ci, run
 from tasks.venv import (
     AggregateScorecardResultsTask,
     CreateVenvTask,
+    DownloadQAIRTAutoSDKTask,
     DownloadQDCWheelTask,
     GenerateGlobalRequirementsTask,
     SyncLocalQAIHMVenvTask,
@@ -266,13 +267,25 @@ class TaskLibrary:
         )
 
     @public_task("Download QDC wheel")
-    @depends(["install_deps", "validate_aws_credentials"])
+    @depends(["install_deps"])
     def download_qdc_wheel(
         self, plan: Plan, step_id: str = "download_qdc_wheel"
     ) -> str:
         return plan.add_step(
             step_id,
             DownloadQDCWheelTask(
+                venv=self.venv_path,
+            ),
+        )
+
+    @public_task("Download QAIRT Auto SDK")
+    @depends(["install_deps", "validate_aws_credentials"])
+    def download_qairt_auto_sdk(
+        self, plan: Plan, step_id: str = "download_qairt_auto_sdk"
+    ) -> str:
+        return plan.add_step(
+            step_id,
+            DownloadQAIRTAutoSDKTask(
                 venv=self.venv_path,
             ),
         )
