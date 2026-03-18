@@ -13,8 +13,19 @@ on:
   workflow_call:
 
 jobs:
+  approve:
+    if: github.event_name == 'workflow_dispatch'
+    name: Approve Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release
+    steps:
+      - run: echo "Release approved"
+
   release_code_repo:
       name: Release Code
+      needs: [approve]
+      if: ${{ !cancelled() && (needs.approve.result == 'success' || needs.approve.result == 'skipped') }}
       runs-on: [tetra-ubuntu-2204, self-hosted]
 
       steps:
@@ -27,14 +38,13 @@ jobs:
 
       - uses: actions/checkout@v6
 
-      - name: Push to public repository
+      - name: Push tag to public repository
         env:
           QAIHM_TAG: ${{ github.ref_name }}
           GH_TOKEN: ${{ secrets.PROD_GH_TOKEN }}
         run: |
           git config --local credential.helper '!f() { echo "username=x-access-token"; echo "password=$GH_TOKEN"; }; f'
           git remote add public https://github.com/qualcomm/ai-hub-models.git
-          git fetch public main --depth=1
 
           FORCE_FLAG=""
           if [ "${{ inputs.force }}" == "true" ]; then
@@ -45,15 +55,6 @@ jobs:
               exit 1
             fi
           fi
-
-          # Squash all changes into a single commit on top of public main
-          git reset public/main
-          git add -A
-          git commit -m "$QAIHM_TAG
-
-          See https://github.com/qualcomm/ai-hub-models/releases/$QAIHM_TAG for changelog.
-
-          Signed-off-by: The AI Hub Models Team <ai-hub-support@qti.qualcomm.com>"
 
           git tag -a $FORCE_FLAG "$QAIHM_TAG" -m "$QAIHM_TAG"
           git push $FORCE_FLAG public "$QAIHM_TAG"

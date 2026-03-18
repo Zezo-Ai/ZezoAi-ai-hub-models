@@ -24,16 +24,27 @@ jobs:
       models: none # only enable unit tests
       use_public_wheel: true
 
+  approve:
+    name: Approve Release
+    if: ${{ inputs.target == 'prod' }}
+    needs: [test_public_wheel]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release
+    steps:
+      - run: echo "Release approved"
+
   release_code:
       name: Release code to Repository
       secrets: inherit
-      needs: [test_public_wheel]
+      needs: [approve]
       uses: ./.github/workflows/release_code.yaml
 
   release_pypi:
       name: Release wheel to ${{ inputs.target == 'prod' && 'PyPi' || 'test PyPi' }}
       secrets: inherit
-      needs: [test_public_wheel]
+      needs: [approve]
+      if: ${{ !cancelled() && (needs.approve.result == 'success' || needs.approve.result == 'skipped') }}
       uses: ./.github/workflows/release_pypi.yaml
       with:
           target: ${{ inputs.target }}
@@ -42,21 +53,21 @@ jobs:
       name: Release Hugging Face Model Cards
       if: ${{ inputs.target == 'prod' }}
       secrets: inherit
-      needs: [test_public_wheel]
+      needs: [approve]
       uses: ./.github/workflows/release_huggingface.yaml
 
   release_assets:
       name: Release Assets
       if: ${{ inputs.target == 'prod' }}
       secrets: inherit
-      needs: [test_public_wheel]
+      needs: [approve]
       uses: ./.github/workflows/release_assets.yaml
 
   sync_public_website:
     name: Sync Public Website & Create Public Website PR
     secrets: inherit
     if: ${{ inputs.target == 'prod' }}
-    needs: [test_public_wheel]
+    needs: [approve]
     uses: ./.github/workflows/release_website.yml
     with:
       source_branch_name: ${{ github.ref }}

@@ -11,8 +11,19 @@ env:
   VENV_PATH: build/ci-envs/release
 
 jobs:
+  approve:
+    if: github.event_name == 'workflow_dispatch'
+    name: Approve Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release
+    steps:
+      - run: echo "Release approved"
+
   release_assets:
       name: Release - Assets
+      needs: [approve]
+      if: ${{ !cancelled() && (needs.approve.result == 'success' || needs.approve.result == 'skipped') }}
       runs-on: [tetra-ubuntu-2204, self-hosted]
       permissions:
         id-token: write # Required for OIDC auth to AWS
