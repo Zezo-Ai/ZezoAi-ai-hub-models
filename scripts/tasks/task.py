@@ -26,8 +26,10 @@ class Task(ABC):
         junit_name: str = "",
         junit_classname: str = "",
         prereqs: list[Task] | None = None,
+        group_logs_on_ci: bool = True,
     ) -> None:
         self.group_name = group_name
+        self.group_logs_on_ci = group_logs_on_ci
         self.raise_on_failure = raise_on_failure
         self.last_result: bool | None = None
         self.last_result_exception: Exception | None = None
@@ -70,7 +72,7 @@ class Task(ABC):
         """Entry point for callers: perform any startup/teardown tasks and call run_task."""
         self.last_result_exception = None
 
-        if self.group_name:
+        if self.group_name and self.group_logs_on_ci:
             start_group(self.group_name)
 
         failed = self._failed_prereqs()
@@ -82,30 +84,26 @@ class Task(ABC):
                 message=f"Skipped: prerequisite(s) failed ({names})",
             )
             self.last_result = False
-            if self.group_name:
+            if self.group_name and self.group_logs_on_ci:
                 end_group()
             return False
 
         try:
             result = self.run_task()
         except Exception as err:
+            self.last_result_exception = err
+            result = False
+
+        if self.group_name and self.group_logs_on_ci:
+            end_group()
+
+        if not result:
             self._write_junit(
                 TestStatus.FAILED,
                 message=f"{self.group_name} failed. Check the logs for details.",
             )
-            self.last_result_exception = err
-            result = False
         else:
-            if not result:
-                self._write_junit(
-                    TestStatus.FAILED,
-                    message=f"{self.group_name} failed. Check the logs for details.",
-                )
-            else:
-                self._write_junit(TestStatus.PASSED)
-
-        if self.group_name:
-            end_group()
+            self._write_junit(TestStatus.PASSED)
 
         self.last_result = result
         if not result and self.raise_on_failure:
@@ -360,7 +358,12 @@ class CompositeTask(Task):
         raise_on_failure: bool = True,
         show_subtasks_in_failure_message: bool = True,
     ) -> None:
-        super().__init__(group_name, raise_on_failure)
+        super().__init__(
+            group_name,
+            raise_on_failure,
+            # Don't group logs if subtasks use groups. GH can't handle nested groups.
+            group_logs_on_ci=not any(t.group_logs_on_ci for t in tasks),
+        )
         self.tasks = tasks
         self.continue_after_single_task_failure = continue_after_single_task_failure
         self.show_subtasks_in_failure_message = show_subtasks_in_failure_message

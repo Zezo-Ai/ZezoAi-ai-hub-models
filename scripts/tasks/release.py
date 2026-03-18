@@ -62,6 +62,7 @@ class BuildWheelTask(CompositeTask):
                     venv=venv,
                     env=env,
                     commands=[
+                        f"rm -f {os.path.join(wheel_dir, 'qai_hub_models-*.whl')}",
                         f"python -m build --wheel --outdir {wheel_dir}"
                         + (" > /dev/null" if on_ci() else ""),
                         f"echo 'Wheel can be found at {wheel_dir}'",

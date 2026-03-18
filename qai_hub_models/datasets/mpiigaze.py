@@ -24,6 +24,7 @@ MPII_GAZE_ASSET = CachedWebDatasetAsset(
     "MPIIGaze",
     MPII_GAZE_VERSION,
     "MPIIGaze.tar.gz",
+    ci_private_s3_key="qai-hub-models/datasets/mpiigaze/MPIIGaze.tar.gz",
 )
 
 
