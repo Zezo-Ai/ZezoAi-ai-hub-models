@@ -169,6 +169,7 @@ jobs:
         with:
           name: Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }}${{ inputs.split_name != '' && format(', {0}', inputs.split_name) || '' }})
           path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets.yaml
+          if-no-files-found: ignore
 
       - name: Combine Per-Model JUnit XMLs
         if: ${{ always() }}

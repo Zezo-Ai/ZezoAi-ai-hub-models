@@ -213,7 +213,8 @@ jobs:
         with:
             run-id: ${{ inputs.accuracy_action_id != '' && inputs.accuracy_action_id || inputs.action_id }}
             github-token: ${{ github.token }}
-            name: Scorecard Cached Artifact (accuracy.csv, ${{ inputs.action_id }})
+            pattern: "Scorecard Cached Artifact (accuracy.csv, ${{ inputs.action_id }}*)"
+            merge-multiple: true
             path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
 
       - name: Download ZIP Assets Results
@@ -223,9 +224,9 @@ jobs:
         with:
             run-id: ${{ inputs.export_tests_action_id != '' && inputs.export_tests_action_id || inputs.action_id }}
             github-token: ${{ github.token }}
-            pattern: Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }})
-            path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
+            pattern: "Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }}*)"
             merge-multiple: true
+            path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
 
       - name: Check Out Scorecard Intermediates
         if: inputs.latest_results_branch != ''

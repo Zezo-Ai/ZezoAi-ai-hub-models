@@ -55,7 +55,7 @@ class ImagenetDataset(BaseDataset, ImageNet):
         """
         if split != DatasetSplit.VAL:
             raise ValueError("Imagenet dataset currently only supports `val` split")
-        BaseDataset.__init__(self, IMAGENET_ASSET.path.parent, split)
+        BaseDataset.__init__(self, IMAGENET_ASSET.extracted_path, split)
         ImageNet.__init__(
             self,
             root=str(self.dataset_path),
@@ -90,20 +90,13 @@ class ImagenetDataset(BaseDataset, ImageNet):
         return ImageNet.__len__(self)
 
     def _download_data(self) -> None:
-        val_path = self.dataset_path / self.split_str
-        os.makedirs(val_path, exist_ok=True)
-
         IMAGENET_ASSET.fetch(extract=True)
         DEVKIT_ASSET.fetch()
         VAL_PREP_ASSET.fetch()
-
-        os.rename(VAL_PREP_ASSET.path, val_path / VAL_PREP_ASSET.path.name)
-        for filepath in self.dataset_path.iterdir():
-            if filepath.name.endswith(".JPEG"):
-                os.rename(filepath, val_path / filepath.name)
-
-        print("Moving images to appropriate class folder. This may take a few minutes.")
-        subprocess.call(f"sh {VAL_PREP_ASSET.path.name}", shell=True, cwd=val_path)
+        os.rename(VAL_PREP_ASSET.path, self.dataset_path / VAL_PREP_ASSET.path.name)
+        subprocess.call(
+            f"sh {VAL_PREP_ASSET.path.name}", shell=True, cwd=self.dataset_path
+        )
 
     @staticmethod
     def default_samples_per_job() -> int:

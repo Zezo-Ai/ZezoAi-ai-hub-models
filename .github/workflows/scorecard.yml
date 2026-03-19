@@ -229,30 +229,22 @@ jobs:
       test_mode: false
       python_version: "3.10"
 
-  collect_accuracy:
-    name: Compute On-Device Accuracy Metrics
-    needs: [submit_split_jobs, fix_flaky_jobs]
-    secrets: inherit
-    if: ${{ !cancelled() && needs.submit_split_jobs.result != 'skipped' && ( inputs.test_scope == 'accuracy' || inputs.test_scope == 'perf_and_accuracy' ) }}
-    uses: ./.github/workflows/scorecard_compute_device_accuracy.yml
-    with:
-      action_id: ${{ github.run_id }}
-
-  test_export_scripts:
-    name: Test Export Scripts & Upload Zip Files
+  collect_results_split:
+    name: Test Export Scripts, Upload Zip Files & Compute Accuracy
     needs: [submit_split_jobs, fix_flaky_jobs]
     secrets: inherit
     if: ${{ !cancelled() && needs.submit_split_jobs.result != 'skipped' }}
-    uses: ./.github/workflows/scorecard_test_export_scripts_split.yml
+    uses: ./.github/workflows/scorecard_results_collection_split.yml
     with:
       action_id: ${{ github.run_id }}
       upload_to_s3: ${{ contains(inputs.release_scope, 'upload_export_assets') }}
+      run_accuracy: ${{ inputs.test_scope == 'accuracy' || inputs.test_scope == 'perf_and_accuracy' }}
       max_models_per_split: 60
       max_num_splits: 8
 
   collect_results:
     name: Collect Scorecard Results
-    needs: [submit_split_jobs, fix_flaky_jobs, collect_accuracy, test_export_scripts]
+    needs: [submit_split_jobs, fix_flaky_jobs, collect_results_split]
     if: ${{ !cancelled() && needs.submit_split_jobs.result != 'skipped' }}
     secrets: inherit
     uses: ./.github/workflows/scorecard_collect_results.yml
@@ -267,7 +259,7 @@ jobs:
 
   combine_test_results:
     name: Combine Test Results
-    needs: [submit_split_jobs, collect_accuracy, test_export_scripts]
+    needs: [submit_split_jobs, collect_results_split]
     if: ${{ always() && needs.submit_split_jobs.result != 'skipped' }}
     runs-on: [tetra-ubuntu-2204, self-hosted]
     steps:
@@ -297,7 +289,7 @@ jobs:
 
       - name: Download Accuracy Test Results
         id: download_accuracy_results
-        if: ${{ needs.collect_accuracy.result != 'skipped' }}
+        if: ${{ needs.collect_results_split.result != 'skipped' }}
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -306,7 +298,7 @@ jobs:
 
       - name: Download Export Test Results
         id: download_export_results
-        if: ${{ needs.test_export_scripts.result != 'skipped' }}
+        if: ${{ needs.collect_results_split.result != 'skipped' }}
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -317,8 +309,8 @@ jobs:
         if: ${{ format('{0}', inputs.generate_test_summary) != 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          ACCURACY_SKIPPED: ${{ needs.collect_accuracy.result == 'skipped' }}
-          EXPORT_SKIPPED: ${{ needs.test_export_scripts.result == 'skipped' }}
+          ACCURACY_SKIPPED: ${{ needs.collect_results_split.result == 'skipped' }}
+          EXPORT_SKIPPED: ${{ needs.collect_results_split.result == 'skipped' }}
         run: |
           source "${{ env.VENV_PATH }}/bin/activate"
           mkdir -p build/combined-test-results

@@ -1,4 +1,4 @@
-name: Split Export Script Tests
+name: Split Results Collection
 
 on:
   workflow_call:
@@ -9,6 +9,11 @@ on:
 
       upload_to_s3:
         description: Upload export-generated ZIP files to S3
+        type: boolean
+        default: false
+
+      run_accuracy:
+        description: Run on-device accuracy computation
         type: boolean
         default: false
 
@@ -97,7 +102,7 @@ jobs:
           echo "Splits: $MATRIX"
           echo "Number of splits: $NUM_SPLITS"
 
-  start_jobs:
+  start_export_jobs:
     name: Test Exports (${{ matrix.split.split_name }})
     needs: split_models
     secrets: inherit
@@ -112,9 +117,24 @@ jobs:
       models: ${{ matrix.split.models }}
       split_name: ${{ matrix.split.split_name }}
 
+  start_accuracy_jobs:
+    name: Compute Accuracy (${{ matrix.split.split_name }})
+    needs: split_models
+    if: ${{ inputs.run_accuracy }}
+    secrets: inherit
+    strategy:
+      matrix:
+        split: ${{ fromJson(needs.split_models.outputs.matrix) }}
+      fail-fast: false
+    uses: ./.github/workflows/scorecard_compute_device_accuracy.yml
+    with:
+      action_id: ${{ inputs.action_id }}
+      models: ${{ matrix.split.models }}
+      split_name: ${{ matrix.split.split_name }}
+
   combine_artifacts:
     name: Combine Split Artifacts
-    needs: [split_models, start_jobs]
+    needs: [split_models, start_export_jobs, start_accuracy_jobs]
     if: ${{ !cancelled() && needs.split_models.result == 'success' }}
     runs-on: [tetra-ubuntu-2204, self-hosted]
     steps:
@@ -131,6 +151,8 @@ jobs:
             --venv="${{ env.VENV_PATH }}" \
             --python="${{ steps.setup_python.outputs.python-path }}" \
             install_deps
+
+      # --- Export Artifacts ---
 
       - name: Download All Split Release Asset Artifacts
         id: download_release_assets
@@ -167,35 +189,109 @@ jobs:
             gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
           done
 
-      - name: Download All Split Test Results
-        id: download_test_results
+      - name: Download All Split Export Test Results
+        id: download_export_test_results
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           pattern: test-results-export-*
-          path: build/split-test-results
+          path: build/split-export-test-results
 
-      - name: Combine JUnit XML Files
-        id: combine_test_results
-        if: ${{ steps.download_test_results.outcome == 'success' }}
+      - name: Combine Export JUnit XML Files
+        id: combine_export_test_results
+        if: ${{ steps.download_export_test_results.outcome == 'success' }}
         run: |
           source "${{ env.VENV_PATH }}/bin/activate"
           python scripts/combine_junit_xml.py \
-            --junit-xml build/split-test-results \
-            --output build/combined-test-results/qaihm-export-zip-tests-junit.xml
+            --junit-xml build/split-export-test-results \
+            --output build/combined-export-test-results/qaihm-export-zip-tests-junit.xml
 
-      - name: Upload Combined Test Results
-        if: ${{ steps.combine_test_results.outcome == 'success' }}
+      - name: Upload Combined Export Test Results
+        if: ${{ steps.combine_export_test_results.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: test-results-export
-          path: build/combined-test-results
+          path: build/combined-export-test-results
 
-      - name: Delete Split Test Results
+      - name: Delete Split Export Test Results
+        if: ${{ steps.download_export_test_results.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ARTIFACT_PREFIX="test-results-export-"
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name | startswith(\"$ARTIFACT_PREFIX\")) | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done
+
+      # --- Accuracy Artifacts ---
+
+      - name: Download All Split Accuracy CSV Artifacts
+        id: download_accuracy_csvs
+        if: ${{ inputs.run_accuracy }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: "Scorecard Cached Artifact (accuracy.csv, ${{ inputs.action_id }}, *)"
+          path: build/split-accuracy-csvs
+
+      - name: Combine Accuracy CSVs
+        if: ${{ steps.download_accuracy_csvs.outcome == 'success' }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python qai_hub_models/scripts/combine_split_artifacts.py \
+            --input-dir build/split-accuracy-csvs \
+            --output-dir build/combined-accuracy-csvs
+
+      - name: Upload Combined Accuracy CSV
+        if: ${{ steps.download_accuracy_csvs.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Scorecard Cached Artifact (accuracy.csv, ${{ inputs.action_id }})
+          path: build/combined-accuracy-csvs/accuracy.csv
+
+      - name: Delete Split Accuracy CSV Artifacts
+        if: ${{ steps.download_accuracy_csvs.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARTIFACT_PREFIX="Scorecard Cached Artifact (accuracy.csv, ${{ inputs.action_id }}, "
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name | startswith(\"$ARTIFACT_PREFIX\")) | .id" | while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
+          done
+
+      - name: Download All Split Accuracy Test Results
+        id: download_accuracy_test_results
+        if: ${{ inputs.run_accuracy }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: test-results-accuracy-*
+          path: build/split-accuracy-test-results
+
+      - name: Combine Accuracy JUnit XML Files
+        id: combine_accuracy_test_results
+        if: ${{ steps.download_accuracy_test_results.outcome == 'success' }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python scripts/combine_junit_xml.py \
+            --junit-xml build/split-accuracy-test-results \
+            --output build/combined-accuracy-test-results/qaihm-device-accuracy-tests-junit.xml
+
+      - name: Upload Combined Accuracy Test Results
+        if: ${{ steps.combine_accuracy_test_results.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-accuracy
+          path: build/combined-accuracy-test-results
+
+      - name: Delete Split Accuracy Test Results
+        if: ${{ steps.download_accuracy_test_results.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARTIFACT_PREFIX="test-results-accuracy-"
           gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name | startswith(\"$ARTIFACT_PREFIX\")) | .id" | while read artifact_id; do
             echo "Deleting artifact $artifact_id"
             gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
