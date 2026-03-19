@@ -10,6 +10,7 @@ from typing import Any
 
 import torch
 
+from qai_hub_models.models._shared.llm.common import TORCH_DYNAMIC_SHAPE_MIN_VERSION
 from qai_hub_models.models._shared.llm.model import (
     DEFAULT_CALIBRATION_SEQ_LEN,
     DEFAULT_CONTEXT_LENGTH,
@@ -19,6 +20,7 @@ from qai_hub_models.models._shared.llm.model import (
 from qai_hub_models.models.common import Precision
 from qai_hub_models.utils.args import get_quantize_action_with_default
 from qai_hub_models.utils.dataset_util import dataset_entries_to_dataloader
+from qai_hub_models.utils.version_helpers import ensure_supported_version
 
 
 def quantize(
@@ -36,7 +38,11 @@ def quantize(
     seq_mse_num_samples: int | None = None,
     ada_scale_num_samples: int | None = None,
     ada_scale_num_iterations: int | None = None,
+    use_dynamic_shapes: bool = False,
 ) -> None:
+    if use_dynamic_shapes:
+        ensure_supported_version("torch", min_version=TORCH_DYNAMIC_SHAPE_MIN_VERSION)
+
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     if device.type != "cuda":
         if not allow_cpu_to_quantize:
@@ -66,6 +72,7 @@ def quantize(
         checkpoint=None,
         host_device=device,
         fp_model=fp_model,
+        use_dynamic_shapes=use_dynamic_shapes,
     )
 
     # Determine how many samples we need
@@ -99,7 +106,9 @@ def quantize(
         ada_scale_num_iterations=ada_scale_num_iterations,
     )
 
-    model_quant.save_calibrated_checkpoint(output_dir, fp_model=fp_model)
+    model_quant.save_calibrated_checkpoint(
+        output_dir, fp_model=fp_model, use_dynamic_shapes=use_dynamic_shapes
+    )
     model_quant = model_quant.to("cpu")
     del model_quant
     fp_model = fp_model.to("cpu")
@@ -181,6 +190,12 @@ def llm_quantize(
         choices=[str(p) for p in supported_precisions],
         help="Pick the precision with which the model must be quantized.",
     )
+    parser.add_argument(
+        "--use-dynamic-shapes",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
 
     quantize(
@@ -198,6 +213,7 @@ def llm_quantize(
         seq_mse_num_samples=args.seq_mse_num_samples,
         ada_scale_num_samples=args.ada_scale_num_samples,
         ada_scale_num_iterations=args.ada_scale_num_iterations,
+        use_dynamic_shapes=args.use_dynamic_shapes,
     )
     print("Quantization completed successfully.")
     print()

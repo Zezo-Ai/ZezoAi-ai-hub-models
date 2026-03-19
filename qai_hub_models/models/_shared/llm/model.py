@@ -63,7 +63,10 @@ except ImportError:
 
 from typing_extensions import Self
 
-from qai_hub_models.models._shared.llm.common import LLMIOType
+from qai_hub_models.models._shared.llm.common import (
+    TORCH_DYNAMIC_SHAPE_MIN_VERSION,
+    LLMIOType,
+)
 from qai_hub_models.models._shared.llm.sha_dynamic_kvcache import (
     SHADynamicCacheNewValueOnly,
 )
@@ -256,7 +259,13 @@ def get_onnx_model(
     path: str,
     return_model: bool = False,
     llm_io_type: LLMIOType = LLMIOType.genie_input_ids,
+    use_dynamic_shapes: bool = False,
 ) -> onnx.ModelProto | None:
+    if use_dynamic_shapes:
+        ensure_supported_version("torch", min_version=TORCH_DYNAMIC_SHAPE_MIN_VERSION)
+    else:
+        ensure_supported_version("torch", min_version="2.4.1", below_version="2.9")
+
     # Create the checkpoint directory if it does not exist.
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
@@ -278,9 +287,14 @@ def get_onnx_model(
         llm_io_type=llm_io_type,
     )
     print()
-    print(
-        f"Exporting ONNX model with sequence length {sequence_length} and context length {context_length}. This could take around 10 minutes."
-    )
+    if use_dynamic_shapes:
+        print(
+            f"Exporting ONNX model with dynamic sequence length and dynamic context length (example context length {context_length}). This could take around 10 minutes."
+        )
+    else:
+        print(
+            f"Exporting ONNX model with sequence length {sequence_length} and context length {context_length}. This could take around 10 minutes."
+        )
 
     example_input = [
         torch.zeros(
@@ -301,10 +315,67 @@ def get_onnx_model(
     if already_has_data:
         os.rename(data_full_path, data_backup_full_path)
 
+    # Build dynamic_shapes if requested (for dynamo export)
+    dynamic_shapes = None
+    if use_dynamic_shapes:
+        from torch.export import Dim
+
+        # Define dimension constraints
+        # seq_len, kv_seq_len, and ctx_len are all dynamic.
+        # ctx_len = seq_len + kv_seq_len, but we declare them independently
+        # and let the tracer infer the relationship from the model computation.
+        seq_len = Dim.DYNAMIC  # type: ignore[attr-defined, unused-ignore]
+        kv_seq_len = Dim.DYNAMIC  # type: ignore[attr-defined, unused-ignore]
+        ctx_len = Dim.DYNAMIC  # type: ignore[attr-defined, unused-ignore]
+
+        # The model's forward signature is: forward(self, input_tokens, attention_mask, *args)
+        # So torch.export sees the input structure as: (input_tokens, attention_mask, args_tuple)
+        # We need dynamic_shapes to match this 3-element structure
+        input_names = list(input_specs.keys())
+
+        # Build dynamic shapes for the *args portion (everything after input_tokens and attention_mask)
+        args_dynamic_shapes: list[dict[int, Any] | None] = []
+        for name in input_names[2:]:  # Skip input_ids/input_embeds and attention_mask
+            if name == "position_ids":
+                # Shape: (1, seq_len)
+                args_dynamic_shapes.append({1: seq_len})
+            elif name in ("position_ids_cos", "position_ids_sin"):
+                # Shape: (1, 1, seq_len, embed_dim)
+                args_dynamic_shapes.append({2: seq_len})
+            elif name.startswith("past_key_"):
+                # past_key shape: (num_kv_heads, 1, embed_dim*2, kv_seq_len)
+                args_dynamic_shapes.append({3: kv_seq_len})
+            elif name.startswith("past_value_"):
+                # past_value shape: (num_kv_heads, 1, kv_seq_len, embed_dim*2)
+                args_dynamic_shapes.append({2: kv_seq_len})
+            else:
+                # No dynamic dims for other inputs
+                args_dynamic_shapes.append(None)
+
+        # Structure: (input_tokens_shape, attention_mask_shape, args_shapes_tuple)
+        dynamic_shapes = (
+            {1: seq_len},  # input_tokens (input_ids or input_embeds): (1, seq_len, ...)
+            {2: seq_len, 3: ctx_len},  # attention_mask: (1, 1, seq_len, context_length)
+            tuple(args_dynamic_shapes),  # *args
+        )
+
     try:
-        # Names are changed in 2.9, which can ruin a user's .onnx files. These
-        # files are cached, so we prevent users from running this export.
-        ensure_supported_version("torch", min_version="2.4.1", below_version="2.9")
+        # Names were changed in 2.9, which could ruin cached .onnx files.
+        # This is no longer an issue with 2.10+ dynamo export.
+        extra = {}
+        if use_dynamic_shapes:
+            extra = {
+                "opset_version": 18,
+                "dynamo": True,
+                "optimize": True,
+                "dynamic_shapes": dynamic_shapes,
+            }
+        else:
+            extra = {
+                "opset_version": 17,
+                "dynamo": False,
+            }
+
         with torch.no_grad():
             safe_torch_onnx_export(
                 fp_model,
@@ -314,7 +385,7 @@ def get_onnx_model(
                 output_names=fp_model._get_output_names(
                     fp_model.llm_config.num_hidden_layers
                 ),
-                opset_version=17,
+                **extra,
             )
 
         fp_model.to(old_device)
@@ -339,6 +410,7 @@ def get_onnx_model(
             os.rename(data_backup_full_path, data_full_path)
 
     load_external_data_for_model(onnx_model, os.path.dirname(path))
+
     if not return_model:
         del onnx_model
         gc.collect()
@@ -954,6 +1026,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         fp_model: LLMBase | None = None,
         checkpoint: str | os.PathLike | Path | None = None,
         _skip_quantsim_creation: bool = False,
+        use_dynamic_shapes: bool = False,
     ) -> Self:
         """
         Load weight from local checkpoint of Huggingface and create Aimet-ONNX QuantSim.
@@ -977,6 +1050,9 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             Note that encodings are sensitive to AIMET ONNX versions.
         _skip_quantsim_creation
             If True, skip creating the QuantSim model.
+        use_dynamic_shapes
+            If True, export the ONNX model with dynamic sequence/context
+            length dimensions.
 
         Returns
         -------
@@ -997,12 +1073,22 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             if checkpoint is None:
                 onnx_file_exists = False
             else:
-                onnx_path = os.path.join(
-                    checkpoint, f"model_seqlen{sequence_length}_cl{context_length}.onnx"
-                )
-                onnx_file_exists = os.path.exists(onnx_path) and os.path.exists(
-                    os.path.join(checkpoint, "model.data")
-                )
+                external_data_exists = os.path.exists(
+                    os.path.join(checkpoint, "model.onnx.data")
+                ) or os.path.exists(os.path.join(checkpoint, "model.data"))
+
+                # Look for fully dynamic ONNX model first (new format)
+                onnx_path = os.path.join(checkpoint, "model_dynamic.onnx")
+                onnx_file_exists = os.path.exists(onnx_path) and external_data_exists
+                if not onnx_file_exists:
+                    # Fall back to fixed-shape model (old format)
+                    onnx_path = os.path.join(
+                        checkpoint,
+                        f"model_seqlen{sequence_length}_cl{context_length}.onnx",
+                    )
+                    onnx_file_exists = (
+                        os.path.exists(onnx_path) and external_data_exists
+                    )
 
             if not onnx_file_exists:
                 if fp_model is None:
@@ -1017,6 +1103,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
                     path=onnx_tmpfile,
                     return_model=True,
                     llm_io_type=fp_model.llm_io_type,
+                    use_dynamic_shapes=use_dynamic_shapes,
                 )
 
             else:
@@ -1149,49 +1236,60 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         self,
         output_checkpoint: str | os.PathLike | Path,
         fp_model: LLMBase,
+        use_dynamic_shapes: bool = False,
     ) -> None:
         """
         output_checkpoint: Path to the directory which must store the checkpoint.
-        It would contain the encodings file, external data file and multiple ONNX
-        models that will be needed by the user.
-        """
-        # Make the directory for the output checkpoint
-        os.makedirs(output_checkpoint, exist_ok=True)
-        export_sequence_lengths = {
-            *DEFAULT_EXPORT_SEQUENCE_LENGTHS,
-            self.sequence_length,
-            self.context_length // 2,
-        }
-        # If the sequence length is ARs to be exported then export model as part of QuantSim.
-        export_sequence_lengths.discard(self.sequence_length)
 
+        When use_dynamic_shapes is True, produces a single model_dynamic.onnx
+        with symbolic dimensions. When False, produces per-sequence-length ONNX
+        files (model_seqlen{sequence_length}_cl{context_length}.onnx).
+        """
+        os.makedirs(output_checkpoint, exist_ok=True)
         print(f"Creating a checkpoint of quantized model at {output_checkpoint}.")
-        # Create the multiple ONNX models.
-        self.create_onnx_models(
-            checkpoint=output_checkpoint,
-            fp_model=fp_model,
-            context_length=self.context_length,
-            export_sequence_lengths=list(export_sequence_lengths),
-            host_device=self.host_device or torch.device("cpu"),
-            llm_io_type=self.llm_io_type,
-        )
+
+        if not use_dynamic_shapes:
+            # Static path: create per-seqlen ONNX files for each export seq_len
+            export_sequence_lengths = {
+                *DEFAULT_EXPORT_SEQUENCE_LENGTHS,
+                self.sequence_length,
+                self.context_length // 2,
+            }
+            export_sequence_lengths.discard(self.sequence_length)
+            self.create_onnx_models(
+                checkpoint=output_checkpoint,
+                fp_model=fp_model,
+                context_length=self.context_length,
+                export_sequence_lengths=list(export_sequence_lengths),
+                host_device=self.host_device or torch.device("cpu"),
+                llm_io_type=self.llm_io_type,
+            )
 
         # Remove existing .data file if it exists since QuantSim export will create a new one
         if os.path.exists(os.path.join(output_checkpoint, "model.data")):
             os.remove(os.path.join(output_checkpoint, "model.data"))
 
-        # Export the QuantSim last, since we want any weights modified by QuantSim to be used for all model variants
+        # Export the QuantSim model (produces model.onnx + model.data + model.encodings).
+        # If the input ONNX had dynamic shapes, QuantSim preserves them.
         assert self.quant_sim is not None
         self.quant_sim.export(str(output_checkpoint), "model")
         del self.quant_sim
-        # Save ONNX model and data file in the checkpoint.
-        shutil.copy(
-            os.path.join(output_checkpoint, "model.onnx"),
-            os.path.join(
-                output_checkpoint,
-                f"model_seqlen{self.sequence_length}_cl{self.context_length}.onnx",
-            ),
-        )
+
+        onnx_path = os.path.join(output_checkpoint, "model.onnx")
+        if use_dynamic_shapes:
+            # Dynamic path: rename to model_dynamic.onnx
+            shutil.move(
+                onnx_path, os.path.join(output_checkpoint, "model_dynamic.onnx")
+            )
+        else:
+            # Static path: rename to indicate static instance.
+            shutil.move(
+                onnx_path,
+                os.path.join(
+                    output_checkpoint,
+                    f"model_seqlen{self.sequence_length}_cl{self.context_length}.onnx",
+                ),
+            )
 
         self.llm_config.save_pretrained(output_checkpoint)
         self.tokenizer.save_pretrained(output_checkpoint)
@@ -1202,35 +1300,55 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         checkpoint: str | os.PathLike | Path,
         fp_model: LLMBase,
         context_length: int,
-        export_sequence_lengths: list[int],
+        export_sequence_lengths: list[int] | None = None,
         host_device: torch.device = torch.device("cpu"),
         llm_io_type: LLMIOType = LLMIOType.genie_input_ids,
+        use_dynamic_shapes: bool = False,
     ) -> None:
+        """
+        Export ONNX models for the checkpoint.
+
+        When use_dynamic_shapes is True, creates a single model_dynamic.onnx
+        with symbolic dimensions.
+
+        Otherwise (default), creates one model_seqlen{seq}_cl{ctx}.onnx per
+        sequence length in export_sequence_lengths.
+        """
         external_weights_file = os.path.join(checkpoint, "model.data")
         onnx_file = os.path.join(checkpoint, "model.onnx")
-        # Make floating point model
-        for seq_len in export_sequence_lengths:
-            expected_onnx_model = os.path.join(
-                checkpoint, f"model_seqlen{seq_len}_cl{context_length}.onnx"
-            )
-            if not os.path.exists(expected_onnx_model) or not os.path.exists(
+
+        if use_dynamic_shapes:
+            # Dynamic: single model_dynamic.onnx
+            dynamic_onnx_model = os.path.join(checkpoint, "model_dynamic.onnx")
+            if not os.path.exists(dynamic_onnx_model) or not os.path.exists(
                 external_weights_file
             ):
-                # Export to ONNX for any sequence length needed.
-                # The external weights is made multiple times but is overwritten each
-                # time so only one copy is there at a given time.
                 get_onnx_model(
                     fp_model=fp_model,
                     context_length=context_length,
-                    sequence_length=seq_len,
+                    sequence_length=DEFAULT_SEQUENCE_LENGTH,
                     path=onnx_file,
                     llm_io_type=llm_io_type,
+                    use_dynamic_shapes=True,
                 )
-                # Rename the model per sequence_length
-                shutil.move(
-                    onnx_file,
-                    expected_onnx_model,
+                shutil.move(onnx_file, dynamic_onnx_model)
+        elif export_sequence_lengths is not None:
+            # Static: per-seqlen ONNX files
+            for seq_len in export_sequence_lengths:
+                expected_onnx_model = os.path.join(
+                    checkpoint, f"model_seqlen{seq_len}_cl{context_length}.onnx"
                 )
+                if not os.path.exists(expected_onnx_model) or not os.path.exists(
+                    external_weights_file
+                ):
+                    get_onnx_model(
+                        fp_model=fp_model,
+                        context_length=context_length,
+                        sequence_length=seq_len,
+                        path=onnx_file,
+                        llm_io_type=llm_io_type,
+                    )
+                    shutil.move(onnx_file, expected_onnx_model)
 
     @classmethod
     def save_tokenizer_and_config(
@@ -1258,15 +1376,30 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         os.makedirs(base_path, exist_ok=True)
         assert self.checkpoint is not None
 
-        src_onnx_filepath = os.path.join(
-            self.checkpoint,
-            f"model_seqlen{self.sequence_length}_cl{self.context_length}.onnx",
+        src_onnx_filepath = os.path.join(self.checkpoint, "model_dynamic.onnx")
+        if not os.path.exists(src_onnx_filepath):
+            # Fall back to fixed-shape model
+            src_onnx_filepath = os.path.join(
+                self.checkpoint,
+                f"model_seqlen{self.sequence_length}_cl{self.context_length}.onnx",
+            )
+        # Find the external data file (always "model.data" in our pipelines)
+        src_external_weights_filepath = None
+        for name in ["model.data", "model.onnx.data"]:
+            candidate = os.path.join(self.checkpoint, name)
+            if os.path.exists(candidate):
+                src_external_weights_filepath = candidate
+                break
+        assert src_external_weights_filepath is not None, (
+            f"External data file not found in {self.checkpoint}"
         )
-        src_external_weights_filepath = os.path.join(self.checkpoint, "model.data")
+
         src_encodings_filepath = os.path.join(self.checkpoint, "model.encodings")
 
         dst_onnx_filepath = os.path.join(base_path, "model.onnx")
-        dst_external_weights_filepath = os.path.join(base_path, "model.data")
+        dst_external_weights_filepath = os.path.join(
+            base_path, os.path.basename(src_external_weights_filepath)
+        )
         dst_encodings_filepath = os.path.join(base_path, "model.encodings")
 
         shutil.copy(src_onnx_filepath, dst_onnx_filepath)

@@ -76,6 +76,7 @@ def _create_patches(
     _patch[Mock],
     _patch[Mock],
     _patch[Mock],
+    _patch[Mock],
 ]:
     mock_from_pretrained = _mock_from_pretrained(
         model_cls, context_length, sequence_length
@@ -95,6 +96,7 @@ def _create_patches(
     )
 
     patch_onnx_checker = patch("onnx.checker.check_model")
+    patch_onnx_load = patch("onnx.load")
 
     patch_split_onnx = patch(
         "qai_hub_models.models._shared.llm.split_onnx_utils.utils.split_onnx",
@@ -121,6 +123,7 @@ def _create_patches(
         patch_model,
         patch_fp_model,
         patch_onnx_checker,
+        patch_onnx_load,
         patch_split_onnx,
         patch_onnx_files,
         patch_get_or_create_cached_model,
@@ -138,6 +141,7 @@ def test_cli_device_with_skips_unsupported_precision_device(
         _,
         patch_model,
         patch_fp_model,
+        _,
         _,
         _,
         patch_onnx_files,
@@ -182,6 +186,7 @@ def test_cli_device_with_skips_unsupported_context_length(
         _,
         patch_model,
         patch_fp_model,
+        _,
         _,
         _,
         patch_onnx_files,
@@ -234,6 +239,7 @@ def test_cli_device_with_skips(
         patch_model,
         patch_fp_model,
         patch_onnx_checker,
+        patch_onnx_load,
         patch_split_onnx,
         patch_onnx_files,
         patch_get_or_create_cached_model,
@@ -245,6 +251,7 @@ def test_cli_device_with_skips(
         patch_model,
         patch_fp_model,
         patch_onnx_checker,
+        patch_onnx_load,
         patch_split_onnx,
         patch_onnx_files,
         patch_get_or_create_cached_model,
@@ -324,6 +331,7 @@ def test_cli_multiple_context_lengths_link_jobs(
         patch_model,
         patch_fp_model,
         patch_onnx_checker,
+        patch_onnx_load,
         patch_split_onnx,
         patch_onnx_files,
         patch_get_or_create_cached_model,
@@ -337,6 +345,7 @@ def test_cli_multiple_context_lengths_link_jobs(
         patch_model,
         patch_fp_model,
         patch_onnx_checker,
+        patch_onnx_load,
         patch_split_onnx,
         patch_onnx_files,
         patch_get_or_create_cached_model,
@@ -398,6 +407,7 @@ def test_cli_chipset_with_options(
         patch_model,
         patch_fp_model,
         patch_onnx_checker,
+        patch_onnx_load,
         patch_split_onnx,
         patch_onnx_files,
         patch_get_or_create_cached_model,
@@ -409,6 +419,7 @@ def test_cli_chipset_with_options(
         patch_model,
         patch_fp_model,
         patch_onnx_checker as mock_onnx_checker,
+        patch_onnx_load,
         patch_split_onnx as mock_split_onnx,
         patch_onnx_files,
         patch_get_or_create_cached_model,
@@ -548,6 +559,7 @@ def test_cli_default_device_select_component(
         patch_model,
         patch_fp_model,
         patch_onnx_checker,
+        patch_onnx_load,
         patch_split_onnx,
         patch_onnx_files,
         patch_get_or_create_cached_model,
@@ -561,6 +573,7 @@ def test_cli_default_device_select_component(
         patch_model,
         patch_fp_model,
         patch_onnx_checker as mock_onnx_checker,
+        patch_onnx_load,
         patch_split_onnx as mock_split_onnx,
         patch_onnx_files,
         patch_get_or_create_cached_model as mock_get_or_create_cached_model,
@@ -642,12 +655,18 @@ def setup_test_quantization(
     checkpoint: str | None = None,
     num_samples: int = 0,
     use_seq_mse: bool = False,
+    use_dynamic_shapes: bool = False,
 ) -> str:
     if not (
         (Path(output_path) / "model.encodings").exists()
         and (Path(output_path) / "model.data").exists()
-        and (Path(output_path) / "model_seqlen1_cl4096.onnx").exists()
-        and (Path(output_path) / "model_seqlen128_cl4096.onnx").exists()
+        and (
+            (
+                (Path(output_path) / "model_seqlen1_cl4096.onnx").exists()
+                and (Path(output_path) / "model_seqlen128_cl4096.onnx").exists()
+            )
+            or (Path(output_path) / "model_dynamic.onnx").exists()
+        )
     ):
         quantize(
             quantized_model_cls=model_cls,
@@ -660,6 +679,7 @@ def setup_test_quantization(
             checkpoint=checkpoint,
             num_samples=num_samples,
             use_seq_mse=use_seq_mse,
+            use_dynamic_shapes=use_dynamic_shapes,
         )
         cleanup()
     return output_path

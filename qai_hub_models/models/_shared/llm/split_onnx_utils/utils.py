@@ -266,7 +266,6 @@ def split_onnx_by_names(
         input_tensor_names = [i.name for i in subgraph.input]
         output_tensor_names = [i.name for i in subgraph.output]
         new_model_info.append([new_basename, input_tensor_names, output_tensor_names])
-
         submodel = onnx.helper.make_model(
             subgraph, opset_imports=onnxmodel.opset_import
         )
@@ -352,7 +351,11 @@ def _get_lm_head_sizes(onnxmodel: onnx.ModelProto) -> tuple[int, int]:
     if len(lm_head_weight.dims) == 2:
         embedding_size, vocab_size = lm_head_weight.dims
     else:
-        (lm_head,) = (i for i in onnxmodel.graph.node if lm_head_weight.name in i.input)
+        (lm_head,) = (
+            i
+            for i in onnxmodel.graph.node
+            if lm_head_weight.name in i.input and i.op_type in {"Conv", "MatMul"}
+        )
         if lm_head.op_type == "Conv":
             attr_group = [i.i for i in lm_head.attribute if i.name == "group"]
             group = attr_group[0] if len(attr_group) == 1 else 1
@@ -440,11 +443,17 @@ def split_onnx(
     (input_tokens,) = (
         i for i in onnxmodel.graph.input if i.name in {"input_ids", "inputs_embeds"}
     )
-    input_tokens_shape = tuple(
-        i.dim_value for i in input_tokens.type.tensor_type.shape.dim
-    )
-    batch_size = input_tokens_shape[0]
-    seq_length = input_tokens_shape[1]
+
+    # Handle both concrete and symbolic (dynamic) dimensions
+    def get_dim(dim: Any) -> int | str:
+        """Return dim_value for concrete dims, or dim_param (symbolic name) for dynamic dims."""
+        if dim.dim_param:
+            return dim.dim_param  # Symbolic dimension (e.g., "seq_len")
+        return dim.dim_value  # Concrete dimension
+
+    input_tokens_dims = input_tokens.type.tensor_type.shape.dim
+    batch_size = get_dim(input_tokens_dims[0])
+    seq_length = get_dim(input_tokens_dims[1])
 
     embedding_size, _vocab_size = _get_lm_head_sizes(onnxmodel)
 

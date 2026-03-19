@@ -162,6 +162,7 @@ class Llama3_8B_AIMETOnnx(Llama3Base_AIMETOnnx):
         precision: Precision = DEFAULT_PRECISION,
         fp_model: LLMBase | None = None,
         _skip_quantsim_creation: bool = False,
+        use_dynamic_shapes: bool = False,
     ) -> Self:
         if host_device is None:
             host_device = torch.device("cpu")
@@ -206,6 +207,7 @@ class Llama3_8B_AIMETOnnx(Llama3Base_AIMETOnnx):
             precision=precision,
             fp_model=fp_model,
             _skip_quantsim_creation=_skip_quantsim_creation,
+            use_dynamic_shapes=use_dynamic_shapes,
         )
 
     @staticmethod

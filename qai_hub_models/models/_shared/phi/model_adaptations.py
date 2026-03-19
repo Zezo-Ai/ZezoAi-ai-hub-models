@@ -20,6 +20,7 @@ from transformers.models.phi3.modeling_phi3 import (
     Phi3MLP,
 )
 
+from qai_hub_models.models._shared.llm.common import TORCH_SUPPORTS_DYNAMIC_SHAPE
 from qai_hub_models.models._shared.llm.model_adaptations import (
     ConvInplaceLinear,
     repeat_kv,
@@ -279,7 +280,12 @@ class Phi35SHAAttention(Phi3Attention):
     ):
         bsz, q_len, _ = hidden_states.size()
 
-        hidden_states = torch.reshape(hidden_states, (bsz, -1, 1, self.hidden_size_))
+        if TORCH_SUPPORTS_DYNAMIC_SHAPE:
+            hidden_states = hidden_states.unsqueeze(2)
+        else:
+            hidden_states = torch.reshape(
+                hidden_states, (bsz, -1, 1, self.hidden_size_)
+            )
         hidden_states = hidden_states.transpose(1, 3)
 
         query_states = [
@@ -393,9 +399,12 @@ class Phi35SHAAttention(Phi3Attention):
             0, 3, 1, 2
         )  # [batch, all_head_dim, 1, seq_len]
         attn_output_concat = self.o_proj_conv(attn_output_concat)
-        attn_output_concat = attn_output_concat.transpose(1, 3).reshape(
-            bsz, q_len, self.hidden_size_
-        )
+        if TORCH_SUPPORTS_DYNAMIC_SHAPE:
+            attn_output_concat = attn_output_concat.transpose(1, 3).squeeze(2)
+        else:
+            attn_output_concat = attn_output_concat.transpose(1, 3).reshape(
+                bsz, q_len, self.hidden_size_
+            )
 
         attn_weights_return = attn_weights if output_attentions else None
 

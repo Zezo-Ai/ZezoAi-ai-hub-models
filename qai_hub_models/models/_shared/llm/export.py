@@ -79,6 +79,16 @@ def _make_sub_component_name(
     return f"{instantiation_name}_{part_index + 1}_of_{num_splits}"
 
 
+def _onnx_has_dynamic_shapes(onnx_path: str) -> bool:
+    """Check if an ONNX model has dynamic (symbolic) input dimensions."""
+    model = onnx.load(onnx_path, load_external_data=False)
+    for inp in model.graph.input:
+        for dim in inp.type.tensor_type.shape.dim:
+            if dim.dim_param:
+                return True
+    return False
+
+
 # TODO(#12640): Unnecessary if we can pull this information directly.
 def _infer_output_specs(
     instantiations: list[tuple[str, int, int]],
@@ -301,7 +311,7 @@ def export_model(
     link_jobs: dict[str, hub.client.LinkJob] = {}
     profile_options_per_subcomponent: dict[str, str] = {}
     onnx_model_path_from_sub_component_name: dict[str, str] = {}
-    llm_config: PretrainedConfig | None = None
+    llm_config: PretrainedConfig
 
     sub_component_names: dict[str, list[str]] = {}
     component_from_sub_component_names = {}
@@ -316,51 +326,68 @@ def export_model(
         onnx_export_dir = tmpdir_handler.name
     Path(onnx_export_dir).mkdir(parents=True, exist_ok=True)
 
-    for instantiation_name, seq_len, ctx_len in instantiations:
-        full_name = f"{model_name}_{instantiation_name}"
-        model = model_cls.from_pretrained(
-            sequence_length=seq_len,
-            context_length=ctx_len,
-            precision=precision,
-            **model_params,
+    # Load the model once to determine checkpoint type and get llm_config.
+    _first_instantiation_name, first_seq_len, first_ctx_len = instantiations[0]
+    model = model_cls.from_pretrained(
+        sequence_length=first_seq_len,
+        context_length=first_ctx_len,
+        precision=precision,
+        **model_params,
+    )
+    llm_config = model.llm_config
+
+    # Check if the checkpoint has a dynamic ONNX model.
+    # Dynamic models are exported/split/uploaded once and compiled with
+    # explicit input_specs for each (seq_len, ctx_len) combo.
+    # Static models are exported/split/uploaded per combo.
+    has_dynamic_onnx = (
+        hasattr(model, "checkpoint")
+        and model.checkpoint is not None
+        and os.path.exists(os.path.join(model.checkpoint, "model_dynamic.onnx"))
+        and _onnx_has_dynamic_shapes(
+            os.path.join(model.checkpoint, "model_dynamic.onnx")
         )
+    )
 
-        llm_config = model.llm_config
-        sub_component_names[instantiation_name] = []
-
-        input_spec = model.get_input_spec(
+    def _export_split_upload(
+        label: str,
+        inst_model: LLM_AIMETOnnx,
+        inst_seq_len: int,
+        inst_ctx_len: int,
+    ) -> tuple[list[Any], list[list[str]]]:
+        """Export ONNX, split, upload parts. Returns (uploaded_models, split_input_names)."""
+        inst_input_spec = inst_model.get_input_spec(
             **{
-                **get_input_spec_kwargs(model, additional_model_kwargs),
-                "sequence_length": seq_len,
-                "context_length": model.context_length,
+                **get_input_spec_kwargs(inst_model, additional_model_kwargs),
+                "sequence_length": inst_seq_len,
+                "context_length": inst_ctx_len,
                 "llm_config": llm_config.to_dict(),
-                "llm_io_type": model.llm_io_type,
+                "llm_io_type": inst_model.llm_io_type,
             },
         )
-
-        sub_output_path = Path(onnx_export_dir) / instantiation_name
-        source_model_dir = model.convert_to_hub_source_model(
+        sub_output_path = Path(onnx_export_dir) / label
+        source_model_dir = inst_model.convert_to_hub_source_model(
             target_runtime,
             sub_output_path,
-            input_spec,
+            inst_input_spec,
             external_onnx_weights=True,
-            output_names=model.get_output_names(),
+            output_names=inst_model.get_output_names(),
         )
         assert source_model_dir is not None
         source_model_bundle = ONNXBundle.from_bundle_path(source_model_dir)
+        nonlocal input_encodings_path
         input_encodings_path = str(source_model_bundle.aimet_encodings_path)
-        # Split encodings
-        model_artifact = Path(onnx_export_dir) / instantiation_name
-        os.makedirs(model_artifact, exist_ok=True)
 
+        model_artifact = Path(onnx_export_dir) / label
+        os.makedirs(model_artifact, exist_ok=True)
         onnx.checker.check_model(source_model_bundle.onnx_graph_path, full_check=True)
-        subcomponent_onnx_bundles: list[ONNXBundle]
+
         if num_splits == 1:
-            subcomponent_onnx_bundles = [source_model_bundle]
+            bundles = [source_model_bundle]
         else:
-            subcomponent_onnx_bundles = utils.split_onnx(
+            bundles = utils.split_onnx(
                 onnxfile=source_model_bundle,
-                modelname=full_name,
+                modelname=f"{model_name}_{label}",
                 num_splits=num_splits,
                 num_layers_per_split=num_layers_per_split,
                 output_dir=model_artifact,
@@ -368,10 +395,74 @@ def export_model(
                 using_qairt_workflow=True,
             )
 
-        # Submit the parts for compilation
-        for i, onnx_model_bundle in enumerate(subcomponent_onnx_bundles):
-            # Sequence length (ar...) and context lenght (cl...) in graph name
-            # are semantically important to Genie
+        uploaded: list[Any] = []
+        input_names: list[list[str]] = []
+        for i, bundle in enumerate(bundles):
+            onnx_path = bundle.onnx_graph_path.as_posix()
+            split_model = onnx.load(onnx_path, load_external_data=False)
+            onnx.checker.check_model(onnx_path, full_check=True)
+            input_names.append([inp.name for inp in split_model.graph.input])
+
+            cache_keys: dict[str, str] = {"precision": str(precision)}
+            if not has_dynamic_onnx:
+                cache_keys["context_length"] = str(inst_ctx_len)
+                cache_keys["sequence_length"] = str(inst_seq_len)
+
+            uploaded.append(
+                get_or_create_cached_model(
+                    model_name=model_name,
+                    model_asset_version=model_asset_version,
+                    cache_name=f"{label}_part_{i + 1}_of_{num_splits}",
+                    cache_mode=model_cache_mode,
+                    model_path=bundle.bundle_path.as_posix(),
+                    additional_keys=cache_keys,
+                )
+            )
+        return uploaded, input_names
+
+    if has_dynamic_onnx:
+        # Dynamic path: Export+Upload once per part (regardless of instantiations)
+        uploaded_models, split_onnx_input_names = _export_split_upload(
+            "dynamic", model, first_seq_len, first_ctx_len
+        )
+    else:
+        # Static path: Export+Upload once per instantiation and part
+        uploaded_models = []
+        split_onnx_input_names = []
+
+    # Submit compile jobs for each (seq_len, ctx_len) combo
+    for inst_idx, (instantiation_name, seq_len, ctx_len) in enumerate(instantiations):
+        sub_component_names[instantiation_name] = []
+
+        if not has_dynamic_onnx:
+            # Static path: export/split/upload per instantiation
+            # Reuse the model from the initial load for the first instantiation.
+            if inst_idx > 0:
+                model = model_cls.from_pretrained(
+                    sequence_length=seq_len,
+                    context_length=ctx_len,
+                    precision=precision,
+                    **model_params,
+                )
+                llm_config = model.llm_config
+            uploaded_models, split_onnx_input_names = _export_split_upload(
+                instantiation_name, model, seq_len, ctx_len
+            )
+        else:
+            model.sequence_length = seq_len
+            model.context_length = ctx_len
+
+        input_spec = model.get_input_spec(
+            **{
+                **get_input_spec_kwargs(model, additional_model_kwargs),
+                "sequence_length": seq_len,
+                "context_length": ctx_len,
+                "llm_config": llm_config.to_dict(),
+                "llm_io_type": model.llm_io_type,
+            },
+        )
+
+        for i in range(len(uploaded_models)):
             sub_component_name = _make_sub_component_name(
                 instantiation_name, i, num_splits
             )
@@ -379,31 +470,28 @@ def export_model(
             sub_component_names[instantiation_name].append(sub_component_name)
             full_name = f"{model_name}_{sub_component_name}"
 
-            onnx_path = onnx_model_bundle.onnx_graph_path.as_posix()
-            onnx.checker.check_model(onnx_path, full_check=True)
-
-            onnx_model_path_from_sub_component_name[sub_component_name] = str(onnx_path)
             model_compile_options = model.get_hub_compile_options(
                 target_runtime,
                 precision,
                 compile_options,
                 context_graph_name=model.get_qnn_context_graph_name(i, num_splits),
             )
-            current_model = get_or_create_cached_model(
-                model_name=model_name,
-                model_asset_version=model_asset_version,
-                cache_name=sub_component_name,
-                cache_mode=model_cache_mode,
-                model_path=onnx_model_bundle.bundle_path.as_posix(),
-                additional_keys={
-                    "context_length": str(model.context_length),
-                    "sequence_length": str(seq_len),
-                    "precision": str(precision),
-                },
-            )
+
+            # Build per-split input spec from the split's ONNX input names.
+            # Intermediate tensors (e.g. "embedding") from previous splits are float32.
+            split_input_spec = {}
+            for inp_name in split_onnx_input_names[i]:
+                if inp_name in input_spec:
+                    split_input_spec[inp_name] = input_spec[inp_name]
+                else:
+                    split_input_spec[inp_name] = (
+                        (1, seq_len, llm_config.hidden_size),
+                        "float32",
+                    )
 
             submitted_compile_job = hub.submit_compile_job(
-                model=current_model,
+                model=uploaded_models[i],
+                input_specs=split_input_spec,
                 device=device,
                 name=full_name,
                 options=model_compile_options,

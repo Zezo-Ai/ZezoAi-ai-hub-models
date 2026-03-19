@@ -6,6 +6,15 @@ import gc
 from enum import Enum
 
 import torch
+from packaging.version import Version
+
+# Minimum torch version required for dynamic-shape ONNX export (dynamo export).
+# Note that earlier versions did support dynamic shapes in general, but did
+# not work well for LLMs until 2.10.
+TORCH_DYNAMIC_SHAPE_MIN_VERSION = "2.10"
+TORCH_SUPPORTS_DYNAMIC_SHAPE = Version(torch.__version__) >= Version(
+    TORCH_DYNAMIC_SHAPE_MIN_VERSION
+)
 
 
 def cleanup() -> None:

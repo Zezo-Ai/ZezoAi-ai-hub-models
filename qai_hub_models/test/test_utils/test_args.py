@@ -190,6 +190,7 @@ def test_parse_llama_export(llama_parser: argparse.ArgumentParser) -> None:
         "synchronous",
         "quantize",
         "onnx_export_dir",
+        "use_dynamic_shapes",
         "zip_assets",
     }
     assert args.target_runtime == TargetRuntime.GENIE

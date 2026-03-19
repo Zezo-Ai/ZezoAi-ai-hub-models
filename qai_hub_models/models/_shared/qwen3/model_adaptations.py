@@ -20,6 +20,7 @@ from transformers.models.qwen3.modeling_qwen3 import (
     Qwen3RMSNorm,
 )
 
+from qai_hub_models.models._shared.llm.common import TORCH_SUPPORTS_DYNAMIC_SHAPE
 from qai_hub_models.models._shared.llm.model_adaptations import (
     ConvInplaceLinear,
     _apply_rope_single,
@@ -240,7 +241,10 @@ class SHAQwen3Attention(Qwen3Attention):
             self.config.num_attention_heads // self.config.num_key_value_heads
         )
 
-        hidden_states = torch.reshape(hidden_states, (bsz, -1, 1, hidden_size))
+        if TORCH_SUPPORTS_DYNAMIC_SHAPE:
+            hidden_states = hidden_states.unsqueeze(2)
+        else:
+            hidden_states = torch.reshape(hidden_states, (bsz, -1, 1, hidden_size))
         hidden_states = hidden_states.transpose(1, 3)
 
         # Project Q, K, V and apply q_norm/k_norm (key Qwen3 difference)
@@ -345,7 +349,10 @@ class SHAQwen3Attention(Qwen3Attention):
         attn_output_return = attn_output_return.permute(0, 3, 1, 2)
         attn_output_return = self.o_proj_conv(attn_output_return)
         attn_output_return = attn_output_return.transpose(1, 3)
-        attn_output_return = attn_output_return.reshape(bsz, q_len, hidden_size)
+        if TORCH_SUPPORTS_DYNAMIC_SHAPE:
+            attn_output_return = attn_output_return.squeeze(2)
+        else:
+            attn_output_return = attn_output_return.reshape(bsz, q_len, hidden_size)
 
         attn_weights_return = attn_weights if output_attentions else None
 

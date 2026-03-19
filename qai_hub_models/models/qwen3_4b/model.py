@@ -182,6 +182,7 @@ class Qwen3_4B_AIMETOnnx(Qwen3Base_AIMETOnnx):
         precision: Precision = DEFAULT_PRECISION,
         fp_model: LLMBase | None = None,
         _skip_quantsim_creation: bool = False,
+        use_dynamic_shapes: bool = False,
     ) -> Self:
         """
         Load weight from Huggingface and create Aimet-ONNX QuantSim.
@@ -205,6 +206,8 @@ class Qwen3_4B_AIMETOnnx(Qwen3Base_AIMETOnnx):
             Optional floating point model instance.
         _skip_quantsim_creation
             Internal parameter to skip quantsim creation. This helps export on platforms where aimet onnx is not available.
+        use_dynamic_shapes
+            Whether to use dynamic shapes for ONNX export.
 
         Returns
         -------
@@ -256,6 +259,7 @@ class Qwen3_4B_AIMETOnnx(Qwen3Base_AIMETOnnx):
             precision=precision,
             fp_model=fp_model,
             _skip_quantsim_creation=_skip_quantsim_creation,
+            use_dynamic_shapes=use_dynamic_shapes,
         )
 
     @staticmethod
