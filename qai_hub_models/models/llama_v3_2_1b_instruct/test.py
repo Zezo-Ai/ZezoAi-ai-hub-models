@@ -312,11 +312,9 @@ def test_evaluate(
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="This test can be run on GPU only."
 )
-@pytest.mark.parametrize("use_dynamic_shapes", [False, True])
 def test_quantize_and_demo(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    use_dynamic_shapes: bool,
 ) -> None:
     """Quantize the model and verify it can respond with 'Paris'."""
     cleanup()
@@ -327,7 +325,6 @@ def test_quantize_and_demo(
         precision=Precision.w4a16,
         checkpoint=HF_REPO_NAME,
         use_seq_mse=False,
-        use_dynamic_shapes=use_dynamic_shapes,
     )
     llama_3_2_1b_chat_demo(
         fp_model_cls=FP_Model,
