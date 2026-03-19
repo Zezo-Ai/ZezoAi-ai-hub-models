@@ -4,6 +4,8 @@
 # ---------------------------------------------------------------------
 
 
+import os
+
 from PIL import Image
 
 from qai_hub_models.models._shared.controlnet.model import ControlNetBase
@@ -169,11 +171,11 @@ def stable_diffusion_demo(
     pil_img = Image.fromarray(to_uint8(image.detach().cpu().numpy())[0])
 
     if args.eval_mode == EvalMode.FP:
-        default_output_dir = "export/torch_fp32"
+        default_output_dir = os.path.join("build", "torch_fp32")
     elif args.eval_mode == EvalMode.ON_DEVICE:
-        default_output_dir = "export/on_device_e2e"
+        default_output_dir = os.path.join("build", "on_device_e2e")
     else:  # quantsim
-        default_output_dir = "export/quantsim"
+        default_output_dir = os.path.join("build", "quantsim")
     output_dir = args.output_dir or default_output_dir
     if not is_test:
         display_or_save_image(pil_img, output_dir)

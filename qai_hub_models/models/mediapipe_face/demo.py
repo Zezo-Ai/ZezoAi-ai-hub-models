@@ -15,7 +15,6 @@ from qai_hub_models.models.mediapipe_face.model import (
     MediaPipeFace,
 )
 from qai_hub_models.utils.args import (
-    add_output_dir_arg,
     demo_model_components_from_cli_args,
     get_model_cli_parser,
     get_on_device_demo_parser,
@@ -44,6 +43,11 @@ def mediapipe_face_demo(model_cls: type[MediaPipeFace], is_test: bool = False) -
         help="image file path or URL",
     )
     parser.add_argument(
+        "--use-default-image",
+        action="store_true",
+        help="Use the default test image instead of camera",
+    )
+    parser.add_argument(
         "--camera",
         type=int,
         default=0,
@@ -61,8 +65,7 @@ def mediapipe_face_demo(model_cls: type[MediaPipeFace], is_test: bool = False) -
         default=0.3,
         help="Intersection over Union (IoU) threshold for NonMaximumSuppression",
     )
-    add_output_dir_arg(parser)
-    get_on_device_demo_parser(parser)
+    parser = get_on_device_demo_parser(parser, add_output_dir=True)
 
     print(
         "Note: This demo is running through torch, and not meant to be real-time without dedicated ML hardware."
@@ -72,11 +75,17 @@ def mediapipe_face_demo(model_cls: type[MediaPipeFace], is_test: bool = False) -
     args = parser.parse_args([] if is_test else None)
     validate_on_device_demo_args(args, MODEL_ID)
 
-    if is_test:
+    # Handle default behavior: use camera unless --use-default-image or --image is specified
+    if args.use_default_image or is_test:
         args.image = INPUT_IMAGE_ADDRESS
 
     torch_model = model_from_cli_args(model_cls, args)
     if args.eval_mode == EvalMode.ON_DEVICE:
+        if not args.image:
+            raise ValueError(
+                "On-device demo mode is not supported with camera input. "
+                "Please provide an image using --image or --use-default-image."
+            )
         detector, landmark_detector = demo_model_components_from_cli_args(
             MediaPipeFace, MODEL_ID, args
         )

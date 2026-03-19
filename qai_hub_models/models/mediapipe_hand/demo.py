@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
-import argparse
 from typing import cast
 
 import numpy as np
@@ -15,10 +14,17 @@ from qai_hub_models.models.mediapipe_hand.model import (
     MODEL_ID,
     MediaPipeHand,
 )
-from qai_hub_models.utils.args import add_output_dir_arg
+from qai_hub_models.utils.args import (
+    demo_model_components_from_cli_args,
+    get_model_cli_parser,
+    get_on_device_demo_parser,
+    model_from_cli_args,
+    validate_on_device_demo_args,
+)
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.camera_capture import capture_and_display_processed_frames
 from qai_hub_models.utils.display import display_or_save_image
+from qai_hub_models.utils.evaluate import EvalMode
 
 INPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "hand.jpeg"
@@ -29,12 +35,17 @@ INPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
 # The demo will display output with the predicted landmarks & bounding boxes drawn.
 def main(is_test: bool = False) -> None:
     # Demo parameters
-    parser = argparse.ArgumentParser()
+    parser = get_model_cli_parser(MediaPipeHand)
     parser.add_argument(
         "--image",
         type=str,
-        required=False,
+        default=None,
         help="image file path or URL",
+    )
+    parser.add_argument(
+        "--use-default-image",
+        action="store_true",
+        help="Use the default test image instead of camera",
     )
     parser.add_argument(
         "--camera",
@@ -54,7 +65,7 @@ def main(is_test: bool = False) -> None:
         default=0.3,
         help="Intersection over Union (IoU) threshold for NonMaximumSuppression",
     )
-    add_output_dir_arg(parser)
+    parser = get_on_device_demo_parser(parser, add_output_dir=True)
 
     print(
         "Note: This demo is running through torch, and not meant to be real-time without dedicated ML hardware."
@@ -62,11 +73,35 @@ def main(is_test: bool = False) -> None:
     print("Use Ctrl+C in your terminal to exit.")
 
     args = parser.parse_args([] if is_test else None)
-    if is_test:
+    validate_on_device_demo_args(args, MODEL_ID)
+
+    # Handle default behavior: use camera unless --use-default-image or --image is specified
+    if args.use_default_image or is_test:
         args.image = INPUT_IMAGE_ADDRESS
 
+    torch_model = model_from_cli_args(MediaPipeHand, args)
+    if args.eval_mode == EvalMode.ON_DEVICE:
+        if not args.image:
+            raise ValueError(
+                "On-device demo mode is not supported with camera input. "
+                "Please provide an image using --image or --use-default-image."
+            )
+        hand_detector, hand_landmark_detector = demo_model_components_from_cli_args(
+            MediaPipeHand, MODEL_ID, args
+        )
+    else:
+        hand_detector = torch_model.hand_detector
+        hand_landmark_detector = torch_model.hand_landmark_detector
+
     # Load app
-    app = MediaPipeHandApp.from_pretrained(MediaPipeHand.from_pretrained())
+    app = MediaPipeHandApp(
+        hand_detector,  # type: ignore[arg-type]
+        hand_landmark_detector,  # type: ignore[arg-type]
+        torch_model.hand_detector.anchors,
+        torch_model.hand_detector.include_postprocessing,
+        torch_model.hand_detector.get_input_spec(),
+        torch_model.hand_landmark_detector.get_input_spec(),
+    )
     print("Model and App Loaded")
 
     if args.image:

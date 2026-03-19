@@ -35,6 +35,7 @@ from qai_hub_models.utils.onnx.helpers import download_and_unzip_workbench_onnx_
 from qai_hub_models.utils.path_helpers import get_next_free_path
 from qai_hub_models.utils.printing import (
     print_inference_metrics,
+    print_on_target_demo_cmd,
     print_profile_metrics_from_job,
     print_tool_versions,
 )
@@ -443,6 +444,7 @@ def export_model(
 
     if not skip_summary:
         print_tool_versions(tool_versions, tool_versions_are_from_device_job)
+        print_on_target_demo_cmd(compile_jobs.values(), Path(__file__).parent, device)
 
     if downloaded_model_path:
         print(f"{model_name} was saved to {downloaded_model_path}\n")
