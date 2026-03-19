@@ -542,5 +542,5 @@ if __name__ == "__main__":
         args.device,
         args.llama_cpp_path,
         args.model_url,
-        args.job_name[:32],  # QDC job names have a 32-character limit
+        args.job_name,
     )

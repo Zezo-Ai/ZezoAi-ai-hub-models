@@ -541,7 +541,7 @@ if __name__ == "__main__":
         args.api_token,
         args.device,
         args.genie_bundle_path,
-        args.job_name[:32],  # QDC job names have a 32-character limit
+        args.job_name,
         args.qairt_sdk_path,
         args.qairt_version,
     )

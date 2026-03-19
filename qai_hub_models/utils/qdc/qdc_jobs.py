@@ -42,6 +42,8 @@ HUB_DEVICE_TO_QDC_DEVICE_MAP = {
 DEFAULT_JOB_TIMEOUT = 7200  # 2 hours
 # Polling interval for job status checks (in seconds)
 POLL_INTERVAL = 30
+# QDC submission fail if name exceeds this
+QDC_JOB_NAME_LIMIT = 32
 
 
 class QDCDevice:
@@ -208,7 +210,7 @@ class QDCJobs:
         return qdc_api.submit_job(
             public_api_client=self.client,
             target_id=qdc_api.get_target_id(self.client, qdc_device.qdc_name),
-            job_name=job_name,
+            job_name=job_name[:QDC_JOB_NAME_LIMIT],
             external_job_id="ExJobId001",
             job_type=JobType.AUTOMATED,
             job_mode=JobMode.APPLICATION,
