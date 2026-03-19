@@ -4,14 +4,13 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
-from typing import cast
-
 import torch
-from ultralytics.nn.modules.head import Segment
+from ultralytics.nn.modules.head import Segment, Segment26
 from ultralytics.nn.tasks import SegmentationModel
 
 from qai_hub_models.models._shared.ultralytics.segment_patches import (
     patch_ultralytics_segmentation_head,
+    patch_ultralytics_segmentation_head_26,
 )
 from qai_hub_models.models._shared.yolo.utils import (
     get_most_likely_score,
@@ -93,9 +92,14 @@ class UltralyticsMulticlassSegmentor(BaseModel):
         self, model: SegmentationModel, precision: Precision | None = None
     ) -> None:
         super().__init__(model)
-        self.num_classes: int = cast(Segment, model.model[-1]).nc
         self.precision = precision
-        patch_ultralytics_segmentation_head(model)
+        self.num_classes = model.model[-1].nc
+        if isinstance(model.model[-1], Segment26):
+            patch_ultralytics_segmentation_head_26(model)
+        elif isinstance(model.model[-1], Segment):
+            patch_ultralytics_segmentation_head(model)
+        else:
+            raise NotImplementedError()
 
     @staticmethod
     def get_input_spec(

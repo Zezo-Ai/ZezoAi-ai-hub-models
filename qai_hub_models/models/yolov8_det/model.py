@@ -12,6 +12,7 @@ from typing_extensions import Self
 from ultralytics.models import YOLO as ultralytics_YOLO
 from ultralytics.nn.tasks import DetectionModel
 
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.models._shared.ultralytics.detect_patches import (
     patch_ultralytics_detection_head,
 )
@@ -143,3 +144,13 @@ class YoloV8Detector(Yolo):
     def get_hub_litemp_percentage(precision: Precision) -> float:
         """Returns the Lite-MP percentage value for the specified mixed precision quantization."""
         return 10
+
+    def get_evaluator(self) -> BaseEvaluator:
+        # This is imported here so segmentation models don't have to install
+        # detection evaluator dependencies.
+        from qai_hub_models.evaluators.detection_evaluator import DetectionEvaluator
+
+        image_height, image_width = self.get_input_spec()["image"][0][2:]
+        return DetectionEvaluator(
+            image_height, image_width, score_threshold=0.001, nms_iou_threshold=0.7
+        )

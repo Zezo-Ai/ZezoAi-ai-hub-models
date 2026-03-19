@@ -79,6 +79,7 @@ def yolo_segmentation_demo(
     model_type: type[BaseModel],
     model_id: str,
     default_image: str | CachedWebAsset,
+    default_score_threshold: float = 0.45,
     stride_multiple: int | None = None,
     is_test: bool = False,
 ) -> None:
@@ -100,7 +101,7 @@ def yolo_segmentation_demo(
     parser.add_argument(
         "--score-threshold",
         type=float,
-        default=0.45,
+        default=default_score_threshold,
         help="Score threshold for NonMaximumSuppression",
     )
     parser.add_argument(

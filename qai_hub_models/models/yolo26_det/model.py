@@ -17,23 +17,22 @@ from qai_hub_models.models._shared.ultralytics.detect_patches import (
     patch_ultralytics_detection_head,
 )
 from qai_hub_models.models._shared.yolo.model import Yolo, yolo_detect_postprocess
-from qai_hub_models.models.common import Precision
 
-MODEL_ASSET_VERSION = 1
+MODEL_ASSET_VERSION = 2
 MODEL_ID = __name__.split(".")[-2]
 
 SUPPORTED_WEIGHTS = [
-    "yolo11n.pt",
-    "yolo11s.pt",
-    "yolo11m.pt",
-    "yolo11l.pt",
-    "yolo11x.pt",
+    "yolo26n.pt",
+    "yolo26s.pt",
+    "yolo26m.pt",
+    "yolo26l.pt",
+    "yolo26x.pt",
 ]
-DEFAULT_WEIGHTS = "yolo11n.pt"
+DEFAULT_WEIGHTS = "yolo26n.pt"
 
 
-class YoloV11Detector(Yolo):
-    """Exportable Yolo11 bounding box detector, end-to-end."""
+class Yolo26Detector(Yolo):
+    """Exportable YOLO26 bounding box detector, end-to-end."""
 
     def __init__(
         self,
@@ -54,6 +53,11 @@ class YoloV11Detector(Yolo):
         include_postprocessing: bool = True,
         split_output: bool = False,
     ) -> Self:
+        if ckpt_name not in SUPPORTED_WEIGHTS:
+            raise ValueError(
+                f"Unsupported checkpoint name provided {ckpt_name}.\n"
+                f"Supported checkpoints are {list(SUPPORTED_WEIGHTS)}."
+            )
         model = cast(DetectionModel, ultralytics_YOLO(ckpt_name).model)
         return cls(
             model,
@@ -69,7 +73,7 @@ class YoloV11Detector(Yolo):
         | torch.Tensor
     ):
         """
-        Run YoloV11 on `image`, and produce a predicted set of bounding boxes and associated class probabilities.
+        Run YOLO26 on `image`, and produce a predicted set of bounding boxes and associated class probabilities.
 
         Parameters
         ----------
@@ -125,25 +129,6 @@ class YoloV11Detector(Yolo):
             self.include_postprocessing,
             self.split_output,
         )
-
-    def get_hub_quantize_options(
-        self, precision: Precision, other_options: str | None = None
-    ) -> str:
-        options = other_options or ""
-        if "--range_scheme" in options:
-            return options
-        if precision in {Precision.w8a8_mixed_int16, Precision.w8a16_mixed_int16}:
-            options += f" --range_scheme min_max --lite_mp percentage={self.get_hub_litemp_percentage(precision)};override_qtype=int16"
-        elif precision in {Precision.w8a8_mixed_fp16, Precision.w8a16_mixed_fp16}:
-            options += f" --range_scheme min_max --lite_mp percentage={self.get_hub_litemp_percentage(precision)};override_qtype=fp16"
-        else:
-            options += " --range_scheme min_max"
-        return options
-
-    @staticmethod
-    def get_hub_litemp_percentage(precision: Precision) -> float:
-        """Returns the Lite-MP percentage value for the specified mixed precision quantization."""
-        return 10
 
     def get_evaluator(self) -> BaseEvaluator:
         # This is imported here so segmentation models don't have to install

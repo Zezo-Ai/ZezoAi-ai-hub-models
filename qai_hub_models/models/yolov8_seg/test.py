@@ -44,11 +44,10 @@ def test_task() -> None:
 
     with torch.no_grad():
         # original model output
-        source_out = source_model(processed_sample_image)
+        source_out = source_model(processed_sample_image)[0]
         source_out_postprocessed = yolo_segment_postprocess(
             source_out[0], qaihm_model.num_classes
         )
-        source_out = [*source_out_postprocessed, source_out[1][-1]]
 
         # Qualcomm AI Hub Model output
         qaihm_out_postprocessed = qaihm_model(processed_sample_image)

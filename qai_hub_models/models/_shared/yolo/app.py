@@ -28,6 +28,9 @@ class YoloObjectDetectionApp:
     The app works with following models:
         * YoloV7
         * YoloV8Detection
+        * YoloV10Detection
+        * YoloV11Detection
+        * Yolo26Detection
 
     For a given image input, the app will:
         * pre-process the image (convert to range[0, 1])
