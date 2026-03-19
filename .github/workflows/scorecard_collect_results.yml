@@ -219,13 +219,13 @@ jobs:
       - name: Download ZIP Assets Results
         id: download-zip-asset-artifact
         if: inputs.action_id != ''
-        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
             run-id: ${{ inputs.export_tests_action_id != '' && inputs.export_tests_action_id || inputs.action_id }}
             github-token: ${{ github.token }}
-            name: Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }})
+            pattern: Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }})
             path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
+            merge-multiple: true
 
       - name: Check Out Scorecard Intermediates
         if: inputs.latest_results_branch != ''
@@ -308,7 +308,7 @@ jobs:
       - name: Update release asset files for models
         id: create-release-assets-files
         continue-on-error: true
-        if: steps.download-zip-asset-artifact.outcome == 'success'
+        if: steps.download-zip-asset-artifact.outputs.matched-artifacts-count > 0
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \

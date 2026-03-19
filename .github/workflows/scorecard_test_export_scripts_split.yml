@@ -134,6 +134,7 @@ jobs:
 
       - name: Download All Split Release Asset Artifacts
         id: download_release_assets
+        if: ${{ inputs.upload_to_s3 }}
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -141,7 +142,7 @@ jobs:
           path: build/split-release-assets
 
       - name: Combine Release Assets
-        if: ${{ steps.download_release_assets.outcome == 'success' }}
+        if: ${{ inputs.upload_to_s3 && steps.download_release_assets.outcome == 'success' }}
         run: |
           source "${{ env.VENV_PATH }}/bin/activate"
           python qai_hub_models/scripts/combine_split_artifacts.py \
@@ -149,14 +150,14 @@ jobs:
             --output-dir build/combined-release-assets
 
       - name: Upload Combined Release Assets
-        if: ${{ steps.download_release_assets.outcome == 'success' }}
+        if: ${{ inputs.upload_to_s3 && steps.download_release_assets.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }})
           path: build/combined-release-assets/release-assets.yaml
 
       - name: Delete Split Release Asset Artifacts
-        if: ${{ steps.download_release_assets.outcome == 'success' }}
+        if: ${{ inputs.upload_to_s3 && steps.download_release_assets.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
