@@ -38,6 +38,7 @@ class VoiceSpec(BaseQAIHMConfig):
     sample_rate: int = 44100
     language_code: int = 0
     description: str
+    capabilities: TTSCapabilities
 
 
 class TTSCapabilities(BaseQAIHMConfig):
@@ -53,15 +54,22 @@ class TTSCapabilities(BaseQAIHMConfig):
     supports_resampling: bool = False
 
 
+class QNNVersion(BaseQAIHMConfig):
+    """Version of QNN SDK."""
+
+    major: int
+    minor: int
+    patch: int = 0
+
+
 class RuntimeInfo(BaseQAIHMConfig):
     """Runtime configuration information."""
 
     language: str
-    qnn_version_major: int
-    qnn_version_minor: int
-    qnn_version_patch: int
+    qnn_version: QNNVersion
     arch_bit: int = 64
     scratch_mem_size_req: int = 3200000
+    is_model_quantized: bool = False
 
 
 class ModelAssets(BaseQAIHMConfig):
@@ -92,7 +100,6 @@ class TTSMetadata(BaseQAIHMConfig):
     version: str = "1.0.0"
     description: str
     voices: list[VoiceSpec]
-    capabilities: TTSCapabilities
     model_type: str = "melo"
     runtime: RuntimeInfo | None = None
     assets: ModelAssets | None = None
@@ -107,11 +114,11 @@ class TTSMetadata(BaseQAIHMConfig):
         model_name: str,
         display_name: str,
         description: str,
+        tool_versions: ToolVersions,
         voice_specs: list[VoiceSpec] | None = None,
         capabilities: TTSCapabilities | None = None,
         runtime: RuntimeInfo | None = None,
         assets: ModelAssets | None = None,
-        tool_versions: ToolVersions | None = None,
     ) -> TTSMetadata:
         """
         Construct a ``TTSMetadata`` object from the information
@@ -127,6 +134,8 @@ class TTSMetadata(BaseQAIHMConfig):
             Human-readable name.
         description
             Short description of the model.
+        tool_versions
+            Optional tool-version information.
         voice_specs
             List of :class:`VoiceSpec` describing each voice.
         capabilities
@@ -135,8 +144,6 @@ class TTSMetadata(BaseQAIHMConfig):
             Optional runtime information; if omitted a minimal default is used.
         assets
             Optional asset paths; if omitted a minimal default is used.
-        tool_versions
-            Optional tool-version information.
 
         Returns
         -------
@@ -146,23 +153,18 @@ class TTSMetadata(BaseQAIHMConfig):
         if capabilities is None:
             capabilities = TTSCapabilities()
         if runtime is None:
-            # Default runtime - QNN version is taken from ``tool_versions`` if present.
-            qnn_version = {"major": 2, "minor": 33, "patch": 0}
-            if tool_versions and tool_versions.qairt is not None:
-                qnn_version = {
-                    "major": int(tool_versions.qairt.framework.major),
-                    "minor": int(tool_versions.qairt.framework.minor),
-                    "patch": int(
+            assert tool_versions.qairt is not None
+            runtime = RuntimeInfo(
+                language=LANGUAGE_MAP[language],
+                qnn_version=QNNVersion(
+                    major=int(tool_versions.qairt.framework.major),
+                    minor=int(tool_versions.qairt.framework.minor),
+                    patch=int(
                         tool_versions.qairt.framework.patch
                         if tool_versions.qairt.framework.patch
                         else 0
                     ),
-                }
-            runtime = RuntimeInfo(
-                language=LANGUAGE_MAP[language],
-                qnn_version_major=qnn_version["major"],
-                qnn_version_minor=qnn_version["minor"],
-                qnn_version_patch=qnn_version["patch"],
+                ),
             )
         if assets is None:
             assets = ModelAssets()
@@ -173,6 +175,7 @@ class TTSMetadata(BaseQAIHMConfig):
                     language=LANGUAGE_MAP[language],
                     language_name=language.capitalize(),
                     description=f"Default voice for {language.capitalize()}",
+                    capabilities=capabilities,
                 )
             ]
 
@@ -181,7 +184,6 @@ class TTSMetadata(BaseQAIHMConfig):
             display_name=display_name,
             description=description,
             voices=voice_specs,
-            capabilities=capabilities,
             runtime=runtime,
             assets=assets,
         )
@@ -249,6 +251,6 @@ def create_tts_metadata(
         model_name=model_name,
         display_name=display_name,
         description=description,
-        assets=assets,
         tool_versions=metadata.tool_versions,
+        assets=assets,
     )

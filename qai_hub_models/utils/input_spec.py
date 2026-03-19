@@ -34,7 +34,7 @@ def make_torch_inputs(spec: InputSpec, seed: int | None = 42) -> list[torch.Tens
     for sp in spec.values():
         torch_dtype = str_to_torch_dtype(sp[1])
         if sp[1] in {"int32", "int64"}:
-            t = torch.randint(2, sp[0], generator=generator).to(torch_dtype)
+            t = torch.randint(10, sp[0], generator=generator).to(torch_dtype)
         else:
             t = torch.rand(sp[0], generator=generator).to(torch_dtype)
         torch_input.append(t)

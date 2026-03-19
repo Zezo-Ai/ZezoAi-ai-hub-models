@@ -106,8 +106,9 @@ class OptimizedTextEncoder(nn.Module):
 
         x = self.encoder(x * x_mask, x_mask, g=g)
 
-        stats = self.proj(x) * x_mask
-        m, logs = torch.split(stats, self.out_channels, dim=1)
+        stats = self.proj(x)
+        m, logs = torch.chunk(stats, 2, dim=1)
+        # m, logs = torch.split(stats, self.out_channels, dim=1) # this line has the same effect as above line
         return x, m, logs, x_mask
 
 

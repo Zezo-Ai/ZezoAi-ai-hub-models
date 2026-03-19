@@ -126,7 +126,7 @@ class Encoder(BaseModel):
         }
 
     def _sample_inputs_impl(
-        self, input_spec: InputSpec | None = None
+        self, input_spec: InputSpec | None = None, **kwargs: Any
     ) -> SampleInputsType:
         """
         This is a default implementation that returns a single random data array
@@ -212,6 +212,7 @@ class Encoder(BaseModel):
             # This does not use a minimum of 0 because some models only have 1 speaker. That would result in a clamp(0, 0) operator, which is invalid in QNN.
             sid = torch.clamp(sid, max=self.model.emb_g.num_embeddings - 1)
             g = self.model.emb_g(sid).unsqueeze(-1)
+
         x, m_p, logs_p, x_mask = self.encoder.forward(
             x, x_lengths, tone, language, bert, ja_bert, g=g
         )
@@ -223,9 +224,12 @@ class Encoder(BaseModel):
         logw = logw.masked_fill(x_mask == 0, -1e9)
 
         w = torch.exp(logw + torch.log(self.scale * length_scale)) * x_mask
-        w_ceil = torch.ceil(w)
-        y_lengths = torch.sum(w_ceil, [1, 2])
-
+        w_ceil = torch.ceil(w)  # shape: [1, 1, 512]
+        # y_lengths = torch.sum(w_ceil, [1, 2])    # after converting to context binary, QNN can't sum correctly
+        # y_lengths = torch.tensor([w_ceil.detach().numpy().sum() ], dtype=torch.float32) # QNN can't sum correctly
+        # y_lengths = torch.tensor([w_ceil.squeeze().cumsum(dim=0)[-1] ], dtype=torch.float32) # QNN can't sum correctly
+        y_lengths = torch.sum(torch.sum(w_ceil, dim=2), dim=1)  # QNN sums correctly
+        # TODO https://jira-dc.qualcomm.com/jira/projects/AISW/issues/AISW-175294
         return y_lengths, x_mask, m_p, logs_p, g, w_ceil
 
     def sdp_forward(
@@ -251,25 +255,21 @@ class Encoder(BaseModel):
             shape of (1, 1, MAX_SEQ_LEN)
         """
         sdp = self.model.sdp
-        x = torch.detach(x)
         assert hasattr(sdp, "pre") and callable(sdp.pre)
-        x = sdp.pre(x)
         assert hasattr(sdp, "cond") and callable(sdp.cond)
+        assert hasattr(sdp, "convs") and callable(sdp.convs)
+        assert hasattr(sdp, "proj") and callable(sdp.proj)
+        assert hasattr(sdp, "flows") and isinstance(sdp.flows, Iterable)
+        x = torch.detach(x)
+        x = sdp.pre(x)
         if g is not None:
             g = torch.detach(g)
             x = x + sdp.cond(g)
-        assert hasattr(sdp, "convs") and callable(sdp.convs)
         x = sdp.convs(x, x_mask)
-        assert hasattr(sdp, "proj") and callable(sdp.proj)
         x = sdp.proj(x) * x_mask
 
-        assert hasattr(sdp, "flows") and isinstance(sdp.flows, Iterable)
         flows = list(sdp.flows)[::-1]
-        flows = [
-            *flows[:-2],
-            flows[-1],
-        ]
-
+        flows = [*flows[:-2], flows[-1]]
         z = self.sdp_noise[:, :, : x.size(2)] * noise_scale_w
 
         half_channels = None
@@ -304,8 +304,6 @@ class Encoder(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
-        if target_runtime.qairt_version_changes_compilation:
-            other_compile_options += " --quantize_io false "
         compile_options = super().get_hub_compile_options(
             target_runtime,
             precision,
@@ -313,7 +311,6 @@ class Encoder(BaseModel):
             device,
             context_graph_name="encoder",
         )
-        # # Must use --truncate_64bit_io when input tensors have type int64.
         if target_runtime != TargetRuntime.ONNX:
             compile_options += " --truncate_64bit_tensors --truncate_64bit_io "
         return compile_options
@@ -427,7 +424,7 @@ class Flow(BaseModel):
         context_graph_name: str | None = None,
     ) -> str:
         if target_runtime.qairt_version_changes_compilation:
-            other_compile_options += " --quantize_io false "
+            other_compile_options += " --quantize_io  "
         return super().get_hub_compile_options(
             target_runtime,
             precision,
@@ -494,7 +491,7 @@ class Decoder(BaseModel):
         context_graph_name: str | None = None,
     ) -> str:
         if target_runtime.qairt_version_changes_compilation:
-            other_compile_options += " --quantize_io false "
+            other_compile_options += " --quantize_io "
         return super().get_hub_compile_options(
             target_runtime,
             precision,
@@ -943,8 +940,6 @@ class BertWrapper(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
-        if target_runtime.qairt_version_changes_compilation:
-            other_compile_options += " --quantize_io false "
         compile_options = super().get_hub_compile_options(
             target_runtime,
             precision,
@@ -955,10 +950,6 @@ class BertWrapper(BaseModel):
         if target_runtime != TargetRuntime.ONNX:
             compile_options += " --truncate_64bit_tensors --truncate_64bit_io "
         return compile_options
-
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "common_voice_text"
 
     @staticmethod
     def component_precision() -> Precision:

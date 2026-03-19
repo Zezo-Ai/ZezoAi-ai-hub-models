@@ -231,11 +231,11 @@ class MeloTTSApp(CollectionAppProtocol):
             length_scale_pt,
             noise_scale_w_pt,
         )
-
         # Flow input
         y_mask = torch.unsqueeze(
-            torch.arange(MAX_SEQ_LEN * 3) < y_lengths[:, None], dim=1
+            torch.arange(MAX_SEQ_LEN * 3) < y_lengths.unsqueeze(dim=-1), dim=1
         ).to(torch.float32)
+
         attn_mask = x_mask.unsqueeze(dim=2) * y_mask.unsqueeze(dim=-1)
         attn = generate_path(w_ceil, attn_mask)
         attn_squeezed = attn.squeeze(1).to(torch.float32)
@@ -352,7 +352,7 @@ class MeloTTSApp(CollectionAppProtocol):
                 )
 
                 y_mask = torch.unsqueeze(
-                    torch.arange(MAX_SEQ_LEN * 3) < y_lengths[:, None], dim=1
+                    torch.arange(MAX_SEQ_LEN * 3) < y_lengths.unsqueeze(dim=-1), dim=1
                 ).to(torch.float32)
                 attn_mask = x_mask.unsqueeze(dim=2) * y_mask.unsqueeze(dim=-1)
                 attn = generate_path(w_ceil, attn_mask)
@@ -398,7 +398,7 @@ class MeloTTSApp(CollectionAppProtocol):
                 )
 
                 y_mask = torch.unsqueeze(
-                    torch.arange(MAX_SEQ_LEN * 3) < y_lengths[:, None], dim=1
+                    torch.arange(MAX_SEQ_LEN * 3) < y_lengths.unsqueeze(dim=-1), dim=1
                 ).to(torch.float32)
                 attn_mask = x_mask.unsqueeze(dim=2) * y_mask.unsqueeze(dim=-1)
                 attn = generate_path(w_ceil, attn_mask)
