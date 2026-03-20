@@ -23,7 +23,7 @@ from qai_hub_models.utils.image_processing import (
     transform_resize_pad_coordinates,
 )
 from qai_hub_models.utils.input_spec import InputSpec
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 GEARGUARD_DATASET_VERSION = 2
 GEARGUARD_DATASET_ID = "gearguard_dataset"
@@ -31,7 +31,7 @@ GEARGUARD_DATASET_DIR_NAME = "gearguard_trainvaltest"
 
 VALID_CLASS_IDX = [0, 1]
 
-GEARGUARD_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+GEARGUARD_PRIVATE_ASSET = CachedPrivateDatasetAsset(
     "qai-hub-models/datasets/gearguard/gearguard_trainvaltest.zip",
     GEARGUARD_DATASET_ID,
     GEARGUARD_DATASET_VERSION,

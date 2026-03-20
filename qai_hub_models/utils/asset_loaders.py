@@ -40,6 +40,7 @@ from schema import And, Schema, SchemaError
 from tqdm import tqdm
 
 from qai_hub_models.models.common import Precision, TargetRuntime
+from qai_hub_models.utils.aws import can_access_private_s3
 from qai_hub_models.utils.envvars import IsOnCIEnvvar
 from qai_hub_models.utils.version_helpers import QAIHMVersion
 
@@ -54,6 +55,7 @@ SOURCE_AS_ROOT_LOCK = threading.Lock()
 
 PathLike = os.PathLike | str
 VersionType = str | int
+
 
 # If non-None, always enter this for yes (True)/no (False) prompts
 _always_answer = None
@@ -709,7 +711,7 @@ class CachedWebAsset:
         asset_config: ModelZooAssetConfig = ASSET_CONFIG,
         model_downloader: Callable[[str, str, int], str] | None = None,
         downloader_num_retries: int = 4,
-        ci_private_s3_key: str | None = None,
+        private_s3_key: str | None = None,
         local_cache_extracted_path: str | os.PathLike | None = None,
     ) -> None:
         """
@@ -725,9 +727,9 @@ class CachedWebAsset:
             Callable to download the file. Defaults to `download_file`.
         downloader_num_retries
             Number of retries when downloading.
-        ci_private_s3_key
+        private_s3_key
             If set, the asset will be fetched from the private S3 bucket
-            using this key when running on CI (`QAIHM_CI=1`).
+            using this key on CI or when the user has valid AWS credentials.
         local_cache_extracted_path
             Path where extracted archive
             contents will live. Defaults to `local_cache_path` with its
@@ -735,10 +737,10 @@ class CachedWebAsset:
             Set this explicitly when the archive already contains a top-level
             directory to avoid double-nesting.
         """
-        if ci_private_s3_key and IsOnCIEnvvar.get():
+        if private_s3_key and can_access_private_s3():
             from qai_hub_models.utils.aws import QAIHM_PRIVATE_S3_BUCKET
 
-            url = f"s3://{QAIHM_PRIVATE_S3_BUCKET}/{ci_private_s3_key}"
+            url = f"s3://{QAIHM_PRIVATE_S3_BUCKET}/{private_s3_key}"
             model_downloader = download_from_private_s3
 
         self.url = url
@@ -1069,7 +1071,7 @@ class CachedWebDatasetAsset(CachedWebAsset):
         asset_config: ModelZooAssetConfig = ASSET_CONFIG,
         model_downloader: Callable[[str, str, int], str] | None = None,
         downloader_num_retries: int = 4,
-        ci_private_s3_key: str | None = None,
+        private_s3_key: str | None = None,
     ) -> None:
         """
         Parameters
@@ -1088,9 +1090,9 @@ class CachedWebDatasetAsset(CachedWebAsset):
             Callable to download the file. Defaults to `download_file`.
         downloader_num_retries
             Number of retries when downloading.
-        ci_private_s3_key
+        private_s3_key
             If set, the asset will be fetched from the private S3 bucket
-            using this key when running on CI (`QAIHM_CI=1`).
+            using this key on CI or when the user has valid AWS credentials.
         """
         local_cache_path = asset_config.get_local_store_dataset_path(
             dataset_id, dataset_version, filename
@@ -1101,7 +1103,7 @@ class CachedWebDatasetAsset(CachedWebAsset):
             asset_config,
             model_downloader,
             downloader_num_retries,
-            ci_private_s3_key,
+            private_s3_key,
         )
         self.dataset_id = dataset_id
         self.dataset_version = dataset_version

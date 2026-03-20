@@ -22,14 +22,14 @@ DEVKIT_ASSET = CachedWebDatasetAsset(
     IMAGENETTE_FOLDER_NAME,
     IMAGENETTE_VERSION,
     DEVKIT_NAME,
-    ci_private_s3_key=f"qai-hub-models/datasets/imagenette/{DEVKIT_NAME}",
+    private_s3_key=f"qai-hub-models/datasets/imagenette/{DEVKIT_NAME}",
 )
 IMAGENETTE_ASSET = CachedWebDatasetAsset(
     f"https://s3.amazonaws.com/fast-ai-imageclas/{IMAGENETTE_FILENAME}",
     IMAGENETTE_FOLDER_NAME,
     IMAGENETTE_VERSION,
     "imagenette2-320.tgz",
-    ci_private_s3_key=f"qai-hub-models/datasets/imagenette/{IMAGENETTE_FILENAME}",
+    private_s3_key=f"qai-hub-models/datasets/imagenette/{IMAGENETTE_FILENAME}",
 )
 
 # Imagenette data has 10 classes and are labeled 0-9.

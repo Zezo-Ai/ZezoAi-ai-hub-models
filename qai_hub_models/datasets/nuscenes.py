@@ -22,13 +22,13 @@ from qai_hub_models.utils.image_processing import (
     get_post_rot_and_tran,
 )
 from qai_hub_models.utils.input_spec import InputSpec
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 NUSCENE_ID = "nuscenes"
 NUSCENE_FILE = "v1.0-mini"
 NUSCENE_VERSION = 2
 
-NUSCENES_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+NUSCENES_PRIVATE_ASSET = CachedPrivateDatasetAsset(
     f"qai-hub-models/datasets/nuscenes/v{NUSCENE_VERSION}/v1.0-mini.tgz",
     NUSCENE_ID,
     NUSCENE_VERSION,

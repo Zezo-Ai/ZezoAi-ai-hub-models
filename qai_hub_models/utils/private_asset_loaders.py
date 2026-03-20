@@ -13,16 +13,23 @@ from qai_hub_models.utils.asset_loaders import (
     ModelZooAssetConfig,
     download_from_private_s3,
 )
-from qai_hub_models.utils.aws import QAIHM_PRIVATE_S3_BUCKET
-from qai_hub_models.utils.envvars import IsOnCIEnvvar
+from qai_hub_models.utils.aws import (
+    QAIHM_PRIVATE_S3_BUCKET,
+    can_access_private_s3,
+)
+from qai_hub_models.utils.path_helpers import is_internal_repo
 
 
-class CachedPrivateCIAsset(CachedWebAsset):
+class CachedPrivateAsset(CachedWebAsset):
     """
-    Cached asset that is only available via the private S3 bucket on CI.
+    Cached asset that is only available via the private S3 bucket.
 
-    On CI (`QAIHM_CI=1`), the asset is downloaded from the private S3 bucket.
-    Outside CI, :meth:`fetch` raises an error because the asset has no public URL.
+    The asset is downloaded when the user has a ``qaihm`` AWS profile
+    configured (via ``scripts/aws/validate_credentials.py``).
+
+    Internal users (detected via git remote URL) without the profile
+    are prompted to set up credentials. External users get the
+    ``access_denied_error`` (e.g. manual download instructions).
     """
 
     def __init__(
@@ -30,7 +37,7 @@ class CachedPrivateCIAsset(CachedWebAsset):
         private_s3_key: str,
         local_cache_path: Path,
         asset_config: ModelZooAssetConfig = ASSET_CONFIG,
-        non_ci_error: Exception | None = None,
+        access_denied_error: Exception | None = None,
         local_cache_extracted_path: str | Path | None = None,
     ) -> None:
         """
@@ -43,14 +50,14 @@ class CachedPrivateCIAsset(CachedWebAsset):
             Path to store the downloaded asset on disk.
         asset_config
             Asset config to use to save this file.
-        non_ci_error
-            Custom error to raise when fetching outside CI.
+        access_denied_error
+            Custom error to raise when the user cannot access private S3.
             If `None`, a default `ValueError` is used.
         local_cache_extracted_path
             Path where extracted archive contents will live.
             Defaults to ``local_cache_path`` without its extension.
         """
-        self.non_ci_error = non_ci_error
+        self.access_denied_error = access_denied_error
         url = f"s3://{QAIHM_PRIVATE_S3_BUCKET}/{private_s3_key}"
         super().__init__(
             url,
@@ -67,10 +74,19 @@ class CachedPrivateCIAsset(CachedWebAsset):
     ) -> Path:
         if local_path is not None:
             return Path(super().fetch(extract=extract, local_path=local_path))
-        if not IsOnCIEnvvar.get():
-            raise self.non_ci_error or ValueError(
-                f"CachedPrivateCIAsset ({self.url}) can only be fetched on CI "
-                "(set QAIHM_CI=1 with valid AWS credentials)."
+        if not can_access_private_s3():
+            # No CI env and no AWS profile. Show a helpful error:
+            # - Internal repo users get a credential setup prompt
+            # - External users get the access_denied_error (e.g., manual download steps)
+            if is_internal_repo():
+                raise ValueError(
+                    "You appear to be using the internal repository but have not "
+                    "set up AWS credentials for private asset downloads.\n"
+                    "Run `python scripts/aws/validate_credentials.py` to configure them."
+                )
+            raise self.access_denied_error or ValueError(
+                f"This is a private asset ({self.url}) and cannot be accessed "
+                "without valid Qualcomm AWS credentials."
             )
         return Path(super().fetch(extract=extract))
 
@@ -105,7 +121,7 @@ class UnfetchableDatasetError(Exception):
             )
 
 
-class CachedPrivateCIDatasetAsset(CachedPrivateCIAsset):
+class CachedPrivateDatasetAsset(CachedPrivateAsset):
     """Private S3 cached asset scoped to a dataset."""
 
     def __init__(

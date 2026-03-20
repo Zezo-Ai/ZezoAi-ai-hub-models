@@ -20,7 +20,7 @@ from qai_hub_models.utils.asset_loaders import (
 )
 from qai_hub_models.utils.image_processing import pre_process_with_affine
 from qai_hub_models.utils.input_spec import InputSpec
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 KITTI_FOLDER_NAME = "kitti"
 KITTI_VERSION = 2
@@ -48,7 +48,7 @@ KITTI_INSTALLATION_STEPS = [
     "Run `python -m qai_hub_models.datasets.configure_dataset --dataset kitti --files /path/to/data_object_image_2.zip /path/to/data_object_label_2.zip /path/to/data_object_calib.zip`",
 ]
 
-KITTI_IMAGES_ASSET = CachedPrivateCIDatasetAsset(
+KITTI_IMAGES_ASSET = CachedPrivateDatasetAsset(
     f"qai-hub-models/datasets/kitti/v{KITTI_VERSION}/data_object_image_2.zip",
     KITTI_FOLDER_NAME,
     KITTI_VERSION,
@@ -56,7 +56,7 @@ KITTI_IMAGES_ASSET = CachedPrivateCIDatasetAsset(
     installation_steps=KITTI_INSTALLATION_STEPS,
 )
 
-KITTI_LABELS_ASSET = CachedPrivateCIDatasetAsset(
+KITTI_LABELS_ASSET = CachedPrivateDatasetAsset(
     f"qai-hub-models/datasets/kitti/v{KITTI_VERSION}/data_object_label_2.zip",
     KITTI_FOLDER_NAME,
     KITTI_VERSION,
@@ -64,7 +64,7 @@ KITTI_LABELS_ASSET = CachedPrivateCIDatasetAsset(
     installation_steps=KITTI_INSTALLATION_STEPS,
 )
 
-KITTI_CALIBS_ASSET = CachedPrivateCIDatasetAsset(
+KITTI_CALIBS_ASSET = CachedPrivateDatasetAsset(
     f"qai-hub-models/datasets/kitti/v{KITTI_VERSION}/data_object_calib.zip",
     KITTI_FOLDER_NAME,
     KITTI_VERSION,

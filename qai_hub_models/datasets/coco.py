@@ -43,14 +43,14 @@ COCO_VAL_DATASET = CachedWebDatasetAsset(
     DATASET_ID,
     DATASET_ASSET_VERSION,
     "val2017.zip",
-    ci_private_s3_key="qai-hub-models/datasets/coco/val2017.zip",
+    private_s3_key="qai-hub-models/datasets/coco/val2017.zip",
 )
 COCO_ANNOTATIONS = CachedWebDatasetAsset(
     "http://images.cocodataset.org/annotations/annotations_trainval2017.zip",
     DATASET_ID,
     DATASET_ASSET_VERSION,
     "annotations_trainval2017.zip",
-    ci_private_s3_key="qai-hub-models/datasets/coco/annotations_trainval2017.zip",
+    private_s3_key="qai-hub-models/datasets/coco/annotations_trainval2017.zip",
 )
 
 DEFAULT_NUM_TRAIN_SAMPLES = 2000

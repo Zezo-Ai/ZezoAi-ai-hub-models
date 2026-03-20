@@ -20,7 +20,7 @@ ADE_ASSET = CachedWebDatasetAsset(
     ADE_FOLDER_NAME,
     ADE_VERSION,
     "ADEdataset.zip",
-    ci_private_s3_key="qai-hub-models/datasets/ade20k/ADEChallengeData2016.zip",
+    private_s3_key="qai-hub-models/datasets/ade20k/ADEChallengeData2016.zip",
 )
 
 

@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import TypeVar
 
 import boto3
+import botocore.exceptions
 import tqdm
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -19,8 +20,32 @@ from qai_hub_models.utils.envvars import IsOnCIEnvvar
 
 QAIHM_PUBLIC_S3_BUCKET = "qaihub-public-assets"
 QAIHM_PRIVATE_S3_BUCKET = "qai-hub-models-private-assets"
+QAIHM_AWS_PROFILE = "qaihm"
 
 CallableRetT = TypeVar("CallableRetT")
+
+
+def has_qaihm_aws_profile() -> bool:
+    """
+    Check whether the local AWS config contains a 'qaihm' profile.
+
+    This indicates the user has previously run the credential setup script
+    (scripts/aws/validate_credentials.py), meaning they are an internal user
+    whose credentials may just need refreshing.
+
+    Returns True if the profile section exists (regardless of whether
+    the credentials are currently valid), False otherwise.
+    """
+    try:
+        boto3.Session(profile_name=QAIHM_AWS_PROFILE)
+        return True
+    except (botocore.exceptions.ProfileNotFound, botocore.exceptions.BotoCoreError):
+        return False
+
+
+def can_access_private_s3() -> bool:
+    """Check if user can access private S3 (CI or has AWS profile)."""
+    return IsOnCIEnvvar.get() or has_qaihm_aws_profile()
 
 
 def attempt_with_s3_credentials_warning(

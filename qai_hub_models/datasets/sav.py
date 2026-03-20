@@ -22,14 +22,14 @@ from qai_hub_models.utils.asset_loaders import (
 )
 from qai_hub_models.utils.image_processing import numpy_image_to_torch
 from qai_hub_models.utils.input_spec import InputSpec
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 SAV_FOLDER_NAME = "sav"
 SAV_VERSION = 2
 SAV_DIR_NAME = "sav_val"
 SEED = 42
 
-SAV_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+SAV_PRIVATE_ASSET = CachedPrivateDatasetAsset(
     "qai-hub-models/datasets/sav/sav_val.tar",
     SAV_FOLDER_NAME,
     SAV_VERSION,

@@ -16,7 +16,7 @@ from qai_hub_models.datasets.common import (
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 CARVANA_VERSION = 2
 CARVANA_DATASET_ID = "carvana"
@@ -29,7 +29,7 @@ CARVANA_INSTALLATION_STEPS = [
     "Run `python -m qai_hub_models.datasets.configure_dataset --dataset carvana --files /path/to/train.zip /path/to/train_masks.zip",
 ]
 
-CARVANA_IMAGES_ASSET = CachedPrivateCIDatasetAsset(
+CARVANA_IMAGES_ASSET = CachedPrivateDatasetAsset(
     f"qai-hub-models/datasets/carvana/v{CARVANA_VERSION}/train.zip",
     CARVANA_DATASET_ID,
     CARVANA_VERSION,
@@ -37,7 +37,7 @@ CARVANA_IMAGES_ASSET = CachedPrivateCIDatasetAsset(
     installation_steps=CARVANA_INSTALLATION_STEPS,
 )
 
-CARVANA_GT_ASSET = CachedPrivateCIDatasetAsset(
+CARVANA_GT_ASSET = CachedPrivateDatasetAsset(
     f"qai-hub-models/datasets/carvana/v{CARVANA_VERSION}/train_masks.zip",
     CARVANA_DATASET_ID,
     CARVANA_VERSION,

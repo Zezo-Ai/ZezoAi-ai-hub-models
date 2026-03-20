@@ -17,13 +17,13 @@ from qai_hub_models.datasets.common import (
     DatasetSplit,
 )
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 FOOTTRACK_DATASET_VERSION = 4
 FOOTTRACK_DATASET_ID = "foottrack_dataset"
 FOOTTRACK_DATASET_DIR_NAME = "foottrackv3_trainvaltest"
 
-FOOTTRACK_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+FOOTTRACK_PRIVATE_ASSET = CachedPrivateDatasetAsset(
     "qai-hub-models/datasets/foottrack/foottrackv3_trainvaltest.zip",
     FOOTTRACK_DATASET_ID,
     FOOTTRACK_DATASET_VERSION,

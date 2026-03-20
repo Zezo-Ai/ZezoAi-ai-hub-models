@@ -21,12 +21,12 @@ from qai_hub_models.datasets.common import (
 )
 from qai_hub_models.models._shared.repaint.utils import preprocess_inputs
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 CELEBAHQ_VERSION = 2
 CELEBAHQ_DATASET_ID = "celebahq"
 
-CELEBAHQ_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+CELEBAHQ_PRIVATE_ASSET = CachedPrivateDatasetAsset(
     f"qai-hub-models/datasets/celebahq/v{CELEBAHQ_VERSION}/celeba_hq.zip",
     CELEBAHQ_DATASET_ID,
     CELEBAHQ_VERSION,

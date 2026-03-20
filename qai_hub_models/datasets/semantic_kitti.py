@@ -16,7 +16,7 @@ from qai_hub_models.datasets.common import (
     DatasetMetadata,
     DatasetSplit,
 )
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 SEMANTIC_KITTI_VERSION = 2
 SEMANTIC_KITTI_ID = "semantic_kitti"
@@ -28,7 +28,7 @@ SEMANTIC_KITTI_INSTALLATION_STEPS = [
     "Run `python -m qai_hub_models.datasets.configure_dataset --dataset semantic_kitti --files /path/to/data_odometry_velodyne.zip /path/to/data_odometry_labels.zip`",
 ]
 
-SEMANTIC_KITTI_LIDARS_ASSET = CachedPrivateCIDatasetAsset(
+SEMANTIC_KITTI_LIDARS_ASSET = CachedPrivateDatasetAsset(
     f"qai-hub-models/datasets/semantic_kitti/v{SEMANTIC_KITTI_VERSION}/partial_data_odometry_velodyne.zip",
     SEMANTIC_KITTI_ID,
     SEMANTIC_KITTI_VERSION,
@@ -36,7 +36,7 @@ SEMANTIC_KITTI_LIDARS_ASSET = CachedPrivateCIDatasetAsset(
     installation_steps=SEMANTIC_KITTI_INSTALLATION_STEPS,
 )
 
-SEMANTIC_KITTI_GT_ASSET = CachedPrivateCIDatasetAsset(
+SEMANTIC_KITTI_GT_ASSET = CachedPrivateDatasetAsset(
     f"qai-hub-models/datasets/semantic_kitti/v{SEMANTIC_KITTI_VERSION}/partial_data_odometry_labels.zip",
     SEMANTIC_KITTI_ID,
     SEMANTIC_KITTI_VERSION,

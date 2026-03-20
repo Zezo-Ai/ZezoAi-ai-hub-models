@@ -18,13 +18,13 @@ from qai_hub_models.datasets.common import (
 )
 from qai_hub_models.models.facemap_3dmm.model import FaceMap_3DMM
 from qai_hub_models.utils.input_spec import InputSpec
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 FACEMAP3DMM_DATASET_VERSION = 2
 FACEMAP3DMM_DATASET_ID = "facemap3dmm_dataset"
 FACEMAP3DMM_DATASET_DIR_NAME = "facemap3dmm_trainvaltest"
 
-FACEMAP3DMM_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+FACEMAP3DMM_PRIVATE_ASSET = CachedPrivateDatasetAsset(
     "qai-hub-models/datasets/facemap_3dmm/facemap3dmm_trainvaltest.zip",
     FACEMAP3DMM_DATASET_ID,
     FACEMAP3DMM_DATASET_VERSION,

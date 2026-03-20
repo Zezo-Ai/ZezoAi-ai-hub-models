@@ -18,12 +18,12 @@ from qai_hub_models.datasets.common import (
     DatasetSplit,
 )
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resize_pad
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 FACEDETLITE_DATASET_VERSION = 2
 FACEDETLITE_DATASET_ID = "facedetlite_dataset"
 
-FACEDETLITE_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+FACEDETLITE_PRIVATE_ASSET = CachedPrivateDatasetAsset(
     "qai-hub-models/datasets/facedetlite/facedetlite_trainvaltest.zip",
     FACEDETLITE_DATASET_ID,
     FACEDETLITE_DATASET_VERSION,

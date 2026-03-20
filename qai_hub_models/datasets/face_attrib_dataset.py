@@ -17,12 +17,12 @@ from qai_hub_models.datasets.common import (
 from qai_hub_models.models.face_attrib_net.model import OUT_NAMES, FaceAttribNet
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resize_pad
 from qai_hub_models.utils.input_spec import InputSpec
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 FACEATTRIB_DATASET_VERSION = 4
 FACEATTRIB_DATASET_ID = "faceattrib"
 FACEATTRIB_DATASET_DIR_NAME = "faceattrib_trainvaltest"
-FACEATTRIB_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+FACEATTRIB_PRIVATE_ASSET = CachedPrivateDatasetAsset(
     f"qai-hub-models/datasets/faceattrib/v{FACEATTRIB_DATASET_VERSION}/faceattrib_trainvaltest.zip",
     FACEATTRIB_DATASET_ID,
     FACEATTRIB_DATASET_VERSION,

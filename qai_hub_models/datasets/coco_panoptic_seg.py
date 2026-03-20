@@ -24,7 +24,7 @@ COCO_ANNOTATIONS_ASSET = CachedWebDatasetAsset(
     COCO_FOLDER_NAME,
     DATASET_ASSET_VERSION,
     "panoptic_annotations_trainval2017.zip",
-    ci_private_s3_key="qai-hub-models/datasets/coco_panoptic/panoptic_annotations_trainval2017.zip",
+    private_s3_key="qai-hub-models/datasets/coco_panoptic/panoptic_annotations_trainval2017.zip",
 )
 
 

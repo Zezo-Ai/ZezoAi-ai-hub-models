@@ -13,10 +13,9 @@ from zipfile import ZipFile
 import pytest
 
 from qai_hub_models.utils.asset_loaders import ModelZooAssetConfig
-from qai_hub_models.utils.envvars import IsOnCIEnvvar
 from qai_hub_models.utils.private_asset_loaders import (
-    CachedPrivateCIAsset,
-    CachedPrivateCIDatasetAsset,
+    CachedPrivateAsset,
+    CachedPrivateDatasetAsset,
     UnfetchableDatasetError,
 )
 
@@ -62,6 +61,11 @@ def _fake_s3_download(src_file: Path) -> Callable[..., str]:
     return _download
 
 
+_PROFILE_PATCH = "qai_hub_models.utils.private_asset_loaders.has_qaihm_aws_profile"
+_ACCESS_PATCH = "qai_hub_models.utils.private_asset_loaders.can_access_private_s3"
+_INTERNAL_PATCH = "qai_hub_models.utils.private_asset_loaders.is_internal_repo"
+
+
 class TestUnfetchableDatasetError:
     """Tests for UnfetchableDatasetError."""
 
@@ -69,8 +73,9 @@ class TestUnfetchableDatasetError:
         err = UnfetchableDatasetError("my_dataset", installation_steps=None)
         assert err.dataset_name == "my_dataset"
         assert err.installation_steps is None
-        assert "Qualcomm-internal usage only" in str(err)
-        assert "my_dataset" in str(err)
+        msg = str(err)
+        assert "Qualcomm-internal usage only" in msg
+        assert "my_dataset" in msg
 
     def test_manual_download_message(self) -> None:
         steps = ["Go to example.com", "Accept the license", "Download data.zip"]
@@ -90,13 +95,13 @@ class TestUnfetchableDatasetError:
             raise err
 
 
-class TestCachedPrivateCIAssetInit:
-    """Tests for CachedPrivateCIAsset.__init__."""
+class TestCachedPrivateAssetInit:
+    """Tests for CachedPrivateAsset.__init__."""
 
     def test_url_constructed_from_s3_key(self) -> None:
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
-            asset = CachedPrivateCIAsset(
+            asset = CachedPrivateAsset(
                 "datasets/foo/bar.zip",
                 Path(tmpdir) / "bar.zip",
                 cfg,
@@ -105,74 +110,115 @@ class TestCachedPrivateCIAssetInit:
                 asset.url == "s3://qai-hub-models-private-assets/datasets/foo/bar.zip"
             )
 
-    def test_default_non_ci_error_is_none(self) -> None:
+    def test_default_access_denied_error_is_none(self) -> None:
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
-            asset = CachedPrivateCIAsset(
+            asset = CachedPrivateAsset(
                 "key.zip",
                 Path(tmpdir) / "key.zip",
                 cfg,
             )
-            assert asset.non_ci_error is None
+            assert asset.access_denied_error is None
 
-    def test_custom_non_ci_error(self) -> None:
+    def test_custom_access_denied_error(self) -> None:
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
             custom_err = RuntimeError("custom")
-            asset = CachedPrivateCIAsset(
+            asset = CachedPrivateAsset(
                 "key.zip",
                 Path(tmpdir) / "key.zip",
                 cfg,
-                non_ci_error=custom_err,
+                access_denied_error=custom_err,
             )
-            assert asset.non_ci_error is custom_err
+            assert asset.access_denied_error is custom_err
 
 
-class TestCachedPrivateCIAssetFetch:
-    """Tests for CachedPrivateCIAsset.fetch()."""
+class TestCachedPrivateAssetFetch:
+    """Tests for CachedPrivateAsset.fetch()."""
 
-    def test_fetch_raises_default_error_off_ci(
+    def test_fetch_raises_default_error_external_user(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        IsOnCIEnvvar.patchenv(monkeypatch, False)
+        """External user (no profile, not internal repo) gets an error."""
+        monkeypatch.setattr(_ACCESS_PATCH, lambda: False)
+        monkeypatch.setattr(_INTERNAL_PATCH, lambda: False)
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
-            asset = CachedPrivateCIAsset(
+            asset = CachedPrivateAsset(
                 "key.zip",
                 Path(tmpdir) / "key.zip",
                 cfg,
             )
-            with pytest.raises(ValueError, match="can only be fetched on CI"):
+            with pytest.raises(ValueError, match="private asset"):
                 asset.fetch()
 
-    def test_fetch_raises_custom_error_off_ci(
+    def test_fetch_raises_custom_error_external_user(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        IsOnCIEnvvar.patchenv(monkeypatch, False)
+        """External user with custom error configured."""
+        monkeypatch.setattr(_ACCESS_PATCH, lambda: False)
+        monkeypatch.setattr(_INTERNAL_PATCH, lambda: False)
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
             custom_err = RuntimeError("no access")
-            asset = CachedPrivateCIAsset(
+            asset = CachedPrivateAsset(
                 "key.pt",
                 Path(tmpdir) / "key.pt",
                 cfg,
-                non_ci_error=custom_err,
+                access_denied_error=custom_err,
             )
             with pytest.raises(RuntimeError, match="no access"):
                 asset.fetch()
 
-    def test_fetch_with_local_path_bypasses_ci_check(
+    def test_fetch_raises_setup_prompt_for_internal_user_without_profile(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """local_path should work even when not on CI."""
-        IsOnCIEnvvar.patchenv(monkeypatch, False)
+        """Internal repo user without AWS profile gets a setup prompt."""
+        monkeypatch.setattr(_ACCESS_PATCH, lambda: False)
+        monkeypatch.setattr(_INTERNAL_PATCH, lambda: True)
+        with TemporaryDirectory() as tmpdir:
+            cfg = _make_asset_config(tmpdir)
+            asset = CachedPrivateAsset(
+                "key.zip",
+                Path(tmpdir) / "key.zip",
+                cfg,
+            )
+            with pytest.raises(ValueError, match="validate_credentials"):
+                asset.fetch()
+
+    def test_fetch_downloads_with_profile(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """User with qaihm profile can download."""
+        monkeypatch.setattr(_ACCESS_PATCH, lambda: True)
+        with TemporaryDirectory() as tmpdir:
+            cfg = _make_asset_config(tmpdir)
+            src = Path(tmpdir) / "_src" / "model.pt"
+            src.parent.mkdir()
+            src.write_bytes(b"s3 data")
+
+            asset = CachedPrivateAsset(
+                "models/model.pt",
+                Path(tmpdir) / "model.pt",
+                cfg,
+            )
+            asset._downloader = _fake_s3_download(src)
+            result = asset.fetch()
+            assert result == Path(tmpdir) / "model.pt"
+            assert result.read_bytes() == b"s3 data"
+
+    def test_fetch_with_local_path_bypasses_profile_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """local_path should work even without a profile."""
+        monkeypatch.setattr(_ACCESS_PATCH, lambda: False)
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
             src = Path(tmpdir) / "_src" / "model.pt"
             src.parent.mkdir()
             src.write_bytes(b"model data")
 
-            asset = CachedPrivateCIAsset(
+            asset = CachedPrivateAsset(
                 "models/model.pt",
                 Path(tmpdir) / "model.pt",
                 cfg,
@@ -184,13 +230,13 @@ class TestCachedPrivateCIAssetFetch:
     def test_fetch_with_local_path_and_extract(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        IsOnCIEnvvar.patchenv(monkeypatch, False)
+        monkeypatch.setattr(_ACCESS_PATCH, lambda: False)
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
             src_zip = Path(tmpdir) / "_src" / "data.zip"
             _make_zip(src_zip, {"a.txt": b"hello"})
 
-            asset = CachedPrivateCIAsset(
+            asset = CachedPrivateAsset(
                 "datasets/data.zip",
                 Path(tmpdir) / "data.zip",
                 cfg,
@@ -199,32 +245,16 @@ class TestCachedPrivateCIAssetFetch:
             assert result == Path(tmpdir) / "data"
             assert (Path(tmpdir) / "data" / "a.txt").read_bytes() == b"hello"
 
-    def test_fetch_on_ci_downloads(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        IsOnCIEnvvar.patchenv(monkeypatch, True)
-        with TemporaryDirectory() as tmpdir:
-            cfg = _make_asset_config(tmpdir)
-            src = Path(tmpdir) / "_src" / "model.pt"
-            src.parent.mkdir()
-            src.write_bytes(b"s3 data")
-
-            asset = CachedPrivateCIAsset(
-                "models/model.pt",
-                Path(tmpdir) / "model.pt",
-                cfg,
-            )
-            asset._downloader = _fake_s3_download(src)
-            result = asset.fetch()
-            assert result == Path(tmpdir) / "model.pt"
-            assert result.read_bytes() == b"s3 data"
-
-    def test_fetch_on_ci_with_extract(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        IsOnCIEnvvar.patchenv(monkeypatch, True)
+    def test_fetch_with_profile_and_extract(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_ACCESS_PATCH, lambda: True)
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
             src_zip = Path(tmpdir) / "_src" / "data.zip"
             _make_zip(src_zip, {"file.txt": b"content"})
 
-            asset = CachedPrivateCIAsset(
+            asset = CachedPrivateAsset(
                 "datasets/data.zip",
                 Path(tmpdir) / "data.zip",
                 cfg,
@@ -235,13 +265,13 @@ class TestCachedPrivateCIAssetFetch:
             assert (result / "file.txt").read_bytes() == b"content"
 
 
-class TestCachedPrivateCIDatasetAsset:
-    """Tests for CachedPrivateCIDatasetAsset."""
+class TestCachedPrivateDatasetAsset:
+    """Tests for CachedPrivateDatasetAsset."""
 
     def test_local_cache_path_uses_dataset_path(self) -> None:
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
-            asset = CachedPrivateCIDatasetAsset(
+            asset = CachedPrivateDatasetAsset(
                 "datasets/coco/train.zip",
                 dataset_id="coco",
                 dataset_version=1,
@@ -254,7 +284,7 @@ class TestCachedPrivateCIDatasetAsset:
     def test_extracted_path_uses_dataset_path(self) -> None:
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
-            asset = CachedPrivateCIDatasetAsset(
+            asset = CachedPrivateDatasetAsset(
                 "datasets/coco/train.zip",
                 dataset_id="coco",
                 dataset_version=1,
@@ -268,7 +298,7 @@ class TestCachedPrivateCIDatasetAsset:
     def test_default_extracted_path_when_none(self) -> None:
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
-            asset = CachedPrivateCIDatasetAsset(
+            asset = CachedPrivateDatasetAsset(
                 "datasets/coco/train.zip",
                 dataset_id="coco",
                 dataset_version=2,
@@ -279,25 +309,25 @@ class TestCachedPrivateCIDatasetAsset:
             expected = Path(tmpdir) / "datasets" / "coco" / "v2" / "train"
             assert asset._local_cache_extracted_path == expected
 
-    def test_non_ci_error_is_unfetchable_dataset_error(self) -> None:
+    def test_access_denied_error_is_unfetchable_dataset_error(self) -> None:
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
-            asset = CachedPrivateCIDatasetAsset(
+            asset = CachedPrivateDatasetAsset(
                 "datasets/coco/train.zip",
                 dataset_id="coco",
                 dataset_version=1,
                 filename="train.zip",
                 asset_config=cfg,
             )
-            assert isinstance(asset.non_ci_error, UnfetchableDatasetError)
-            assert asset.non_ci_error.dataset_name == "coco"
-            assert asset.non_ci_error.installation_steps is None
+            assert isinstance(asset.access_denied_error, UnfetchableDatasetError)
+            assert asset.access_denied_error.dataset_name == "coco"
+            assert asset.access_denied_error.installation_steps is None
 
-    def test_non_ci_error_with_installation_steps(self) -> None:
+    def test_access_denied_error_with_installation_steps(self) -> None:
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
             steps = ["Download from site", "Unzip"]
-            asset = CachedPrivateCIDatasetAsset(
+            asset = CachedPrivateDatasetAsset(
                 "datasets/ds/data.zip",
                 dataset_id="ds",
                 dataset_version=1,
@@ -305,16 +335,17 @@ class TestCachedPrivateCIDatasetAsset:
                 asset_config=cfg,
                 installation_steps=steps,
             )
-            assert isinstance(asset.non_ci_error, UnfetchableDatasetError)
-            assert asset.non_ci_error.installation_steps == steps
+            assert isinstance(asset.access_denied_error, UnfetchableDatasetError)
+            assert asset.access_denied_error.installation_steps == steps
 
-    def test_fetch_raises_unfetchable_error_off_ci(
+    def test_fetch_raises_unfetchable_error_external_user(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        IsOnCIEnvvar.patchenv(monkeypatch, False)
+        monkeypatch.setattr(_ACCESS_PATCH, lambda: False)
+        monkeypatch.setattr(_INTERNAL_PATCH, lambda: False)
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
-            asset = CachedPrivateCIDatasetAsset(
+            asset = CachedPrivateDatasetAsset(
                 "datasets/private_ds/data.zip",
                 dataset_id="private_ds",
                 dataset_version=1,
@@ -324,13 +355,14 @@ class TestCachedPrivateCIDatasetAsset:
             with pytest.raises(UnfetchableDatasetError, match="Qualcomm-internal"):
                 asset.fetch()
 
-    def test_fetch_raises_with_installation_steps_off_ci(
+    def test_fetch_raises_with_installation_steps_external_user(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        IsOnCIEnvvar.patchenv(monkeypatch, False)
+        monkeypatch.setattr(_ACCESS_PATCH, lambda: False)
+        monkeypatch.setattr(_INTERNAL_PATCH, lambda: False)
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
-            asset = CachedPrivateCIDatasetAsset(
+            asset = CachedPrivateDatasetAsset(
                 "datasets/licensed_ds/data.zip",
                 dataset_id="licensed_ds",
                 dataset_version=1,
@@ -344,7 +376,7 @@ class TestCachedPrivateCIDatasetAsset:
     def test_dataset_id_and_version_stored(self) -> None:
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
-            asset = CachedPrivateCIDatasetAsset(
+            asset = CachedPrivateDatasetAsset(
                 "key",
                 dataset_id="my_ds",
                 dataset_version=3,
@@ -354,16 +386,16 @@ class TestCachedPrivateCIDatasetAsset:
             assert asset.dataset_id == "my_ds"
             assert asset.dataset_version == 3
 
-    def test_fetch_with_local_path_bypasses_ci(
+    def test_fetch_with_local_path_bypasses_profile_check(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        IsOnCIEnvvar.patchenv(monkeypatch, False)
+        monkeypatch.setattr(_ACCESS_PATCH, lambda: False)
         with TemporaryDirectory() as tmpdir:
             cfg = _make_asset_config(tmpdir)
             src_zip = Path(tmpdir) / "_src" / "data.zip"
             _make_zip(src_zip, {"img.jpg": b"image"})
 
-            asset = CachedPrivateCIDatasetAsset(
+            asset = CachedPrivateDatasetAsset(
                 "datasets/ds/data.zip",
                 dataset_id="ds",
                 dataset_version=1,

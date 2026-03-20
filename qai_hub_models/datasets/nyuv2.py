@@ -21,7 +21,7 @@ from qai_hub_models.datasets.common import (
 )
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.input_spec import InputSpec
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 NYUV2_FOLDER_NAME = "nyuv2"
 FILE_NAME = "nyu_depth_v2_labeled.mat"
@@ -32,7 +32,7 @@ SPLIT_ASSET = CachedWebDatasetAsset.from_asset_store(
     "splits.mat",
 )
 
-NYUV2_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+NYUV2_PRIVATE_ASSET = CachedPrivateDatasetAsset(
     "qai-hub-models/datasets/nyuv2/nyu_depth_v2_labeled.mat",
     NYUV2_FOLDER_NAME,
     NYUV2_VERSION,

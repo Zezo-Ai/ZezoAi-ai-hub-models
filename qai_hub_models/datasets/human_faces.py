@@ -16,12 +16,12 @@ from qai_hub_models.datasets.common import (
     DatasetSplit,
 )
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 DATASET_VERSION = 2
 DATASET_ID = "human_faces_dataset"
 
-HUMAN_FACES_PRIVATE_ASSET = CachedPrivateCIDatasetAsset(
+HUMAN_FACES_PRIVATE_ASSET = CachedPrivateDatasetAsset(
     "qai-hub-models/datasets/human_faces/faces.zip",
     DATASET_ID,
     DATASET_VERSION,

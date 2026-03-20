@@ -72,8 +72,8 @@ def profiles_exist(accounts: dict[str, AccountData]) -> bool:
     try:
         for account in accounts.values():
             boto3.Session(profile_name=account["profile"])
-    except botocore.exceptions.ProfileNotFound as e:
-        logging.warning(e)
+    except botocore.exceptions.ProfileNotFound:
+        logging.warning(f"Profile not found: {account['profile']}")
         return False
 
     return True
@@ -143,12 +143,11 @@ def credentials_valid(accounts: dict[str, AccountData], all_accounts: bool) -> b
         except (
             botocore.exceptions.NoCredentialsError,
             botocore.exceptions.ClientError,
-        ) as e:
+        ):
             if account["required"] or all_accounts:
                 logging.exception(
                     f"Could not get caller identity for aws profile '{account['profile']}'"
                 )
-                logging.exception(e)  # noqa: TRY401
                 return False
             continue
 

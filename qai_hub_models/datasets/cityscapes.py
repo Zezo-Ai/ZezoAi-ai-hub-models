@@ -17,7 +17,7 @@ from qai_hub_models.datasets.common import (
     DatasetSplit,
 )
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.private_asset_loaders import CachedPrivateCIDatasetAsset
+from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 CITYSCAPES_VERSION = 2
 CITYSCAPES_DATASET_ID = "cityscapes"
@@ -28,7 +28,7 @@ CITYSCAPES_INSTALLATION_STEPS = [
     "Run `python -m qai_hub_models.datasets.configure_dataset --dataset cityscapes --files /path/to/leftImg8bit_trainvaltest.zip /path/to/gtFine_trainvaltest.zip`",
 ]
 
-CITYSCAPES_IMAGES_ASSET = CachedPrivateCIDatasetAsset(
+CITYSCAPES_IMAGES_ASSET = CachedPrivateDatasetAsset(
     "qai-hub-models/datasets/cityscapes/partial_leftImg8bit_trainvaltest.zip",
     CITYSCAPES_DATASET_ID,
     CITYSCAPES_VERSION,
@@ -36,7 +36,7 @@ CITYSCAPES_IMAGES_ASSET = CachedPrivateCIDatasetAsset(
     installation_steps=CITYSCAPES_INSTALLATION_STEPS,
 )
 
-CITYSCAPES_GT_ASSET = CachedPrivateCIDatasetAsset(
+CITYSCAPES_GT_ASSET = CachedPrivateDatasetAsset(
     "qai-hub-models/datasets/cityscapes/gtFine_trainvaltest.zip",
     CITYSCAPES_DATASET_ID,
     CITYSCAPES_VERSION,
