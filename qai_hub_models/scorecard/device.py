@@ -23,6 +23,17 @@ from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
 from qai_hub_models.utils.qai_hub_helpers import can_access_qualcomm_ai_hub
 
+
+def sanitize_chipset_name(name: str) -> str:
+    """
+    We want some chipset names to appear differently on the website and perf.yaml
+    compared to the name registered in workbench.
+    """
+    if name.endswith("-for-galaxy"):
+        return name[: -len("-for-galaxy")]
+    return name
+
+
 _FRAMEWORK_ATTR_PREFIX = "framework"
 _DEVICE_CACHE: dict[str, hub.Device | None] = {}
 UNIVERSAL_DEVICE_SCORECARD_NAME = "universal"
@@ -357,6 +368,8 @@ class ScorecardDevice:
         """
         If this device can run a model, get a set of all chipsets that should also be supported.
         This device's chipset will be included in the list.
+
+        Returned names are sanitized (e.g. "-for-galaxy" suffix is stripped).
         """
         if self.form_factor in [
             ScorecardDevice.FormFactor.PHONE,
@@ -369,10 +382,13 @@ class ScorecardDevice:
                 "qualcomm-snapdragon-8gen1",
                 "qualcomm-snapdragon-888",
             ]
-            if self.chipset in mobile_chips:
+            # Sanitize chipset name (e.g. strip "-for-galaxy" suffix)
+            # so variant devices get the same backward-compatibility expansion.
+            chipset = sanitize_chipset_name(self.chipset)
+            if chipset in mobile_chips:
                 # Return this chipset and all older chipsets.
                 # We don't run older devices in the scorecard, so this is a proxy.
-                return set(mobile_chips[mobile_chips.index(self.chipset) :])
+                return set(mobile_chips[mobile_chips.index(chipset) :])
         if self.form_factor == ScorecardDevice.FormFactor.COMPUTE:
             # If either compute chip works, both work
             compute_chips = {

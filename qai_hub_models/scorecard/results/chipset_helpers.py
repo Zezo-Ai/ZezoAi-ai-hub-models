@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import qai_hub as hub
 
-from qai_hub_models.scorecard.device import ScorecardDevice
+from qai_hub_models.scorecard.device import ScorecardDevice, sanitize_chipset_name
 
 WEBSITE_CHIPSET_ORDER = [
+    "qualcomm-snapdragon-8-elite-gen5",
     "qualcomm-snapdragon-8-elite",
     "qualcomm-snapdragon-x2-elite",
     "qualcomm-snapdragon-x-elite",
@@ -33,19 +34,9 @@ WEBSITE_CHIPSET_ORDER = [
 ]
 
 
-def _sanitize_chipset_name(name: str) -> str:
-    """
-    We want some chipset names to appear differently on the website and perf.yaml
-    compared to the name registered in workbench.
-    """
-    if name.endswith("-for-galaxy"):
-        return name[: -len("-for-galaxy")]
-    return name
-
-
 def sorted_chipsets(chips: set[str]) -> list[str]:
     """Sort the set of chipsets in order they should show up on the website."""
-    chips = {_sanitize_chipset_name(c) for c in chips}
+    chips = {sanitize_chipset_name(c) for c in chips}
 
     out = []
     for chipset in WEBSITE_CHIPSET_ORDER:
@@ -65,9 +56,10 @@ def sorted_devices(devices: set[ScorecardDevice]) -> list[ScorecardDevice]:
     """
     device_chipset_map: dict[str, set[ScorecardDevice]] = {}
     for device in devices:
-        if device.chipset not in device_chipset_map:
-            device_chipset_map[device.chipset] = set()
-        device_chipset_map[device.chipset].add(device)
+        sanitized = sanitize_chipset_name(device.chipset)
+        if sanitized not in device_chipset_map:
+            device_chipset_map[sanitized] = set()
+        device_chipset_map[sanitized].add(device)
 
     out: list[ScorecardDevice] = []
     for chipset in WEBSITE_CHIPSET_ORDER:
