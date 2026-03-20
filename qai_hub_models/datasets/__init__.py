@@ -67,6 +67,7 @@ def _try_import_dataset(module_name: str, cls: str, name: str | None = None) -> 
 _try_import_dataset(".common_voice", "CommonVoiceDataset")
 _try_import_dataset(".common_voice", "CommonVoiceText", name="common_voice_text")
 _try_import_dataset(".bsd300", "BSD300Dataset")
+_try_import_dataset(".bsd300_denoising", "BSD300DenoisingDataset")
 _try_import_dataset(".cityscapes", "CityscapesDataset")
 _try_import_dataset(".cityscapes_lowres", "CityscapesLowResDataset")
 _try_import_dataset(".ade20k", "ADESegmentationDataset")
