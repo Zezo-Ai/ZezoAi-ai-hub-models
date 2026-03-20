@@ -11,6 +11,7 @@ from typing import Any
 
 import torch
 import torch.nn.functional as F
+from qai_hub.client import Device
 from typing_extensions import Self
 
 from qai_hub_models.models.statetransformer.model_patch import custom_one_hot
@@ -21,7 +22,7 @@ from qai_hub_models.utils.asset_loaders import (
     SourceAsRoot,
     find_replace_in_repo,
 )
-from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
 from qai_hub_models.utils.input_spec import InputSpec
 
 # Repository and model configuration
@@ -204,6 +205,23 @@ class StateTransformer(BaseModel):
             "low_res_raster": ((batch_size, 224, 224, 58), "float32"),
             "context_actions": ((batch_size, 4, 7), "float32"),
         }
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        if (
+            target_runtime == TargetRuntime.TFLITE
+            and "--truncate_64bit_tensors" not in other_compile_options
+        ):
+            other_compile_options += " --truncate_64bit_tensors"
+        return super().get_hub_compile_options(
+            target_runtime, precision, other_compile_options, device, context_graph_name
+        )
 
     @staticmethod
     def get_channel_last_inputs() -> list[str]:

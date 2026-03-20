@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn.functional as F
+from qai_hub.client import Device
 from stereonet.model import CostVolume, soft_argmin
 from stereonet.model import StereoNet as StereoNetModel
 from torch import nn
@@ -14,7 +15,7 @@ from typing_extensions import Self
 
 from qai_hub_models.models.stereonet.model_patch import CostVolumeOptimized
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
 from qai_hub_models.utils.input_spec import InputSpec
 
 MODEL_ID = __name__.split(".")[-2]
@@ -167,6 +168,23 @@ class StereoNet(BaseModel):
     @staticmethod
     def get_output_names() -> list[str]:
         return ["disparity"]
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        if (
+            target_runtime == TargetRuntime.TFLITE
+            and "--truncate_64bit_tensors" not in other_compile_options
+        ):
+            other_compile_options += " --truncate_64bit_tensors"
+        return super().get_hub_compile_options(
+            target_runtime, precision, other_compile_options, device, context_graph_name
+        )
 
     @staticmethod
     def get_channel_last_outputs() -> list[str]:

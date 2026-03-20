@@ -9,6 +9,7 @@ import math
 
 import numpy as np
 import torch
+from qai_hub.client import Device
 from transformers import WavLMForCTC
 from transformers.models.wavlm.modeling_wavlm import WavLMGroupNormConvLayer
 from typing_extensions import Self
@@ -17,7 +18,7 @@ from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.evaluators.libri_speech_evaluator import LibriSpeechEvaluator
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_numpy
-from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
 from qai_hub_models.utils.input_spec import InputSpec
 
 DEFAULT_WEIGHTS = "patrickvonplaten/wavlm-libri-clean-100h-base-plus"
@@ -91,6 +92,23 @@ class HuggingFaceWavLMBasePlus(BaseModel):
             length = input_spec["input"][0][1]
             audio = audio[:length]
         return {"input": [np.expand_dims(audio, axis=0)]}
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        if (
+            target_runtime == TargetRuntime.TFLITE
+            and "--truncate_64bit_tensors" not in other_compile_options
+        ):
+            other_compile_options += " --truncate_64bit_tensors"
+        return super().get_hub_compile_options(
+            target_runtime, precision, other_compile_options, device, context_graph_name
+        )
 
     def get_evaluator(self) -> BaseEvaluator:
         return LibriSpeechEvaluator()

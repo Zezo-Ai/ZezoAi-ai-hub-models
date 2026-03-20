@@ -9,6 +9,7 @@ import os
 from typing import Any
 
 import torch
+from qai_hub.client import Device
 from torch import nn
 from typing_extensions import Self
 
@@ -22,7 +23,7 @@ from qai_hub_models.utils.asset_loaders import (
     SourceAsRoot,
     load_torch,
 )
-from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.base_model import BaseModel, TargetRuntime
 from qai_hub_models.utils.input_spec import InputSpec
 
 MODEL_ID = __name__.split(".")[-2]
@@ -108,6 +109,23 @@ class CVT(BaseModel):
     @staticmethod
     def get_output_names() -> list[str]:
         return ["bev"]
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        if (
+            target_runtime == TargetRuntime.TFLITE
+            and "--truncate_64bit_tensors" not in other_compile_options
+        ):
+            other_compile_options += " --truncate_64bit_tensors"
+        return super().get_hub_compile_options(
+            target_runtime, precision, other_compile_options, device, context_graph_name
+        )
 
     def get_evaluator(self) -> BaseEvaluator:
         return NuscenesBevSegmentationEvaluator()

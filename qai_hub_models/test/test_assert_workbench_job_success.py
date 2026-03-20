@@ -45,8 +45,8 @@ def _verify_jobs_successful(job_ids: dict[str, str], job_type: str) -> None:
             if DisableWorkbenchJobTimeoutEnvvar.get():
                 status = job.wait()
             else:
-                # Wait a maximum of 60 minutes for a compile job
-                timemax = datetime.timedelta(minutes=60)
+                # Wait a maximum of 75 minutes for a compile job
+                timemax = datetime.timedelta(minutes=75)
                 timediff = datetime.datetime.now() - job.date
                 if timediff < timemax:
                     with contextlib.suppress(TimeoutError):

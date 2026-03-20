@@ -10,6 +10,7 @@ import sys
 from types import SimpleNamespace
 
 import torch
+from qai_hub.client import Device
 from typing_extensions import Self
 
 from qai_hub_models.utils.asset_loaders import (
@@ -17,7 +18,7 @@ from qai_hub_models.utils.asset_loaders import (
     SourceAsRoot,
     load_torch,
 )
-from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import InputSpec
 
@@ -145,6 +146,23 @@ class ACT(BaseModel):
             "qpos": ((batch_size, 14), "float32"),
             "image": ((batch_size, 3, height, width), "float32"),
         }
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        if (
+            target_runtime == TargetRuntime.TFLITE
+            and "--truncate_64bit_tensors" not in other_compile_options
+        ):
+            other_compile_options += " --truncate_64bit_tensors"
+        return super().get_hub_compile_options(
+            target_runtime, precision, other_compile_options, device, context_graph_name
+        )
 
     @staticmethod
     def get_output_names() -> list[str]:
