@@ -3,6 +3,9 @@ supported_precisions:
 - w8a16
 has_on_target_demo: true
 disabled_paths:
+  float:
+    tflite:
+      scorecard_failure: 'Bicubic size not compatible with TFLite, see https://github.com/qcom-ai-hub/tetracode/issues/18172'
   w8a16:
     onnx:
       issue: Poor numerical accuracy https://github.com/qcom-ai-hub/tetracode/issues/14856

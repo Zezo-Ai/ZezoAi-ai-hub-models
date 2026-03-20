@@ -3,6 +3,9 @@ supported_precisions:
 - w8a16
 has_on_target_demo: true
 disabled_paths:
+  float:
+    tflite:
+      scorecard_failure: 'Bicubic size not compatible with TFLite, see https://github.com/qcom-ai-hub/tetracode/issues/18172'
   w8a16:
     qnn_dlc:
       scorecard_accuracy_failure: Torch and On-device accuracy diff (-40.900 δ1) above threshold (10.0 δ1)
