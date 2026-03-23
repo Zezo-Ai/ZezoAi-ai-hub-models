@@ -31,7 +31,7 @@ def bev_pool(
     Summary
         - The official code uses a custom C++/CUDA op (bev_pool_ext) + QuickCumsum.
         So here we reimplemented pooling using pure PyTorch (no CUDA extensions) and
-        the cumulative sum logic is moved into encoder3 due to memory efficiency.
+        the cumulative sum logic is moved outside of the model (into app.py) due to memory efficiency.
 
     Parameters
     ----------

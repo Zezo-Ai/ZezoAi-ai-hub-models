@@ -3,14 +3,20 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
+from typing import cast
+
 from qai_hub_models.models.bevfusion_det.app import BEVFusionApp
 from qai_hub_models.models.bevfusion_det.model import (
     MODEL_ASSET_VERSION,
     MODEL_ID,
     BEVFusion,
+    BEVFusionDecoder,
+    BEVFusionEncoder1,
+    BEVFusionEncoder2,
+    BEVFusionEncoder3,
 )
 from qai_hub_models.utils.args import (
-    add_output_dir_arg,
+    demo_model_components_from_cli_args,
     get_model_cli_parser,
     get_on_device_demo_parser,
     model_from_cli_args,
@@ -22,6 +28,7 @@ from qai_hub_models.utils.asset_loaders import (
     load_json,
 )
 from qai_hub_models.utils.display import display_or_save_image
+from qai_hub_models.utils.evaluate import EvalMode
 
 # Asset definitions
 CAMERAS = {
@@ -52,22 +59,37 @@ INPUTS = CachedWebModelAsset.from_asset_store(
 def main(is_test: bool = False) -> None:
     # Parse arguments
     parser = get_model_cli_parser(BEVFusion)
-
-    parser = get_on_device_demo_parser(parser)
-
-    add_output_dir_arg(parser)
+    parser = get_on_device_demo_parser(parser, add_output_dir=True)
     args = parser.parse_args([] if is_test else None)
 
     # Load model
     model = model_from_cli_args(BEVFusion, args)
     validate_on_device_demo_args(args, MODEL_ID)
-    app = BEVFusionApp(
-        model.encoder1,
-        model.encoder2,
-        model.encoder3,
-        model.encoder4,
-        model.decoder,
-    )
+
+    heads = model.decoder.heads
+    if args.eval_mode == EvalMode.ON_DEVICE:
+        enc1, enc2, enc3, dec = demo_model_components_from_cli_args(
+            BEVFusion, MODEL_ID, args
+        )
+        app = BEVFusionApp(
+            cast(BEVFusionEncoder1, enc1),
+            cast(BEVFusionEncoder2, enc2),
+            cast(BEVFusionEncoder3, enc3),
+            cast(BEVFusionDecoder, dec),
+            num_classes=heads.num_classes,
+            task_heads=heads.task_heads,
+            get_bboxes=heads.get_bboxes,
+        )
+    else:
+        app = BEVFusionApp(
+            model.encoder1,
+            model.encoder2,
+            model.encoder3,
+            model.decoder,
+            num_classes=heads.num_classes,
+            task_heads=heads.task_heads,
+            get_bboxes=heads.get_bboxes,
+        )
 
     # Load inputs
     cam_paths = dict(CAMERAS.items())

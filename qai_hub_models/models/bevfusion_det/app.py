@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import torch
@@ -14,7 +14,6 @@ from PIL import Image
 from pyquaternion import Quaternion
 
 from qai_hub_models.models.bevfusion_det.model import (
-    BEVFusionDecoder,
     BEVFusionEncoder1,
 )
 from qai_hub_models.utils.bounding_box_processing_3d import (
@@ -22,6 +21,7 @@ from qai_hub_models.utils.bounding_box_processing_3d import (
     draw_3d_bbox,
 )
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
+from qai_hub_models.utils.optimization import optimized_cumsum
 
 OBJECT_CLASSES = {
     "car": (255, 158, 0),
@@ -46,8 +46,10 @@ class BEVFusionApp:
             tuple[torch.Tensor, torch.Tensor, torch.Tensor],
         ],
         encoder3: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-        encoder4: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-        decoder: BEVFusionDecoder,
+        decoder: Callable[[torch.Tensor], torch.Tensor],
+        num_classes: list[int] | Any,
+        task_heads: list[Any] | Any,
+        get_bboxes: Callable[..., Any] | Any,
         score_threshold: float = 0.4,
         nms_threshold: float = 4.0,
         nms_post_max_size: int = 83,
@@ -66,12 +68,20 @@ class BEVFusionApp:
         encoder3
             Model encoder component.
             For input specs, see `BEVFusionEncoder3.get_input_spec` in model.py.
-        encoder4
-            Model encoder component.
-            For input specs, see `BEVFusionEncoder4.get_input_spec` in model.py.
         decoder
             Model decoder component.
-            For input spec, see `BEVFusionDecoder.get_input_spec` in model.py.
+            For input spec, see ``BEVFusionDecoder.get_input_spec`` in model.py.
+        num_classes
+            List of per-task class counts from CenterHead (``heads.num_classes``).
+            Used to determine how to split the decoder output tensor per task.
+        task_heads
+            List of per-task head modules from CenterHead (``heads.task_heads``).
+            Each entry exposes a ``heads`` dict whose values carry the output
+            channel count for each regression key (reg, height, dim, rot, vel).
+        get_bboxes
+            Bound method ``heads.get_bboxes`` from CenterHead.
+            Called with the unpacked prediction dicts to decode raw outputs into
+            bounding boxes, scores, and labels.
         score_threshold
             Score threshold, default is 0.4.
         nms_threshold
@@ -82,12 +92,13 @@ class BEVFusionApp:
         self.encoder1 = encoder1
         self.encoder2 = encoder2
         self.encoder3 = encoder3
-        self.encoder4 = encoder4
         self.decoder = decoder
+        self.num_classes = num_classes
+        self.task_heads = task_heads
+        self.get_bboxes = get_bboxes
         self.score_threshold = score_threshold
         self.nms_threshold = nms_threshold
         self.nms_post_max_size = nms_post_max_size
-        self.num_classes = self.decoder.heads.num_classes
 
     def prepare_camera_inputs(
         self,
@@ -196,22 +207,30 @@ class BEVFusionApp:
         x = self.encoder1(torch.tensor(imgs))
 
         x, lengths, geom_feats = self.encoder2(
-            x.unsqueeze(0), inv_intrins, sensor2keyegos, inv_post_rots, post_trans
+            x.unsqueeze(0),
+            inv_intrins.unsqueeze(0),
+            sensor2keyegos,
+            inv_post_rots,
+            post_trans,
         )
+        segment_indices = torch.cumsum(lengths, dim=0).long()
 
-        segment = self.encoder3(x, lengths)
+        x_reshaped = x.unsqueeze(0).reshape(96, 118, 176, 80).float()
+        x = optimized_cumsum(x_reshaped).reshape(x.shape)
+        x = x.reshape(-1, 80)
+        segment = x[segment_indices, :]
+        diff = segment[1:] - segment[:-1]
+        segment = torch.cat([segment[:1], diff], dim=0)
 
-        x = self.encoder4(segment, geom_feats.unsqueeze(0))
-
+        x = self.encoder3(segment.unsqueeze(0), geom_feats.unsqueeze(0))
         pred_tensor = self.decoder(x)
 
         # unpack predictions into dict
-        num_classes = cast(list[int], self.decoder.heads.num_classes)
         pred_dicts = []
         start = 0
         head_order = ["reg", "height", "dim", "rot", "vel", "heatmap"]
-        for i, nc in enumerate(num_classes):
-            task_head = self.decoder.heads.task_heads[i]  # type: ignore[index]
+        for i, nc in enumerate(self.num_classes):
+            task_head = self.task_heads[i]
             reg_heads = getattr(task_head, "heads", None)
             channels = []
             for key in head_order:
@@ -230,7 +249,7 @@ class BEVFusionApp:
             pred_dict = dict(zip(head_order, split_tensors, strict=False))
             pred_dicts.append([pred_dict])
 
-        bboxes, scores, labels = self.decoder.heads.get_bboxes(pred_dicts)[0]  # type: ignore[operator]
+        bboxes, scores, labels = self.get_bboxes(pred_dicts)[0]
         corners = compute_corners(bboxes)
 
         # Filter based on confidence score

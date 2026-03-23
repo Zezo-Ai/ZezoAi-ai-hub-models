@@ -23,8 +23,15 @@ OUTPUT = CachedWebModelAsset.from_asset_store(MODEL_ID, 5, "outputs/corners.npy"
 @skip_clone_repo_check
 def test_task() -> None:
     model = BEVFusion.from_pretrained()
+    heads = model.decoder.heads
     app = BEVFusionApp(
-        model.encoder1, model.encoder2, model.encoder3, model.encoder4, model.decoder
+        model.encoder1,
+        model.encoder2,
+        model.encoder3,
+        model.decoder,
+        num_classes=heads.num_classes,
+        task_heads=heads.task_heads,
+        get_bboxes=heads.get_bboxes,
     )
 
     cam_paths = dict(CAMERAS.items())

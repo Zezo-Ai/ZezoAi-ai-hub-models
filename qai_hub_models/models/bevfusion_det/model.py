@@ -45,7 +45,6 @@ from qai_hub_models.utils.image_processing import (
     normalize_image_torchvision,
 )
 from qai_hub_models.utils.input_spec import InputSpec
-from qai_hub_models.utils.optimization import optimized_cumsum
 from qai_hub_models.utils.window_partitioning import (
     WindowMSA_forward_optimized,
     window_partition_optimized,
@@ -211,67 +210,6 @@ class BEVFusionEncoder2(BaseModel):
 
 
 class BEVFusionEncoder3(BaseModel):
-    def __init__(self) -> None:
-        super().__init__()
-
-    @classmethod
-    def from_pretrained(cls, ckpt: str = str(DEFAULT_WEIGHTS.fetch())) -> Self:
-        return cls()
-
-    def forward(self, x: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
-        """
-        Processes lengths tensor with cumulative sum and aggregates features using cumulative sums
-        and indexing based on lengths.
-
-        Parameters
-        ----------
-        x
-            Input features of shape (batch_size, 1993728, 80).
-        lengths
-            Input lengths tensor of shape (batch_size, 59000).
-
-        Returns
-        -------
-        aggregated_features : torch.Tensor
-            Aggregated features of shape (59000, 80).
-        """
-        lengths = torch.cumsum(lengths, dim=0).long()
-
-        x_reshaped = x.view(96, 118, 176, 80).float()
-        x = optimized_cumsum(x_reshaped).view(x.shape)
-        x = x.reshape(-1, 80)
-        return x[lengths, :]
-
-    @staticmethod
-    def get_input_spec(
-        batch_size: int = 1, height: int = 256, width: int = 704
-    ) -> InputSpec:
-        return {
-            "img": ((batch_size, 1993728, 80), "float32"),
-            "length": ((batch_size, 59000), "int32"),
-        }
-
-    @staticmethod
-    def get_output_names() -> list[str]:
-        return ["aggregated_features"]
-
-    def get_hub_compile_options(
-        self,
-        target_runtime: TargetRuntime,
-        precision: Precision,
-        other_compile_options: str = "",
-        device: Device | None = None,
-        context_graph_name: str | None = None,
-    ) -> str:
-        compile_options = super().get_hub_compile_options(
-            target_runtime, precision, other_compile_options, device, context_graph_name
-        )
-        if target_runtime != TargetRuntime.ONNX:
-            compile_options += " --truncate_64bit_tensors True --truncate_64bit_io True"
-        return compile_options
-
-
-class BEVFusionEncoder4(BaseModel):
     def __init__(self, vtransform: nn.Module) -> None:
         super().__init__()
         self.vtransform = vtransform
@@ -301,15 +239,21 @@ class BEVFusionEncoder4(BaseModel):
             BEV grid features of shape (1, 80, 256, 256).
         """
         segment_sums = segment_sums.reshape(-1, 80)
-        n = segment_sums.size(0)
-        segment_sums[1:] = segment_sums[1:] - segment_sums[: n - 1]
+
         x_pos_vals = geom_feats[0, 0]
         channel_vals = geom_feats[0, 1]
-        out = torch.zeros((1, 256, 256, 80))
-        ba = torch.zeros_like(x_pos_vals)
-        out.index_put_(
-            (ba.long(), x_pos_vals.long(), channel_vals.long()), segment_sums
+
+        # Create output tensor with proper device and dtype
+        out = torch.zeros(
+            (1, 256, 256, 80), dtype=segment_sums.dtype, device=segment_sums.device
         )
+
+        # Clamp indices to valid range to prevent out-of-bounds errors
+        x_pos_vals = torch.clamp(x_pos_vals, 0, 255).long()
+        channel_vals = torch.clamp(channel_vals, 0, 255).long()
+        ba = torch.zeros_like(x_pos_vals)
+
+        out.index_put_((ba, x_pos_vals, channel_vals), segment_sums)
         x = out.permute(0, 3, 1, 2).contiguous()
         return self.vtransform.downsample(x)  # type: ignore[operator]
 
@@ -414,7 +358,6 @@ class BEVFusionDecoder(BaseModel):
 @CollectionModel.add_component(BEVFusionEncoder1)
 @CollectionModel.add_component(BEVFusionEncoder2)
 @CollectionModel.add_component(BEVFusionEncoder3)
-@CollectionModel.add_component(BEVFusionEncoder4)
 @CollectionModel.add_component(BEVFusionDecoder)
 class BEVFusion(CollectionModel):
     def __init__(
@@ -422,14 +365,13 @@ class BEVFusion(CollectionModel):
         encoder1: BEVFusionEncoder1,
         encoder2: BEVFusionEncoder2,
         encoder3: BEVFusionEncoder3,
-        encoder4: BEVFusionEncoder4,
         decoder: BEVFusionDecoder,
     ) -> None:
-        super().__init__(encoder1, encoder2, encoder3, encoder4, decoder)
+        super().__init__(encoder1, encoder2, encoder3, decoder)
         self.encoder1 = encoder1
         self.encoder2 = encoder2
         self.encoder3 = encoder3
-        self.encoder4 = encoder4
+
         self.decoder = decoder
 
     @staticmethod
@@ -581,8 +523,7 @@ class BEVFusion(CollectionModel):
         models = (
             BEVFusionEncoder1(encoder_backbone, encoder_neck),
             BEVFusionEncoder2(vtransform),
-            BEVFusionEncoder3(),
-            BEVFusionEncoder4(vtransform),
+            BEVFusionEncoder3(vtransform),
             BEVFusionDecoder(decoder_backbone, decoder_neck, centerhead),
         )
         for model in models[:-1]:
