@@ -4,11 +4,11 @@
 # ---------------------------------------------------------------------
 
 from qai_hub_models.models._shared.hf_whisper.demo import hf_whisper_demo
-from qai_hub_models.models.whisper_medium.model import WhisperMedium
+from qai_hub_models.models.whisper_medium.model import MODEL_ID, WhisperMedium
 
 
 def main(is_test: bool = False) -> None:
-    hf_whisper_demo(WhisperMedium, is_test)
+    hf_whisper_demo(WhisperMedium, MODEL_ID, is_test)
 
 
 if __name__ == "__main__":
