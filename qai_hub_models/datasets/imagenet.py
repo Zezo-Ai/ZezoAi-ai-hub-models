@@ -4,6 +4,7 @@
 # ---------------------------------------------------------------------
 
 import os
+import shutil
 import subprocess
 
 import torch
@@ -21,6 +22,7 @@ IMAGENET_ASSET = CachedWebDatasetAsset(
     IMAGENET_FOLDER_NAME,
     IMAGENET_VERSION,
     "ILSVRC2012_img_val.tar",
+    private_s3_key="qai-hub-models/datasets/imagenet/ILSVRC2012_img_val.tar",
 )
 DEVKIT_NAME = "ILSVRC2012_devkit_t12.tar.gz"
 DEVKIT_ASSET = CachedWebDatasetAsset(
@@ -55,7 +57,7 @@ class ImagenetDataset(BaseDataset, ImageNet):
         """
         if split != DatasetSplit.VAL:
             raise ValueError("Imagenet dataset currently only supports `val` split")
-        BaseDataset.__init__(self, IMAGENET_ASSET.extracted_path, split)
+        BaseDataset.__init__(self, DEVKIT_ASSET.extracted_path.parent, split)
         ImageNet.__init__(
             self,
             root=str(self.dataset_path),
@@ -67,6 +69,10 @@ class ImagenetDataset(BaseDataset, ImageNet):
         val_path = self.dataset_path / self.split_str
         if not (self.dataset_path / DEVKIT_NAME).exists():
             print("Missing Devkit.")
+            return False
+
+        if not val_path.exists():
+            print("Missing images.")
             return False
 
         subdirs = [filepath for filepath in val_path.iterdir() if filepath.is_dir()]
@@ -90,13 +96,26 @@ class ImagenetDataset(BaseDataset, ImageNet):
         return ImageNet.__len__(self)
 
     def _download_data(self) -> None:
+        # Fetch data
         IMAGENET_ASSET.fetch(extract=True)
         DEVKIT_ASSET.fetch()
         VAL_PREP_ASSET.fetch()
-        os.rename(VAL_PREP_ASSET.path, self.dataset_path / VAL_PREP_ASSET.path.name)
+
+        # Prep images
         subprocess.call(
-            f"sh {VAL_PREP_ASSET.path.name}", shell=True, cwd=self.dataset_path
+            f"sh {VAL_PREP_ASSET.path}", shell=True, cwd=IMAGENET_ASSET.extracted_path
         )
+
+        # Move images to <root>/val
+        dst_folder = self.dataset_path / self.split_str
+        if not dst_folder.exists():
+            if os.name == "nt":
+                shutil.move(IMAGENET_ASSET.extracted_path, dst_folder)
+                # Leave breadcrumbs so the CachedWebDatasetAsset won't try to re-download the imagenet devkit
+                IMAGENET_ASSET.extracted_path.mkdir()
+                (IMAGENET_ASSET.extracted_path / "exists.txt").touch()
+            else:
+                os.symlink(IMAGENET_ASSET.extracted_path, dst_folder)
 
     @staticmethod
     def default_samples_per_job() -> int:
