@@ -66,7 +66,7 @@ jobs:
     outputs:
       image_tag: ${{ steps.tag.outputs.image_tag }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
         lfs: false
@@ -138,7 +138,7 @@ jobs:
         mkdir -p "$TMPDIR"
         chown ${{ env.DOCKER_USER_ID }}:${{ env.DOCKER_GROUP_ID }} "$TMPDIR"
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
@@ -189,14 +189,14 @@ jobs:
 
     - name: Upload Test Results
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: test-results
         path: ${{ github.workspace }}/test-results
 
     - name: Upload CSV Results
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: pytest-results
         path: ${{ github.workspace }}/*.csv
@@ -232,7 +232,7 @@ jobs:
     steps:
     - name: Create GitHub Issue
       id: create-github-issue
-      uses: actions/github-script@v6.4.1
+      uses: actions/github-script@v8
       with:
         github-token: ${{ secrets.STAGING_GH_TOKEN }}
         script: |
