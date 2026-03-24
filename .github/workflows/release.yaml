@@ -39,6 +39,8 @@ jobs:
       secrets: inherit
       needs: [approve]
       uses: ./.github/workflows/release_code.yaml
+      with:
+          skip_approval: true
 
   release_pypi:
       name: Release wheel to ${{ inputs.target == 'prod' && 'PyPi' || 'test PyPi' }}
@@ -48,6 +50,7 @@ jobs:
       uses: ./.github/workflows/release_pypi.yaml
       with:
           target: ${{ inputs.target }}
+          skip_approval: true
 
   release_huggingface:
       name: Release Hugging Face Model Cards
@@ -55,6 +58,8 @@ jobs:
       secrets: inherit
       needs: [approve]
       uses: ./.github/workflows/release_huggingface.yaml
+      with:
+          skip_approval: true
 
   release_assets:
       name: Release Assets
@@ -62,6 +67,8 @@ jobs:
       secrets: inherit
       needs: [approve]
       uses: ./.github/workflows/release_assets.yaml
+      with:
+          skip_approval: true
 
   sync_public_website:
     name: Sync Public Website & Create Public Website PR

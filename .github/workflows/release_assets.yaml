@@ -4,6 +4,11 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
   workflow_call:
+      inputs:
+          skip_approval:
+            required: false
+            type: boolean
+            default: false
 
 env:
   QAIHM_CI: 1
@@ -12,7 +17,7 @@ env:
 
 jobs:
   approve:
-    if: github.event_name == 'workflow_dispatch'
+    if: ${{ !inputs.skip_approval }}
     name: Approve Release
     runs-on: ubuntu-latest
     timeout-minutes: 30

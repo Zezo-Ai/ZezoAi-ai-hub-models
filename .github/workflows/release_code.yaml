@@ -11,10 +11,16 @@ on:
             default: false
             description: Force replace an existing tag
   workflow_call:
+      inputs:
+          skip_approval:
+            required: false
+            type: boolean
+            default: false
 
 jobs:
   approve:
-    if: github.event_name == 'workflow_dispatch'
+    if: ${{ !inputs.skip_approval }}
+
     name: Approve Release
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -51,10 +57,9 @@ jobs:
             FORCE_FLAG="-f"
           else
             if git ls-remote --tags public | grep -q "refs/tags/$QAIHM_TAG$"; then
-              echo "Tag $QAIHM_TAG already exists. Aborting release. Use force to replace."
+              echo "Tag $QAIHM_TAG already exists in the public repository. Aborting release. Use force to replace."
               exit 1
             fi
           fi
 
-          git tag -a $FORCE_FLAG "$QAIHM_TAG" -m "$QAIHM_TAG"
           git push $FORCE_FLAG public "$QAIHM_TAG"

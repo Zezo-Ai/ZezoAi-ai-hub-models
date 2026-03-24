@@ -95,16 +95,19 @@ def _get_extras() -> dict[str, list[str]]:
 
 
 def _get_excluded_package_data() -> dict[str, list[str]]:
-    return (
-        {
-            "qai_hub_models.models": [
-                "**/release-assets.yaml",
-                "**/test_generated.py",
-            ]
-        }
-        if IS_RELEASE_BUILD
-        else {}
-    )
+    if not IS_RELEASE_BUILD:
+        return {}
+
+    # Exclude data files from unpublished models. Setuptools treats files in
+    # excluded sub-packages as data files of ancestor packages, so patterns
+    # must be added at every level that has package_data globs.
+    return {
+        "qai_hub_models": [
+            *[f"models/{model}/**" for model in _get_unpublished_models()],
+            *[f"{package}/**" for package in RELEASE_EXCLUDED_PACKAGES],
+            "models/**/release-assets.yaml",
+        ],
+    }
 
 
 def _get_excluded_packages() -> list[str]:
@@ -117,7 +120,6 @@ setup(
     packages=find_packages(
         include=["qai_hub_models*"], exclude=_get_excluded_packages()
     ),
-    install_requires=_load_requirements(PACKAGE_ROOT / "requirements.txt"),
     extras_require=_get_extras(),
     exclude_package_data=_get_excluded_package_data(),
 )

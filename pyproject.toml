@@ -29,11 +29,18 @@ Issues = "https://github.com/quic/ai-hub-models/issues"
 Slack = "https://aihub.qualcomm.com/community/slack"
 HuggingFace = "https://huggingface.co/qualcomm"
 
+[tool.setuptools]
+# Disable auto-discovery so setup.py's find_packages() controls which
+# packages are included (release builds dynamically exclude unpublished models).
+py-modules = []
+# Disable all checked in files being automatically included in the wheel.
+include-package-data = false
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["qai_hub_models/requirements.txt"]}
+
 [tool.setuptools.package-data]
 qai_hub_models = ["**/*.yaml", "**/*.txt", "**/*.json", "**/*.diff", "**/*.md", "**/*.j2", "**/*.env", "**/*.csv"]
-
-[tool.setuptools.packages.find]
-include = ["qai_hub_models*"]
 
 [tool.setuptools_scm]
 version_file = "qai_hub_models/_version.py"

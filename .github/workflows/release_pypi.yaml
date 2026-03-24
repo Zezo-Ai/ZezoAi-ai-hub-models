@@ -18,15 +18,18 @@ on:
           target:
               required: true
               type: string
+          skip_approval:
+            required: false
+            type: boolean
+            default: false
 
 env:
   QAIHM_CI: 1
   PYTHON_VERSION: '3.10'
-  VENV_PATH: build/ci-envs/release
 
 jobs:
   approve:
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'prod'
+    if: ${{ !inputs.skip_approval && inputs.target == 'prod' }}
     name: Approve Release
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -63,8 +66,7 @@ jobs:
 
       - name: Build public wheel
         run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" build_release_wheel
+          python3 scripts/build_and_test.py build_release_wheel
 
       - name: Upload to PyPI
         env:
@@ -72,6 +74,6 @@ jobs:
           TWINE_PASSWORD: ${{ inputs.target == 'prod' && secrets.PYPI_TOKEN || secrets.TEST_PYPI_TOKEN }}
           TWINE_REPOSITORY_URL: ${{ inputs.target == 'prod' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
         run: |
-          source ${{ env.VENV_PATH }}/bin/activate
+          source build/release_venv/bin/activate
           pip install twine
           twine upload --verbose build/release/wheel/*.whl

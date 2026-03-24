@@ -7,9 +7,12 @@ from __future__ import annotations
 
 import os
 
+from .constants import REPO_ROOT
 from .task import CompositeTask
 from .util import get_env_bool, on_ci
 from .venv import CreateVenvTask, RunCommandsWithVenvTask
+
+EGG_INFO_DIR = os.path.join(REPO_ROOT, "qai_hub_models.egg-info")
 
 
 class CreateReleaseVenv(CompositeTask):
@@ -62,7 +65,11 @@ class BuildWheelTask(CompositeTask):
                     venv=venv,
                     env=env,
                     commands=[
-                        f"rm -f {os.path.join(wheel_dir, 'qai_hub_models-*.whl')}",
+                        # Remove stale egg-info so setuptools re-discovers
+                        # packages with the correct include/exclude lists.
+                        f'rm -rf "{EGG_INFO_DIR}"',
+                        # Remove old wheels
+                        f'rm -f "{os.path.join(wheel_dir, "qai_hub_models-*.whl")}"',
                         f"python -m build --wheel --outdir {wheel_dir}"
                         + (" > /dev/null" if on_ci() else ""),
                         f"echo 'Wheel can be found at {wheel_dir}'",
