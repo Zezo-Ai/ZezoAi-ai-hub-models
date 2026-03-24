@@ -288,6 +288,7 @@ jobs:
         with:
           name: test-results-${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && 'models' || 'scorecard-models' }}-py${{ inputs.python_version }}${{ inputs.split_name != '' && format('-{0}', inputs.split_name) || '' }}
           path: build/combined-test-results
+          if-no-files-found: ignore
 
       - name: Clean Up Artifacts
         if: ${{ always() && steps.dump_env.outcome == 'success' }}

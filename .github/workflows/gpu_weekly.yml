@@ -253,14 +253,15 @@ jobs:
     # Send result to Slack channel
     - name: Send Slack Notification
       id: slack_notification
-      uses: slackapi/slack-github-action@v1.25.0
+      uses: slackapi/slack-github-action@v3
       with:
-        channel-id: C06UY9XU212
-        slack-message: |
-          🚨 GPU ${{ env.TEST_SUITE }} Tests Failed
+        method: chat.postMessage
+        token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+        payload: |
+          channel: "C06UY9XU212"
+          text: |-
+            🚨 GPU ${{ env.TEST_SUITE }} Tests Failed
 
-          Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
 
-          GitHub Issue: ${{ steps.create-github-issue.outputs.issue_url }}
-      env:
-        SLACK_BOT_TOKEN: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+            GitHub Issue: ${{ steps.create-github-issue.outputs.issue_url }}

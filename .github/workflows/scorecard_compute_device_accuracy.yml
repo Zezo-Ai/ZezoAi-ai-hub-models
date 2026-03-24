@@ -168,6 +168,7 @@ jobs:
         with:
           name: test-results-accuracy${{ inputs.split_name != '' && format('-{0}', inputs.split_name) || '' }}
           path: ${{ github.workspace }}/combined-test-results
+          if-no-files-found: ignore
 
       - name: Upload Accuracy CSV
         id: upload-accuracy-intermediates

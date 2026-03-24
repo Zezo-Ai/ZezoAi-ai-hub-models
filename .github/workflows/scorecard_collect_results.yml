@@ -506,27 +506,30 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: slackapi/slack-github-action@v1.25.0
+      - uses: slackapi/slack-github-action@v3
         name: Notify Scorecard (#scorecard)
         with:
-          channel-id: C04S7R56YTH
-          slack-message: "${{ needs.aggregate_scorecard_results.outputs.qaihm_test_deployment || '<unset deployment>' }} Scorecard Complete:\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}\nPerformance Diff: ${{ needs.aggregate_scorecard_results.outputs.performance_diff_url || 'N/A' }}\nNumerics Diff: ${{ needs.aggregate_scorecard_results.outputs.numerics_diff_url || 'N/A' }}\nCSV: ${{ needs.aggregate_scorecard_results.outputs.csv_url }}${{ inputs.publish_to_tableau && '\nTableau (may appear in up to 30 minutes): https://tableau.qualcomm.com/#/site/QCTEngineering/workbooks/18930/' || ''}}"
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+          payload: |
+            channel: "C04S7R56YTH"
+            text: "${{ needs.aggregate_scorecard_results.outputs.qaihm_test_deployment || '<unset deployment>' }} Scorecard Complete:\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}\nPerformance Diff: ${{ needs.aggregate_scorecard_results.outputs.performance_diff_url || 'N/A' }}\nNumerics Diff: ${{ needs.aggregate_scorecard_results.outputs.numerics_diff_url || 'N/A' }}\nCSV: ${{ needs.aggregate_scorecard_results.outputs.csv_url }}${{ inputs.publish_to_tableau && '\nTableau (may appear in up to 30 minutes): https://tableau.qualcomm.com/#/site/QCTEngineering/workbooks/18930/' || ''}}"
 
-      - uses: slackapi/slack-github-action@v1.25.0
+      - uses: slackapi/slack-github-action@v3
         name: Notify Scorecard (#ai-hub-models)
         with:
-          channel-id: C05LEEK0N8J
-          slack-message: "${{ needs.aggregate_scorecard_results.outputs.qaihm_test_deployment || '<unset deployment>' }} Scorecard Complete. See #scorecard for details.${{ inputs.tableau_branch_name == 'weekly-prod' && needs.create_pr.result == 'success' && format('\n:warning: RELEASE CZAR -- merge this automated results PR: {0}', needs.create_pr.outputs.qaihm_pr_url) || '' }}"
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+          payload: |
+            channel: "C05LEEK0N8J"
+            text: "${{ needs.aggregate_scorecard_results.outputs.qaihm_test_deployment || '<unset deployment>' }} Scorecard Complete. See #scorecard for details.${{ inputs.tableau_branch_name == 'weekly-prod' && needs.create_pr.result == 'success' && format('\n:warning: RELEASE CZAR -- merge this automated results PR: {0}', needs.create_pr.outputs.qaihm_pr_url) || '' }}"
 
-      - uses: slackapi/slack-github-action@v1.25.0
+      - uses: slackapi/slack-github-action@v3
         name: Notify Scorecard (#ai-hub-compiler)
         if: ${{ needs.aggregate_scorecard_results.outputs.qaihm_test_deployment == 'dev' }}
         with:
-          channel-id: C08EYJJCW87
-          slack-message: "${{ needs.aggregate_scorecard_results.outputs.qaihm_test_deployment || '<unset deployment>' }} Scorecard Complete. See #scorecard for details."
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+          payload: |
+            channel: "C08EYJJCW87"
+            text: "${{ needs.aggregate_scorecard_results.outputs.qaihm_test_deployment || '<unset deployment>' }} Scorecard Complete. See #scorecard for details."

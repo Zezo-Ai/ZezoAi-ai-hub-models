@@ -6,6 +6,8 @@
 import contextlib
 import datetime
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pprint import pformat
 
 import pytest
@@ -25,19 +27,25 @@ from qai_hub_models.utils.testing_async_utils import (
     get_quantize_job_ids_file,
 )
 
+# Maximum time (minutes after job submission) to wait for a single job to finish
+_JOB_TIMEOUT_SECONDS = 75 * 60
+# 90-minute hard cap per thread to prevent indefinite hangs
+_JOIN_TIMEOUT_SECONDS = 90 * 60
+
 
 def _not_exists_or_empty(path: str | os.PathLike) -> bool:
     return not os.path.exists(path) or os.stat(path).st_size == 0
 
 
-def _verify_jobs_successful(job_ids: dict[str, str], job_type: str) -> None:
-    """
-    Verifies that the jobs with the given job ids all succeeded.
-    If any jobs fail, raises a ValueError with the failed job urls.
-    """
-    failed_jobs = {}
-    timeout_jobs = {}
-    for name, job_id in job_ids.items():
+def _check_single_job(
+    name: str,
+    job_id: str,
+    failed_jobs: dict[str, str],
+    timeout_jobs: dict[str, str],
+    lock: threading.Lock,
+) -> None:
+    """Check a single job's status, storing results in the shared dicts."""
+    try:
         job = hub.get_job(job_id)
 
         status = job.get_status()
@@ -45,22 +53,47 @@ def _verify_jobs_successful(job_ids: dict[str, str], job_type: str) -> None:
             if DisableWorkbenchJobTimeoutEnvvar.get():
                 status = job.wait()
             else:
-                # Wait a maximum of 75 minutes for a compile job
-                timemax = datetime.timedelta(minutes=75)
+                timemax = datetime.timedelta(seconds=_JOB_TIMEOUT_SECONDS)
                 timediff = datetime.datetime.now() - job.date
                 if timediff < timemax:
                     with contextlib.suppress(TimeoutError):
                         status = job.wait(int((timemax - timediff).total_seconds()))
 
         if not status.success:
-            if not status.finished or (
-                status.failure
-                and status.message is not None
-                and "timed out" in status.message
-            ):
-                timeout_jobs[name] = job.url
-            else:
-                failed_jobs[name] = job.url
+            with lock:
+                if not status.finished or (
+                    status.failure
+                    and status.message is not None
+                    and "timed out" in status.message
+                ):
+                    timeout_jobs[name] = job.url
+                else:
+                    failed_jobs[name] = job.url
+    except Exception as exc:
+        with lock:
+            failed_jobs[name] = f"<exception: {exc}>"
+
+
+def _verify_jobs_successful(job_ids: dict[str, str], job_type: str) -> None:
+    """
+    Verifies that the jobs with the given job ids all succeeded.
+    If any jobs fail, raises a ValueError with the failed job urls.
+
+    Uses a thread pool to check results in parallel.
+    """
+    failed_jobs: dict[str, str] = {}
+    timeout_jobs: dict[str, str] = {}
+    lock = threading.Lock()
+
+    with ThreadPoolExecutor(max_workers=min(64, len(job_ids))) as pool:
+        futures = [
+            pool.submit(
+                _check_single_job, name, job_id, failed_jobs, timeout_jobs, lock
+            )
+            for name, job_id in job_ids.items()
+        ]
+        for f in as_completed(futures, timeout=_JOIN_TIMEOUT_SECONDS):
+            f.result()
 
     error_strs = []
     if failed_jobs:

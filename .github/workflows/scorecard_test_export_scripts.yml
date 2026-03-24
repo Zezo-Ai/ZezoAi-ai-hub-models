@@ -186,3 +186,4 @@ jobs:
         with:
           name: test-results-export${{ inputs.split_name != '' && format('-{0}', inputs.split_name) || '' }}
           path: ${{ github.workspace }}/combined-test-results
+          if-no-files-found: ignore
