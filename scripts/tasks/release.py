@@ -67,9 +67,11 @@ class BuildWheelTask(CompositeTask):
                     commands=[
                         # Remove stale egg-info so setuptools re-discovers
                         # packages with the correct include/exclude lists.
-                        f'rm -rf "{EGG_INFO_DIR}"',
+                        # single quotes surround the path for safety.
+                        f"rm -rf '{EGG_INFO_DIR}'",
                         # Remove old wheels
-                        f'rm -f "{os.path.join(wheel_dir, "qai_hub_models-*.whl")}"',
+                        # single quotes around the path for safety (double quotes would cause * to be incorrectly interpreted by the shell)
+                        f"rm -f '{os.path.join(wheel_dir, 'qai_hub_models-*.whl')}'",
                         f"python -m build --wheel --outdir {wheel_dir}"
                         + (" > /dev/null" if on_ci() else ""),
                         f"echo 'Wheel can be found at {wheel_dir}'",

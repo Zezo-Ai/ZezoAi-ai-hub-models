@@ -111,9 +111,12 @@ def _get_excluded_package_data() -> dict[str, list[str]]:
 
 
 def _get_excluded_packages() -> list[str]:
-    return [f"qai_hub_models.{package}*" for package in RELEASE_EXCLUDED_PACKAGES] + [
-        f"qai_hub_models.models.{model}*" for model in _get_unpublished_models()
-    ]
+    return (
+        [f"qai_hub_models.{package}*" for package in RELEASE_EXCLUDED_PACKAGES]
+        + [f"qai_hub_models.models.{model}*" for model in _get_unpublished_models()]
+        if IS_RELEASE_BUILD
+        else []
+    )
 
 
 setup(
