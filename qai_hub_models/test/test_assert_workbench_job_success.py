@@ -18,12 +18,14 @@ from qai_hub_models.scorecard.execution_helpers import (
 from qai_hub_models.scorecard.results.yaml import (
     CompileScorecardJobYaml,
     InferenceScorecardJobYaml,
+    LinkScorecardJobYaml,
     ProfileScorecardJobYaml,
     QuantizeScorecardJobYaml,
 )
 from qai_hub_models.utils.testing_async_utils import (
     get_compile_job_ids_file,
     get_inference_job_ids_file,
+    get_link_job_ids_file,
     get_profile_job_ids_file,
     get_quantize_job_ids_file,
 )
@@ -126,6 +128,15 @@ def test_compile_jobs_success() -> None:
         get_compile_job_ids_file()
     ).job_id_mapping
     _verify_jobs_successful(job_ids, "compile")
+
+
+@pytest.mark.skipif(
+    _not_exists_or_empty(get_link_job_ids_file()),
+    reason="No link jobs file found",
+)
+def test_link_jobs_success() -> None:
+    job_ids = LinkScorecardJobYaml.from_file(get_link_job_ids_file()).job_id_mapping
+    _verify_jobs_successful(job_ids, "link")
 
 
 @pytest.mark.skipif(

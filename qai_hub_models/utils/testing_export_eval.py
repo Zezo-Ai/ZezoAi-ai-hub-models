@@ -917,7 +917,7 @@ def fetch_compile_or_link_jobs(
     scorecard_path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
     component_names: list[str] | None = None,
-) -> Mapping[str | None, hub.Job]:
+) -> Mapping[str | None, hub.CompileJob | hub.LinkJob]:
     """
     Fetch cached compile or link jobs depending on runtime type.
 
@@ -939,7 +939,7 @@ def fetch_compile_or_link_jobs(
 
     Returns
     -------
-    jobs : Mapping[str | None, hub.Job]
+    jobs : Mapping[str | None, hub.CompileJob | hub.LinkJob]
         The cached jobs (link jobs for AOT, compile jobs for JIT).
 
     Raises
@@ -947,10 +947,10 @@ def fetch_compile_or_link_jobs(
     CachedScorecardJobError
         If no cached jobs are found.
     """
-    # is_aot = scorecard_path.runtime.is_aot_compiled
+    is_aot = scorecard_path.runtime.uses_hub_link
 
-    jobs: Mapping[str | None, hub.Job] | None
-    if False:  # TODO: enable this when link jobs are enabled in CI.
+    jobs: Mapping[str | None, hub.CompileJob | hub.LinkJob] | None
+    if is_aot:
         # For AOT runtimes, fetch link jobs (context binaries)
         jobs = fetch_async_test_jobs(
             hub.JobType.LINK,
@@ -1061,13 +1061,24 @@ def profile_via_export(
             model.component_class_names if isinstance(model, CollectionModel) else None,
         )
 
+        # Extract target models from jobs
+        if has_components:
+            target_models_map = assert_success_and_get_target_models(jobs)
+            target_models: hub.Model | dict[str | None, hub.Model] = target_models_map
+        else:
+            job = jobs[None]
+            assert job, "No job found"
+            target_model_single = job.get_target_model()
+            assert target_model_single, f"Job failed: {job}"
+            target_models = target_model_single
+
         profile_output = profile_model(
             model_id,
             device.execution_device,
             model.get_hub_profile_options(
                 scorecard_path.runtime, scorecard_path.get_profile_options()
             ),
-            jobs if has_components else jobs[None],
+            target_models,
         )
         profile_jobs = (
             cast(dict[str | None, hub.Job], profile_output)
@@ -1076,10 +1087,10 @@ def profile_via_export(
         )
 
     # Verify success or cache job IDs to a file.
-    for component, job in profile_jobs.items():
+    for component, profile_job in profile_jobs.items():
         assert_success_or_cache_job(
             model_id,
-            job,
+            profile_job,
             precision,
             scorecard_path,
             device,
@@ -1135,6 +1146,17 @@ def inference_via_export(
         model.component_class_names if isinstance(model, CollectionModel) else None,
     )
 
+    # Extract target models from jobs
+    if has_components:
+        target_models_map = assert_success_and_get_target_models(jobs)
+        target_models: hub.Model | dict[str | None, hub.Model] = target_models_map
+    else:
+        job = jobs[None]
+        assert job, "No job found"
+        target_model_single = job.get_target_model()
+        assert target_model_single, f"Job failed: {job}"
+        target_models = target_model_single
+
     runtime = scorecard_path.runtime
     inference_output = inference_model(
         model.sample_inputs(
@@ -1143,7 +1165,7 @@ def inference_via_export(
         model_id,
         device.execution_device,
         model.get_hub_profile_options(runtime, scorecard_path.get_profile_options()),
-        jobs if has_components else jobs[None],
+        target_models,
     )
     inference_jobs: dict[str | None, hub.Job] = (
         cast(dict[str | None, hub.Job], inference_output)
@@ -1151,10 +1173,10 @@ def inference_via_export(
         else {None: inference_output}
     )
     # Verify success or cache job IDs to a file.
-    for component, job in inference_jobs.items():
+    for component, inference_job in inference_jobs.items():
         assert_success_or_cache_job(
             model_id,
-            job,
+            inference_job,
             precision,
             scorecard_path,
             device,

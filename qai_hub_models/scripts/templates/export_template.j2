@@ -2,7 +2,7 @@
 {% set optional_s = "s" if is_collection_model else "" -%}
 {% set model_var = "component" if is_collection_model else "model" -%}
 {% set model_or_comp_name = "component_name" if is_collection_model else "model_name" -%}
-{% set component_hub_model = "uploaded_models[component_name]" if is_precompiled else "compile_jobs[component_name].get_target_model()" -%}
+{% set component_hub_model = "uploaded_models[component_name]" if is_precompiled else "target_models[component_name]" -%}
 
 {% set print_demo_cmd = has_on_target_demo -%}
 {% set check_trace = ", check_trace=False" if not check_trace else "" -%}
@@ -271,7 +271,7 @@ def profile_model(
     {%- if is_precompiled %}
     uploaded_models: dict[str, hub.Model],
     {%- else %}
-    compile_job{{ optional_s }}: {{ "dict[str, hub.client.CompileJob]" if is_collection_model else "hub.client.CompileJob" }},
+    target_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model" }},
     {%- endif %}
     {%- if is_collection_model %}
     components: list[str] | None = None,
@@ -286,7 +286,7 @@ def profile_model(
     {%- endif -%}
     {%- filter indent(width=4 if is_collection_model else 0) %}
     submitted_profile_job = hub.submit_profile_job(
-        model={{ component_hub_model if is_collection_model else "compile_job.get_target_model()" }},
+        model={{ component_hub_model if is_collection_model else "target_model" }},
         device=device,
         name={{ 'f"{model_name}_{component_name}"' if is_collection_model else 'model_name' }},
         options={{ 'options.get(component_name, "")' if is_collection_model else "options" }},
@@ -314,7 +314,7 @@ def inference_model(
     {%- if is_precompiled %}
     uploaded_models: dict[str, hub.Model],
     {%- else %}
-    compile_job{{ optional_s }}: {{ "dict[str, hub.client.CompileJob]" if is_collection_model else "hub.client.CompileJob" }},
+    target_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model" }},
     {%- endif %}
     {%- if is_collection_model %}
     components: list[str] | None = None,
@@ -330,7 +330,7 @@ def inference_model(
 
     {%- filter indent(width=4 if is_collection_model else 0) %}
     submitted_inference_job = hub.submit_inference_job(
-        model={{ component_hub_model if is_collection_model else "compile_job.get_target_model()" }},
+        model={{ component_hub_model if is_collection_model else "target_model" }},
         {%- if is_collection_model %}
         inputs=inputs[component_name],
         {%- else %}
@@ -358,7 +358,7 @@ def download_model(
     runtime: TargetRuntime,
     precision: Precision,
     tool_versions: ToolVersions,
-    compile_job{{ optional_s }}: {{ "dict[str, hub.client.CompileJob]" if is_collection_model else "hub.client.CompileJob" }},
+    target_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model" }},
     {%- if not is_collection_model %}
     model_name: str,
     {%- endif %}
@@ -366,13 +366,6 @@ def download_model(
 ) -> Path:
     output_folder_name = os.path.basename(output_dir)
     output_path = get_next_free_path(output_dir)
-
-    {% if is_collection_model -%}
-    target_models = assert_success_and_get_target_models(compile_jobs)
-    {%- else %}
-    target_model = compile_job.get_target_model()
-    assert target_model, f"Compile Job Failed:\n{compile_job}"
-    {%- endif %}
 
     with tempfile.TemporaryDirectory() as tmpdir:
         dst_path = Path(tmpdir) / output_folder_name
@@ -706,7 +699,7 @@ def export_model(
     {%- endif %}
 
     # {{ steps.compile }}
-    compile_job{{ optional_s }} = compile_model(
+    compile_job{{ optional_s }}{{ ": dict[str, hub.client.CompileJob]" if is_collection_model else "" }} = compile_model(
         model,
         model_name,
         device,
@@ -725,6 +718,38 @@ def export_model(
         {%- endif %}
         extra_options=compile_options,
     )
+
+    # {{ steps.link }}
+    link_job{{ optional_s }}{{ ": dict[str, hub.client.LinkJob]" if is_collection_model else ": hub.client.LinkJob" }} | None = None
+    target_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model | None" }}
+    if target_runtime.uses_hub_link:
+        {%- if is_collection_model %}
+        compiled_models = assert_success_and_get_target_models(compile_jobs)
+        {%- else %}
+        compiled_model = compile_job.get_target_model()
+        assert compiled_model is not None, f"Compile job failed: {compile_job}"
+        {%- endif %}
+        link_job{{ optional_s }} = link_model(
+            compiled_model{{ optional_s }},
+            device,
+            model_name,
+            model,
+            target_runtime,
+        )
+        {%- if not is_collection_model %}
+        # Extract target models from link jobs for profile/inference
+        target_model = link_job.get_target_model()
+        assert target_model is not None, f"Link job failed: {link_job}"
+        {%- endif %}
+    {%- if not is_collection_model %}
+    else:
+        # For JIT runtimes, extract models from compile jobs
+        target_model = compile_job.get_target_model()
+        assert target_model is not None, f"Compile job failed: {compile_job}"
+    {%- endif %}
+    {%- if is_collection_model %}
+    target_models = assert_success_and_get_target_models(link_jobs if link_jobs else compile_jobs)
+    {%- endif %}
     {%- endif %}
 
     # {{ steps.profile }}
@@ -737,7 +762,7 @@ def export_model(
             {%- if is_precompiled %}
             uploaded_models,
             {%- else %}
-            compile_job{{ optional_s }},
+            target_model{{ optional_s }},
             {%- endif %}
             {%- if is_collection_model %}
             components,
@@ -761,7 +786,7 @@ def export_model(
             {%- if is_precompiled %}
             uploaded_models,
             {%- else %}
-            compile_job{{ optional_s }},
+            target_model{{ optional_s }},
             {%- endif %}
             {%- if is_collection_model %}
             components,
@@ -802,7 +827,7 @@ def export_model(
             target_runtime,
             precision,
             tool_versions,
-            compile_job{{ optional_s }}{{ "" if is_collection_model else ", MODEL_ID" }},
+            {{ "target_models" if is_collection_model else "target_model" }}{{ "" if is_collection_model else ", MODEL_ID" }},
             zip_assets
         )
         {%- else %}
@@ -865,6 +890,7 @@ def export_model(
             component_name: ExportResult(
                 {%- if not is_precompiled %}
                 compile_job=compile_jobs[component_name],
+                link_job=link_jobs.get(component_name) if link_jobs else None,
                 inference_job=inference_jobs.get(component_name, None),
                 {%- endif %}
                 profile_job=profile_jobs.get(component_name, None),
@@ -881,6 +907,7 @@ def export_model(
     return ExportResult(
         {%- if not is_precompiled %}
         compile_job=compile_job,
+        link_job=link_job,
         inference_job=inference_job,
         {%- endif %}
         profile_job=profile_job,

@@ -445,19 +445,19 @@ def get_device_and_chipset_name(device: hub.Device) -> tuple[str | None, str | N
 
 @overload
 def assert_success_and_get_target_models(
-    jobs: Mapping[str, hub.CompileJob | hub.QuantizeJob],
+    jobs: Mapping[str, hub.CompileJob | hub.QuantizeJob | hub.LinkJob],
 ) -> dict[str, hub.Model]: ...
 
 
 @overload
 def assert_success_and_get_target_models(
-    jobs: Mapping[str | None, hub.CompileJob | hub.QuantizeJob],
+    jobs: Mapping[str | None, hub.CompileJob | hub.QuantizeJob | hub.LinkJob],
 ) -> dict[str | None, hub.Model]: ...
 
 
 def assert_success_and_get_target_models(
-    jobs: Mapping[str | None, hub.CompileJob | hub.QuantizeJob]
-    | Mapping[str, hub.CompileJob | hub.QuantizeJob],
+    jobs: Mapping[str | None, hub.CompileJob | hub.QuantizeJob | hub.LinkJob]
+    | Mapping[str, hub.CompileJob | hub.QuantizeJob | hub.LinkJob],
 ) -> dict[str | None, hub.Model] | dict[str, hub.Model]:
     """
     Assert all jobs succeeded and extract their target models.
@@ -465,7 +465,7 @@ def assert_success_and_get_target_models(
     Parameters
     ----------
     jobs
-        A dict mapping names to compile or quantize jobs.
+        A dict mapping names to compile, quantize, or link jobs.
 
     Returns
     -------

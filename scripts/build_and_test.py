@@ -463,6 +463,7 @@ class TaskLibrary:
     def _make_hub_scorecard_task(
         self,
         pre_quantize_compile: bool = False,
+        enable_link: bool = False,
         quantize: bool = False,
         enable_compile: bool = False,
         enable_profile: bool = False,
@@ -480,6 +481,7 @@ class TaskLibrary:
             use_shared_cache=True,
             run_general=False,
             run_export_pre_quantize_compile=pre_quantize_compile,
+            run_export_link=enable_link,
             run_export_quantize=quantize,
             run_export_compile=enable_compile,
             run_export_profile=enable_profile,
@@ -500,6 +502,13 @@ class TaskLibrary:
         return plan.add_step(
             step_id, self._make_hub_scorecard_task(pre_quantize_compile=True)
         )
+
+    @public_task("Run link jobs for all models.")
+    @depends(["model_test_setup"])
+    def test_link_all_models(
+        self, plan: Plan, step_id: str = "test_link_all_models"
+    ) -> str:
+        return plan.add_step(step_id, self._make_hub_scorecard_task(enable_link=True))
 
     @public_task("Run quantize jobs for all models.")
     @depends(["model_test_setup"])

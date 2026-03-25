@@ -175,14 +175,14 @@ def profile_model(
     model_name: str,
     device: hub.Device,
     options: dict[str, str],
-    compile_jobs: dict[str, hub.client.CompileJob],
+    target_models: dict[str, hub.Model],
     components: list[str] | None = None,
 ) -> dict[str, hub.client.ProfileJob]:
     profile_jobs: dict[str, hub.client.ProfileJob] = {}
     for component_name in components or Model.component_class_names:
         print(f"Profiling model {component_name} on a hosted device.")
         submitted_profile_job = hub.submit_profile_job(
-            model=compile_jobs[component_name].get_target_model(),
+            model=target_models[component_name],
             device=device,
             name=f"{model_name}_{component_name}",
             options=options.get(component_name, ""),
@@ -198,7 +198,7 @@ def inference_model(
     model_name: str,
     device: hub.Device,
     options: dict[str, str],
-    compile_jobs: dict[str, hub.client.CompileJob],
+    target_models: dict[str, hub.Model],
     components: list[str] | None = None,
 ) -> dict[str, hub.client.InferenceJob]:
     inference_jobs: dict[str, hub.client.InferenceJob] = {}
@@ -207,7 +207,7 @@ def inference_model(
             f"Running inference for {component_name} on a hosted device with example inputs."
         )
         submitted_inference_job = hub.submit_inference_job(
-            model=compile_jobs[component_name].get_target_model(),
+            model=target_models[component_name],
             inputs=inputs[component_name],
             device=device,
             name=f"{model_name}_{component_name}",
@@ -225,13 +225,11 @@ def download_model(
     runtime: TargetRuntime,
     precision: Precision,
     tool_versions: ToolVersions,
-    compile_jobs: dict[str, hub.client.CompileJob],
+    target_models: dict[str, hub.Model],
     zip_assets: bool,
 ) -> Path:
     output_folder_name = os.path.basename(output_dir)
     output_path = get_next_free_path(output_dir)
-
-    target_models = assert_success_and_get_target_models(compile_jobs)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         dst_path = Path(tmpdir) / output_folder_name
@@ -469,7 +467,7 @@ def export_model(
             quantized_models = assert_success_and_get_target_models(quantize_jobs)
 
     # 3. Compiles the model to an asset that can be run on device
-    compile_jobs = compile_model(
+    compile_jobs: dict[str, hub.client.CompileJob] = compile_model(
         model,
         model_name,
         device,
@@ -480,6 +478,21 @@ def export_model(
         extra_options=compile_options,
     )
 
+    link_jobs: dict[str, hub.client.LinkJob] | None = None
+    target_models: dict[str, hub.Model]
+    if target_runtime.uses_hub_link:
+        compiled_models = assert_success_and_get_target_models(compile_jobs)
+        link_jobs = link_model(
+            compiled_models,
+            device,
+            model_name,
+            model,
+            target_runtime,
+        )
+    target_models = assert_success_and_get_target_models(
+        link_jobs if link_jobs else compile_jobs
+    )
+
     # 4. Profiles the model performance on a real device
     profile_jobs: dict[str, hub.client.ProfileJob] = {}
     if not skip_profiling:
@@ -487,7 +500,7 @@ def export_model(
             model_name,
             device,
             model.get_hub_profile_options(target_runtime, profile_options),
-            compile_jobs,
+            target_models,
             components,
         )
 
@@ -501,7 +514,7 @@ def export_model(
             model_name,
             device,
             model.get_hub_profile_options(target_runtime, profile_options),
-            compile_jobs,
+            target_models,
             components,
         )
 
@@ -533,7 +546,7 @@ def export_model(
             target_runtime,
             precision,
             tool_versions,
-            compile_jobs,
+            target_models,
             zip_assets,
         )
 
@@ -573,6 +586,7 @@ def export_model(
         components={
             component_name: ExportResult(
                 compile_job=compile_jobs[component_name],
+                link_job=link_jobs.get(component_name) if link_jobs else None,
                 inference_job=inference_jobs.get(component_name, None),
                 profile_job=profile_jobs.get(component_name, None),
                 quantize_job=quantize_jobs.get(component_name, None),

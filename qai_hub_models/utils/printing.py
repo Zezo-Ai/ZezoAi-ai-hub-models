@@ -10,7 +10,7 @@ from collections import Counter
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
-from typing import IO, Any, TypeVar
+from typing import IO, Any
 
 import numpy as np
 import qai_hub as hub
@@ -240,11 +240,8 @@ def print_profile_metrics(
     )
 
 
-DemoJobT = TypeVar("DemoJobT", hub.CompileJob, hub.LinkJob)
-
-
 def print_on_target_demo_cmd(
-    compile_job: DemoJobT | Iterable[DemoJobT],
+    compile_job: hub.CompileJob | hub.LinkJob | Iterable[hub.CompileJob | hub.LinkJob],
     model_folder: Path,
     device: hub.Device,
 ) -> None:

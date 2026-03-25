@@ -88,6 +88,7 @@ def update_code_gen_failure_reasons(
     enabled_test_paths: dict[Precision, list[ScorecardProfilePath]],
     components: list[str] | None,
     compile_summary: ModelCompileSummary,
+    link_summary: ModelCompileSummary,
     profile_summary: ModelPerfSummary,
     code_gen_config: QAIHMModelCodeGen,
 ) -> None:
@@ -106,6 +107,12 @@ def update_code_gen_failure_reasons(
     }
 
     compile_failures: dict[
+        Precision, dict[ScorecardCompilePath, dict[str, CompileScorecardJob]]
+    ] = {
+        p: {path.compile_path: {} for path in paths}
+        for p, paths in enabled_test_paths.items()
+    }
+    link_failures: dict[
         Precision, dict[ScorecardCompilePath, dict[str, CompileScorecardJob]]
     ] = {
         p: {path.compile_path: {} for path in paths}
@@ -137,6 +144,13 @@ def update_code_gen_failure_reasons(
                 compile_failures[precision][path.compile_path][component_id] = (
                     compile_job
                 )
+
+            # Skip model if it can't link for any canary device (AOT runtimes only).
+            link_job = link_summary.get_run(
+                precision, device, path.compile_path, component_id
+            )
+            if link_job.failed:
+                link_failures[precision][path.compile_path][component_id] = link_job
 
             if device == default_device:
                 # Skip model if it can't be profiled on its default device.
@@ -188,6 +202,12 @@ def update_code_gen_failure_reasons(
                     for key, val in failed_compile_jobs.items()
                 ]
                 path_failure_reason = f"Compilation Failure(s): {' '.join(failures)}"
+            elif failed_link_jobs := link_failures[precision][path.compile_path]:
+                failures = [
+                    f"{key}:{val.job_id}" if key != model_id else str(val.job_id)
+                    for key, val in failed_link_jobs.items()
+                ]
+                path_failure_reason = f"Link Failure(s): {' '.join(failures)}"
             elif failed_profile_jobs := profile_failures[precision][path]:
                 failures = [
                     f"{key}:{val.job_id}" if key != model_id else str(val.job_id)

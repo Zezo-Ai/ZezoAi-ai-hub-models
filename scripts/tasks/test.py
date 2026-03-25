@@ -31,6 +31,7 @@ from .util import (
     check_info_field,
     get_is_hub_quantized,
     get_model_python_version_requirements,
+    get_requires_aot_prepare,
     is_quantized_llm_model,
     model_needs_aimet,
     on_ci,
@@ -271,6 +272,7 @@ class PyTestModelTask(CompositeTask):
         run_mypy: bool = False,
         run_general: bool = True,
         run_pre_quantize_compile: bool = False,
+        run_link: bool = False,
         run_quantize: bool = False,
         run_compile: bool = True,
         run_profile: bool = False,
@@ -361,6 +363,8 @@ class PyTestModelTask(CompositeTask):
                     test_flags.append("unmarked")
                 if run_pre_quantize_compile:
                     test_flags.append("pre_quantize_compile")
+                if run_link:
+                    test_flags.append("link")
                 if run_compile:
                     test_flags.append("compile")
                 if run_profile:
@@ -463,6 +467,7 @@ class PyTestModelsTask(CompositeTask):
         run_mypy: bool = False,  # Only run mypy for model folders that don't use global requirements. Global reqs are covered by the precommit.
         run_general: bool = True,
         run_export_pre_quantize_compile: bool = False,
+        run_export_link: bool = False,
         run_export_quantize: bool = False,
         run_export_compile: bool = True,
         run_export_profile: bool = False,
@@ -531,13 +536,19 @@ class PyTestModelsTask(CompositeTask):
         export_models = models_to_test_export
         hub_quantized_models = []
         nonhub_quantized_models = []
+        aot_models = []
         for model in models_for_testing:
             if get_is_hub_quantized(model) and model in export_models:
                 hub_quantized_models.append(model)
             else:
                 nonhub_quantized_models.append(model)
+            if get_requires_aot_prepare(model) and model in export_models:
+                aot_models.append(model)
 
-        if run_export_quantize:
+        if run_export_link:
+            # Only run AOT models when running link tests
+            models_to_run = aot_models
+        elif run_export_quantize:
             models_to_run = hub_quantized_models
         else:
             # Run hub quantized models last to give quantize job time to complete
@@ -567,6 +578,7 @@ class PyTestModelsTask(CompositeTask):
                     run_general=run_general,
                     run_pre_quantize_compile=run_export_pre_quantize_compile
                     and model_name in export_models,
+                    run_link=run_export_link and model_name in aot_models,
                     run_quantize=run_export_quantize and model_name in export_models,
                     run_compile=run_export_compile and model_name in export_models,
                     run_profile=run_export_profile and model_name in export_models,

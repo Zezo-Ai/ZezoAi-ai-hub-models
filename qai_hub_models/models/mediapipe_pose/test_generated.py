@@ -62,14 +62,12 @@ from qai_hub_models.utils.testing_export_eval import (
 #   For example, models that allow JIT (on-device) compile will not test AOT runtimes; we assume that if it works on JIT it will work on AOT.
 ENABLED_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
     Precision.float: [
-        TargetRuntime.TFLITE,
-        TargetRuntime.QNN_DLC,
-        TargetRuntime.ONNX,
+        TargetRuntime.QNN_CONTEXT_BINARY,
+        TargetRuntime.PRECOMPILED_QNN_ONNX,
     ],
     Precision.w8a8: [
-        TargetRuntime.TFLITE,
-        TargetRuntime.QNN_DLC,
-        TargetRuntime.ONNX,
+        TargetRuntime.QNN_CONTEXT_BINARY,
+        TargetRuntime.PRECOMPILED_QNN_ONNX,
     ],
 }
 
@@ -80,14 +78,12 @@ ENABLED_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
 #   For example, models that allow JIT (on-device) compile will not test AOT runtimes; we assume that if it works on JIT it will work on AOT.
 PASSING_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
     Precision.float: [
-        TargetRuntime.TFLITE,
-        TargetRuntime.QNN_DLC,
-        TargetRuntime.ONNX,
+        TargetRuntime.QNN_CONTEXT_BINARY,
+        TargetRuntime.PRECOMPILED_QNN_ONNX,
     ],
     Precision.w8a8: [
-        TargetRuntime.TFLITE,
-        TargetRuntime.QNN_DLC,
-        TargetRuntime.ONNX,
+        TargetRuntime.QNN_CONTEXT_BINARY,
+        TargetRuntime.PRECOMPILED_QNN_ONNX,
     ],
 }
 
@@ -320,6 +316,7 @@ def test_val_accuracy(
         EVAL_DEVICE,
         ENABLED_PRECISION_RUNTIMES,
         PASSING_PRECISION_RUNTIMES,
+        requires_aot_prepare=True,
     ),
     ids=pytest_device_idfn,
 )

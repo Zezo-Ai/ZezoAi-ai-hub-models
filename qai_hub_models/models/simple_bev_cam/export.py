@@ -136,11 +136,11 @@ def profile_model(
     model_name: str,
     device: hub.Device,
     options: str,
-    compile_job: hub.client.CompileJob,
+    target_model: hub.Model,
 ) -> hub.client.ProfileJob:
     print(f"Profiling model {model_name} on a hosted device.")
     submitted_profile_job = hub.submit_profile_job(
-        model=compile_job.get_target_model(),
+        model=target_model,
         device=device,
         name=model_name,
         options=options,
@@ -153,11 +153,11 @@ def inference_model(
     model_name: str,
     device: hub.Device,
     options: str,
-    compile_job: hub.client.CompileJob,
+    target_model: hub.Model,
 ) -> hub.client.InferenceJob:
     print(f"Running inference for {model_name} on a hosted device with example inputs.")
     submitted_inference_job = hub.submit_inference_job(
-        model=compile_job.get_target_model(),
+        model=target_model,
         inputs=inputs,
         device=device,
         name=model_name,
@@ -172,15 +172,12 @@ def download_model(
     runtime: TargetRuntime,
     precision: Precision,
     tool_versions: ToolVersions,
-    compile_job: hub.client.CompileJob,
+    target_model: hub.Model,
     model_name: str,
     zip_assets: bool,
 ) -> Path:
     output_folder_name = os.path.basename(output_dir)
     output_path = get_next_free_path(output_dir)
-
-    target_model = compile_job.get_target_model()
-    assert target_model, f"Compile Job Failed:\n{compile_job}"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         dst_path = Path(tmpdir) / output_folder_name
@@ -394,6 +391,26 @@ def export_model(
         extra_options=compile_options,
     )
 
+    link_job: hub.client.LinkJob | None = None
+    target_model: hub.Model | None
+    if target_runtime.uses_hub_link:
+        compiled_model = compile_job.get_target_model()
+        assert compiled_model is not None, f"Compile job failed: {compile_job}"
+        link_job = link_model(
+            compiled_model,
+            device,
+            model_name,
+            model,
+            target_runtime,
+        )
+        # Extract target models from link jobs for profile/inference
+        target_model = link_job.get_target_model()
+        assert target_model is not None, f"Link job failed: {link_job}"
+    else:
+        # For JIT runtimes, extract models from compile jobs
+        target_model = compile_job.get_target_model()
+        assert target_model is not None, f"Compile job failed: {compile_job}"
+
     # 4. Profiles the model performance on a real device
     profile_job: hub.client.ProfileJob | None = None
     if not skip_profiling:
@@ -401,7 +418,7 @@ def export_model(
             model_name,
             device,
             model.get_hub_profile_options(target_runtime, profile_options),
-            compile_job,
+            target_model,
         )
 
     # 5. Inferences the model on sample inputs
@@ -415,7 +432,7 @@ def export_model(
             model_name,
             device,
             model.get_hub_profile_options(target_runtime, profile_options),
-            compile_job,
+            target_model,
         )
 
     # 6. Extracts relevant tool (eg. SDK) versions used to compile and profile this model
@@ -443,7 +460,7 @@ def export_model(
             target_runtime,
             precision,
             tool_versions,
-            compile_job,
+            target_model,
             MODEL_ID,
             zip_assets,
         )
@@ -476,6 +493,7 @@ def export_model(
 
     return ExportResult(
         compile_job=compile_job,
+        link_job=link_job,
         inference_job=inference_job,
         profile_job=profile_job,
         quantize_job=quantize_job,

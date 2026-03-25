@@ -458,8 +458,8 @@ def get_link_parameterized_pytest_config(
     Get a pytest parameterization list of all enabled (precision, compile path, device)
     tuples that require link jobs.
 
-    Link jobs are needed for AOT-compiled runtimes, which use hub.link()
-    to convert DLCs to device-specific context binaries.
+    Link jobs are needed for runtimes that use hub.link() to convert DLCs to
+    device-specific context binaries.
     """
     compile_configs = get_model_test_parameterizations(
         model_id,
@@ -469,11 +469,11 @@ def get_link_parameterized_pytest_config(
         can_use_quantize_job,
         include_mirror_devices=include_mirror_devices,
     )
-    # Filter to only AOT-compiled runtimes that need linking
+    # Filter to only runtimes that use hub.link()
     return [
         (precision, path, device)
         for precision, path, device in compile_configs
-        if path.runtime.is_aot_compiled
+        if path.runtime.uses_hub_link
     ]
 
 

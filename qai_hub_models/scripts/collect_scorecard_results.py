@@ -54,11 +54,13 @@ from qai_hub_models.scorecard.results.yaml import (
     COMPILE_YAML_BASE,
     ENVIRONMENT_ENV_BASE,
     INFERENCE_YAML_BASE,
+    LINK_YAML_BASE,
     PROFILE_YAML_BASE,
     QUANTIZE_YAML_BASE,
     TOOL_VERSIONS_BASE,
     CompileScorecardJobYaml,
     InferenceScorecardJobYaml,
+    LinkScorecardJobYaml,
     ProfileScorecardJobYaml,
     QuantizeScorecardJobYaml,
     ScorecardJobYaml,
@@ -192,6 +194,7 @@ def process_model(
     static_models_dir: Path,
     quantize_job_yamls: QuantizeScorecardJobYaml,
     compile_job_yamls: CompileScorecardJobYaml,
+    link_job_yamls: LinkScorecardJobYaml,
     profile_job_yamls: ProfileScorecardJobYaml,
     inference_job_yamls: InferenceScorecardJobYaml,
     gen_csv: bool,
@@ -214,6 +217,8 @@ def process_model(
         YAML containing quantize job information.
     compile_job_yamls
         YAML containing compile job information.
+    link_job_yamls
+        YAML containing link job information.
     profile_job_yamls
         YAML containing profile job information.
     inference_job_yamls
@@ -248,6 +253,7 @@ def process_model(
                 model_id,
                 quantize_job_yamls,
                 compile_job_yamls,
+                link_job_yamls,
                 profile_job_yamls,
                 inference_job_yamls,
                 gen_csv,
@@ -263,6 +269,7 @@ def process_model(
                 static_models_dir,
                 quantize_job_yamls,
                 compile_job_yamls,
+                link_job_yamls,
                 profile_job_yamls,
                 inference_job_yamls,
             )
@@ -392,6 +399,7 @@ def process_e2e_recipe_model(
     model_id: str,
     quantize_job_yamls: QuantizeScorecardJobYaml,
     compile_job_yamls: CompileScorecardJobYaml,
+    link_job_yamls: LinkScorecardJobYaml,
     profile_job_yamls: ProfileScorecardJobYaml,
     inference_job_yamls: InferenceScorecardJobYaml,
     gen_csv: bool,
@@ -410,6 +418,8 @@ def process_e2e_recipe_model(
         YAML containing quantize job information.
     compile_job_yamls
         YAML containing compile job information.
+    link_job_yamls
+        YAML containing link job information.
     profile_job_yamls
         YAML containing profile job information.
     inference_job_yamls
@@ -465,6 +475,10 @@ def process_e2e_recipe_model(
     compile_summary = compile_job_yamls.summary_from_model(
         model_id, test_params.compile_tests, test_params.component_names
     )
+    print_with_id("Loading link summary")
+    link_summary = link_job_yamls.summary_from_model(
+        model_id, test_params.compile_tests, test_params.component_names
+    )
     print_with_id("Loading profile summary")
     profile_summary = profile_job_yamls.summary_from_model(
         model_id, test_params.profile_tests, test_params.component_names
@@ -493,6 +507,7 @@ def process_e2e_recipe_model(
             test_params.component_names,
             quantize_summary,
             compile_summary,
+            link_summary,
             profile_summary,
             inference_summary,
         )
@@ -504,6 +519,7 @@ def process_e2e_recipe_model(
             test_params.enabled_paths,
             test_params.component_names,
             compile_summary,
+            link_summary,
             profile_summary,
             cj,
         )
@@ -561,6 +577,7 @@ def process_static_file_model(
     models_dir: Path,
     quantize_job_yamls: QuantizeScorecardJobYaml | None,
     compile_job_yamls: CompileScorecardJobYaml | None,
+    link_job_yamls: LinkScorecardJobYaml | None,
     profile_job_yamls: ProfileScorecardJobYaml | None,
     inference_job_yamls: InferenceScorecardJobYaml | None,
 ) -> ResultsSpreadsheet:
@@ -598,6 +615,15 @@ def process_static_file_model(
                 test_params.component_names,
             )
 
+        link_summary = None
+        if link_job_yamls:
+            print_with_id("Loading link summary")
+            link_summary = link_job_yamls.summary_from_model(
+                model_id,
+                test_params.compile_tests,
+                test_params.component_names,
+            )
+
         profile_summary = None
         if profile_job_yamls:
             print_with_id("Loading profile summary")
@@ -628,6 +654,7 @@ def process_static_file_model(
             test_params.component_names,
             quantize_summary,
             compile_summary,
+            link_summary,
             profile_summary,
             inference_summary,
         )
@@ -673,6 +700,7 @@ if __name__ == "__main__":
         # Load previous scorecard state
         quantize_job_yamls = QuantizeScorecardJobYaml.from_file(QUANTIZE_YAML_BASE)
         compile_job_yamls = CompileScorecardJobYaml.from_file(COMPILE_YAML_BASE)
+        link_job_yamls = LinkScorecardJobYaml.from_file(LINK_YAML_BASE)
         profile_job_yamls = ProfileScorecardJobYaml.from_file(PROFILE_YAML_BASE)
         inference_job_yamls = InferenceScorecardJobYaml.from_file(INFERENCE_YAML_BASE)
 
@@ -680,12 +708,14 @@ if __name__ == "__main__":
         if args.ignore_existing_intermediate_jobs:
             clear_jobs(quantize_job_yamls, model_list, all_models)
             clear_jobs(compile_job_yamls, model_list, all_models)
+            clear_jobs(link_job_yamls, model_list, all_models)
             clear_jobs(profile_job_yamls, model_list, all_models)
             clear_jobs(inference_job_yamls, model_list, all_models)
     else:
         # Previous scorecard state is applicable only on prod
         quantize_job_yamls = QuantizeScorecardJobYaml()
         compile_job_yamls = CompileScorecardJobYaml()
+        link_job_yamls = LinkScorecardJobYaml()
         profile_job_yamls = ProfileScorecardJobYaml()
         inference_job_yamls = InferenceScorecardJobYaml()
 
@@ -718,6 +748,7 @@ if __name__ == "__main__":
                 cycle([static_model_dir]),
                 cycle([quantize_job_yamls]),
                 cycle([compile_job_yamls]),
+                cycle([link_job_yamls]),
                 cycle([profile_job_yamls]),
                 cycle([inference_job_yamls]),
                 cycle([args.gen_csv]),
@@ -736,6 +767,7 @@ if __name__ == "__main__":
                 static_model_dir,
                 quantize_job_yamls,
                 compile_job_yamls,
+                link_job_yamls,
                 profile_job_yamls,
                 inference_job_yamls,
                 args.gen_csv,

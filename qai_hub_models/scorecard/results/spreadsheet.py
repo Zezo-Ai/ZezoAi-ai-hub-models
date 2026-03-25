@@ -62,6 +62,8 @@ class ResultsSpreadsheet(list):
         quantize_url: str | None
         compile_status: str
         compile_url: str | None
+        link_status: str
+        link_url: str | None
         profile_status: str
         profile_url: str | None
         inference_time: float | None
@@ -208,6 +210,7 @@ class ResultsSpreadsheet(list):
         components: list[str] | None = None,
         quantize_summary: ModelQuantizeSummary | None = None,
         compile_summary: ModelCompileSummary | None = None,
+        link_summary: ModelCompileSummary | None = None,
         profile_summary: ModelPerfSummary | None = None,
         inference_summary: ModelInferenceSummary | None = None,
     ) -> None:
@@ -218,6 +221,7 @@ class ResultsSpreadsheet(list):
                 components,
                 quantize_summary,
                 compile_summary,
+                link_summary,
                 profile_summary,
                 inference_summary,
             )
@@ -257,12 +261,14 @@ class ResultsSpreadsheet(list):
         components: list[str] | None = None,
         quantize_summary: ModelQuantizeSummary | None = None,
         compile_summary: ModelCompileSummary | None = None,
+        link_summary: ModelCompileSummary | None = None,
         profile_summary: ModelPerfSummary | None = None,
         inference_summary: ModelInferenceSummary | None = None,
     ) -> list[ResultsSpreadsheet.Entry]:
         entries: list[ResultsSpreadsheet.Entry] = []
         quantize_summary = quantize_summary or ModelQuantizeSummary()
         compile_summary = compile_summary or ModelCompileSummary()
+        link_summary = link_summary or ModelCompileSummary()
         profile_summary = profile_summary or ModelPerfSummary()
         inference_summary = inference_summary or ModelInferenceSummary()
 
@@ -273,6 +279,9 @@ class ResultsSpreadsheet(list):
                     precision, device, None, component_id
                 )
                 compile_job = compile_summary.get_run(
+                    precision, device, path.compile_path, component_id
+                )
+                link_job = link_summary.get_run(
                     precision, device, path.compile_path, component_id
                 )
                 profile_job = profile_summary.get_run(
@@ -300,6 +309,7 @@ class ResultsSpreadsheet(list):
                 # Job status
                 quantize_status, quantize_url = _get_url_and_status(quantize_job)
                 compile_status, compile_url = _get_url_and_status(compile_job)
+                link_status, link_url = _get_url_and_status(link_job)
                 profile_status, profile_url = _get_url_and_status(profile_job)
                 inference_status, inference_url = _get_url_and_status(inference_job)
 
@@ -332,6 +342,10 @@ class ResultsSpreadsheet(list):
                         ",", "."
                     ),  # remove commas for CSV compatibliity
                     compile_url=compile_url,
+                    link_status=link_status.replace(
+                        ",", "."
+                    ),  # remove commas for CSV compatibliity
+                    link_url=link_url,
                     profile_status=profile_status.replace(
                         ",", "."
                     ),  # remove commas for CSV compatibliity

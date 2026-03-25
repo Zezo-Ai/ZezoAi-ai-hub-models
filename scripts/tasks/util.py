@@ -115,6 +115,10 @@ def get_is_hub_quantized(model_name: str) -> bool:
     ) and not check_code_gen_field(model_name, "is_aimet")
 
 
+def get_requires_aot_prepare(model_name: str) -> bool:
+    return check_code_gen_field(model_name, "requires_aot_prepare")
+
+
 def model_needs_aimet(model_name: str) -> bool:
     return check_code_gen_field(model_name, "is_aimet")
 

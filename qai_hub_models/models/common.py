@@ -651,7 +651,10 @@ class TargetRuntime(Enum):
                 "llama.cpp runtimes use pre-built GGUF models instead."
             )
 
-        if self.is_orchestrator_runtime:
+        if self.is_orchestrator_runtime or self.uses_hub_link:
+            # Orchestrator runtimes and link-based runtimes compile to DLC first.
+            # Link-based runtimes (e.g., QNN_CONTEXT_BINARY) then use hub.link()
+            # to convert the DLC to a context binary.
             hub_target_runtime_flag = TargetRuntime.QNN_DLC.value
         else:
             hub_target_runtime_flag = self.value
@@ -682,6 +685,16 @@ class TargetRuntime(Enum):
             TargetRuntime.GENIE,
             TargetRuntime.ONNXRUNTIME_GENAI,
         ]
+
+    @property
+    def uses_hub_link(self) -> bool:
+        """
+        Returns true if this runtime uses hub.link() to convert DLCs to context binaries.
+
+        These runtimes follow the flow: compile(qnn_dlc) -> link() -> context binary.
+        PRECOMPILED_QNN_ONNX is an exception - it's AOT compiled but can't use linking yet.
+        """
+        return self.is_aot_compiled and self != TargetRuntime.PRECOMPILED_QNN_ONNX
 
     @property
     def is_orchestrator_runtime(self) -> bool:
