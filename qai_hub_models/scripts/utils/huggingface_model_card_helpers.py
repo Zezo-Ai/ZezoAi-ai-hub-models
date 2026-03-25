@@ -29,6 +29,7 @@ from qai_hub_models.utils.asset_loaders import (
     ASSET_CONFIG,
     QAIHM_WEB_ASSET,
 )
+from qai_hub_models.utils.fetch_static_assets import fetch_static_assets
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 JINJA_ENV = jinja2.Environment(
@@ -81,8 +82,14 @@ def get_download_links_rows(
     for precision, precision_details in release_assets.precisions.items():
         # Universal assets (not chipset-specific)
         for path, asset_details in precision_details.universal_assets.items():
-            download_url = ASSET_CONFIG.get_release_asset_url(
-                model_id, version, path.runtime, precision, None
+            _, download_url = fetch_static_assets(
+                model_id,
+                path.runtime,
+                precision,
+                device_or_chipset=None,
+                qaihm_version_tag=version,
+                skip_download=True,
+                verbose=False,
             )
             rows.append(
                 {
@@ -100,8 +107,14 @@ def get_download_links_rows(
             chipset_info = devices_yaml.chipsets.get(chipset)
             chipset_display = chipset_info.marketing_name if chipset_info else chipset
             for path, asset_details in chipset_paths.items():
-                download_url = ASSET_CONFIG.get_release_asset_url(
-                    model_id, version, path.runtime, precision, chipset
+                _, download_url = fetch_static_assets(
+                    model_id,
+                    path.runtime,
+                    precision,
+                    device_or_chipset=chipset,
+                    qaihm_version_tag=version,
+                    skip_download=True,
+                    verbose=False,
                 )
                 rows.append(
                     {
@@ -201,6 +214,71 @@ def generate_hf_model_LICENSE(model_info: QAIHMModelInfo) -> str:
     return string_stream.getvalue()
 
 
+def generate_hf_manifest(
+    model_id: str,
+    version: str,
+) -> QAIHMModelReleaseAssets | None:
+    """
+    Generate a manifest with download URLs for a model's release assets.
+
+    Parameters
+    ----------
+    model_id
+        Model identifier (e.g., "resnet50").
+    version
+        Version string for the release assets (e.g., "0.45.0").
+
+    Returns
+    -------
+    manifest: QAIHMModelReleaseAssets | None
+        Manifest with download URLs populated, or None if model has no release assets.
+    """
+    release_assets = QAIHMModelReleaseAssets.from_model(model_id, not_exists_ok=True)
+    if release_assets.empty:
+        return None
+
+    # Create manifest with download URLs populated
+    manifest = QAIHMModelReleaseAssets(version=version)
+
+    for precision, precision_details in release_assets.precisions.items():
+        # Universal assets
+        for path, asset_details in precision_details.universal_assets.items():
+            _, download_url = fetch_static_assets(
+                model_id,
+                path.runtime,
+                precision,
+                device_or_chipset=None,
+                qaihm_version_tag=version,
+                skip_download=True,
+                verbose=False,
+            )
+            new_details = QAIHMModelReleaseAssets.AssetDetails(
+                tool_versions=asset_details.tool_versions,
+                download_url=download_url,
+            )
+            manifest.add_asset(new_details, precision, None, path)
+
+        # Chipset-specific assets
+        for chipset, chipset_paths in precision_details.chipset_assets.items():
+            for path, asset_details in chipset_paths.items():
+                _, download_url = fetch_static_assets(
+                    model_id,
+                    path.runtime,
+                    precision,
+                    device_or_chipset=chipset,
+                    qaihm_version_tag=version,
+                    skip_download=True,
+                    verbose=False,
+                )
+                new_details = QAIHMModelReleaseAssets.AssetDetails(
+                    tool_versions=asset_details.tool_versions,
+                    download_url=download_url,
+                )
+                manifest.add_asset(new_details, precision, chipset, path)
+
+    return manifest
+
+
 def generate_hf_model_card(
     model_info: QAIHMModelInfo,
     model_perf: QAIHMModelPerf,
@@ -285,6 +363,13 @@ def write_hf_model_card_and_license(
     license_path = output_dir / "LICENSE"
     with open(license_path, "w") as license_file:
         license_file.write(license_text)
+
+    # Write release_assets.yaml with download URLs for release assets.
+    if not model_info.restrict_model_sharing:
+        manifest = generate_hf_manifest(model_info.id, qaihm_version)
+        if manifest is not None:
+            manifest_path = output_dir / "release_assets.yaml"
+            manifest.to_yaml(manifest_path)
 
 
 def write_deprecated_hf_model_card(output_dir: str | os.PathLike) -> None:

@@ -20,13 +20,20 @@ from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
 class QAIHMModelReleaseAssets(BaseQAIHMConfig):
     """Schema for model release_assets.yaml files."""
 
+    # Version of QAIHM (only present in manifest.yaml, not release-assets.yaml)
+    version: str | None = None
+
     class AssetDetails(BaseQAIHMConfig):
         # Key for object in the AI Hub Models S3 Bucket
         # (see qai_hub_models/utils/aws.py)
-        s3_key: str
+        # Optional for manifest.yaml (uses download_url instead)
+        s3_key: str | None = None
 
         # Tool versions used to generate this asset.
         tool_versions: ToolVersions | None = None
+
+        # Optional: Public download URL (populated for manifest generation)
+        download_url: str | None = None
 
     class PrecisionDetails(BaseQAIHMConfig):
         universal_assets: dict[

@@ -84,6 +84,10 @@ def release_asset(
     if not sc_path.is_published:
         return
 
+    assert (
+        asset_details.s3_key is not None
+    )  # s3_key always present in release-assets.yaml
+
     s3_key = ASSET_CONFIG.get_release_asset_s3_key(
         version=qaihm_version,
         model_id=model_id,

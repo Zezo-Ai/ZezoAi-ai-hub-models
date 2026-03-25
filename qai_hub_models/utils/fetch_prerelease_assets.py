@@ -94,6 +94,8 @@ def fetch_prerelease_assets(
 
     assets = QAIHMModelReleaseAssets.from_model(model_id, not_exists_ok=True)
     if asset := assets.get_asset(precision, chipset, sc_path):
+        # s3_key should always be present in release-assets.yaml
+        assert asset.s3_key is not None, "s3_key must be present for pre-release assets"
         bucket = get_qaihm_s3(QAIHM_PRIVATE_S3_BUCKET)[0]
         if s3_file_exists(bucket, asset.s3_key):
             if output_folder is not None:
