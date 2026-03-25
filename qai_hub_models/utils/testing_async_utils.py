@@ -28,6 +28,7 @@ from qai_hub_models.scorecard.device import cs_universal
 from qai_hub_models.scorecard.envvars import (
     DEFAULT_AGGREGATED_CSV_NAME,
     ArtifactsDirEnvvar,
+    DisableWorkbenchJobTimeoutEnvvar,
 )
 from qai_hub_models.scorecard.execution_helpers import get_async_job_cache_name
 from qai_hub_models.scorecard.results.scorecard_job import ScorecardJob
@@ -397,13 +398,24 @@ def fetch_async_test_job(
         # No job ID, this wasn't found in the cache.
         return None
     if raise_if_not_successful and not scorecard_job.success:
-        # If the job has an ID but it's marked as "skipped", then it timed out.
-        error_str = (
-            "still running" if scorecard_job.skipped else scorecard_job.job_status
-        )
-        raise CachedScorecardJobError(
+        errType: type[Exception]
+        if scorecard_job.running:
+            # We treat jobs that are downstream of timeouts as true test failures.
+            # Otherwise, we might not catch the timeout later during result collection.
+            errType = TimeoutError
+            error_str = f"still running after {DisableWorkbenchJobTimeoutEnvvar.DEFAULT_WAIT_TIME_MINUTES} minutes"
+        elif scorecard_job.skipped:
+            # We skip the test (via throwing a CachedScorecardJobError) if the prerequisite job is missng from the job cache.
+            errType = CachedScorecardJobError
+            error_str = "did not run or is missing from the job cache"
+        else:
+            # We skip this test (via throwing a CachedScorecardJobError) if the prerequisite job failed.
+            errType = CachedScorecardJobError
+            error_str = scorecard_job.job_status
+
+        raise errType(
             str_with_async_test_metadata(
-                f"{scorecard_job.job._job_type.display_name.title()} job {error_str}: {scorecard_job.job.url}",
+                f"Prerequisite {scorecard_job.job._job_type.display_name.title()} job {error_str}: {scorecard_job.job.url}",
                 model_id,
                 precision,
                 path,

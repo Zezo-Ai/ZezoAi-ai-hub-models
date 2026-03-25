@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -16,6 +17,7 @@ from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.scorecard import ScorecardCompilePath, ScorecardProfilePath
 from qai_hub_models.scorecard.device import ScorecardDevice, cs_universal
 from qai_hub_models.scorecard.envvars import (
+    DisableWorkbenchJobTimeoutEnvvar,
     EnabledPrecisionsEnvvar,
     IgnoreKnownFailuresEnvvar,
     SpecialPrecisionSetting,
@@ -25,6 +27,49 @@ from qai_hub_models.scorecard.static.list_models import (
     get_bench_pytorch_w8a16_models,
 )
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
+
+
+def wait_for_prerequisite_job(
+    job: hub.Job, max_wait_seconds: int | None = None
+) -> hub.JobStatus:
+    """
+    Wait for a job up to DisableWorkbenchJobTimeoutEnvvar.DEFAULT_WAIT_TIME_MINUTES after the job was submitted, or indefinitely if QAIHM_TEST_DISABLE_WORKBENCH_JOB_TIMEOUT is truthy.
+
+    Parameters
+    ----------
+    job
+        The job to wait for.
+    max_wait_seconds
+        This is the max number of seconds AFTER THE JOB'S SUBMISSION TIME to allow the job to run.
+        If None:
+          - DisableWorkbenchJobTimeoutEnvvar.DEFAULT_WAIT_TIME_MINUTES is used by default
+          - waits indefinitely if envvar QAIHM_TEST_DISABLE_WORKBENCH_JOB_TIMEOUT is truthy
+
+    Returns
+    -------
+    status: hub.JobStatus
+        Status of the job at the end of the wait period.
+        If the job is still running, the status will reflect that.
+
+    """
+    if not max_wait_seconds:
+        max_wait_seconds = (
+            None
+            if DisableWorkbenchJobTimeoutEnvvar.get()
+            else (DisableWorkbenchJobTimeoutEnvvar.DEFAULT_WAIT_TIME_MINUTES * 60)
+        )
+
+    wait_period = (
+        None  # wait indefinitely
+        if max_wait_seconds is None
+        # wait up to max_wait_seconds after the job was submitted
+        else max(0, max_wait_seconds - int(time.time() - job.date.timestamp()))
+    )
+    try:
+        return job.wait(wait_period)
+    except TimeoutError:
+        # If we hit a timeout, return the current job status.
+        return job.get_status()
 
 
 def get_enabled_test_precisions() -> tuple[

@@ -69,6 +69,11 @@ on:
         type: string
         default: '3.10'
 
+      disable_override_workbench_job_timeout:
+        description: Disable shorter workbench job timeout used for QAIHM PRs.
+        default: false
+        type: boolean
+
 env:
   PYTHON_VERSION: ${{ inputs.python_version }}
   VENV_PATH: build/ci-envs/qaihm-build
@@ -131,6 +136,7 @@ jobs:
       split_name: ${{ matrix.split.split_name }}
       sync_assets_branch: ${{ inputs.sync_assets_branch }}
       python_version: ${{ inputs.python_version }}
+      disable_override_workbench_job_timeout: ${{ inputs.disable_override_workbench_job_timeout }}
 
   combine_artifacts:
     name: Combine Split Artifacts

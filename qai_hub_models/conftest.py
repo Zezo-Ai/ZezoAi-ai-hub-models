@@ -7,8 +7,7 @@ from __future__ import annotations
 import pytest
 
 # Import modules with @pytest_cli_envvar-decorated envvars to populate the registry
-import qai_hub_models.scorecard.envvars
-import qai_hub_models.test.utils.envvars  # noqa: F401
+import qai_hub_models.scorecard.envvars  # noqa: F401
 from qai_hub_models.utils.envvar_bases import PYTEST_CLI_ENVVAR_REGISTRY
 
 

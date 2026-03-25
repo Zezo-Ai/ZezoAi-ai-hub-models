@@ -473,3 +473,24 @@ class DateFormatEnvvar(QAIHMDateFormatEnvvar):
 
     DATE_ENVVAR = DateEnvvar
     DATE_FORMAT_ENVVAR = FormatEnvvar
+
+
+@pytest_cli_envvar
+class DisableWorkbenchJobTimeoutEnvvar(QAIHMBoolEnvvar):
+    """
+    If this is false, a 75 minute timeout is enforced on jobs, post submission time.
+    This is a separate timeout than the timeout on AI Hub Workbench. This timeout is intended for
+    PR tests, so users don't have to wait hours for hub to time out their job to know it's failing.
+
+    If this is true, the override timeout is disabled for AI Hub Models testing.
+    We will wait for the job to time out on AI Hub Workbench instead."
+    """
+
+    VARNAME = "QAIHM_TEST_DISABLE_WORKBENCH_JOB_TIMEOUT"
+    DEFAULT_WAIT_TIME_MINUTES = 75
+    CLI_ARGNAMES = ["--disable-workbench-timeout"]
+    CLI_HELP_MESSAGE = "For testing, AI Hub Models enforces a 75 minute timeout on workbench jobs (after submission time) by default. If True, the QAIHM-specific 75 minute timeout is disabled."
+
+    @classmethod
+    def default(cls) -> bool:
+        return False

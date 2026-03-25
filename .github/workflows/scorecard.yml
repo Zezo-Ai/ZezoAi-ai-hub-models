@@ -215,6 +215,7 @@ jobs:
       sync_assets_branch: ${{ needs.sync_assets.outputs.branch_name }}
       max_models_per_split: ${{ (inputs.test_scope == 'accuracy' || inputs.test_scope == 'perf_and_accuracy') && 30 || 60 }}
       max_num_splits: 8
+      disable_override_workbench_job_timeout: true
 
   fix_flaky_jobs:
     name: Fix Flaky Profile Jobs

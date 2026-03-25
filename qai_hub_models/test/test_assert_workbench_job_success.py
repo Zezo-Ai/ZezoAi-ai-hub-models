@@ -3,8 +3,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
-import contextlib
-import datetime
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,13 +11,16 @@ from pprint import pformat
 import pytest
 import qai_hub as hub
 
+from qai_hub_models.scorecard.envvars import DisableWorkbenchJobTimeoutEnvvar
+from qai_hub_models.scorecard.execution_helpers import (
+    wait_for_prerequisite_job,
+)
 from qai_hub_models.scorecard.results.yaml import (
     CompileScorecardJobYaml,
     InferenceScorecardJobYaml,
     ProfileScorecardJobYaml,
     QuantizeScorecardJobYaml,
 )
-from qai_hub_models.test.utils.envvars import DisableWorkbenchJobTimeoutEnvvar
 from qai_hub_models.utils.testing_async_utils import (
     get_compile_job_ids_file,
     get_inference_job_ids_file,
@@ -27,10 +28,10 @@ from qai_hub_models.utils.testing_async_utils import (
     get_quantize_job_ids_file,
 )
 
-# Maximum time (minutes after job submission) to wait for a single job to finish
-_JOB_TIMEOUT_SECONDS = 75 * 60
-# 90-minute hard cap per thread to prevent indefinite hangs
-_JOIN_TIMEOUT_SECONDS = 90 * 60
+# Hard cap per thread to prevent indefinite hangs
+_JOIN_TIMEOUT_SECONDS = (
+    DisableWorkbenchJobTimeoutEnvvar.DEFAULT_WAIT_TIME_MINUTES + 5
+) * 60
 
 
 def _not_exists_or_empty(path: str | os.PathLike) -> bool:
@@ -47,17 +48,7 @@ def _check_single_job(
     """Check a single job's status, storing results in the shared dicts."""
     try:
         job = hub.get_job(job_id)
-
-        status = job.get_status()
-        if not status.finished:
-            if DisableWorkbenchJobTimeoutEnvvar.get():
-                status = job.wait()
-            else:
-                timemax = datetime.timedelta(seconds=_JOB_TIMEOUT_SECONDS)
-                timediff = datetime.datetime.now() - job.date
-                if timediff < timemax:
-                    with contextlib.suppress(TimeoutError):
-                        status = job.wait(int((timemax - timediff).total_seconds()))
+        status = wait_for_prerequisite_job(job)
 
         if not status.success:
             with lock:

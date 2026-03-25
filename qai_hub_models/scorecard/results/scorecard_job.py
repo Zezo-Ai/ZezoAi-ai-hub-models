@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import datetime
-import time
 from functools import cached_property
 from typing import Any, Generic, TypeVar, cast
 
@@ -20,6 +19,7 @@ from qai_hub_models.scorecard import (
     ScorecardDevice,
     ScorecardProfilePath,
 )
+from qai_hub_models.scorecard.execution_helpers import wait_for_prerequisite_job
 
 JobTypeVar = TypeVar(
     "JobTypeVar",
@@ -91,16 +91,8 @@ class ScorecardJob(Generic[JobTypeVar, ScorecardPathOrNoneTypeVar]):
             raise ValueError("No Job ID")
 
         job = cast(JobTypeVar, hub.get_job(self.job_id))
-        if not job.get_status().finished:
-            if not self.wait_for_job:
-                return job
-            if self.wait_for_max_job_duration:
-                time_left = int(
-                    job.date.timestamp() + self.wait_for_max_job_duration - time.time()
-                )
-                job.wait(time_left)
-            else:
-                job.wait()
+        if self.wait_for_job:
+            wait_for_prerequisite_job(job, self.wait_for_max_job_duration)
         return job
 
     @cached_property
@@ -112,6 +104,10 @@ class ScorecardJob(Generic[JobTypeVar, ScorecardPathOrNoneTypeVar]):
         # or the class was told to treat running jobs like they were skipped.
         #
         return not self.job_id or self._job_status.running
+
+    @cached_property
+    def running(self) -> bool:
+        return bool(self.job_id) and self._job_status.running
 
     @cached_property
     def failed(self) -> bool:

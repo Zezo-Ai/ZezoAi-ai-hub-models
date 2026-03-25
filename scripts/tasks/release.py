@@ -32,7 +32,7 @@ class CreateReleaseVenv(CompositeTask):
             RunCommandsWithVenvTask(
                 "Install build dependencies",
                 venv=self.venv_path,
-                commands=["pip install build"],
+                commands=["pip install build==1.4.2"],
             )
         )
         super().__init__(

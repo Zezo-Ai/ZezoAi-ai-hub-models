@@ -15,12 +15,13 @@ from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 ParsedT = TypeVar("ParsedT")
+EnvvarT = TypeVar("EnvvarT", bound="QAIHMEnvvar")
 
 # Registry of envvar classes that should be exposed as pytest CLI args
 PYTEST_CLI_ENVVAR_REGISTRY: list[type[QAIHMEnvvar[Any]]] = []
 
 
-def pytest_cli_envvar(cls: type[QAIHMEnvvar[Any]]) -> type[QAIHMEnvvar[Any]]:
+def pytest_cli_envvar(cls: type[EnvvarT]) -> type[EnvvarT]:
     """Decorator that registers an envvar class for pytest CLI exposure."""
     PYTEST_CLI_ENVVAR_REGISTRY.append(cls)
     return cls

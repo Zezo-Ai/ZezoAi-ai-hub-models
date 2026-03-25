@@ -58,6 +58,11 @@ on:
         type: string
         default: '3.10'
 
+      disable_override_workbench_job_timeout:
+        description: Disable shorter workbench job timeout used for QAIHM PRs.
+        default: false
+        type: boolean
+
 env:
   # Versions MUST be quoted, otherwise they will be interpreted as a floats
   # (and version like 3.10 can be interpreted as 3.1).
@@ -75,6 +80,7 @@ jobs:
       QAIHM_TEST_IGNORE_KNOWN_FAILURES: ${{ inputs.ignore_known_failures && '1' || '0' }}
       QAIHM_TEST_DEPLOYMENT: ${{ inputs.deployment }}
       QAIHM_TEST_ARTIFACTS_DIR: build/scorecard-yamls/${{ github.run_id }}
+      QAIHM_TEST_DISABLE_WORKBENCH_JOB_TIMEOUT: ${{ inputs.disable_override_workbench_job_timeout && '1' || '0' }}
       QAIHM_TEST_DEVICES: ${{ inputs.test_devices }}
       QAIHM_TEST_PATHS: ${{ inputs.test_runtimes }}
       QAIHM_TEST_MODELS: ${{ inputs.models }}
@@ -161,6 +167,7 @@ jobs:
           echo "QAIHM_TEST_IGNORE_KNOWN_FAILURES=${{ env.QAIHM_TEST_IGNORE_KNOWN_FAILURES }}" >> $ENVIRONMENT_FILE
           echo "QAIHM_TEST_IGNORE_DEVICE_JOB_CACHE=${{ inputs.ignore_job_cache }}" >> $ENVIRONMENT_FILE
           echo "QAIHM_TEST_SCOPE=${{ inputs.test_scope }}" >> $ENVIRONMENT_FILE
+          echo "QAIHM_TEST_DISABLE_WORKBENCH_JOB_TIMEOUT=${{ env.QAIHM_TEST_DISABLE_WORKBENCH_JOB_TIMEOUT }}" >> $ENVIRONMENT_FILE
 
       - name: Create Test Results Directory
         run: |
