@@ -46,6 +46,7 @@ def main() -> None:
         model_cls=Model,
         supported_datasets=eval_datasets,
         supported_precision_runtimes=supported_precision_runtimes,
+        num_calibration_samples=50,
         default_device="Samsung Galaxy S25 (Family)",
     )
     args = parser.parse_args()
@@ -64,6 +65,7 @@ def main() -> None:
             skip_profiling=True,
             compile_options=args.compile_options,
             profile_options=args.profile_options,
+            num_calibration_samples=args.num_calibration_samples,
             **{**model_kwargs, **input_spec_kwargs},
         )
         return
