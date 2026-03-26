@@ -487,10 +487,21 @@ class DisableWorkbenchJobTimeoutEnvvar(QAIHMBoolEnvvar):
     """
 
     VARNAME = "QAIHM_TEST_DISABLE_WORKBENCH_JOB_TIMEOUT"
-    DEFAULT_WAIT_TIME_MINUTES = 75
+    DEFAULT_MAX_WORKBENCH_JOB_DURATION_MINUTES = 75
     CLI_ARGNAMES = ["--disable-workbench-timeout"]
-    CLI_HELP_MESSAGE = "For testing, AI Hub Models enforces a 75 minute timeout on workbench jobs (after submission time) by default. If True, the QAIHM-specific 75 minute timeout is disabled."
+    CLI_HELP_MESSAGE = f"For testing, AI Hub Models enforces a {DEFAULT_MAX_WORKBENCH_JOB_DURATION_MINUTES} minute timeout on workbench jobs (after submission time) by default. If True, the QAIHM-specific {DEFAULT_MAX_WORKBENCH_JOB_DURATION_MINUTES} minute timeout is disabled."
 
     @classmethod
     def default(cls) -> bool:
         return False
+
+    @classmethod
+    def max_workbench_job_duration_minutes(cls) -> int | None:
+        """Return the max workbench job duration (time since start) allowed in scorecard in minutes (or None if there is no maximum)."""
+        return None if cls.get() else cls.DEFAULT_MAX_WORKBENCH_JOB_DURATION_MINUTES
+
+    @classmethod
+    def max_workbench_job_duration_seconds(cls) -> int | None:
+        """Return the max workbench job duration (time since start) allowed in scorecard in seconds (or None if there is no maximum)."""
+        max_duration_minutes = cls.max_workbench_job_duration_minutes()
+        return max_duration_minutes * 60 if max_duration_minutes is not None else None

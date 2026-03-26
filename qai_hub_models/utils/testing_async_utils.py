@@ -398,22 +398,14 @@ def fetch_async_test_job(
         # No job ID, this wasn't found in the cache.
         return None
     if raise_if_not_successful and not scorecard_job.success:
-        errType: type[Exception]
         if scorecard_job.running:
-            # We treat jobs that are downstream of timeouts as true test failures.
-            # Otherwise, we might not catch the timeout later during result collection.
-            errType = TimeoutError
-            error_str = f"still running after {DisableWorkbenchJobTimeoutEnvvar.DEFAULT_WAIT_TIME_MINUTES} minutes"
+            error_str = f"still running after max allowed job duration of {DisableWorkbenchJobTimeoutEnvvar.max_workbench_job_duration_minutes()} minutes"
         elif scorecard_job.skipped:
-            # We skip the test (via throwing a CachedScorecardJobError) if the prerequisite job is missng from the job cache.
-            errType = CachedScorecardJobError
             error_str = "did not run or is missing from the job cache"
         else:
-            # We skip this test (via throwing a CachedScorecardJobError) if the prerequisite job failed.
-            errType = CachedScorecardJobError
             error_str = scorecard_job.job_status
 
-        raise errType(
+        raise CachedScorecardJobError(
             str_with_async_test_metadata(
                 f"Prerequisite {scorecard_job.job._job_type.display_name.title()} job {error_str}: {scorecard_job.job.url}",
                 model_id,

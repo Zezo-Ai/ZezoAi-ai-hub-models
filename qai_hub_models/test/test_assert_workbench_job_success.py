@@ -9,7 +9,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pprint import pformat
 
 import pytest
-import qai_hub as hub
+from qai_hub.client import _api_call as hub_api_call
+from qai_hub.client import api as hub_api
+from qai_hub.hub import _global_client
 
 from qai_hub_models.scorecard.envvars import DisableWorkbenchJobTimeoutEnvvar
 from qai_hub_models.scorecard.execution_helpers import (
@@ -30,11 +32,6 @@ from qai_hub_models.utils.testing_async_utils import (
     get_quantize_job_ids_file,
 )
 
-# Hard cap per thread to prevent indefinite hangs
-_JOIN_TIMEOUT_SECONDS = (
-    DisableWorkbenchJobTimeoutEnvvar.DEFAULT_WAIT_TIME_MINUTES + 5
-) * 60
-
 
 def _not_exists_or_empty(path: str | os.PathLike) -> bool:
     return not os.path.exists(path) or os.stat(path).st_size == 0
@@ -43,14 +40,40 @@ def _not_exists_or_empty(path: str | os.PathLike) -> bool:
 def _check_single_job(
     name: str,
     job_id: str,
+    max_workbench_job_duration_seconds: int | None,
     failed_jobs: dict[str, str],
     timeout_jobs: dict[str, str],
     lock: threading.Lock,
 ) -> None:
     """Check a single job's status, storing results in the shared dicts."""
     try:
-        job = hub.get_job(job_id)
-        status = wait_for_prerequisite_job(job)
+        # We fetch the job_pb here (instead of using hub.get_job) so we don't have to fetch it again later when we check for timeouts.
+        # get_job() is pretty slow. Removing the extra fetch saves us 20+ seconds (for context, checking all compile jobs takes about 50 seconds).
+        job_pb = hub_api_call(hub_api.get_job, _global_client.config, job_id=job_id)
+        job = _global_client._make_job(job_pb)
+        assert job is not None, f"Unable to retrieve job {job_id}"
+        status = wait_for_prerequisite_job(job, max_workbench_job_duration_seconds)
+
+        exceeded_timeout = False
+        if status.success and max_workbench_job_duration_seconds is not None:
+            # job completion_time is not exposed in the client, so use lower level APIs.
+            specific_job_pb = job._extract_job_specific_pb(job_pb)
+            if not specific_job_pb.HasField("completion_time"):
+                # The original job_pb above was fetched before the job completed,
+                # so it is lacking a set completion time.
+                #
+                # Fetch the job proto again so we have the completion time.
+                specific_job_pb = job._extract_job_specific_pb(
+                    hub_api_call(hub_api.get_job, job._owner.config, job_id=job_id)
+                )
+
+            assert specific_job_pb.HasField("completion_time"), (
+                "Unexpected workbench behavior: Completion time is missing in the job protobuf, but the job status is success."
+            )
+            exceeded_timeout = (
+                specific_job_pb.completion_time.seconds
+                - specific_job_pb.start_time.seconds
+            ) > max_workbench_job_duration_seconds
 
         if not status.success:
             with lock:
@@ -62,6 +85,9 @@ def _check_single_job(
                     timeout_jobs[name] = job.url
                 else:
                     failed_jobs[name] = job.url
+        elif exceeded_timeout:
+            with lock:
+                timeout_jobs[name] = job.url
     except Exception as exc:
         with lock:
             failed_jobs[name] = f"<exception: {exc}>"
@@ -78,14 +104,34 @@ def _verify_jobs_successful(job_ids: dict[str, str], job_type: str) -> None:
     timeout_jobs: dict[str, str] = {}
     lock = threading.Lock()
 
+    max_workbench_job_duration_minutes = (
+        DisableWorkbenchJobTimeoutEnvvar.max_workbench_job_duration_minutes()
+    )
+    thread_timeout = (
+        (max_workbench_job_duration_minutes + 5) * 60
+        if max_workbench_job_duration_minutes is not None
+        else None
+    )
+
+    max_workbench_job_duration_seconds = (
+        (max_workbench_job_duration_minutes * 60)
+        if max_workbench_job_duration_minutes is not None
+        else None
+    )
     with ThreadPoolExecutor(max_workers=min(64, len(job_ids))) as pool:
         futures = [
             pool.submit(
-                _check_single_job, name, job_id, failed_jobs, timeout_jobs, lock
+                _check_single_job,
+                name,
+                job_id,
+                max_workbench_job_duration_seconds,
+                failed_jobs,
+                timeout_jobs,
+                lock,
             )
             for name, job_id in job_ids.items()
         ]
-        for f in as_completed(futures, timeout=_JOIN_TIMEOUT_SECONDS):
+        for f in as_completed(futures, timeout=thread_timeout):
             f.result()
 
     error_strs = []
@@ -94,9 +140,10 @@ def _verify_jobs_successful(job_ids: dict[str, str], job_type: str) -> None:
             f"The following {job_type} jobs failed:\n{pformat(failed_jobs)}"
         )
     if timeout_jobs:
-        error_strs.append(
-            f"The following {job_type} jobs timed out:\n{pformat(timeout_jobs)}"
-        )
+        errmsg = f"The following {job_type} jobs timed out"
+        if max_workbench_job_duration_minutes is not None:
+            errmsg += f" or took longer than the maximum allowed runtime of {max_workbench_job_duration_minutes} minutes to complete"
+        error_strs.append(f"{errmsg}:\n{pformat(timeout_jobs)}")
     if len(error_strs) > 0:
         raise ValueError("\n".join(error_strs))
 
