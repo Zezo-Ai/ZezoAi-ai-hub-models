@@ -407,7 +407,7 @@ def get_onnx_model(
 
     finally:
         if already_has_data:
-            os.rename(data_backup_full_path, data_full_path)
+            os.replace(data_backup_full_path, data_full_path)
 
     load_external_data_for_model(onnx_model, os.path.dirname(path))
 
