@@ -48,6 +48,9 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
 # Add symlink for python
 RUN ln -s /usr/bin/python3.10 /usr/bin/python
 
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
+
 # Install uv
 RUN curl -Ls https://astral.sh/uv/install.sh | bash && \
     mv /root/.local/bin/uv /usr/local/bin/ && \
