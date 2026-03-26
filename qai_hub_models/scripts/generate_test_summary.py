@@ -19,6 +19,8 @@ def clean_message(message: str) -> str:
     """Clean up a failure message for better display."""
     message = re.sub(r"\n", " ", message)
     message = re.sub(r"\s+", " ", message)
+    # Remove pipe characters as they break markdown table formatting
+    message = message.replace("|", "")
     if len(message) > 100:
         message = message[:97] + "..."
     return message
@@ -108,13 +110,14 @@ def extract_relevant_stack_trace(stack_trace: str | None, message: str) -> str |
         error_lines = [i for i, line in enumerate(stack_lines) if error_type in line]
 
         if error_lines:
-            # Get more lines before and a few lines after the error
+            # Get more lines before the error and ALL lines after (to capture
+            # multi-line error messages like dicts of failed jobs)
             last_error_line = error_lines[-1]
             start_line = max(
                 0, last_error_line - 7
             )  # Include 7 lines before instead of 2
-            end_line = min(len(stack_lines), last_error_line + 3)
-            return "\n".join(stack_lines[start_line:end_line])
+            # Include all lines from the error to the end to capture full error message
+            return "\n".join(stack_lines[start_line:])
         # If we can't find the error message, use the last several lines
         return "\n".join(stack_lines[-10:])  # Show 10 lines instead of 5
     if len(stack_lines) > 5:
