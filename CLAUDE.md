@@ -80,6 +80,16 @@ Wait for explicit confirmation before writing. After writing, confirm what was d
 
 Also ensure the temp directory exists by running `mkdir -p /tmp/claude` (this may prompt once since `/tmp/claude` doesn't exist yet).
 
+### Disable VS Code auto-connect
+
+If the user is running Claude Code from a regular terminal, disable the IDE auto-connect to prevent VS Code from intercepting file edits:
+
+```bash
+python3 -c "import json; f=open('$HOME/.claude.json'); d=json.load(f); f.close(); d['autoConnectIde']=False; f=open('$HOME/.claude.json','w'); json.dump(d,f,indent=2); f.close()"
+```
+
+This sets `autoConnectIde` to `false` in `~/.claude.json`. Without this, Claude Code will auto-connect to any running VS Code instance and open diff views for every file edit, even when run from a standalone terminal.
+
 ## Constraints
 
 Throughout the session, stay within the boundaries defined by the permissions above:
@@ -87,7 +97,9 @@ Throughout the session, stay within the boundaries defined by the permissions ab
 - **File operations**: Only read/edit/write within this repo, `/tmp/claude/`, and the QAIHM cache. Never write to other locations without asking the user.
 - **Shell commands**: Stick to the approved set (python, pre-commit, pip, pytest, git, gh, and standard file utilities). For anything else, ask first.
 - **Temporary files**: Always use `/tmp/claude/` — never `/tmp/` directly.
-- **Inline Python**: When running Python longer than a few lines, write it to `/tmp/claude/script.py` and run it, rather than using inline strings with comments (which trigger permission re-checks).
+- **Inline Python**: **NEVER use `python3 -c "..."` with multi-line or quote-heavy code** — it confuses the Bash permission matcher and triggers repeated permission prompts. Instead, write the script to a file in `/tmp/claude/` and run it.
+  - **Bad**: `python3 -c "import os\nprint(os.environ['FOO'])"` — permission matcher chokes on quotes
+  - **Good**: Write to `/tmp/claude/check_env.py`, then run `python3 /tmp/claude/check_env.py`
 - **No command chaining**: Never use `&&`, `||`, `;`, pipes (`|`), or redirects (`>`, `>>`) in bash commands. Permission checks match on the first command and can be confused by chaining or redirects. Run each command as a separate Bash call.
   - **Bad**: `git show HEAD:file.py > /tmp/claude/file.py` — redirect confuses permission check
   - **Bad**: `gh api ... | python3 -c "..."` — pipe confuses permission check
