@@ -152,9 +152,13 @@ class GPUPyTestModelsTask(CompositeTask):
 
         models_to_test = []
         for model_name in get_all_models():
-            if os.path.exists(
-                os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "test.py")
-            ) and (is_quantized_llm_model(model_name)):
+            if (
+                os.path.exists(
+                    os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "test.py")
+                )
+                and (is_quantized_llm_model(model_name))
+                and not check_code_gen_field(model_name, "skip_hub_tests_and_scorecard")
+            ):
                 models_to_test.append(model_name)
                 # Only run llama_v2_7b_chat on weekly runs so nightly takes less time.
                 if not nightly_only and model_name == "llama_v2_7b_chat":
