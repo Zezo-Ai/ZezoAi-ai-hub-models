@@ -51,6 +51,35 @@ class ScorecardCompilePath(Enum):
         ]
         return len(profile_paths) > 0
 
+    def should_run_path_for_model(
+        self,
+        precision: Precision,
+        model_supported_runtimes: dict[Precision, list[TargetRuntime]],
+    ) -> bool:
+        """
+        Whether this compile path should be run for a model with the given
+        supported runtimes. Delegates to profile paths that use this compile path.
+
+        Parameters
+        ----------
+        precision
+            The precision to check.
+        model_supported_runtimes
+            Mapping of precision to supported runtimes for the model.
+
+        Returns
+        -------
+        should_run : bool
+            True if this compile path should be run for the model at the given precision.
+        """
+        from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
+
+        return any(
+            x.compile_path == self
+            and x.should_run_path_for_model(precision, model_supported_runtimes)
+            for x in ScorecardProfilePath
+        )
+
     @property
     def runtime(self) -> TargetRuntime:
         if self == ScorecardCompilePath.TFLITE:

@@ -273,13 +273,8 @@ def get_enabled_paths_for_testing(
         sc_paths: list[ScorecardPathTypeVar] = []
         for path in path_type:
             path = cast(ScorecardPathTypeVar, path)
-            if (
-                not path.enabled
-                or path.runtime not in model_test_precision_runtimes.get(precision, [])
-                or not path.supports_precision(precision)
-            ):
-                continue
-            sc_paths.append(path)
+            if path.should_run_path_for_model(precision, model_test_precision_runtimes):
+                sc_paths.append(path)
         if sc_paths:
             out[precision] = sc_paths
     return out

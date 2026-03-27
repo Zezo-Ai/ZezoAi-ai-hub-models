@@ -157,9 +157,6 @@ class SpecialPathSetting(Enum):
     # Enable default set of profile paths (tflite, qnn_dlc or qnn_context_binary, onnx or precompiled_qnn_onnx) used in standard scorecards.
     DEFAULT = "default"
 
-    # Enable all profile paths.
-    ALL = "all"
-
     def __repr__(self) -> str:
         return self.value
 
@@ -192,7 +189,6 @@ Paths can be specified by their full name (e.g. tflite, qnn_dlc, onnx) or by a p
 Path names map to the enum values in qai_hub_models/scorecard/path_profile.py::ScorecardProfilePath
 
 Special options:
- * 'all' -- Enable all paths
  * 'default' -- Enable default set of paths used by CI & scorecard
 
 """

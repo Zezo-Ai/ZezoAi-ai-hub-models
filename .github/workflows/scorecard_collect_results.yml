@@ -381,7 +381,7 @@ jobs:
 
           git add qai_hub_models/scorecard/intermediates/*.yaml
           git add qai_hub_models/scorecard/intermediates/accuracy.csv
-          if [ "$QAIHM_TEST_MODELS" = "all" ] && [ "$QAIHM_TEST_PATHS" == "all" ] && [ "$QAIHM_TEST_DEVICES" == "all" ] && [ "QAIHM_TEST_PRECISIONS" == "default" ]; then
+          if [ "$QAIHM_TEST_MODELS" = "all" ] && [ "$QAIHM_TEST_DEVICES" == "all" ] && [ "QAIHM_TEST_PRECISIONS" == "default" ]; then
             git add qai_hub_models/scorecard/intermediates/environment.env
           fi
           git -c user.name='qaihm-bot_QCOM' -c user.email=qaihm_bot@qti.qualcomm.com commit -m "[Automated] Update Performance Data for ${{ inputs.action_id || inputs.latest_results_branch }}"

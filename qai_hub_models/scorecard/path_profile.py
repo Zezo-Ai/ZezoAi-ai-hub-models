@@ -104,8 +104,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
     @property
     def enabled(self) -> bool:
         valid_test_runtimes = EnabledPathsEnvvar.get()
-        if SpecialPathSetting.ALL in valid_test_runtimes:
-            return True
 
         default_paths = ScorecardProfilePath.default_paths()
         if SpecialPathSetting.DEFAULT in valid_test_runtimes and self in default_paths:
@@ -120,6 +118,60 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
             return True
 
         return self.value in valid_test_runtimes
+
+    def should_run_path_for_model(
+        self,
+        precision: Precision,
+        model_supported_runtimes: dict[Precision, list[TargetRuntime]],
+    ) -> bool:
+        """
+        Whether this path should be run for a model with the given supported
+        runtimes at the given precision.
+
+        Resolution order based on what is in the EnabledPathsEnvvar:
+        1. "default" keyword: enables default paths whose runtime is in the
+           model's supported runtimes.
+        2. Explicit path name (e.g. qnn_dlc_via_qnn_ep): enables the path
+           if the model supports any runtime with the same inference engine.
+        3. Engine prefix (e.g. "qnn"): enables paths whose runtime
+           is in the model's supported runtimes.
+
+        Parameters
+        ----------
+        precision
+            The precision to check.
+        model_supported_runtimes
+            Mapping of precision to supported runtimes for the model.
+
+        Returns
+        -------
+        should_run : bool
+            True if this path should be run for the model at the given precision.
+        """
+        supported_runtimes = model_supported_runtimes.get(precision, [])
+        if not supported_runtimes or not self.supports_precision(precision):
+            return False
+
+        valid_test_runtimes = EnabledPathsEnvvar.get()
+
+        # 1. "default": exact runtime match against supported runtimes
+        if (
+            SpecialPathSetting.DEFAULT in valid_test_runtimes
+            and self in self.default_paths()
+            and self.runtime in supported_runtimes
+        ):
+            return True
+
+        # 2. Explicit path name: inference engine match
+        if self.value in valid_test_runtimes:
+            supported_engines = {r.inference_engine for r in supported_runtimes}
+            return self.runtime.inference_engine in supported_engines
+
+        # 3. Engine prefix: exact runtime match against supported runtimes
+        return (
+            self.runtime.inference_engine.value in valid_test_runtimes
+            and self.runtime in supported_runtimes
+        )
 
     def supports_precision(self, precision: Precision) -> bool:
         """Whether this profile path applies to the given model precision."""

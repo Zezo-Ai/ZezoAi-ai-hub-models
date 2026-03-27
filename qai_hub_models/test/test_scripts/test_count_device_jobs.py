@@ -18,7 +18,7 @@ from qai_hub_models.utils.set_env import set_temp_env
 
 def get_test_env(
     devices: str = "all",
-    runtimes: str = "all",
+    runtimes: str = "default",
     precisions: str = "default",
     run_all_skipped_jobs: bool = True,
 ) -> dict[str, str | None]:
