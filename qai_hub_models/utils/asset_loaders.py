@@ -931,10 +931,10 @@ class CachedWebAsset:
                     extract_tar_file(self.local_cache_path, self.extracted_path)
                     os.remove(self.local_cache_path)  # Deletes tar file
                 else:
-                    raise ValueError(
+                    raise ValueError(  # noqa: TRY301
                         f"Unsupported compressed file type: {self.archive_ext}"
                     )
-            except:
+            except BaseException:
                 # Cleanup the folder if the extraction failed, so we don't falsely think the asset was extracted already.
                 if self.extracted_path.exists():
                     shutil.rmtree(self.extracted_path)
