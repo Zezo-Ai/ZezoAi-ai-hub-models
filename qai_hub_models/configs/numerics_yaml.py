@@ -37,7 +37,12 @@ class QAIHMModelNumerics(BaseQAIHMConfig):
         metric_description: str
         metric_unit: str
         metric_range: QAIHMModelNumerics.Range
-        metric_fp_vs_device_enablement_threshold: float | None = None
+        # Maximum allowed deviation between torch and device accuracy, or
+        # between actual accuracy and the benchmark value.
+        # Paths exceeding this threshold are disabled by the scorecard.
+        metric_enablement_threshold: float | None = None
+        # Expected accuracy from info.yaml's numerics_benchmark.
+        benchmark_value: float | None = None
         num_partial_samples: int
         partial_torch_metric: float
         device_metric: dict[

@@ -269,6 +269,45 @@ def update_code_gen_accuracy_failure_reasons(
         reasons = reasons_by_runtime[path.runtime]
         reasons.scorecard_accuracy_failure = f"Torch and On-device accuracy diff ({disabled_path[8]}) above threshold ({disabled_path[9]})"
 
+    for benchmark_failure in model_diff.benchmark_failures:
+        diff_model_id = benchmark_failure[0]
+        if diff_model_id != model_id:
+            continue
+
+        accuracy_type = benchmark_failure[3]
+        bf_precision = benchmark_failure[4]
+        bf_path = benchmark_failure[5]
+
+        if accuracy_type == "device":
+            assert bf_precision is not None and bf_path is not None
+            if (
+                not bf_path.is_published
+                or not bf_path.enabled
+                or bf_precision not in supported_precisions
+            ):
+                continue
+            if bf_precision not in code_gen_config.disabled_paths.data:
+                code_gen_config.disabled_paths.data[bf_precision] = {}
+            reasons_by_runtime = code_gen_config.disabled_paths.data[bf_precision]
+            if bf_path.runtime not in reasons_by_runtime:
+                reasons_by_runtime[bf_path.runtime] = ModelDisableReasons()
+            reasons = reasons_by_runtime[bf_path.runtime]
+            reasons.scorecard_accuracy_failure = f"Device accuracy ({benchmark_failure[6]}) deviates from benchmark ({benchmark_failure[7]}) by {benchmark_failure[8]}, threshold: {benchmark_failure[9]}"
+
+        elif accuracy_type == "torch":
+            # Torch accuracy failure affects all paths for all precisions
+            for p in supported_precisions:
+                for sc_path in ScorecardProfilePath:
+                    if not sc_path.is_published or not sc_path.enabled:
+                        continue
+                    if p not in code_gen_config.disabled_paths.data:
+                        code_gen_config.disabled_paths.data[p] = {}
+                    reasons_by_runtime = code_gen_config.disabled_paths.data[p]
+                    if sc_path.runtime not in reasons_by_runtime:
+                        reasons_by_runtime[sc_path.runtime] = ModelDisableReasons()
+                    reasons = reasons_by_runtime[sc_path.runtime]
+                    reasons.scorecard_accuracy_failure = f"Torch accuracy ({benchmark_failure[6]}) deviates from benchmark ({benchmark_failure[7]}) by {benchmark_failure[8]}, threshold: {benchmark_failure[9]}"
+
 
 def update_model_publish_status(model_info: QAIHMModelInfo) -> bool:
     """Update the model publishing status based on failure reasons. Returns true if the status was changed, false otherwise."""
@@ -357,7 +396,8 @@ def remove_numerics_failures(
                     metric_description=metric.metric_description,
                     metric_unit=metric.metric_unit,
                     metric_range=copy.copy(metric.metric_range),
-                    metric_fp_vs_device_enablement_threshold=metric.metric_fp_vs_device_enablement_threshold,
+                    metric_enablement_threshold=metric.metric_enablement_threshold,
+                    benchmark_value=metric.benchmark_value,
                     num_partial_samples=metric.num_partial_samples,
                     partial_torch_metric=metric.partial_torch_metric,
                     device_metric=new_metrics_by_device,

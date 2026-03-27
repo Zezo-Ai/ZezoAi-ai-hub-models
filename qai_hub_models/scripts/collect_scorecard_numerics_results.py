@@ -103,7 +103,11 @@ def main() -> None:
 
             model_diff = NumericsDiff()
             numerics = create_numerics_yaml(
-                model_id, accuracy_df, chipset_registry, model_diff
+                model_id,
+                accuracy_df,
+                chipset_registry,
+                model_diff,
+                benchmark=model_info.numerics_benchmark,
             )
             global_diff.merge_from(model_diff)
             if numerics is None:

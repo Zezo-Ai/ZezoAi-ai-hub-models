@@ -8,6 +8,7 @@ from __future__ import annotations
 from prettytable import PrettyTable
 
 from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.info_yaml import NumericsAccuracyBenchmark
 from qai_hub_models.configs.numerics_yaml import (
     QAIHMModelNumerics,
     ScorecardProfilePath,
@@ -77,6 +78,24 @@ class NumericsDiff:
             ]
         ] = []
 
+        # tuple<Model ID, Dataset Name, Metric Name, Accuracy Type ("torch" or "device"), Precision | None, Path | None, Actual Value, Benchmark Value, Difference, Threshold, Newly Disabled>
+        # Precision and Path are None for torch failures (torch accuracy is not per-device/path).
+        self.benchmark_failures: list[
+            tuple[
+                str,
+                str,
+                str,
+                str,
+                Precision | None,
+                ScorecardProfilePath | None,
+                str,
+                str,
+                str,
+                str,
+                bool,
+            ]
+        ] = []
+
         # tuple<Model ID, Dataset Name, Metric Name, Device, Precision, Path, FP Accuracy, Current Device Accuracy, Difference, Difference Threshold, Newly Disabled>
         self.device_vs_float_greater_than_enablement_threshold: list[
             tuple[
@@ -108,6 +127,7 @@ class NumericsDiff:
         self.new_paths.extend(other.new_paths)
         self.progressions.extend(other.progressions)
         self.regressions.extend(other.regressions)
+        self.benchmark_failures.extend(other.benchmark_failures)
         self.device_vs_float_greater_than_enablement_threshold.extend(
             other.device_vs_float_greater_than_enablement_threshold
         )
@@ -123,6 +143,7 @@ class NumericsDiff:
         previous_report: dict[ScorecardProfilePath, QAIHMModelNumerics.DeviceDetails]
         | None,
         new_report: dict[ScorecardProfilePath, QAIHMModelNumerics.DeviceDetails],
+        benchmark: NumericsAccuracyBenchmark | None = None,
     ) -> None:
         prev_metric = previous_report.get(path) if previous_report else None
         new_metric = new_report.get(path)
@@ -152,6 +173,15 @@ class NumericsDiff:
                 )
             )
 
+        # Skip device checks if torch already failed the benchmark
+        torch_already_failed = any(
+            f[0] == model_id
+            and f[3] == "torch"
+            and f[1] == new_metric_details.dataset_name
+            and f[2] == new_metric_details.metric_name
+            for f in self.benchmark_failures
+        )
+
         device_vs_float = (
             (new_metric.partial_metric - new_metric_details.partial_torch_metric)
             if new_metric
@@ -165,13 +195,11 @@ class NumericsDiff:
         )
 
         if (
-            new_metric
+            not torch_already_failed
+            and new_metric
             and device_vs_float
-            and new_metric_details.metric_fp_vs_device_enablement_threshold
-            and (
-                abs(device_vs_float)
-                >= new_metric_details.metric_fp_vs_device_enablement_threshold
-            )
+            and new_metric_details.metric_enablement_threshold
+            and (abs(device_vs_float) >= new_metric_details.metric_enablement_threshold)
         ):
             info = QAIHMModelCodeGen.from_model(model_id)
             reasons = info.disabled_paths.get_disable_reasons(precision, path.runtime)
@@ -186,16 +214,50 @@ class NumericsDiff:
                     f"{new_metric_details.partial_torch_metric} {new_metric_details.metric_unit}",
                     f"{new_metric.partial_metric} {new_metric_details.metric_unit}",
                     f"{device_vs_float:.3f} {new_metric_details.metric_unit}",
-                    f"{new_metric_details.metric_fp_vs_device_enablement_threshold} {new_metric_details.metric_unit}",
+                    f"{new_metric_details.metric_enablement_threshold} {new_metric_details.metric_unit}",
                     reasons.scorecard_accuracy_failure is None,
                 )
             )
+
+        # Check device accuracy against benchmark (skip if torch already failed)
+        if (
+            new_metric
+            and benchmark
+            and not torch_already_failed
+            and new_metric_details.metric_enablement_threshold
+            and benchmark.dataset_name == new_metric_details.dataset_name
+            and benchmark.metric_name == new_metric_details.metric_name
+        ):
+            device_vs_benchmark = new_metric.partial_metric - benchmark.value
+            if (
+                abs(device_vs_benchmark)
+                >= new_metric_details.metric_enablement_threshold
+            ):
+                info = QAIHMModelCodeGen.from_model(model_id)
+                reasons = info.disabled_paths.get_disable_reasons(
+                    precision, path.runtime
+                )
+                self.benchmark_failures.append(
+                    (
+                        model_id,
+                        new_metric_details.dataset_name,
+                        new_metric_details.metric_name,
+                        "device",
+                        precision,
+                        path,
+                        f"{new_metric.partial_metric} {new_metric_details.metric_unit}",
+                        f"{benchmark.value} {new_metric_details.metric_unit}",
+                        f"{device_vs_benchmark:.3f} {new_metric_details.metric_unit}",
+                        f"{new_metric_details.metric_enablement_threshold} {new_metric_details.metric_unit}",
+                        reasons.scorecard_accuracy_failure is None,
+                    )
+                )
 
         if (
             new_metric
             and prev_metric
             and previous_metric_details
-            and new_metric_details.metric_fp_vs_device_enablement_threshold
+            and new_metric_details.metric_enablement_threshold
             and device_vs_float
             and device_vs_float_prev
             and new_metric_details.metric_range.min
@@ -208,7 +270,7 @@ class NumericsDiff:
             metric_diff_diff = abs(device_vs_float) - abs(device_vs_float_prev)
             if (
                 abs(metric_diff_diff)
-                > new_metric_details.metric_fp_vs_device_enablement_threshold / 10
+                > new_metric_details.metric_enablement_threshold / 10
             ):
                 proreg = self.regressions if metric_diff_diff > 0 else self.progressions
                 proreg.append(
@@ -240,6 +302,7 @@ class NumericsDiff:
         new_report: dict[
             Precision, dict[ScorecardProfilePath, QAIHMModelNumerics.DeviceDetails]
         ],
+        benchmark: NumericsAccuracyBenchmark | None = None,
     ) -> None:
         previous_report_precision = (
             previous_report.get(precision) if previous_report else None
@@ -285,6 +348,7 @@ class NumericsDiff:
                     path,
                     previous_report_precision,
                     new_report_precision,
+                    benchmark=benchmark,
                 )
 
     def _update_summary_for_device(
@@ -306,6 +370,7 @@ class NumericsDiff:
                 Precision, dict[ScorecardProfilePath, QAIHMModelNumerics.DeviceDetails]
             ],
         ],
+        benchmark: NumericsAccuracyBenchmark | None = None,
     ) -> None:
         previous_report_device = (
             previous_report.get(device) if previous_report else None
@@ -348,6 +413,7 @@ class NumericsDiff:
                     precision,
                     previous_report_device,
                     new_report_device,
+                    benchmark=benchmark,
                 )
 
     def _update_summary_for_metric(
@@ -357,6 +423,7 @@ class NumericsDiff:
         metric: str,
         previous_report: list[QAIHMModelNumerics.MetricDetails] | None,
         new_report: list[QAIHMModelNumerics.MetricDetails],
+        benchmark: NumericsAccuracyBenchmark | None = None,
     ) -> None:
         previous_report_metric: QAIHMModelNumerics.MetricDetails | None = None
         new_report_metric: QAIHMModelNumerics.MetricDetails | None = None
@@ -385,6 +452,36 @@ class NumericsDiff:
             self.missing_metrics.append((model_id, dataset, metric))
 
         if new_report_metric:
+            # Check torch accuracy against benchmark
+            if (
+                benchmark
+                and new_report_metric.metric_enablement_threshold
+                and benchmark.dataset_name == new_report_metric.dataset_name
+                and benchmark.metric_name == new_report_metric.metric_name
+            ):
+                torch_vs_benchmark = (
+                    new_report_metric.partial_torch_metric - benchmark.value
+                )
+                if (
+                    abs(torch_vs_benchmark)
+                    >= new_report_metric.metric_enablement_threshold
+                ):
+                    self.benchmark_failures.append(
+                        (
+                            model_id,
+                            new_report_metric.dataset_name,
+                            new_report_metric.metric_name,
+                            "torch",
+                            None,
+                            None,
+                            f"{new_report_metric.partial_torch_metric} {new_report_metric.metric_unit}",
+                            f"{benchmark.value} {new_report_metric.metric_unit}",
+                            f"{torch_vs_benchmark:.3f} {new_report_metric.metric_unit}",
+                            f"{new_report_metric.metric_enablement_threshold} {new_report_metric.metric_unit}",
+                            False,
+                        )
+                    )
+
             all_devices: set[ScorecardDevice] = set()
 
             previous_report_metric_devices = None
@@ -402,6 +499,7 @@ class NumericsDiff:
                     device,
                     previous_report_metric_devices,
                     new_report_metric_devices,
+                    benchmark=benchmark,
                 )
 
     def update_summary(
@@ -409,6 +507,7 @@ class NumericsDiff:
         model_id: str,
         previous_report: QAIHMModelNumerics | None,
         new_report: QAIHMModelNumerics | None,
+        benchmark: NumericsAccuracyBenchmark | None = None,
     ) -> None:
         if not new_report and not previous_report:
             return
@@ -434,6 +533,7 @@ class NumericsDiff:
                     metric_name,
                     previous_report.metrics if previous_report else None,
                     new_report.metrics,
+                    benchmark=benchmark,
                 )
 
     def _get_summary_table_proreg(
@@ -516,6 +616,30 @@ class NumericsDiff:
                 sf.write(str(table))
             else:
                 sf.write("No disabled configurations found.\n")
+            sf.write("\n")
+
+            sf.write("\n\n----------------- Benchmark Failures -----------------\n")
+            if self.benchmark_failures:
+                table = PrettyTable(
+                    [
+                        "Model ID",
+                        "Dataset Name",
+                        "Metric Name",
+                        "Accuracy Type",
+                        "Precision",
+                        "Runtime",
+                        "Actual Value",
+                        "Benchmark Value",
+                        "Difference",
+                        "Threshold",
+                        "Newly Disabled",
+                    ]
+                )
+                self.benchmark_failures.sort(key=lambda k: k[0])  # sort by model id
+                table.add_rows(self.benchmark_failures)
+                sf.write(str(table))
+            else:
+                sf.write("No benchmark failures found.\n")
             sf.write("\n")
 
             sf.write("\n\n----------------- Regressions -----------------\n")

@@ -38,8 +38,17 @@ __all__ = [
     "MODEL_STATUS",
     "MODEL_TAG",
     "MODEL_USE_CASE",
+    "NumericsAccuracyBenchmark",
     "QAIHMModelInfo",
 ]
+
+
+class NumericsAccuracyBenchmark(BaseQAIHMConfig):
+    """Expected accuracy benchmark for a model on a specific dataset/metric."""
+
+    dataset_name: str
+    metric_name: str
+    value: float
 
 
 class QAIHMModelInfo(BaseQAIHMConfig):
@@ -133,6 +142,10 @@ class QAIHMModelInfo(BaseQAIHMConfig):
 
     # If set, model assets shouldn't distributed.
     restrict_model_sharing: bool = False
+
+    # Expected accuracy benchmark. If set, scorecard will flag results that
+    # deviate from this value by more than the metric's metric_enablement_threshold.
+    numerics_benchmark: NumericsAccuracyBenchmark | None = None
 
     # If status is private, this must have a reference to an issue with an explanation.
     status_reason: str | None = None

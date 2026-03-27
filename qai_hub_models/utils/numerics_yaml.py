@@ -9,6 +9,7 @@ from typing import NamedTuple
 import numpy as np
 import pandas as pd
 
+from qai_hub_models.configs.info_yaml import NumericsAccuracyBenchmark
 from qai_hub_models.configs.numerics_yaml import (
     QAIHMModelNumerics,
 )
@@ -52,6 +53,7 @@ def create_numerics_struct(
     model_name: str,
     accuracy_df: pd.DataFrame,
     chipset_registry: dict[str, ScorecardDevice],
+    benchmark: NumericsAccuracyBenchmark | None = None,
 ) -> QAIHMModelNumerics | None:
     model_df = accuracy_df[accuracy_df.model_id == model_name]
     if model_df.empty:
@@ -104,6 +106,15 @@ def create_numerics_struct(
                 )
             device_metric[chipset_registry[chipset]] = metric_data_dict
 
+        # Include benchmark value if the benchmark matches this metric
+        bm_value: float | None = None
+        if (
+            benchmark
+            and benchmark.dataset_name == accuracy_metadata.dataset_name
+            and benchmark.metric_name == accuracy_metadata.metric_name
+        ):
+            bm_value = benchmark.value
+
         final_data.append(
             QAIHMModelNumerics.MetricDetails(
                 dataset_name=accuracy_metadata.dataset_name,
@@ -116,7 +127,8 @@ def create_numerics_struct(
                     min=accuracy_metadata.metric_min,
                     max=accuracy_metadata.metric_max,
                 ),
-                metric_fp_vs_device_enablement_threshold=accuracy_metadata.metric_threshold,
+                metric_enablement_threshold=accuracy_metadata.metric_threshold,
+                benchmark_value=bm_value,
                 num_partial_samples=accuracy_metadata.num_samples,
                 partial_torch_metric=torch_accuracy,
                 device_metric=device_metric,
@@ -133,11 +145,16 @@ def create_numerics_yaml(
     accuracy_df: pd.DataFrame,
     chipset_registry: dict[str, ScorecardDevice],
     numerics_diff: NumericsDiff | None = None,
+    benchmark: NumericsAccuracyBenchmark | None = None,
 ) -> QAIHMModelNumerics | None:
     existing_struct = QAIHMModelNumerics.from_model(model_name, not_exists_ok=True)
-    numerics_struct = create_numerics_struct(model_name, accuracy_df, chipset_registry)
+    numerics_struct = create_numerics_struct(
+        model_name, accuracy_df, chipset_registry, benchmark=benchmark
+    )
     if numerics_diff is not None:
-        numerics_diff.update_summary(model_name, existing_struct, numerics_struct)
+        numerics_diff.update_summary(
+            model_name, existing_struct, numerics_struct, benchmark=benchmark
+        )
     return numerics_struct or None
 
 

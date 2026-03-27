@@ -61,10 +61,10 @@ class MaskedLMEvaluator(BaseEvaluator):
     def get_accuracy_score(self) -> float:
         if self._num_total == 0:
             return 0.0
-        return float(self._num_correct) / float(self._num_total)
+        return 100.0 * float(self._num_correct) / float(self._num_total)
 
     def formatted_accuracy(self) -> str:
-        return f"{100.0 * self.get_accuracy_score():.2f}%"
+        return f"{self.get_accuracy_score():.2f}%"
 
     def get_metric_metadata(self) -> MetricMetadata:
         return MetricMetadata(
