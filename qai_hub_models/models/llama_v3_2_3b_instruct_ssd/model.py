@@ -217,11 +217,10 @@ class Llama3_2_3B_SSD_AIMETOnnx(LLM_SSD_AIMETOnnx, Llama3Base_AIMETOnnx):
                     f"Checkpoints are available in the following precisions: {','.join(available_checkpoints)}."
                 )
             precision_checkpoint = DEFAULT_CHECKPOINT[precision]
-            checkpoint = os.path.join(
+            checkpoint = str(
                 CachedWebModelAsset.from_asset_store(
                     MODEL_ID, MODEL_ASSET_VERSION, precision_checkpoint + ".zip"
-                ).fetch(extract=True),
-                precision_checkpoint,
+                ).fetch(extract=True)
             )
             # Generate necessary ONNX models
             if fp_model is not None:
