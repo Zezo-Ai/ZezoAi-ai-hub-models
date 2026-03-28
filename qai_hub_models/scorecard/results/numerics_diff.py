@@ -227,6 +227,7 @@ class NumericsDiff:
             and new_metric_details.metric_enablement_threshold
             and benchmark.dataset_name == new_metric_details.dataset_name
             and benchmark.metric_name == new_metric_details.metric_name
+            and benchmark.unit == new_metric_details.metric_unit
         ):
             device_vs_benchmark = new_metric.partial_metric - benchmark.value
             if (
@@ -458,6 +459,7 @@ class NumericsDiff:
                 and new_report_metric.metric_enablement_threshold
                 and benchmark.dataset_name == new_report_metric.dataset_name
                 and benchmark.metric_name == new_report_metric.metric_name
+                and benchmark.unit == new_report_metric.metric_unit
             ):
                 torch_vs_benchmark = (
                     new_report_metric.partial_torch_metric - benchmark.value

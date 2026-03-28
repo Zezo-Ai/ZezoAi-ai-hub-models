@@ -49,6 +49,10 @@ class NumericsAccuracyBenchmark(BaseQAIHMConfig):
     dataset_name: str
     metric_name: str
     value: float
+    unit: str
+    # Where this benchmark value came from (e.g., a URL to the paper or
+    # model card, or "AI Hub Models Reference Eval" for scorecard-derived values).
+    source: str
 
 
 class QAIHMModelInfo(BaseQAIHMConfig):
