@@ -25,7 +25,9 @@ class AccuracyMetadata(NamedTuple):
     dataset_link: str
     split_description: str
     metric_name: str
-    metric_unit: str
+    # An empty box in accuracy.csv is parsed as None. Mypy does not catch
+    # this when we type metric_unit as "str", so we pick "str | None".
+    metric_unit: str | None
     metric_description: str
     metric_min: float | None
     metric_max: float | None
@@ -112,7 +114,7 @@ def create_numerics_struct(
             benchmark
             and benchmark.dataset_name == accuracy_metadata.dataset_name
             and benchmark.metric_name == accuracy_metadata.metric_name
-            and benchmark.unit == accuracy_metadata.metric_unit
+            and benchmark.unit == (accuracy_metadata.metric_unit or "")
         ):
             bm_value = benchmark.value
 
@@ -123,7 +125,7 @@ def create_numerics_struct(
                 dataset_split_description=accuracy_metadata.split_description,
                 metric_name=accuracy_metadata.metric_name,
                 metric_description=accuracy_metadata.metric_description,
-                metric_unit=accuracy_metadata.metric_unit,
+                metric_unit=accuracy_metadata.metric_unit or "",
                 metric_range=QAIHMModelNumerics.Range(
                     min=accuracy_metadata.metric_min,
                     max=accuracy_metadata.metric_max,
