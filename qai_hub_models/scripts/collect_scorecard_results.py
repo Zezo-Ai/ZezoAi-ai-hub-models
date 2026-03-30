@@ -698,11 +698,21 @@ if __name__ == "__main__":
     # Load Base YAMLs
     if using_prod_hub:
         # Load previous scorecard state
-        quantize_job_yamls = QuantizeScorecardJobYaml.from_file(QUANTIZE_YAML_BASE)
-        compile_job_yamls = CompileScorecardJobYaml.from_file(COMPILE_YAML_BASE)
-        link_job_yamls = LinkScorecardJobYaml.from_file(LINK_YAML_BASE)
-        profile_job_yamls = ProfileScorecardJobYaml.from_file(PROFILE_YAML_BASE)
-        inference_job_yamls = InferenceScorecardJobYaml.from_file(INFERENCE_YAML_BASE)
+        quantize_job_yamls = QuantizeScorecardJobYaml.from_file(
+            QUANTIZE_YAML_BASE, create_empty_if_no_file=True
+        )
+        compile_job_yamls = CompileScorecardJobYaml.from_file(
+            COMPILE_YAML_BASE, create_empty_if_no_file=True
+        )
+        link_job_yamls = LinkScorecardJobYaml.from_file(
+            LINK_YAML_BASE, create_empty_if_no_file=True
+        )
+        profile_job_yamls = ProfileScorecardJobYaml.from_file(
+            PROFILE_YAML_BASE, create_empty_if_no_file=True
+        )
+        inference_job_yamls = InferenceScorecardJobYaml.from_file(
+            INFERENCE_YAML_BASE, create_empty_if_no_file=True
+        )
 
         # Erase jobs for models we're collecting results for, if applicable
         if args.ignore_existing_intermediate_jobs:
@@ -834,10 +844,12 @@ if __name__ == "__main__":
     if using_prod_hub:
         quantize_job_yamls.to_file(QUANTIZE_YAML_BASE)
         compile_job_yamls.to_file(COMPILE_YAML_BASE)
+        link_job_yamls.to_file(LINK_YAML_BASE)
         profile_job_yamls.to_file(PROFILE_YAML_BASE)
         inference_job_yamls.to_file(INFERENCE_YAML_BASE)
         print(f"Quantize Job IDs written to {QUANTIZE_YAML_BASE}")
         print(f"Compile Job IDs written to {COMPILE_YAML_BASE}")
+        print(f"Link Job IDs written to {LINK_YAML_BASE}")
         print(f"Profile Job IDs written to {PROFILE_YAML_BASE}")
         print(f"Inference Job IDs written to {INFERENCE_YAML_BASE}")
 

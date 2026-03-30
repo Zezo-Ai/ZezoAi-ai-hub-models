@@ -109,9 +109,13 @@ class ScorecardJobYaml(
         self.job_id_mapping = job_id_mapping or {}
 
     @classmethod
-    def from_file(cls, config_path: str | Path) -> Self:
+    def from_file(
+        cls, config_path: str | Path, create_empty_if_no_file: bool = False
+    ) -> Self:
         """Read yaml files."""
         if not os.path.exists(config_path):
+            if create_empty_if_no_file:
+                return cls()
             raise FileNotFoundError(f"File not found with job ids at {config_path}")
 
         yaml = ruamel.yaml.YAML()
