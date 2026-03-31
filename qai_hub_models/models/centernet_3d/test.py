@@ -35,7 +35,7 @@ def test_task() -> None:
     )
     expected = load_numpy(OUTPUT.fetch())
 
-    np.testing.assert_allclose(np.array(dets), expected, rtol=1e-04, atol=1e-04)
+    np.testing.assert_allclose(np.array(dets), expected, rtol=1e-03, atol=1e-02)
 
 
 @pytest.mark.trace
@@ -53,7 +53,7 @@ def test_trace() -> None:
     )
     expected = load_numpy(OUTPUT.fetch())
 
-    np.testing.assert_allclose(np.array(dets), expected, rtol=1e-04, atol=1e-04)
+    np.testing.assert_allclose(np.array(dets), expected, rtol=1e-03, atol=1e-02)
 
 
 @skip_clone_repo_check

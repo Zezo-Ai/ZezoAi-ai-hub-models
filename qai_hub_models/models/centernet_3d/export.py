@@ -220,7 +220,7 @@ def download_model(
 
 def export_model(
     device: hub.Device,
-    precision: Precision = Precision.float,
+    precision: Precision = Precision.w8a16,
     num_calibration_samples: int | None = None,
     quantized_model_id: str | None = None,
     skip_compiling: bool = False,
@@ -503,10 +503,6 @@ def export_model(
 def main() -> None:
     warnings.filterwarnings("ignore")
     supported_precision_runtimes: dict[Precision, list[TargetRuntime]] = {
-        Precision.float: [
-            TargetRuntime.QNN_CONTEXT_BINARY,
-            TargetRuntime.PRECOMPILED_QNN_ONNX,
-        ],
         Precision.w8a16: [
             TargetRuntime.QNN_CONTEXT_BINARY,
             TargetRuntime.PRECOMPILED_QNN_ONNX,
