@@ -277,6 +277,7 @@ and many more.
 | [Depth-Anything-V2](https://aihub.qualcomm.com/models/depth_anything_v2) | [qai_hub_models.models.depth_anything_v2](qai_hub_models/models/depth_anything_v2/README.md) |
 | [Depth-Anything-V3](https://aihub.qualcomm.com/models/depth_anything_v3) | [qai_hub_models.models.depth_anything_v3](qai_hub_models/models/depth_anything_v3/README.md) |
 | [Midas-V2](https://aihub.qualcomm.com/models/midas) | [qai_hub_models.models.midas](qai_hub_models/models/midas/README.md) |
+| [StereoNet](https://aihub.qualcomm.com/models/stereonet) | [qai_hub_models.models.stereonet](qai_hub_models/models/stereonet/README.md) |
 | | |
 | **Driver Assistance**
 | [BEVDet](https://aihub.qualcomm.com/models/bevdet) | [qai_hub_models.models.bevdet](qai_hub_models/models/bevdet/README.md) |

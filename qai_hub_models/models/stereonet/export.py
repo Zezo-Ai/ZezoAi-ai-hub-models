@@ -29,11 +29,7 @@ from qai_hub_models.utils.args import (
     get_input_spec_kwargs,
     get_model_kwargs,
 )
-from qai_hub_models.utils.asset_loaders import (
-    ASSET_CONFIG,
-    UNPUBLISHED_MODEL_WARNING,
-    query_yes_no,
-)
+from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import ExportResult
@@ -506,9 +502,6 @@ def export_model(
 
 def main() -> None:
     warnings.filterwarnings("ignore")
-    print("WARNING:", UNPUBLISHED_MODEL_WARNING)
-    if not query_yes_no("Continue?"):
-        return
     supported_precision_runtimes: dict[Precision, list[TargetRuntime]] = {
         Precision.float: [
             TargetRuntime.TFLITE,

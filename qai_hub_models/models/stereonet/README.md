@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [StereoNet: Real-time stereo matching network for disparity estimation](https://aihub.qualcomm.com/models/stereonet)
 
 StereoNet is an end-to-end deep architecture for real-time stereo matching that produces high-quality, edge-preserved disparity maps from a rectified stereo image pair.
