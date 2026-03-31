@@ -148,6 +148,11 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
         should_run : bool
             True if this path should be run for the model at the given precision.
         """
+        # supported_runtimes lists all valid paths for this model at the
+        # given precision. Paths are only excluded from this list for hard
+        # constraints (e.g. timeouts, or unsupported combos like w8a16 on
+        # tflite). We intersect requested paths with this list so that even
+        # explicitly requested paths are skipped when those constraints apply.
         supported_runtimes = model_supported_runtimes.get(precision, [])
         if not supported_runtimes or not self.supports_precision(precision):
             return False
@@ -162,7 +167,10 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
         ):
             return True
 
-        # 2. Explicit path name: inference engine match
+        # 2. Explicit path name: use inference engine match (looser) so that
+        #    e.g. requesting "qnn_dlc_via_qnn_ep" works for a model that only
+        #    lists qnn_context_binary (same QNN engine). However, if the
+        #    engine itself is excluded (e.g. QNN timed out), no QNN path runs.
         if self.value in valid_test_runtimes:
             supported_engines = {r.inference_engine for r in supported_runtimes}
             return self.runtime.inference_engine in supported_engines
