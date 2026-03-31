@@ -9,7 +9,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pprint import pformat
 
 import pytest
-from qai_hub.client import _api_call as hub_api_call
 from qai_hub.client import api as hub_api
 from qai_hub.hub import _global_client
 
@@ -49,7 +48,7 @@ def _check_single_job(
     try:
         # We fetch the job_pb here (instead of using hub.get_job) so we don't have to fetch it again later when we check for timeouts.
         # get_job() is pretty slow. Removing the extra fetch saves us 20+ seconds (for context, checking all compile jobs takes about 50 seconds).
-        job_pb = hub_api_call(hub_api.get_job, _global_client.config, job_id=job_id)
+        job_pb = _global_client._api_call(hub_api.get_job, job_id=job_id)
         job = _global_client._make_job(job_pb)
         assert job is not None, f"Unable to retrieve job {job_id}"
         status = wait_for_prerequisite_job(job, max_workbench_job_duration_seconds)
@@ -64,7 +63,7 @@ def _check_single_job(
                 #
                 # Fetch the job proto again so we have the completion time.
                 specific_job_pb = job._extract_job_specific_pb(
-                    hub_api_call(hub_api.get_job, job._owner.config, job_id=job_id)
+                    job._owner._api_call(hub_api.get_job, job_id=job_id)
                 )
 
             assert specific_job_pb.HasField("completion_time"), (
