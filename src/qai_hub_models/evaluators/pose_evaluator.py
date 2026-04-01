@@ -12,7 +12,12 @@ import numpy as np
 import torch
 
 from qai_hub_models.datasets.cocobody import CocoBodyDataset
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import (
+    MEAN_AVERAGE_PRECISION,
+    PERCENTAGE_CORRECT_KEYPOINTS,
+    MetricMetadata,
+)
 from qai_hub_models.evaluators.utils.pose import get_final_preds
 from qai_hub_models.extern.xtcocotools.cocoeval import COCOeval
 from qai_hub_models.utils.printing import suppress_stdout
@@ -135,13 +140,7 @@ class CocoBodyPoseEvaluator(BaseEvaluator):
         return f"mAP: {results['AP']:.3f}, AP@.5: {results['AP@.5']:.3f}"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Mean Average Precision",
-            unit="mAP",
-            description="Percentage of keypoints that are close to the expected location.",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
-        )
+        return MEAN_AVERAGE_PRECISION
 
 
 class MPIIPoseEvaluator(BaseEvaluator):
@@ -221,10 +220,4 @@ class MPIIPoseEvaluator(BaseEvaluator):
         )
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Percentage Correct Keypoints (head-normalized)",
-            unit="PCKh",
-            description="Percentage of keypoints within a certain distance of expected.",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
-        )
+        return PERCENTAGE_CORRECT_KEYPOINTS

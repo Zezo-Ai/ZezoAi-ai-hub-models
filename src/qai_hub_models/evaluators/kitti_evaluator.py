@@ -11,7 +11,8 @@ import numpy as np
 import torch
 
 from qai_hub_models.datasets.kitti import KITTI_LABELS_ASSET
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import AVERAGE_PRECISION, MetricMetadata
 from qai_hub_models.evaluators.utils.kitti import eval_class
 from qai_hub_models.models.centernet_3d.util import ddd_post_process
 
@@ -190,10 +191,4 @@ class KittiEvaluator(BaseEvaluator):
         return f"{bbox_str} AP-(E,M,H) {aos_str} AOS-(E,M,H) {bev_str} BEV-(E,M,H)"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Average Precision",
-            unit="AP",
-            description="Average Precision",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
-        )
+        return AVERAGE_PRECISION

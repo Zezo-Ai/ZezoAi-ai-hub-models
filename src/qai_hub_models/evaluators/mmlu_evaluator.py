@@ -18,10 +18,10 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from qai_hub_models.evaluators.base_evaluators import (
     BaseEvaluator,
-    MetricMetadata,
     _DataLoader,
 )
 from qai_hub_models.evaluators.kldiv_evaluator import KLDivEvaluator
+from qai_hub_models.evaluators.metrics import MMLU, MetricMetadata
 
 if TYPE_CHECKING:
     from qai_hub_models.models._shared.llm.generator import LLM_Generator
@@ -286,10 +286,4 @@ class MMLUEvaluator(BaseEvaluator):
         self.for_each_batch(model, data, eval_iterations, _add_batch)
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Massive Multitask Language Understanding",
-            unit="MMLU",
-            description="Set of multiple choice questions that the model answered correctly.",
-            range=(0.0, 1.0),
-            float_vs_device_threshold=0.1,
-        )
+        return MMLU

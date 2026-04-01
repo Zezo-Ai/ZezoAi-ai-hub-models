@@ -12,7 +12,8 @@ import numpy as np
 import torch
 
 from qai_hub_models.datasets.cocowholebody import CocoWholeBodyDataset
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import MEAN_AVERAGE_PRECISION, MetricMetadata
 from qai_hub_models.evaluators.utils.pose import (
     BODY_SIGMAS,
     FACE_SIGMAS,
@@ -212,10 +213,4 @@ class WholeBodyPoseEvaluator(BaseEvaluator):
         return f"mAP: {results['AP']:.3f}, AP@.5: {results['AP@.5']:.3f}"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Mean Average Precision",
-            unit="mAP",
-            description="Percentage of keypoints that are close to the expected location.",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
-        )
+        return MEAN_AVERAGE_PRECISION

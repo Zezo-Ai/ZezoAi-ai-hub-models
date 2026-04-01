@@ -8,7 +8,8 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import NORMALIZED_MEAN_ERROR, MetricMetadata
 from qai_hub_models.models.facemap_3dmm.utils import (
     project_landmark,
     transform_landmark_coordinates,
@@ -77,10 +78,6 @@ class FaceMap3DMMEvaluator(BaseEvaluator):
         return f"Mean NME: {mean_nme:.4f}"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Normalized Mean Error",
-            unit="NME",
-            description="Average distance between predicted and expected landmark, weighted by the typical scale for each landmark. Lower is better.",
-            range=(0.0, None),
-            float_vs_device_threshold=0.01,
+        return NORMALIZED_MEAN_ERROR.with_description(
+            "Average distance between predicted and expected landmarks, weighted by the typical scale for each landmark. Lower is better."
         )

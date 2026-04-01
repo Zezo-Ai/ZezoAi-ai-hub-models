@@ -7,23 +7,17 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection
-from typing import NamedTuple, TypeAlias
+from typing import TypeAlias
 
 import torch
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
+from qai_hub_models.evaluators.metrics import MetricMetadata
+
 _ModelIO: TypeAlias = Collection[torch.Tensor] | torch.Tensor
 # Typically is a torch DataLoader, but anything with the collection signature is acceptable.
 _DataLoader: TypeAlias = DataLoader | Collection[_ModelIO | tuple[_ModelIO, _ModelIO]]
-
-
-class MetricMetadata(NamedTuple):
-    name: str
-    unit: str
-    description: str
-    range: tuple[float | None, float | None]
-    float_vs_device_threshold: float | None = None
 
 
 class BaseEvaluator(ABC):

@@ -9,7 +9,8 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import DELTA_THRESHOLD_ACCURACY, MetricMetadata
 
 
 class DepthEvaluator(BaseEvaluator):
@@ -91,10 +92,4 @@ class DepthEvaluator(BaseEvaluator):
         return x_0, x_1
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Delta Threshold Accuracy",
-            unit="δ1",
-            description="The percentage of pixels where the predicted depth is within 25% of the expected.",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
-        )
+        return DELTA_THRESHOLD_ACCURACY

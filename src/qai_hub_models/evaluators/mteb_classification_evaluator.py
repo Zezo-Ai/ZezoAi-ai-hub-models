@@ -17,7 +17,8 @@ from qai_hub_models.datasets.amazon_counterfactual import (
     AmazonCounterfactualClassificationDataset,
     DatasetSplit,
 )
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import ACCURACY_TOP1, MetricMetadata
 
 
 class ClassificationEvaluator(BaseEvaluator):
@@ -152,10 +153,4 @@ class ClassificationEvaluator(BaseEvaluator):
         return f"{self.get_accuracy_score():.3f}% (Top 1)"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Top-1 Percent Correct",
-            unit="%",
-            description="Percentage of Correct Top 1 Predictions",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
-        )
+        return ACCURACY_TOP1

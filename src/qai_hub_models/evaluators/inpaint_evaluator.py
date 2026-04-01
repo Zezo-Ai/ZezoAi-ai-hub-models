@@ -15,7 +15,8 @@ from torch.autograd import Variable
 from torch.nn.functional import adaptive_avg_pool2d
 from torchvision import models
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import SSIM, MetricMetadata
 
 
 class InpaintEvaluator(BaseEvaluator):
@@ -212,13 +213,7 @@ class InpaintEvaluator(BaseEvaluator):
         return pred_arr
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Structural Similarity",
-            unit="SSIM",
-            description="A measure of the perceived quality difference between two images.",
-            range=(0.0, 1.0),
-            float_vs_device_threshold=0.1,
-        )
+        return SSIM
 
 
 class InceptionV3(nn.Module):

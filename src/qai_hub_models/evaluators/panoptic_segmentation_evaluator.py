@@ -11,7 +11,8 @@ from panopticapi.evaluation import PQStat
 from panopticapi.utils import rgb2id
 
 from qai_hub_models.datasets.coco_panoptic_seg import CocoPanopticSegmentationDataset
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import PANOPTIC_QUALITY, MetricMetadata
 from qai_hub_models.models.mask2former.app import Mask2FormerApp as app
 
 
@@ -276,10 +277,4 @@ class PanopticSegmentationEvaluator(BaseEvaluator):
         return f"{self.get_accuracy_score() * 100:.1f} PQ"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Panoptic Quality",
-            unit="PQ",
-            description="A measure of how well all objects in the image were correctly identified and segmented.",
-            range=(0.0, 1.0),
-            float_vs_device_threshold=0.1,
-        )
+        return PANOPTIC_QUALITY

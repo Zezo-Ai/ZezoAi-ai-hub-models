@@ -8,7 +8,8 @@ from __future__ import annotations
 import torch
 from torch.types import Number
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import ACCURACY_TOP1, MetricMetadata
 
 
 class ClassificationEvaluator(BaseEvaluator):
@@ -52,10 +53,4 @@ class ClassificationEvaluator(BaseEvaluator):
         return f"{self.top1():.1f}% (Top 1), {self.top5():.1f}% (Top 5)"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Classification Accuracy",
-            unit="%",
-            description="Percentage of inputs that were correctly classified.",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
-        )
+        return ACCURACY_TOP1

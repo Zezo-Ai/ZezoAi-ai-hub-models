@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import torch
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import ACCURACY_TOP1, MetricMetadata
 
 
 class MaskedLMEvaluator(BaseEvaluator):
@@ -67,10 +68,6 @@ class MaskedLMEvaluator(BaseEvaluator):
         return f"{self.get_accuracy_score():.2f}%"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Top-1 Masked LM Accuracy",
-            unit="%",
-            description="Percentage of masked tokens correctly predicted (highest-probability token).",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
+        return ACCURACY_TOP1.with_description(
+            "Percentage of masked tokens correctly predicted (highest-probability token)."
         )

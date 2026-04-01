@@ -8,7 +8,8 @@ from __future__ import annotations
 import jiwer
 import torch
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import WORD_ERROR_RATE, MetricMetadata
 from qai_hub_models.models.huggingface_wavlm_base_plus.app import get_processor
 
 
@@ -70,10 +71,4 @@ class LibriSpeechEvaluator(BaseEvaluator):
         return f"Word Error Rate: {wer_score:.3f}"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Word Error Rate",
-            unit="WER",
-            description="The percentage of words incorrectly predicted. Lower is better.",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
-        )
+        return WORD_ERROR_RATE

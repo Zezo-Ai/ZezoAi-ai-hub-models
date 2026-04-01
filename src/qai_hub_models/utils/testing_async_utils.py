@@ -17,7 +17,7 @@ from qai_hub.public_rest_api import DatasetEntries
 
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.datasets.common import DatasetMetadata
-from qai_hub_models.evaluators.base_evaluators import MetricMetadata
+from qai_hub_models.evaluators.metrics import MetricMetadata
 from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.scorecard import (
     ScorecardCompilePath,

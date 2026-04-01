@@ -9,7 +9,8 @@ from collections.abc import Collection
 import numpy as np
 import torch
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import MEAN_ANGULAR_ERROR, MetricMetadata
 
 
 class MPIIGazeEvaluator(BaseEvaluator):
@@ -86,10 +87,4 @@ class MPIIGazeEvaluator(BaseEvaluator):
         return f"Mean Angular Error: {error:.3f} degrees"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Mean Angular Error",
-            unit="MAE (Degrees)",
-            description="Mean angular error between predicted and ground truth gaze directions. Lower is better.",
-            range=(0.0, None),
-            float_vs_device_threshold=5.0,
-        )
+        return MEAN_ANGULAR_ERROR

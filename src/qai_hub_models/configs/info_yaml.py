@@ -21,6 +21,7 @@ from qai_hub_models.configs._info_yaml_enums import (
 )
 from qai_hub_models.configs._info_yaml_llm_details import LLM_CALL_TO_ACTION, LLMDetails
 from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.evaluators.metrics import VALID_METRIC_PAIRS
 from qai_hub_models.scorecard import ScorecardDevice
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, QAIHM_WEB_ASSET
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
@@ -232,6 +233,18 @@ class QAIHMModelInfo(BaseQAIHMConfig):
             raise ValueError(
                 "`status_reason` in info.yaml should not be set for published models."
             )
+
+        # Validate numerics_benchmark metric_name + unit
+        if self.numerics_benchmark is not None:
+            pair = (self.numerics_benchmark.metric_name, self.numerics_benchmark.unit)
+            if pair not in VALID_METRIC_PAIRS:
+                valid_pairs_str = ", ".join(
+                    f"({n!r}, {u!r})" for n, u in sorted(VALID_METRIC_PAIRS)
+                )
+                raise ValueError(
+                    f"numerics_benchmark metric_name={pair[0]!r} with unit={pair[1]!r} "
+                    f"does not match any known metric. Valid pairs:\n  {valid_pairs_str}"
+                )
 
         # Required assets exist
         if self.status == MODEL_STATUS.PUBLISHED:

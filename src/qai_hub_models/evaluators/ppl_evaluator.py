@@ -15,9 +15,9 @@ from tqdm import tqdm
 
 from qai_hub_models.evaluators.base_evaluators import (
     BaseEvaluator,
-    MetricMetadata,
     _DataLoader,
 )
+from qai_hub_models.evaluators.metrics import PERPLEXITY, MetricMetadata
 
 if TYPE_CHECKING:
     from transformers import PreTrainedTokenizerBase
@@ -119,9 +119,4 @@ class PerplexityEvaluator(BaseEvaluator):
         self.for_each_batch(model, data, eval_iterations, _add_batch)
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Perplexity",
-            unit="PPL",
-            description="A measure of how likely the model is to predict a given sequence of words. Lower is better.",
-            range=(0.0, None),
-        )
+        return PERPLEXITY

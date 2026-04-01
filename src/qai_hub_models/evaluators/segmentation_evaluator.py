@@ -8,7 +8,8 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import MEAN_IOU, MetricMetadata
 
 
 class SegmentationOutputEvaluator(BaseEvaluator):
@@ -85,10 +86,4 @@ class SegmentationOutputEvaluator(BaseEvaluator):
         return f"{self.get_accuracy_score():.3f} mIOU"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Mean Intersection Over Union",
-            unit="mIOU",
-            description="Overlap of predicted and expected segmentation divided by the union size.",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
-        )
+        return MEAN_IOU

@@ -10,7 +10,8 @@ import numpy as np
 import torch
 from sklearn.metrics import average_precision_score
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import MEAN_AVERAGE_PRECISION, MetricMetadata
 
 
 class AudioSetOutputEvaluator(BaseEvaluator):
@@ -91,10 +92,6 @@ class AudioSetOutputEvaluator(BaseEvaluator):
         return f"{self.get_accuracy_score():.3f} mAP"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Mean Average Precision",
-            unit="mAP",
-            description="Mean Average Precision (across predicted audio classes).",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
+        return MEAN_AVERAGE_PRECISION.with_description(
+            "Mean Average Precision (across predicted audio classes)."
         )

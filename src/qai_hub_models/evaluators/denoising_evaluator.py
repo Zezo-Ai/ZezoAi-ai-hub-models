@@ -8,7 +8,8 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import PSNR, MetricMetadata
 from qai_hub_models.utils.compare import compute_psnr
 
 
@@ -54,10 +55,6 @@ class DenoisingEvaluator(BaseEvaluator):
         return f"{self.get_accuracy_score():.2f} dB PSNR"
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Peak Signal-to-Noise Ratio (PSNR)",
-            unit="dB",
-            description="A measure of how similar the denoised image is to the clean original.",
-            range=(0.0, None),
-            float_vs_device_threshold=1.0,
+        return PSNR.with_description(
+            "A measure of how similar the denoised image is to the clean original."
         )

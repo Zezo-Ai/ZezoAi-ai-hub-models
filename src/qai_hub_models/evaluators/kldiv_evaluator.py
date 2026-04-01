@@ -18,9 +18,9 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from qai_hub_models.evaluators.base_evaluators import (
     BaseEvaluator,
-    MetricMetadata,
     _DataLoader,
 )
+from qai_hub_models.evaluators.metrics import KL_DIVERGENCE, MetricMetadata
 
 if TYPE_CHECKING:
     from qai_hub_models.models._shared.llm.generator import LLM_Generator
@@ -223,9 +223,4 @@ class KLDivEvaluator(BaseEvaluator):
         self.for_each_batch(model, data, eval_iterations, _add_batch)
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="KL divergence",
-            unit="kldiv",
-            description="A distance metric between two probability distributions. Lower is better.",
-            range=(0.0, None),
-        )
+        return KL_DIVERGENCE

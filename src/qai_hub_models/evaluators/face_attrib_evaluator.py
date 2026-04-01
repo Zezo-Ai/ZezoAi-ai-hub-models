@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import torch
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import ACCURACY, MetricMetadata
 
 
 class FaceAttribNetEvaluator(BaseEvaluator):
@@ -97,10 +98,6 @@ class FaceAttribNetEvaluator(BaseEvaluator):
         -------
         MetricMetadata
         """
-        return MetricMetadata(
-            name="Attribute Accuracy",
-            unit="%",
-            description="Correctness between the predicted detection and the label.",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
+        return ACCURACY.with_description(
+            "Correctness between the predicted detection and the label."
         )

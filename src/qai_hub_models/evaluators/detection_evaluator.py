@@ -13,7 +13,11 @@ import torch
 # podm comes from the object-detection-metrics pip package
 from podm.metrics import BoundingBox, MetricPerClass, get_pascal_voc_metrics
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator, MetricMetadata
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.metrics import (
+    MEAN_AVERAGE_PRECISION_IOU_5_95,
+    MetricMetadata,
+)
 from qai_hub_models.utils.bounding_box_processing import batched_nms
 
 
@@ -195,13 +199,7 @@ class mAPEvaluator(BaseEvaluator):
         )
 
     def get_metric_metadata(self) -> MetricMetadata:
-        return MetricMetadata(
-            name="Mean Average Precision",
-            unit="mAP@0.5:0.95",
-            description="Mean Average Precision averaged over IOU thresholds 0.5 to 0.95 in 0.05 increments.",
-            range=(0.0, 100.0),
-            float_vs_device_threshold=10.0,
-        )
+        return MEAN_AVERAGE_PRECISION_IOU_5_95
 
 
 class DetectionEvaluator(mAPEvaluator):
