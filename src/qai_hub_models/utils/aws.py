@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
+import logging
 import os
 import re
 import sys
@@ -197,7 +198,7 @@ def s3_copy(
 def get_qaihm_s3(bucket_name: str, requires_admin: bool = False) -> tuple[Bucket, bool]:
     """
     Get boto3 objects for interacting with the given bucket using QAIHM credentials.
-    Throws if credentials do not exist
+    Throws if credentials do not exist.
 
     Parameters
     ----------
@@ -211,21 +212,33 @@ def get_qaihm_s3(bucket_name: str, requires_admin: bool = False) -> tuple[Bucket
     bucket : Bucket
         Bucket object for the specified S3 bucket.
     is_admin : bool
-        Whether the returned objects have admin permissions.
+        Whether the current credentials have admin permissions.
     """
-    if requires_admin:
-        profile_name = "qaihm-admin"
-        exception_msg = "This action requires adminsitrator permissions. Administrator permissions are not available."
-    else:
-        profile_name = "qaihm"
-        exception_msg = "Could not find valid AWS profile. Run <repo_root>/scripts/build_and_test.py --task validate_aws_credentials"
-
     try:
-        session = boto3.Session(profile_name=profile_name)
+        session = boto3.Session(profile_name=QAIHM_AWS_PROFILE)
         bucket = session.resource("s3").Bucket(bucket_name)
-        return bucket, False
     except Exception as e:
-        raise ValueError(exception_msg) from e
+        raise ValueError(
+            "Could not find valid AWS profile. Run <repo_root>/scripts/build_and_test.py --task validate_aws_credentials"
+        ) from e
+
+    # Only check admin role when explicitly required, to avoid an STS round-trip on every call.
+    is_admin = False
+    if requires_admin:
+        admin_role = os.environ.get("QAIHM_AWS_ADMIN_ROLE", "")
+        if admin_role:
+            try:
+                sts_client = session.client("sts")
+                arn = sts_client.get_caller_identity().get("Arn", "")
+                is_admin = f"role/{admin_role}" in arn
+            except Exception:
+                logging.warning("Could not determine admin role from STS")
+
+    if requires_admin and not is_admin:
+        raise ValueError(
+            "This action requires administrator permissions. Current role is not an admin role."
+        )
+    return bucket, is_admin
 
 
 def get_qaihm_s3_or_exit(
@@ -233,7 +246,7 @@ def get_qaihm_s3_or_exit(
 ) -> tuple[Bucket, bool]:
     """
     Get boto3 objects for interacting with the given bucket using QAIHM credentials.
-    Prints an error message and exits if credentials do not exist
+    Prints an error message and exits if credentials do not exist.
 
     Parameters
     ----------
@@ -247,7 +260,7 @@ def get_qaihm_s3_or_exit(
     bucket : Bucket
         Bucket object for the specified S3 bucket.
     is_admin : bool
-        Whether the returned objects have admin permissions.
+        Whether the current credentials have admin permissions.
     """
     try:
         return get_qaihm_s3(bucket_name, requires_admin)

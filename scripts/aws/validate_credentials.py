@@ -3,97 +3,54 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
-import argparse
 import configparser
 import contextlib
-import getpass
 import logging
 import os
+import subprocess
 import sys
-from typing import TypedDict
 
 import boto3
 import botocore
 import botocore.exceptions
-from awslogin.auth import IdP
-from awslogin.profile import Profile
+
+PROFILE = "qaihm"
+REGION = "us-west-2"
+SESSION_DURATION = 3600
 
 
-# This maintains a mapping from colloquial account names to:
-# - account ID
-# - the name of the AWS profile created locally. This is used by the AWS CLI and SDKs
-# - the IAM role assumed in that account
-#
-# The account ID and roles are configured via environment variables:
-#   QAIHM_AWS_ACCOUNT_ID  - AWS account ID
-#   QAIHM_AWS_ROLE        - IAM role for the primary account
-#   QAIHM_AWS_ADMIN_ROLE  - IAM role for the admin account
-class AccountData(TypedDict):
-    id: str
-    profile: str
-    role: str
-    required: bool
-
-
-def _load_accounts() -> dict[str, AccountData]:
-    account_id = os.environ.get("QAIHM_AWS_ACCOUNT_ID", "")
-    role = os.environ.get("QAIHM_AWS_ROLE", "")
-    admin_role = os.environ.get("QAIHM_AWS_ADMIN_ROLE", "")
-
-    if not account_id or not role or not admin_role:
+def _load_env(name: str) -> str:
+    value = os.environ.get(name, "")
+    if not value:
         raise ValueError(
-            "Missing required environment variables. Set "
-            "QAIHM_AWS_ACCOUNT_ID, QAIHM_AWS_ROLE, and QAIHM_AWS_ADMIN_ROLE. "
+            f"Missing required environment variable {name}. "
             "See https://qualcomm-confluence.atlassian.net/wiki/spaces/ML/pages/3188064594/Private+AWS+Access+Setup for setup instructions."
         )
-
-    return {
-        "qaihm": {
-            "id": account_id,
-            "profile": "qaihm",
-            "role": role,
-            "required": True,
-        },
-        "qaihm-admin": {
-            "id": account_id,
-            "profile": "qaihm-admin",
-            "role": admin_role,
-            "required": False,
-        },
-    }
+    return value
 
 
-def profiles_exist(accounts: dict[str, AccountData]) -> bool:
-    """
-    Checks whether local AWS profile entries exist for all accounts we care about.
-
-    Returns True if all profiles exist, False otherwise.
-    """
+def profile_exists() -> bool:
     try:
-        for account in accounts.values():
-            boto3.Session(profile_name=account["profile"])
+        boto3.Session(profile_name=PROFILE)
     except botocore.exceptions.ProfileNotFound:
-        logging.warning(f"Profile not found: {account['profile']}")
+        logging.warning(f"Profile not found: {PROFILE}")
         return False
-
     return True
 
 
-def add_profiles(accounts: dict[str, AccountData]) -> None:
-    """Adds local AWS profile entries for all accounts we care about."""
+def add_profile() -> None:
     config = configparser.ConfigParser()
     config_file = os.path.expanduser(f"~{os.sep}.aws{os.sep}config")
 
-    # Make the .aws directory if it doesn't exist.
     config_dir = os.path.dirname(config_file)
     os.makedirs(config_dir, exist_ok=True)
 
     config.read(config_file)
-    for profile in [a["profile"] for a in accounts.values()]:
-        with contextlib.suppress(configparser.DuplicateSectionError):
-            config.add_section(f"profile {profile}")
+    with contextlib.suppress(configparser.DuplicateSectionError):
+        config.add_section(f"profile {PROFILE}")
 
-        config.set(f"profile {profile}", "region", "us-west-2")
+    config.set(f"profile {PROFILE}", "region", REGION)
+    config.set(f"profile {PROFILE}", "sts_regional_endpoints", "regional")
 
     with open(config_file, "w") as f:
         config.write(f)
@@ -101,12 +58,10 @@ def add_profiles(accounts: dict[str, AccountData]) -> None:
 
 def prune_default() -> None:
     """
-    Removes any duplicate profile entries for the "default" profile.
+    Removes the bare [default] section from ~/.aws/config if it exists.
 
-    AWS allows the default profile to be entered as [profile default] or [default] in the config file.
-    The "add_profiles" method above adds all profiles with the same "profile name" section header,
-    so if users have an existing [default] section, they will end up with two different default sections.
-    This works with the AWS CLI, but CDK blows up, so delete the [default] section if it exists.
+    AWS allows the default profile as either [profile default] or [default].
+    If both exist, CDK blows up, so delete the bare [default] section.
     """
     config = configparser.ConfigParser()
     config_file = os.path.expanduser(f"~{os.sep}.aws{os.sep}config")
@@ -118,91 +73,153 @@ def prune_default() -> None:
         config.write(f)
 
 
-def credentials_valid(accounts: dict[str, AccountData], all_accounts: bool) -> bool:
-    """
-    Checks whether valid AWS credentials exist for all accounts we care about.
+def create_saml2aws_config(account_id: str, role: str, idp_app_id: str) -> None:
+    config_file = os.path.expanduser("~/.saml2aws")
+    user_email = None
+    if os.path.exists(config_file):
+        config = configparser.ConfigParser()
+        config.read(config_file)
+        with contextlib.suppress(configparser.NoSectionError):
+            user_email = config.get("default", "username")
 
-    Parameters
-    ----------
-    accounts
-        The accounts to check.
-    all_accounts
-        If True, checks all accounts instead of only the ones marked as required.
+    user_email = user_email or input("Your qualcomm email address: ")
 
-    Returns
-    -------
-    valid : bool
-        True if valid credentials are found for all specified accounts, False otherwise.
-    """
-    for account in accounts.values():
-        session = boto3.Session(profile_name=account["profile"])
-        sts_client = session.client("sts")
+    with open(config_file, "w") as f:
+        f.write(
+            f"""[default]
+app_id                  = {idp_app_id}
+url                     = https://account.activedirectory.windowsazure.com
+username                = {user_email}
+provider                = AzureAD
+mfa                     = Auto
+skip_verify             = false
+timeout                 = 0
+aws_urn                 = urn:amazon:webservices
+aws_session_duration    = {SESSION_DURATION}
+aws_profile             = {PROFILE}
+role_arn                = arn:aws:iam::{account_id}:role/{role}
+region                  = {REGION}
+saml_cache              = false
+disable_remember_device = false
+disable_sessions        = false
+download_browser_driver = false
+headless                = false
+"""
+        )
 
-        try:
-            sts_client.get_caller_identity()
-        except (
-            botocore.exceptions.NoCredentialsError,
-            botocore.exceptions.ClientError,
-        ):
-            if account["required"] or all_accounts:
-                logging.exception(
-                    f"Could not get caller identity for aws profile '{account['profile']}'"
-                )
-                return False
-            continue
+
+def add_default_credentials_section() -> None:
+    config_file = os.path.expanduser("~/.aws/credentials")
+
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    if not config.has_section("default"):
+        config.add_section("default")
+
+    for option, value in config.items(PROFILE):
+        config.set("default", option, value)
+
+    with open(config_file, "w") as f:
+        config.write(f)
+
+
+def credentials_valid() -> bool:
+    session = boto3.Session(profile_name=PROFILE)
+    sts_client = session.client("sts")
+
+    try:
+        sts_client.get_caller_identity()
+    except (
+        botocore.exceptions.NoCredentialsError,
+        botocore.exceptions.ClientError,
+    ):
+        logging.warning(f"Could not get caller identity for aws profile '{PROFILE}'")
+        return False
 
     return True
 
 
+def is_password_saved() -> bool:
+    if sys.platform == "darwin":
+        result = subprocess.run(
+            [
+                "security",
+                "find-internet-password",
+                "-s",
+                "account.activedirectory.windowsazure.com",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.stdout.find("saml2aws") != -1:
+            return True
+
+    return False
+
+
+def clear_saved_password() -> None:
+    if sys.platform == "darwin":
+        subprocess.run(
+            [
+                "security",
+                "delete-internet-password",
+                "-s",
+                "account.activedirectory.windowsazure.com",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+
 if __name__ == "__main__":
-    argparser = argparse.ArgumentParser()
-    # The required accounts have IAM roles with a longer duration (8 hours) while the non-required ones have a shorter duration (1 hour).
-    # The required roles are needed for build_and_test and for running Hub locally, while the others are just nice-to-have.
-    # We want to ensure that valid credentials are always available for the required accounts, while credentials for the other accounts
-    # are fetched only if the user explicitly asks for them.
-    # This is so that most users can get away with needing to enter their password only once a day to get fresh credentials.
-    argparser.add_argument("--all_accounts", action="store_true")
-    args = argparser.parse_args()
+    account_id = _load_env("QAIHM_AWS_ACCOUNT_ID")
+    admin_role = os.environ.get("QAIHM_AWS_ADMIN_ROLE", "")
+    role = admin_role or _load_env("QAIHM_AWS_ROLE")
+    idp_app_id = _load_env("QAIHM_AWS_IDP_APP_ID")
 
-    accounts = _load_accounts()
+    if not profile_exists():
+        logging.info("Creating AWS profile entry")
+        add_profile()
 
-    if not profiles_exist(accounts):
-        logging.info("Creating AWS profile entries")
-        add_profiles(accounts)
+    create_saml2aws_config(account_id, role, idp_app_id)
 
     prune_default()
 
-    if not credentials_valid(accounts, args.all_accounts):
-        logging.info("Obtaining AWS credentials")
+    if credentials_valid():
+        sys.exit(0)
 
-        if not sys.stdin.isatty():
-            raise RuntimeError(
-                "This is not a TTY and hence this script cannot prompt you for your password. Please re-run this in a different, interactive terminal."
+    logging.info("Obtaining AWS credentials")
+
+    if not sys.stdin.isatty():
+        raise RuntimeError(
+            "This is not a TTY and hence this script cannot prompt you for your password. Please re-run this in a different, interactive terminal."
+        )
+
+    print(f"Getting AWS credentials for {PROFILE}")
+
+    command = ["saml2aws", "login"]
+
+    if is_password_saved():
+        command.append("--skip-prompt")
+
+    env: dict[str, str] = os.environ.copy()
+
+    try:
+        subprocess.run(command, check=True, env=env)
+    except Exception:
+        if is_password_saved():
+            print(
+                "Failed to authenticate. If you updated your password recently, that's probably why."
             )
+            should_clear = input(
+                "Would you like me to erase your saved password? y/N: "
+            )
+            if should_clear.lower() in ["y", "yes"]:
+                clear_saved_password()
+                print("Saved password erased. Please try again.")
 
-        password = getpass.getpass(prompt="Qualcomm password: ")
-        username = getpass.getuser()
+        raise
 
-        idp = IdP(username, password)
-        profile = Profile()
-
-        for account in accounts.values():
-            session = boto3.Session(profile_name=account["profile"])
-            sts_client = session.client("sts")
-            role_arn = f"arn:aws:iam::{account['id']}:role/{account['role']}"
-            # Assume the role for 8 hours
-            try:
-                session = idp.assume_saml_role(role_arn, duration=8 * 60 * 60)
-                logging.info(
-                    f"Writing credentials for '{role_arn}' as profile '{account['profile']}'"
-                )
-                profile.set(account["profile"], session)
-            except:  # noqa: E722
-                if account["required"]:
-                    raise
-                else:
-                    # External contributors don't have access to every account. If the account isn't required,
-                    # continue without raising an exception.
-                    continue
-
-        profile.write()
+    add_default_credentials_section()
