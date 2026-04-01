@@ -1,0 +1,89 @@
+target-version = "py310"
+
+[lint]
+select = [
+    "E", # pycodestyle
+    "F", # pyflakes (flake8 replacement) rules
+    "I", # sort inputs
+    "UP", # pyupgrade replacement rules
+    "PGH", # disallow naked type: ignore with no reason
+    "T10", # looks for breakpoints
+    "ISC", # Fixes incorrect string concat
+    "INP", # Missing __init__.py
+    "D", # docstring format
+    "NPY", # Numpy rules
+    "PD", # Pandas rules
+    "PERF", # Various minor syntax changes that improve performance
+    "PL", # Pylint rules
+    "YTT", # Linting rules around for comparison of python versions
+    "A",  # disallows variables that mirror builtins
+    "B",  # catches common bugs
+    "PT",  # modern pytest syntax / catches bad tests
+    "TRY", # Prevents antipatterns when exceptions are thrown (eg. `raise Exception` is bad, use a more specific exception)
+    "C4", # Prevents container antipatterns (eg. use list(xlist) instead of [el for el in xlist]) to copy a list
+    "RET", # Optimal return syntax
+    "SIM", # Various rules to make sure the more simple syntax is used. For example, enforces `return x` over `return True if x else False`.
+    "RUF",  # Various helpful rules not found in other linter sets
+    "FURB",  # Prevents outdated python syntax
+    "PIE",  # Prevents outdated python syntax
+    "PYI",  # Makes sure advanced typings (eg. generic classes) are implemented correctly
+    "TID251", # Banned imports
+    "ANN", # Enforces that all functions have type annotations
+]
+ignore = [
+    "E501", # line too long
+    "E741", # Ambiguous variable names
+    ###
+    # Rules that require every function / class / module to have a docstring
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    ###
+    # Rules that are overly picky about docstring verbage / formatting.
+    "D205",
+    "D400",
+    "D401",
+    "D404",
+    "D415",
+    ###
+    "PLR2004", # Magic value for constant
+    "PLC0415", # Import should be at top of file. We can't do this a lot of the time.
+    "PLR0915", # function too long
+    "PLR0913", # too many arguments
+    "PLR0914", # too many locals
+    "PLR0912", # too many branches
+    "PLR0911", # too many returns
+    "PLR0904", # too many public methods
+    "PLR0916", # too many boolean expressions
+    "PLR0917", # too many positional args
+    "PLR1702", # too many nested blocks
+    "PLW2901", # for loop variable overwritten inside loop. This is often seen in model code, so it is disabled.
+    "B019", # functools.cache can lead to memory leaks
+    "PT018", # test assertions should be broken into multiple parts. This is a buggy check that is applied by the linter outside of pytest code.
+    "PT015", # Assertion always fails, replace with pytest.fail(). This is a buggy check that is applied by the linter outside of pytest code.
+    "TRY003", # Avoid specifying long messages outside the exception class
+    "TRY300", # Consider moving return statement to an `else` block
+    "RUF009", # don't use function in dataclass defaults
+    "RUF012", # Mutable class attributes should be annotated with `typing.ClassVar`
+    "ANN401", # Do not using 'any' for typing
+]
+
+[lint.per-file-ignores]
+"scripts/*" = ["INP", "PERF"]
+
+[lint.flake8-comprehensions]
+allow-dict-calls-with-keyword-arguments = true
+
+[lint.flake8-bugbear]
+extend-immutable-calls = ["torch.device", "os.path.join"]
+
+[lint.pyupgrade]
+keep-runtime-typing = true
+
+[lint.pydocstyle]
+convention = "numpy"

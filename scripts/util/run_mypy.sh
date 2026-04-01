@@ -27,5 +27,7 @@ else
   mypy_files=("$@")
 fi
 
+# Run mypy from src/ so it can find the package
+cd "${REPO_ROOT}/src"
 # echo "Checking ${mypy_files[*]}"
-mypy --warn-unused-configs --config-file="${REPO_ROOT}/pyproject.toml" "${mypy_files[@]}"
+mypy --warn-unused-configs --config-file="${REPO_ROOT}/src/pyproject.toml" "${mypy_files[@]}"

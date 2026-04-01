@@ -23,7 +23,7 @@ on:
         type: string
 
       device:
-        description: 'Target device(s). See `qai_hub_models/scorecard/device.py`. Comma-separated for multiple (e.g., "cs_x2_elite,cs_auto_lemans_8775")'
+        description: 'Target device(s). See `src/qai_hub_models/scorecard/device.py`. Comma-separated for multiple (e.g., "cs_x2_elite,cs_auto_lemans_8775")'
         required: true
         default: cs_x2_elite
         type: string
@@ -219,7 +219,7 @@ jobs:
       id: check_changes
       run: |
         # Check for both modified and new/untracked perf.yaml files
-        has_modified=$(git diff --quiet qai_hub_models/models/*/perf.yaml 2>/dev/null && echo "false" || echo "true")
+        has_modified=$(git diff --quiet src/qai_hub_models/models/*/perf.yaml 2>/dev/null && echo "false" || echo "true")
         has_untracked=$(git ls-files --others --exclude-standard | grep -q 'perf\.yaml$' && echo "true" || echo "false")
 
         if [ "$has_modified" = "true" ] || [ "$has_untracked" = "true" ]; then
@@ -274,7 +274,7 @@ jobs:
       with:
         name: updated-perf-yamls
         path: |
-          ${{ github.workspace }}/qai_hub_models/models/**/perf.yaml
+          ${{ github.workspace }}/src/qai_hub_models/models/**/perf.yaml
 
     - name: Create Pull Request
       if: ${{ (inputs.create_pr) && steps.push_changes.outputs.branch_name != '' && steps.check_changes.outputs.has_changes == 'true' }}

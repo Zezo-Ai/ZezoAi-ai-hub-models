@@ -87,7 +87,7 @@ jobs:
       - name: Validate Outputs
         run: |
           source ${{env.VENV_PATH}}/bin/activate
-          python qai_hub_models/scorecard/static/scripts/validate_integration_test.py \
+          python -m qai_hub_models.scorecard.static.scripts.validate_integration_test \
             --junit-xml ${{ github.workspace }}/test-results/qaihm-scorecard-integration-test-junit.xml
 
       - name: Download Scorecard Test Results
@@ -111,7 +111,7 @@ jobs:
             FAILURE_ARGS+=("--workflow-failure" "$name" "--workflow-failure-url" "$url")
           done < <(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs --paginate -q '.jobs[] | select(.conclusion == "failure") | "\(.name)\t${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/\(.id)"')
 
-          python qai_hub_models/scripts/generate_test_summary.py \
+          python -m qai_hub_models.scripts.generate_test_summary \
             --title "Scorecard Integration Test" \
             "${FAILURE_ARGS[@]}" \
             --name "Scorecard Job Submission" --junit-xml build/all-test-results/scorecard/qaihm-model-tests-junit.xml \

@@ -10,18 +10,18 @@ on:
           type: string
 
         models:
-          description: Test Models. Model names match folder names in `qai_hub_models/models`. Comma Separated.
+          description: Test Models. Model names match folder names in `src/qai_hub_models/models`. Comma Separated.
           required: false
           type: string
           default: pytorch
 
         test_devices:
-          description: Test Devices. See `qai_hub_models/scorecard/device.py`. Comma Separated.
+          description: Test Devices. See `src/qai_hub_models/scorecard/device.py`. Comma Separated.
           type: string
           default: default
 
         test_runtimes:
-          description: Test Paths (runtimes). See `qai_hub_models/scorecard/path_profile.py`. Comma Separated.
+          description: Test Paths (runtimes). See `src/qai_hub_models/scorecard/path_profile.py`. Comma Separated.
           type: string
           default: default
 
@@ -333,7 +333,7 @@ jobs:
             TEST_ARGS+=(--name "Export Script Test & Zip File Upload" --junit-xml build/all-test-results/export/qaihm-export-zip-tests-junit.xml)
           fi
 
-          python qai_hub_models/scripts/generate_test_summary.py \
+          python -m qai_hub_models.scripts.generate_test_summary \
             --title "Scorecard" \
             "${FAILURE_ARGS[@]}" \
             "${TEST_ARGS[@]}" \

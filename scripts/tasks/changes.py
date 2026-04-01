@@ -25,7 +25,8 @@ REPRESENTATIVE_EXPORT_MODELS = [
     "whisper_tiny",
 ]
 REPRESENTATIVE_EXPORT_FILES = [
-    f"qai_hub_models/models/{model}/export.py" for model in REPRESENTATIVE_EXPORT_MODELS
+    f"src/qai_hub_models/models/{model}/export.py"
+    for model in REPRESENTATIVE_EXPORT_MODELS
 ]
 
 
@@ -34,45 +35,45 @@ REPRESENTATIVE_EXPORT_FILES = [
 # aimet models. Testing a representative set of aimet models is probably
 # good enough rather than testing all of them.
 MANUAL_EDGES = {
-    "qai_hub_models/utils/quantization_aimet.py": [
-        "qai_hub_models/models/yolov7_quantized/model.py",
-        "qai_hub_models/models/ffnet_40s_quantized/model.py",
-        "qai_hub_models/models/xlsr_quantized/model.py",
-        "qai_hub_models/models/resnet18_quantized/model.py",
+    "src/qai_hub_models/utils/quantization_aimet.py": [
+        "src/qai_hub_models/models/yolov7_quantized/model.py",
+        "src/qai_hub_models/models/ffnet_40s_quantized/model.py",
+        "src/qai_hub_models/models/xlsr_quantized/model.py",
+        "src/qai_hub_models/models/resnet18_quantized/model.py",
     ],
-    "qai_hub_models/datasets/__init__.py": [
-        "qai_hub_models/models/yolov7_quantized/model.py"
+    "src/qai_hub_models/datasets/__init__.py": [
+        "src/qai_hub_models/models/yolov7_quantized/model.py"
     ],
-    "qai_hub_models/datasets/common.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/models/common.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/asset_loaders.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/base_config.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/collection_model_helpers.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/envvars.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/scorecard/execution_helpers.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/scorecard/device.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/scorecard/envvars.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/base_model.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/default_export_device.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/quantization.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/input_spec.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/qai_hub_helpers.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/inference.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/evaluate.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/onnx/torch_wrapper.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/printing.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/path_helpers.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/runtime_torch_wrapper.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/transpose_channel.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/testing.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/utils/tflite/torch_wrapper.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/configs/code_gen_yaml.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/configs/_info_yaml_enums.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/configs/_info_yaml_llm_details.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/configs/info_yaml.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/configs/model_disable_reasons.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/configs/perf_yaml.py": REPRESENTATIVE_EXPORT_FILES,
-    "qai_hub_models/_version.py": [],
+    "src/qai_hub_models/datasets/common.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/models/common.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/asset_loaders.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/base_config.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/collection_model_helpers.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/envvars.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/scorecard/execution_helpers.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/scorecard/device.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/scorecard/envvars.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/base_model.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/default_export_device.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/quantization.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/input_spec.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/qai_hub_helpers.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/inference.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/evaluate.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/onnx/torch_wrapper.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/printing.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/path_helpers.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/runtime_torch_wrapper.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/transpose_channel.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/testing.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/tflite/torch_wrapper.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/configs/code_gen_yaml.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/configs/_info_yaml_enums.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/configs/_info_yaml_llm_details.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/configs/info_yaml.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/configs/model_disable_reasons.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/configs/perf_yaml.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/_version.py": [],
 }
 
 

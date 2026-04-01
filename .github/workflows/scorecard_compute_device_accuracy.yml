@@ -43,7 +43,7 @@ jobs:
     runs-on: [tetra-ubuntu-2204, self-hosted]
     timeout-minutes: 1440 # 24 hours
     env:
-      QAIHM_TEST_ARTIFACTS_DIR: ${{ inputs.action_id == '' && 'qai_hub_models/scorecard/intermediates' || format('build/scorecard-yamls/{0}', inputs.action_id) }}
+      QAIHM_TEST_ARTIFACTS_DIR: ${{ inputs.action_id == '' && 'src/qai_hub_models/scorecard/intermediates' || format('build/scorecard-yamls/{0}', inputs.action_id) }}
 
     permissions:
       contents: read
@@ -151,7 +151,7 @@ jobs:
         continue-on-error: true
         run: |
           source "${{env.VENV_PATH}}/bin/activate"
-          python qai_hub_models/scorecard/static/scripts/evaluate_static_accuracy.py
+          python -m qai_hub_models.scorecard.static.scripts.evaluate_static_accuracy
 
       - name: Combine Per-Model JUnit XMLs
         if: ${{ always() }}

@@ -14,6 +14,7 @@ from tempfile import TemporaryDirectory
 from .changes import get_all_models, get_changed_files_in_package
 from .constants import (
     BUILD_ROOT,
+    PY_PACKAGE_INSTALL_ROOT,
     PY_PACKAGE_MODELS_ROOT,
     PY_PACKAGE_SRC_ROOT,
     REPO_ROOT,
@@ -114,7 +115,7 @@ class PyTestQAIHMTask(PyTestTask):
             for x in os.listdir(os.path.join(PY_PACKAGE_SRC_ROOT, "scorecard"))
         ]
 
-        if not get_changed_files_in_package("qai_hub_models/scorecard/static"):
+        if not get_changed_files_in_package("src/qai_hub_models/scorecard/static"):
             scorecard_files.remove(f"{PY_PACKAGE_SRC_ROOT}/scorecard/static")
         all_dirs_except_models.extend(scorecard_files)
 
@@ -206,7 +207,7 @@ class GPUPyTestModelsTask(CompositeTask):
                 os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "requirements-gpu.txt")
             )
             gpu_req_rel_path = (
-                f"qai_hub_models/models/{model_name}/requirements-gpu.txt"
+                f"src/qai_hub_models/models/{model_name}/requirements-gpu.txt"
             )
             install_cmds = [f"pip install $(ls {qdc_wheel_glob})"]
             if has_gpu_reqs:
@@ -426,7 +427,7 @@ class PyTestModelTask(CompositeTask):
                             # MyPy errors on "unused #type: ignore" from unrelated model code, if run in a non-global environment.
                             # Therefore we run mypy only on the specific model folder for specific model environments.
                             [
-                                f'mypy --warn-unused-configs --config-file="{REPO_ROOT}/pyproject.toml" --package qai_hub_models.models.{model_name}'
+                                f'cd "{PY_PACKAGE_INSTALL_ROOT}" && mypy --warn-unused-configs --config-file="{PY_PACKAGE_INSTALL_ROOT}/pyproject.toml" --package qai_hub_models.models.{model_name}'
                             ],
                             junit_xml_path=junit_xml_path,
                             junit_testsuite="pytest",
@@ -657,8 +658,8 @@ class GenerateTestSummaryTask(RunCommandsTask):
         super().__init__(
             group_name="Generate Test Failure Summary",
             commands=[
-                f'python3 scripts/combine_junit_xml.py --junit-xml="{input_dir}" --output="{combined_xml}"',
-                f'python3 qai_hub_models/scripts/generate_test_summary.py --title="{title}" --name="{name}" --junit-xml="{combined_xml}" --output="{summary_md}"',
+                f'python scripts/combine_junit_xml.py --junit-xml="{input_dir}" --output="{combined_xml}"',
+                f'python -m qai_hub_models.scripts.generate_test_summary --title="{title}" --name="{name}" --junit-xml="{combined_xml}" --output="{summary_md}"',
             ],
         )
 
@@ -724,7 +725,7 @@ class CollectLLMPerfTask(CompositeTask):
                 os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "requirements-gpu.txt")
             )
             gpu_req_rel_path = (
-                f"qai_hub_models/models/{model_name}/requirements-gpu.txt"
+                f"src/qai_hub_models/models/{model_name}/requirements-gpu.txt"
             )
             install_cmds = [f"pip install $(ls {qdc_wheel_glob})"]
             if has_gpu_reqs:
@@ -765,7 +766,7 @@ class CollectLLMPerfTask(CompositeTask):
                 PyTestTask(
                     group_name=f"Run LLM Perf Tests For Model {model_name}",
                     venv=model_venv,
-                    files_or_dirs=f"qai_hub_models/models/{model_name}/test.py",
+                    files_or_dirs=f"src/qai_hub_models/models/{model_name}/test.py",
                     extra_args="-s -m 'llm_perf'",
                     junit_xml_path=model_junit_xml_path,
                     raise_on_failure=False,

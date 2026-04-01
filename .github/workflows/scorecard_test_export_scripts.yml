@@ -58,7 +58,7 @@ jobs:
     runs-on: [tetra-ubuntu-2204, self-hosted]
     timeout-minutes: 1440 # 24 hours
     env:
-      QAIHM_TEST_ARTIFACTS_DIR: ${{ inputs.action_id == '' && 'qai_hub_models/scorecard/intermediates' || format('build/scorecard-yamls/{0}', inputs.action_id) }}
+      QAIHM_TEST_ARTIFACTS_DIR: ${{ inputs.action_id == '' && 'src/qai_hub_models/scorecard/intermediates' || format('build/scorecard-yamls/{0}', inputs.action_id) }}
       QAIHM_TEST_S3_ARTIFACTS_DIR: ${{ inputs.upload_to_s3 && format('pre_release_assets/gh_actions/{0}', inputs.action_id) || '' }}
 
     permissions:

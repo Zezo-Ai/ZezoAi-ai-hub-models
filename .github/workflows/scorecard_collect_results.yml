@@ -113,7 +113,7 @@ jobs:
 
     timeout-minutes: 1440 # 24 hours
     env:
-      QAIHM_TEST_ARTIFACTS_DIR: ${{ inputs.action_id == '' && 'qai_hub_models/scorecard/intermediates' || format('build/scorecard-yamls/{0}', inputs.action_id) }}
+      QAIHM_TEST_ARTIFACTS_DIR: ${{ inputs.action_id == '' && 'src/qai_hub_models/scorecard/intermediates' || format('build/scorecard-yamls/{0}', inputs.action_id) }}
       QAIHM_TEST_TABLEAU_BRANCH_NAME: ${{ inputs.tableau_branch_name }}
       QAIHM_TEST_RESULTS_COLLECTION_IGNORE_EXISTING_JOBS: "1"
       QAIHM_CI_USE_EDITABLE_INSTALL: 1
@@ -157,20 +157,20 @@ jobs:
           git fetch origin ${{ inputs.previous_results_branch }}
 
           # Grab intermediates (previous jobs) that we want to compare with.
-          git checkout origin/${{ inputs.previous_results_branch }} qai_hub_models/scorecard/intermediates
+          git checkout origin/${{ inputs.previous_results_branch }} src/qai_hub_models/scorecard/intermediates
 
           # Since the previous results branch is our "base" to create a PR, we want to run
           # results collection on that branch and only commit the changes made by results collection.
           #
           # We only commit the /models folder, so we replace models with their state at the previous results branch.
-          git checkout origin/${{ inputs.previous_results_branch }} qai_hub_models/models
+          git checkout origin/${{ inputs.previous_results_branch }} src/qai_hub_models/models
 
           # Restore 2 core files that may have changed.
           #
           # These are used throughout the repo. We want to align them with the scripts that collect
           # the results. Those scripts are aligned with the base branch checked out by this GitHub action.
-          git checkout qai_hub_models/models/common.py
-          git checkout qai_hub_models/models/protocols.py
+          git checkout src/qai_hub_models/models/common.py
+          git checkout src/qai_hub_models/models/protocols.py
 
       - id: install_platform_deps
         env:
@@ -328,7 +328,7 @@ jobs:
         if: ${{ !cancelled() && steps.aggregate-results.outcome == 'success' }}
         run: |
           source ${{ env.VENV_PATH }}/bin/activate
-          python qai_hub_models/scripts/analyze_scorecard_failures.py \
+          python -m qai_hub_models.scripts.analyze_scorecard_failures \
             ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/aggregated_scorecard_results.csv \
             --output-file ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/scorecard_failure_analysis.csv
 
@@ -362,21 +362,21 @@ jobs:
           # git ls-files -co includes tracked and untracked files
           # `git add` files have changed and commit them.
           #
-          rm -rf qai_hub_models/scorecard/intermediates/perf-yamls
-          git ls-files -co qai_hub_models | grep "\/models/.*/perf.*\.yaml$" | xargs git add
-          git ls-files -co qai_hub_models | grep "\/models/.*/numerics.*\.yaml$" | xargs git add
-          git ls-files -co qai_hub_models | grep "\/models/.*/info.*\.yaml$" | xargs git add
-          git ls-files -co qai_hub_models | grep "\/models/.*/release-assets.*\.yaml$" | xargs git add
-          git ls-files -co qai_hub_models | grep "\/models/.*/code\-gen\.yaml$" | xargs git add
-          git ls-files -co qai_hub_models | grep "\/models/.*/export\.py$" | xargs git add
-          git ls-files -co qai_hub_models | grep "\/models/.*/evaluate\.py$" | xargs git add
-          git ls-files -co qai_hub_models | grep "\/models/.*/test_generated\.py$" | xargs git add
-          git ls-files -co qai_hub_models | grep "\/models/.*/README\.md$" | xargs git add
+          rm -rf src/qai_hub_models/scorecard/intermediates/perf-yamls
+          git ls-files -co src/qai_hub_models | grep "\/models/.*/perf.*\.yaml$" | xargs git add
+          git ls-files -co src/qai_hub_models | grep "\/models/.*/numerics.*\.yaml$" | xargs git add
+          git ls-files -co src/qai_hub_models | grep "\/models/.*/info.*\.yaml$" | xargs git add
+          git ls-files -co src/qai_hub_models | grep "\/models/.*/release-assets.*\.yaml$" | xargs git add
+          git ls-files -co src/qai_hub_models | grep "\/models/.*/code\-gen\.yaml$" | xargs git add
+          git ls-files -co src/qai_hub_models | grep "\/models/.*/export\.py$" | xargs git add
+          git ls-files -co src/qai_hub_models | grep "\/models/.*/evaluate\.py$" | xargs git add
+          git ls-files -co src/qai_hub_models | grep "\/models/.*/test_generated\.py$" | xargs git add
+          git ls-files -co src/qai_hub_models | grep "\/models/.*/README\.md$" | xargs git add
 
-          git add qai_hub_models/scorecard/intermediates/*.yaml
-          git add qai_hub_models/scorecard/intermediates/accuracy.csv
+          git add src/qai_hub_models/scorecard/intermediates/*.yaml
+          git add src/qai_hub_models/scorecard/intermediates/accuracy.csv
           if [ "$QAIHM_TEST_MODELS" = "all" ] && [ "$QAIHM_TEST_DEVICES" == "all" ] && [ "QAIHM_TEST_PRECISIONS" == "default" ]; then
-            git add qai_hub_models/scorecard/intermediates/environment.env
+            git add src/qai_hub_models/scorecard/intermediates/environment.env
           fi
           git -c user.name='qaihm-bot_QCOM' -c user.email=qaihm_bot@qti.qualcomm.com commit -m "[Automated] Update Performance Data for ${{ inputs.action_id || inputs.latest_results_branch }}"
           git push --set-upstream origin ${{ env.PR_REF_NAME }} -f
@@ -417,19 +417,19 @@ jobs:
         if: ${{ !cancelled() && steps.create-perf-files.outcome == 'success' }}
         run: |
           mkdir -p ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/perf-yamls
-          cp --parents -r qai_hub_models/models/**/perf.yaml ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/perf-yamls
+          cp --parents -r src/qai_hub_models/models/**/perf.yaml ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/perf-yamls
 
       - name: Collect Numerics Results
         if: ${{ !cancelled() && steps.create-numerics-files.outcome == 'success' }}
         run: |
           mkdir -p ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/numerics-yamls
-          cp --parents -r qai_hub_models/models/**/numerics.yaml ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/numerics-yamls
+          cp --parents -r src/qai_hub_models/models/**/numerics.yaml ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/numerics-yamls
 
       - name: Collect Release Assets Files
         if: ${{ !cancelled() && steps.create-release-assets-files.outcome == 'success' }}
         run: |
           mkdir -p ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets-yamls
-          cp --parents -r qai_hub_models/models/**/release-assets.yaml ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets-yamls
+          cp --parents -r src/qai_hub_models/models/**/release-assets.yaml ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets-yamls
 
       - name: Upload Job Artifact - Scorecard Results
         id: upload-results

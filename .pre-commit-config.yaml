@@ -11,8 +11,8 @@ repos:
         files: \.py|\.sh$
         exclude: >
             (?x)^(
-            qai_hub_models/extern/basicsr/|
-            qai_hub_models/extern/xtcocotools/
+            src/qai_hub_models/extern/basicsr/|
+            src/qai_hub_models/extern/xtcocotools/
             )
         args:
             - --license-filepath
@@ -63,12 +63,12 @@ repos:
     rev: 0.7.3
     hooks:
     -   id: pydoclint
-        args: [--quiet]
+        args: [--quiet, --config=src/pyproject.toml]
 -   repo: local
     hooks:
     -   id: mypy
         name: mypy
-        files: qai_hub_models/.*(py|pyi|ipynb)$
+        files: src/qai_hub_models/.*(py|pyi|ipynb)$
         entry: scripts/util/run_mypy.sh
         language: system
         # By default, precommit will split the files into groups and run

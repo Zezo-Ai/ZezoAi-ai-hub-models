@@ -20,7 +20,7 @@ on:
             - scorecard_collection_immediate
 
         latest_results_branch:
-          description: The branch with new scorecard jobs (in qai_hub_models/scorecard/intermediates). Unused if the Github Action Run ID is set.
+          description: The branch with new scorecard jobs (in src/qai_hub_models/scorecard/intermediates). Unused if the Github Action Run ID is set.
           required: false
           type: string
 
@@ -86,7 +86,7 @@ jobs:
     timeout-minutes: 1200 # 20 hours, this waits for the scorecard jobs to finish.
 
     env:
-      QAIHM_TEST_ARTIFACTS_DIR: ${{ inputs.action_id == '' && 'qai_hub_models/scorecard/intermediates' || format('build/scorecard-yamls/{0}', inputs.action_id) }}
+      QAIHM_TEST_ARTIFACTS_DIR: ${{ inputs.action_id == '' && 'src/qai_hub_models/scorecard/intermediates' || format('build/scorecard-yamls/{0}', inputs.action_id) }}
       QAIHM_TEST_DEPLOYMENT: ${{ inputs.deployment }}
 
     permissions:
@@ -205,7 +205,7 @@ jobs:
           QAIHM_TEST_ARTIFACTS_DIR: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
         run: |
           source "${{ env.VENV_PATH }}/bin/activate"
-          python qai_hub_models/scripts/format_flaky_jobs_report.py \
+          python -m qai_hub_models.scripts.format_flaky_jobs_report \
             --flaky-jobs-file ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/flaky_jobs/flaky_jobs.yaml \
             --output-file ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/flaky_jobs/formatted_report.txt
 

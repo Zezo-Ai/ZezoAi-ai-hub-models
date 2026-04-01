@@ -12,7 +12,7 @@ from .task import CompositeTask
 from .util import get_env_bool, on_ci
 from .venv import CreateVenvTask, RunCommandsWithVenvTask
 
-EGG_INFO_DIR = os.path.join(REPO_ROOT, "qai_hub_models.egg-info")
+EGG_INFO_DIR = os.path.join(REPO_ROOT, "src", "qai_hub_models.egg-info")
 
 
 class CreateReleaseVenv(CompositeTask):
@@ -72,7 +72,7 @@ class BuildWheelTask(CompositeTask):
                         # Remove old wheels
                         # single quotes around the path for safety (double quotes would cause * to be incorrectly interpreted by the shell)
                         f"rm -f '{os.path.join(wheel_dir, 'qai_hub_models-*.whl')}'",
-                        f"python -m build --wheel --outdir {wheel_dir}"
+                        f"python -m build --wheel --outdir {wheel_dir} {os.path.join(REPO_ROOT, 'src')}"
                         + (" > /dev/null" if on_ci() else ""),
                         f"echo 'Wheel can be found at {wheel_dir}'",
                     ],

@@ -113,7 +113,7 @@ jobs:
         if: ${{ inputs.sync_assets_branch != '' }}
         run: |
           git fetch origin ${{ inputs.sync_assets_branch }}
-          git checkout origin/${{ inputs.sync_assets_branch }} -- qai_hub_models/scorecard/static/models
+          git checkout origin/${{ inputs.sync_assets_branch }} -- src/qai_hub_models/scorecard/static/models
 
       - name: Create Virtual Env
         run: |
@@ -182,16 +182,16 @@ jobs:
         run: |
           source "${{env.VENV_PATH}}/bin/activate"
           if [[ "${{ github.event_name }}" != "schedule" ]]; then
-            python qai_hub_models/scripts/count_device_jobs.py --assert-valid-daytime-scorecard
+            python -m qai_hub_models.scripts.count_device_jobs --assert-valid-daytime-scorecard
           else
-            python qai_hub_models/scripts/count_device_jobs.py
+            python -m qai_hub_models.scripts.count_device_jobs
           fi
 
       - name: Dump QAIRT Versions to Disk
         id: dump_qairt
         run: |
           source "${{env.VENV_PATH}}/bin/activate"
-          python qai_hub_models/scripts/dump_scorecard_tool_versions.py
+          python -m qai_hub_models.scripts.dump_scorecard_tool_versions
 
       - name: Run Unit Tests (Pytorch Recipes)
         id: run-unit-tests
@@ -209,7 +209,7 @@ jobs:
         if: ${{ !cancelled() && inputs.test_scope != 'unit' && inputs.test_scope != 'unit_and_compile' }}
         run: |
           source "${{env.VENV_PATH}}/bin/activate"
-          python qai_hub_models/scorecard/static/scripts/exec_models.py --skip-profile --skip-inference
+          python -m qai_hub_models.scorecard.static.scripts.exec_models --skip-profile --skip-inference
 
       - name: Run Pre-Quantize ONNX Compile Jobs (Pytorch Recipes)
         id: run-pre-quantize-compile-jobs
@@ -266,11 +266,11 @@ jobs:
         run: |
           source "${{env.VENV_PATH}}/bin/activate"
           if [[ "${{ inputs.test_scope }}" == "perf" ]]; then
-            python qai_hub_models/scorecard/static/scripts/exec_models.py --skip-compile --skip-inference
+            python -m qai_hub_models.scorecard.static.scripts.exec_models --skip-compile --skip-inference
           elif [[ "${{ inputs.test_scope }}" == "accuracy" ]]; then
-            python qai_hub_models/scorecard/static/scripts/exec_models.py --skip-compile --skip-profile
+            python -m qai_hub_models.scorecard.static.scripts.exec_models --skip-compile --skip-profile
           elif [[ "${{ inputs.test_scope }}" == "perf_and_accuracy" ]]; then
-            python qai_hub_models/scorecard/static/scripts/exec_models.py --skip-compile
+            python -m qai_hub_models.scorecard.static.scripts.exec_models --skip-compile
           fi
 
       - name: Run Profile & Inference Jobs (Pytorch Recipes)

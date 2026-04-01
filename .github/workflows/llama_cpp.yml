@@ -150,7 +150,7 @@ jobs:
         if: ${{ inputs.create_pr }}
         id: check_changes
         run: |
-          if git diff --quiet qai_hub_models/models/*/perf.yaml 2>/dev/null; then
+          if git diff --quiet src/qai_hub_models/models/*/perf.yaml 2>/dev/null; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
@@ -160,7 +160,7 @@ jobs:
         if: ${{ inputs.create_pr && steps.check_changes.outputs.has_changes == 'true' }}
         run: |
           git checkout -b ${{ env.PR_REF_NAME }}
-          git add qai_hub_models/models/*/perf.yaml
+          git add src/qai_hub_models/models/*/perf.yaml
           git -c user.name='qaihm-bot_QCOM' -c user.email=qaihm_bot@qti.qualcomm.com commit -m "[Automated] Update Llama.CPP perf.yaml files for run ${{ github.run_id }}"
           git push --set-upstream origin ${{ env.PR_REF_NAME }} -f
 

@@ -169,15 +169,15 @@ jobs:
       if: ${{ inputs.python_version != '3.10' }}
       # Global requirements are different per python version. We check in python 3.10 reqs.
       # We only need to check for 3.10 if the requirements are checked in correctly.
-      run: git checkout qai_hub_models/global_requirements.txt
+      run: git checkout src/qai_hub_models/global_requirements.txt
 
     - name: Re-run export code-gen
       if: ${{ inputs.precommit_scope == 'all' }}
-      run: source "${{ env.VENV_PATH }}/bin/activate" && python qai_hub_models/scripts/run_codegen.py -a
+      run: source "${{ env.VENV_PATH }}/bin/activate" && python -m qai_hub_models.scripts.run_codegen -a
 
     - name: Re-generate devices_and_chipsets
       if: ${{ inputs.precommit_scope == 'all' }}
-      run: source "${{ env.VENV_PATH }}/bin/activate" && python qai_hub_models/scripts/generate_scorecard_device_yaml.py
+      run: source "${{ env.VENV_PATH }}/bin/activate" && python -m qai_hub_models.scripts.generate_scorecard_device_yaml
 
     - name: Check for code-gen changes
       if: ${{ inputs.precommit_scope == 'all' }}
@@ -185,9 +185,9 @@ jobs:
         if [[ -n $(git diff) ]]; then
           git diff
           echo "Detected uncommitted changes when running git diff.\n"
-          echo "Please run \`python qai_hub_models/scripts/run_codegen.py -a\`, "
-          echo "\`python qai_hub_models/scripts/generate_global_requirements.py\`, and "
-          echo "\`python qai_hub_models/scripts/generate_scorecard_device_yaml.py \`, then update the PR.\n"
+          echo "Please run \`python -m qai_hub_models.scripts.run_codegen -a\`, "
+          echo "\`python -m qai_hub_models.scripts.generate_global_requirements\`, and "
+          echo "\`python -m qai_hub_models.scripts.generate_scorecard_device_yaml \`, then update the PR.\n"
           exit 1
         fi
 
@@ -496,7 +496,7 @@ jobs:
             TEST_ARGS+=(--name "Verify Workbench Jobs Passed" --junit-xml build/all-test-results/workbench-jobs/qaihm-verify-workbench-jobs-junit.xml)
           fi
 
-          python qai_hub_models/scripts/generate_test_summary.py \
+          python -m qai_hub_models.scripts.generate_test_summary \
             --title "py${{ inputs.python_version }} Test" \
             "${FAILURE_ARGS[@]}" \
             "${TEST_ARGS[@]}" \

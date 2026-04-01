@@ -9,7 +9,7 @@ on:
         type: string
 
       models:
-        description: Models to run. Model names match folder names in `qai_hub_models/models`. Comma separated.
+        description: Models to run. Model names match folder names in `src/qai_hub_models/models`. Comma separated.
         type: string
         default: all
 
@@ -107,7 +107,7 @@ jobs:
           if [[ "${{ inputs.max_num_splits }}" != "0" ]]; then
             SPLIT_ARGS="$SPLIT_ARGS --max-num-pt-splits ${{ inputs.max_num_splits }}"
           fi
-          MATRIX=$(python qai_hub_models/scripts/split_torch_models.py $SPLIT_ARGS --output-format github)
+          MATRIX=$(python -m qai_hub_models.scripts.split_torch_models $SPLIT_ARGS --output-format github)
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           NUM_SPLITS=$(echo "$MATRIX" | python -c "import sys, json; print(len(json.load(sys.stdin)))")
           echo "num_splits=$NUM_SPLITS" >> "$GITHUB_OUTPUT"
@@ -171,7 +171,7 @@ jobs:
           QAIHM_TEST_MODELS: ${{ inputs.models }}
         run: |
           source "${{ env.VENV_PATH }}/bin/activate"
-          python qai_hub_models/scripts/combine_split_artifacts.py \
+          python -m qai_hub_models.scripts.combine_split_artifacts \
             --input-dir build/split-artifacts \
             --output-dir build/scorecard-yamls/${{ github.run_id }}
 

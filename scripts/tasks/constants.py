@@ -41,20 +41,16 @@ BUILD_ROOT = os.path.join(REPO_ROOT, "build")
 QAI_HUB_LATEST_PATH = os.path.join(BUILD_ROOT, "qai_hub-latest-py3-none-any.whl")
 
 # Package paths relative to repository root
-PY_PACKAGE_RELATIVE_SRC_ROOT = "qai_hub_models"
+PY_PACKAGE_RELATIVE_SRC_ROOT = os.path.join("src", "qai_hub_models")
 PY_PACKAGE_RELATIVE_MODELS_ROOT = os.path.join(PY_PACKAGE_RELATIVE_SRC_ROOT, "models")
 
 # Absolute package paths
-PY_PACKAGE_INSTALL_ROOT = REPO_ROOT
-PY_PACKAGE_SRC_ROOT = os.path.join(
-    PY_PACKAGE_INSTALL_ROOT, PY_PACKAGE_RELATIVE_SRC_ROOT
-)
+PY_PACKAGE_INSTALL_ROOT = os.path.join(REPO_ROOT, "src")
+PY_PACKAGE_SRC_ROOT = os.path.join(REPO_ROOT, PY_PACKAGE_RELATIVE_SRC_ROOT)
 PY_PACKAGE_LOCAL_CACHE = os.environ.get(
     STORE_ROOT_ENV_VAR, os.path.join(os.path.expanduser("~"), ".qaihm")
 )
-PY_PACKAGE_MODELS_ROOT = os.path.join(
-    PY_PACKAGE_INSTALL_ROOT, PY_PACKAGE_RELATIVE_MODELS_ROOT
-)
+PY_PACKAGE_MODELS_ROOT = os.path.join(REPO_ROOT, PY_PACKAGE_RELATIVE_MODELS_ROOT)
 STATIC_MODELS_ROOT = os.path.join(PY_PACKAGE_SRC_ROOT, "scorecard", "static", "models")
 
 PUBLIC_BENCH_MODELS = os.path.join(

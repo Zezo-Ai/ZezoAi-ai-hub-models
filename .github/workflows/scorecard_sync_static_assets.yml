@@ -122,7 +122,7 @@ jobs:
         id: sync-models
         run: |
           source ${{env.VENV_PATH}}/bin/activate
-          python qai_hub_models/scorecard/static/scripts/sync_model_assets.py
+          python -m qai_hub_models.scorecard.static.scripts.sync_model_assets
 
       - name: Commit & Push Changes
         id: push_results
@@ -140,7 +140,7 @@ jobs:
           # git ls-files -co includes tracked and untracked files
           # `git add` only perf yamls that have changed compared to main, and commit them.
           #
-          git add qai_hub_models/scorecard/static/models/*.yaml
+          git add src/qai_hub_models/scorecard/static/models/*.yaml
           git -c user.name='qaihm-bot_QCOM' -c user.email=qaihm_bot@qti.qualcomm.com commit -m "[Automated] Sync Scorecard Model Assets | Models: ${{inputs.models}}" || true
           git push --set-upstream origin ${{ env.PR_REF_NAME }} -f
 

@@ -17,7 +17,13 @@ from tasks.changes import (
     PrintCITestModelsTask,
     get_all_models,
 )
-from tasks.constants import BUILD_ROOT, DEFAULT_PYTHON, PY_PACKAGE_SRC_ROOT, VENV_PATH
+from tasks.constants import (
+    BUILD_ROOT,
+    DEFAULT_PYTHON,
+    PY_PACKAGE_SRC_ROOT,
+    REPO_ROOT,
+    VENV_PATH,
+)
 from tasks.plan import (
     ALL_TASKS,
     PUBLIC_TASKS,
@@ -128,11 +134,11 @@ def parse_arguments() -> argparse.Namespace:
     return args
 
 
-DEFAULT_RELEASE_DIRECTORY = os.path.join(BUILD_ROOT, "release")
+DEFAULT_RELEASE_DIRECTORY = os.path.join(REPO_ROOT, "src", "build", "release")
 RELEASE_VENV = os.path.join(BUILD_ROOT, "release_venv")
 RELEASE_WHEEL_DIR = os.path.join(DEFAULT_RELEASE_DIRECTORY, "wheel")
 RELEASE_REPO_DIR = os.path.join(DEFAULT_RELEASE_DIRECTORY, "repository")
-PRIVATE_WHEEL_DIR = os.path.join(BUILD_ROOT, "wheel")
+PRIVATE_WHEEL_DIR = os.path.join(REPO_ROOT, "src", "build", "wheel")
 
 
 def get_test_venv_wheel_dir() -> str | None:
@@ -218,8 +224,14 @@ class TaskLibrary:
     @depends_if(
         get_test_venv_wheel_dir(),
         eq=[
-            (RELEASE_WHEEL_DIR, ["build_release_wheel", "create_venv"]),
-            (PRIVATE_WHEEL_DIR, ["build_dev_wheel", "create_venv"]),
+            (
+                RELEASE_WHEEL_DIR,
+                ["build_release_wheel", "create_venv"],
+            ),
+            (
+                PRIVATE_WHEEL_DIR,
+                ["build_dev_wheel", "create_venv"],
+            ),
             # no dependencies (editable install) otherwise
         ],
         default=["create_venv"],
@@ -228,7 +240,9 @@ class TaskLibrary:
         return plan.add_step(
             step_id,
             SyncLocalQAIHMVenvTask(
-                self.venv_path, ["dev"], qaihm_wheel_dir=get_test_venv_wheel_dir()
+                self.venv_path,
+                ["dev"],
+                qaihm_wheel_dir=get_test_venv_wheel_dir(),
             ),
         )
 
@@ -302,7 +316,7 @@ class TaskLibrary:
         - QAIHM_TEST_DEVICES: Comma-separated list of QDC device names
         - QDC_API_KEY: QDC API token
 
-        Model configs are defined in qai_hub_models/scripts/run_llama_cpp_benchmarks.py
+        Model configs are defined in src/qai_hub_models/scripts/run_llama_cpp_benchmarks.py
         """
         return plan.add_step(
             step_id,
@@ -391,7 +405,7 @@ class TaskLibrary:
                 group_name=None,
                 venv=self.venv_path,
                 commands=[
-                    "python qai_hub_models/scripts/collect_scorecard_results.py --gen-csv --gen-perf-summary --sync-code-gen"
+                    "python -m qai_hub_models.scripts.collect_scorecard_results --gen-csv --gen-perf-summary --sync-code-gen"
                 ],
             ),
         )
@@ -405,7 +419,7 @@ class TaskLibrary:
                 group_name=None,
                 venv=self.venv_path,
                 commands=[
-                    "python qai_hub_models/scripts/collect_scorecard_numerics_results.py --sync-code-gen"
+                    "python -m qai_hub_models.scripts.collect_scorecard_numerics_results --sync-code-gen"
                 ],
             ),
         )
@@ -421,7 +435,7 @@ class TaskLibrary:
                 group_name=None,
                 venv=self.venv_path,
                 commands=[
-                    "python qai_hub_models/scripts/collect_scorecard_assets_results.py"
+                    "python -m qai_hub_models.scripts.collect_scorecard_assets_results"
                 ],
             ),
         )
@@ -629,7 +643,7 @@ class TaskLibrary:
             RunCommandsWithVenvTask(
                 group_name=None,
                 venv=self.venv_path,
-                commands=["python qai_hub_models/scripts/publish_release_assets.py"],
+                commands=["python -m qai_hub_models.scripts.publish_release_assets"],
             ),
         )
 
@@ -644,7 +658,7 @@ class TaskLibrary:
                 group_name=None,
                 venv=self.venv_path,
                 commands=[
-                    "python qai_hub_models/scripts/release_huggingface_model_cards.py --deprecate-removed-models"
+                    "python -m qai_hub_models.scripts.release_huggingface_model_cards --deprecate-removed-models"
                 ],
             ),
         )

@@ -289,7 +289,9 @@ class PyTestTask(RunCommandsWithVenvTask):
         ignore_no_tests_return_code: bool = False,
         include_pytest_cmd_in_status_message: bool = True,
         junit_xml_path: str | None = None,
-        config_file: str | os.PathLike = os.path.join(REPO_ROOT, "pyproject.toml"),
+        config_file: str | os.PathLike = os.path.join(
+            REPO_ROOT, "src", "pyproject.toml"
+        ),
         prereqs: list[Task] | None = None,
     ) -> None:
         pytest_options = f"--config-file={config_file}"
