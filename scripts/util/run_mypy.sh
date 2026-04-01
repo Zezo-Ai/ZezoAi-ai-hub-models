@@ -24,7 +24,11 @@ if [[ "$#" -eq 0 || "$#" -gt 100 ]]; then
   # If the changed file list is empty or especially large, just check the whole package.
   mypy_files=("-p" "qai_hub_models")
 else
-  mypy_files=("$@")
+  # Strip src/ prefix since we cd into src/
+  mypy_files=()
+  for f in "$@"; do
+    mypy_files+=("${f#src/}")
+  done
 fi
 
 # Run mypy from src/ so it can find the package

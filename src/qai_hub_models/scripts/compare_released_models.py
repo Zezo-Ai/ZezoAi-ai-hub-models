@@ -35,7 +35,9 @@ def get_directories(repo_root: str, tag: str) -> set[str]:
     subprocess.run(["git", "pull", "origin", "main"], check=True)
     subprocess.run(["git", "fetch", "--tags"], check=True)
     subprocess.run(["git", "checkout", tag], check=True)
-    models_path = os.path.join(repo_root, "qai_hub_models", "models")
+    models_path = os.path.join(repo_root, "src", "qai_hub_models", "models")
+    if not os.path.exists(models_path):
+        models_path = os.path.join(repo_root, "qai_hub_models", "models")
     return set(os.listdir(models_path))
 
 

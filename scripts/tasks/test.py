@@ -237,7 +237,7 @@ class GPUPyTestModelsTask(CompositeTask):
                         group_name=f"Run {test_suite} Tests For Model {model_name}",
                         venv=model_venv,
                         commands=[
-                            f"{common_command} && pytest -v -s --capture=no qai_hub_models/models/{model_name}/test.py {options}",
+                            f"{common_command} && pytest -v -s --capture=no src/qai_hub_models/models/{model_name}/test.py {options}",
                         ],
                         raise_on_failure=False,
                         # Ignore "no tests collected" return code
