@@ -22,7 +22,7 @@ from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.path_helpers import (
     MODEL_IDS,
     QAIHM_PACKAGE_NAME,
-    QAIHM_PACKAGE_ROOT,
+    QAIHM_REPO_ROOT,
 )
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -106,7 +106,7 @@ def main() -> None:
     """Generate the global README with a summary table for all models (including private ones)."""
     generate_global_readme(
         [QAIHMModelInfo.from_model(mid) for mid in MODEL_IDS],
-        QAIHM_PACKAGE_ROOT.parent,
+        QAIHM_REPO_ROOT,
     )
 
 

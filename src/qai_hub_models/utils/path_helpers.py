@@ -13,12 +13,13 @@ from qai_hub_models.utils.asset_loaders import load_yaml
 MODELS_PACKAGE_NAME = "models"
 QAIHM_PACKAGE_NAME = "qai_hub_models"
 QAIHM_PACKAGE_ROOT = Path(__file__).parent.parent
+QAIHM_REPO_ROOT = QAIHM_PACKAGE_ROOT.parent.parent
 
 
 def is_internal_repo() -> bool:
     """Check if running from the internal repository via git remote URL."""
     try:
-        git_config = QAIHM_PACKAGE_ROOT.parent / ".git" / "config"
+        git_config = QAIHM_REPO_ROOT / ".git" / "config"
         return "ai-hub-models-internal" in git_config.read_text()
     except (OSError, ValueError):
         return False

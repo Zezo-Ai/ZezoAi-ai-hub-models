@@ -182,12 +182,13 @@ jobs:
     - name: Check for code-gen changes
       if: ${{ inputs.precommit_scope == 'all' }}
       run: |
-        if [[ -n $(git diff) ]]; then
+        if [[ -n $(git diff) || -n $(git ls-files --others --exclude-standard) ]]; then
           git diff
-          echo "Detected uncommitted changes when running git diff.\n"
+          git ls-files --others --exclude-standard
+          echo "Detected uncommitted changes or untracked files after code-gen."
           echo "Please run \`python -m qai_hub_models.scripts.run_codegen -a\`, "
           echo "\`python -m qai_hub_models.scripts.generate_global_requirements\`, and "
-          echo "\`python -m qai_hub_models.scripts.generate_scorecard_device_yaml \`, then update the PR.\n"
+          echo "\`python -m qai_hub_models.scripts.generate_scorecard_device_yaml \`, then update the PR."
           exit 1
         fi
 

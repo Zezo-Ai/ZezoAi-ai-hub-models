@@ -20,7 +20,7 @@ from qai_hub_models.scripts.generate_model_readme import generate_and_write_mode
 from qai_hub_models.utils.path_helpers import (
     MODEL_IDS,
     QAIHM_MODELS_ROOT,
-    QAIHM_PACKAGE_ROOT,
+    QAIHM_REPO_ROOT,
 )
 
 HEADER = "# THIS FILE WAS AUTO-GENERATED. DO NOT EDIT MANUALLY."
@@ -327,9 +327,7 @@ def main() -> None:
 
     # Generate global README
     all_model_infos = [QAIHMModelInfo.from_model(mid) for mid in MODEL_IDS]
-    modified_files.append(
-        str(generate_global_readme(all_model_infos, QAIHM_PACKAGE_ROOT.parent))
-    )
+    modified_files.append(str(generate_global_readme(all_model_infos, QAIHM_REPO_ROOT)))
 
     os.environ["SKIP"] = "mypy"
     subprocess.run(["pre-commit", "run", "--files", *modified_files], check=False)
