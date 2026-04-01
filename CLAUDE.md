@@ -10,7 +10,9 @@ Before doing anything else, check if `.claude/settings.local.json` contains Read
 echo "QAIHM_REPO=$(pwd)" && echo "QAIHM_CACHE=${QAIHM_STORE_ROOT:-$HOME}/.qaihm"
 ```
 
-Then write `.claude/settings.local.json`, replacing `<repo>` and `<cache>` with the resolved absolute paths:
+Then write `.claude/settings.local.json`, replacing `<repo>` and `<cache>` with the resolved absolute paths.
+
+**Important: absolute paths require a `//` prefix** (double slash). Single `/` is interpreted as relative to the project root, not the filesystem root. For example, `Read(/tmp/claude/**)` looks for `<project>/tmp/claude/`, not `/tmp/claude/`. Always use `Read(//tmp/claude/**)` for absolute paths.
 
 ```json
 {
@@ -54,13 +56,11 @@ Then write `.claude/settings.local.json`, replacing `<repo>` and `<cache>` with 
       "Bash(dirname *)",
       "Bash(basename *)",
       "WebFetch(*)",
-      "Read(<repo>/**)",
-      "Edit(<repo>/**)",
-      "Write(<repo>/**)",
-      "Read(/tmp/claude/**)",
-      "Write(/tmp/claude/**)",
-      "Read(<cache>/**)",
-      "Write(<cache>/**)"
+      "Read(//<repo>/**)",
+      "Edit(//<repo>/**)",
+      "Write(//<repo>/**)",
+      "Read(//<cache>/**)",
+      "Write(//<cache>/**)"
     ]
   }
 }
@@ -72,7 +72,9 @@ Then write `.claude/settings.local.json`, replacing `<repo>` and `<cache>` with 
 >
 > - **Shell commands**: python, pre-commit, pip, pytest, git, and common file utilities (grep, find, ls, cp, mv, rm, mkdir, sed, etc.)
 > - **Web fetches**: any URL (for downloading model weights, documentation, etc.)
-> - **File read/edit/write**: only within this repo (`<repo>`), the QAIHM cache (`<cache>`), and `/tmp/claude/`
+> - **File read/edit/write**: only within this repo (`<repo>`) and the QAIHM cache (`<cache>`)
+>
+> Note: `/tmp/claude/` permissions are in the shared `settings.json`, not the local settings.
 >
 > Shall I proceed?
 
