@@ -340,7 +340,10 @@ class RuntimeTorchWrapper(ABC, ExecutableModelProtocol, Generic[ModelIODetailsT]
                     and output_name in self.dequantize_model_output
                 ):
                     output = (
-                        (output - np.int32(output_details.qdq_params.zero_point))
+                        (
+                            output.astype(np.int32)
+                            - np.int32(output_details.qdq_params.zero_point)
+                        )
                         * np.float64(output_details.qdq_params.scale)
                     ).astype(np.float32)
 
