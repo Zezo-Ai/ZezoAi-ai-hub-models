@@ -22,7 +22,7 @@ class ValidateAwsCredentialsTask(ConditionalTask):
                 "Validating AWS credentials",
                 venv_path,
                 [
-                    f'if [ -d "{aws_script_path}" ]; then source {install_saml2aws_path}; fi',
+                    f'if [ -d "{aws_script_path}" ]; then bash {install_saml2aws_path}; fi',
                     f'if [ -d "{aws_script_path}" ]; then python {validate_creds_path}; fi',
                 ],
             ),
