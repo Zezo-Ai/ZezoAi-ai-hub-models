@@ -46,7 +46,9 @@ PY_PACKAGE_RELATIVE_MODELS_ROOT = os.path.join(PY_PACKAGE_RELATIVE_SRC_ROOT, "mo
 
 # Absolute package paths
 PY_PACKAGE_INSTALL_ROOT = os.path.join(REPO_ROOT, "src")
+PY_CLI_INSTALL_ROOT = os.path.join(REPO_ROOT, "cli")
 PY_PACKAGE_SRC_ROOT = os.path.join(REPO_ROOT, PY_PACKAGE_RELATIVE_SRC_ROOT)
+PY_CLI_SRC_ROOT = os.path.join(PY_CLI_INSTALL_ROOT, "qai_hub_models_cli")
 PY_PACKAGE_LOCAL_CACHE = os.environ.get(
     STORE_ROOT_ENV_VAR, os.path.join(os.path.expanduser("~"), ".qaihm")
 )

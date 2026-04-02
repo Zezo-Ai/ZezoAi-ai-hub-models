@@ -15,12 +15,13 @@ from .constants import (
     DEFAULT_PYTHON,
     DEV_REQUIREMENTS_PATH,
     GLOBAL_REQUIREMENTS_PATH,
+    PY_CLI_INSTALL_ROOT,
     PY_PACKAGE_INSTALL_ROOT,
     PY_PACKAGE_MODELS_ROOT,
     REPO_ROOT,
     REQUIREMENTS_PATH,
 )
-from .task import RunCommandsTask, RunCommandsWithVenvTask
+from .task import CompositeTask, RunCommandsTask, RunCommandsWithVenvTask
 from .util import get_code_gen_str_field, get_pip, has_cuda_gpu, uv_installed
 
 
@@ -232,7 +233,40 @@ class InstallGlobalRequirementsTask(RunCommandsWithVenvTask):
         )
 
 
-class SyncLocalQAIHMVenvTask(RunCommandsWithVenvTask):
+class InstallCLITask(RunCommandsWithVenvTask):
+    """Install the qai_hub_models_cli package from a wheel or as editable."""
+
+    def __init__(
+        self,
+        venv_path: str | None,
+        cli_wheel_dir: str | os.PathLike | None = None,
+        junit_xml_path: str | None = None,
+        junit_testsuite: str = "",
+        junit_name: str = "install_cli",
+        junit_classname: str = "qai_hub_models_cli",
+    ) -> None:
+        if cli_wheel_dir is not None:
+            commands = [
+                f"{get_pip()} install $(ls {cli_wheel_dir}/qai_hub_models_cli-*.whl)",
+            ]
+            install_method = "wheel"
+        else:
+            commands = [
+                f'{get_pip()} install -e "{PY_CLI_INSTALL_ROOT}"',
+            ]
+            install_method = "editable"
+        super().__init__(
+            group_name=f"Install CLI ({install_method})",
+            venv=venv_path,
+            commands=commands,
+            junit_xml_path=junit_xml_path,
+            junit_testsuite=junit_testsuite,
+            junit_name=junit_name,
+            junit_classname=junit_classname,
+        )
+
+
+class SyncLocalQAIHMVenvTask(CompositeTask):
     """Sync the provided environment with local QAIHM and the provided extras."""
 
     def __init__(
@@ -242,6 +276,7 @@ class SyncLocalQAIHMVenvTask(RunCommandsWithVenvTask):
         flags: str | None = None,
         pre_install: str | None = None,
         qaihm_wheel_dir: str | os.PathLike | None = None,
+        cli_wheel_dir: str | os.PathLike | None = None,
         junit_xml_path: str | None = None,
         junit_testsuite: str = "",
         junit_name: str = "",
@@ -279,8 +314,14 @@ class SyncLocalQAIHMVenvTask(RunCommandsWithVenvTask):
 
         super().__init__(
             group_name=f"Install QAIHM{extras_str} ({install_method})",
-            venv=venv_path,
-            commands=commands,
+            tasks=[
+                InstallCLITask(venv_path, cli_wheel_dir),
+                RunCommandsWithVenvTask(
+                    group_name=f"Install QAIHM{extras_str} ({install_method})",
+                    venv=venv_path,
+                    commands=commands,
+                ),
+            ],
             junit_xml_path=junit_xml_path,
             junit_testsuite=junit_testsuite,
             junit_name=junit_name,
@@ -297,6 +338,7 @@ class SyncModelVenvTask(SyncLocalQAIHMVenvTask):
         venv_path: str | None,
         include_dev_deps: bool = False,
         qaihm_wheel_dir: str | os.PathLike | None = None,
+        cli_wheel_dir: str | os.PathLike | None = None,
         junit_xml_path: str | None = None,
     ) -> None:
         extras = []
@@ -313,6 +355,7 @@ class SyncModelVenvTask(SyncLocalQAIHMVenvTask):
             get_code_gen_str_field(model_name, "pip_install_flags"),
             get_code_gen_str_field(model_name, "pip_pre_build_reqs"),
             qaihm_wheel_dir,
+            cli_wheel_dir=cli_wheel_dir,
             junit_xml_path=junit_xml_path,
             junit_testsuite="pytest",
             junit_name="environment_setup",

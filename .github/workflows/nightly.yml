@@ -159,14 +159,18 @@ jobs:
             python -m qai_hub_models.scripts.generate_test_summary \
               --title "Nightly Test" \
               "${FAILURE_ARGS[@]}" \
-              --name "py3.10 Unit Tests" --junit-xml build/all-test-results/py310/qaihm-unit-tests-junit.xml \
+              --name "py3.10 QAIHM Tests" --junit-xml build/all-test-results/py310/qaihm-unit-tests-junit.xml \
+              --name "py3.10 CLI Tests" --junit-xml build/all-test-results/py310/qaihm-cli-tests-junit.xml \
               --name "py3.10 Model Tests" --junit-xml build/all-test-results/py310/qaihm-model-tests-junit.xml \
               --name "py3.10 Verify Workbench Jobs" --junit-xml build/all-test-results/py310/qaihm-verify-workbench-jobs-junit.xml \
-              --name "py3.11 Unit Tests" --junit-xml build/all-test-results/py311/qaihm-unit-tests-junit.xml \
+              --name "py3.11 QAIHM Tests" --junit-xml build/all-test-results/py311/qaihm-unit-tests-junit.xml \
+              --name "py3.11 CLI Tests" --junit-xml build/all-test-results/py311/qaihm-cli-tests-junit.xml \
               --name "py3.11 Model Tests" --junit-xml build/all-test-results/py311/qaihm-model-tests-junit.xml \
-              --name "py3.12 Unit Tests" --junit-xml build/all-test-results/py312/qaihm-unit-tests-junit.xml \
+              --name "py3.12 QAIHM Tests" --junit-xml build/all-test-results/py312/qaihm-unit-tests-junit.xml \
+              --name "py3.12 CLI Tests" --junit-xml build/all-test-results/py312/qaihm-cli-tests-junit.xml \
               --name "py3.12 Model Tests" --junit-xml build/all-test-results/py312/qaihm-model-tests-junit.xml \
-              --name "py3.13 Unit Tests" --junit-xml build/all-test-results/py313/qaihm-unit-tests-junit.xml \
+              --name "py3.13 QAIHM Tests" --junit-xml build/all-test-results/py313/qaihm-unit-tests-junit.xml \
+              --name "py3.13 CLI Tests" --junit-xml build/all-test-results/py313/qaihm-cli-tests-junit.xml \
               --name "py3.13 Model Tests" --junit-xml build/all-test-results/py313/qaihm-model-tests-junit.xml \
               --name "Scorecard Job Submission" --junit-xml build/all-test-results/scorecard/qaihm-model-tests-junit.xml \
               --name "Scorecard Accuracy Collection" --junit-xml build/all-test-results/scorecard/qaihm-device-accuracy-tests-junit.xml \

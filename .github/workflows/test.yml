@@ -256,8 +256,8 @@ jobs:
         run: |
           mkdir -p "${{ github.workspace }}/test-results"
 
-      - name: Run Tests
-        id: run-tests
+      - name: Run QAIHM Tests
+        id: run-qaihm-tests
         env:
           QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/test-results/qaihm-unit-tests-junit.xml
         run: |
@@ -265,6 +265,16 @@ jobs:
             --venv="${{ env.VENV_PATH }}" \
             --python="${{ steps.setup_python.outputs.python-path }}" \
             test_qaihm
+
+      - name: Run CLI Tests
+        id: run-cli-tests
+        env:
+          QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/test-results/qaihm-cli-tests-junit.xml
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            test_cli
 
       - name: Upload Test Results
         if: ${{ always() }}
@@ -488,7 +498,8 @@ jobs:
 
           # Build test input arguments, excluding skipped tests
           TEST_ARGS=(
-            --name "Unit Tests" --junit-xml build/all-test-results/unit-tests/qaihm-unit-tests-junit.xml
+            --name "QAIHM Tests" --junit-xml build/all-test-results/unit-tests/qaihm-unit-tests-junit.xml
+            --name "CLI Tests" --junit-xml build/all-test-results/unit-tests/qaihm-cli-tests-junit.xml
           )
           if [[ "$MODEL_TESTS_SKIPPED" != "true" ]]; then
             TEST_ARGS+=(--name "Model Tests" --junit-xml build/all-test-results/model-tests/qaihm-model-tests-junit.xml)

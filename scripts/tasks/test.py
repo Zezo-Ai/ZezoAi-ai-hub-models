@@ -288,6 +288,7 @@ class PyTestModelTask(CompositeTask):
         install_deps: bool = True,
         raise_on_failure: bool = False,
         qaihm_wheel_dir: str | os.PathLike | None = None,
+        cli_wheel_dir: str | os.PathLike | None = None,
         junit_xml_path: str | None = None,
     ) -> None:
         tasks = []
@@ -329,6 +330,7 @@ class PyTestModelTask(CompositeTask):
                     model_venv,
                     include_dev_deps=True,
                     qaihm_wheel_dir=qaihm_wheel_dir,
+                    cli_wheel_dir=cli_wheel_dir,
                     junit_xml_path=junit_xml_path,
                 )
                 tasks.append(setup_task)
@@ -482,6 +484,7 @@ class PyTestModelsTask(CompositeTask):
         exit_after_single_model_failure: bool = False,
         raise_on_failure: bool = True,
         qaihm_wheel_dir: str | os.PathLike | None = None,
+        cli_wheel_dir: str | os.PathLike | None = None,
         junit_xml_path: str | None = os.environ.get("QAIHM_JUNIT_XML_PATH"),
     ) -> None:
         self.exit_after_single_model_failure = exit_after_single_model_failure
@@ -520,7 +523,10 @@ class PyTestModelsTask(CompositeTask):
             tasks.append(CreateVenvTask(base_test_venv, python_executable))
             tasks.append(
                 SyncLocalQAIHMVenvTask(
-                    base_test_venv, ["dev"], qaihm_wheel_dir=qaihm_wheel_dir
+                    base_test_venv,
+                    ["dev"],
+                    qaihm_wheel_dir=qaihm_wheel_dir,
+                    cli_wheel_dir=cli_wheel_dir,
                 )
             )
 
@@ -594,6 +600,7 @@ class PyTestModelsTask(CompositeTask):
                     # Do not raise on failure; let PyTestModelsTask::run_tasks handle this
                     raise_on_failure=False,
                     qaihm_wheel_dir=qaihm_wheel_dir,
+                    cli_wheel_dir=cli_wheel_dir,
                     junit_xml_path=model_junit_xml_path,
                 )
             )

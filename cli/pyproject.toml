@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools >= 80", "setuptools-scm>=9,<10"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qai_hub_models_cli"
+dynamic = ["version"]
+description = "CLI for Qualcomm AI Hub Models."
+requires-python = ">=3.10, <3.14"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Qualcomm® Technologies, Inc", email = "ai-hub-support@qti.qualcomm.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+]
+
+[project.scripts]
+qai_hub_models = "qai_hub_models_cli.cli:main"
+qai-hub-models = "qai_hub_models_cli.cli:main"
+
+[project.urls]
+Homepage = "https://aihub.qualcomm.com/models"
+GitHub = "https://github.com/qualcomm/ai-hub-models"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools_scm]
+root = ".."
+version_file = "qai_hub_models_cli/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = "qai_hub_models_cli"
+python_files = ["test_*.py"]
+
+[tool.pydoclint]
+style = 'numpy'
+arg-type-hints-in-docstring = false
+skip-checking-short-docstrings = true
+skip-checking-raises = true
+allow-init-docstring = true
+check-style-mismatch = true
+
+[tool.mypy]
+ignore_missing_imports = true
+warn_unused_ignores = true

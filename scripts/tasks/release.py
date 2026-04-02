@@ -13,6 +13,7 @@ from .util import get_env_bool, on_ci
 from .venv import CreateVenvTask, RunCommandsWithVenvTask
 
 EGG_INFO_DIR = os.path.join(REPO_ROOT, "src", "qai_hub_models.egg-info")
+CLI_EGG_INFO_DIR = os.path.join(REPO_ROOT, "cli", "qai_hub_models_cli.egg-info")
 
 
 class CreateReleaseVenv(CompositeTask):
@@ -80,3 +81,30 @@ class BuildWheelTask(CompositeTask):
             )
 
         super().__init__(f"Build Wheel to: {wheel_dir}", tasks)
+
+
+class BuildCLIWheelTask(CompositeTask):
+    """Build the qai_hub_models_cli wheel."""
+
+    def __init__(
+        self,
+        venv: str | None,
+        wheel_dir: str | os.PathLike,
+        src_dir: str | os.PathLike,
+    ) -> None:
+        tasks = []
+
+        os.makedirs(wheel_dir, exist_ok=True)
+        tasks.append(
+            RunCommandsWithVenvTask(
+                "Build CLI Wheel",
+                venv=venv,
+                commands=[
+                    f"rm -rf '{CLI_EGG_INFO_DIR}'",
+                    f"rm -f '{os.path.join(wheel_dir, 'qai_hub_models_cli-*.whl')}'",
+                    f"python -m build --wheel --outdir {wheel_dir} {src_dir}",
+                ],
+            )
+        )
+
+        super().__init__(f"Build CLI Wheel to: {wheel_dir}", tasks)

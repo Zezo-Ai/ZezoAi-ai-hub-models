@@ -4,6 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qai_hub_models"
+# "dependencies" and "optional-dependencies" are provided by setup.py
 dynamic = ["version", "dependencies", "optional-dependencies"]
 description = "Popular Machine Learning models optimized for Qualcomm chipsets."
 requires-python = ">=3.10, <3.14"
@@ -32,9 +33,6 @@ HuggingFace = "https://huggingface.co/qualcomm"
 py-modules = []
 include-package-data = false
 
-[tool.setuptools.dynamic]
-dependencies = {file = ["qai_hub_models/requirements.txt"]}
-
 [tool.setuptools.package-data]
 qai_hub_models = ["**/*.yaml", "**/*.txt", "**/*.json", "**/*.diff", "**/*.md", "**/*.j2", "**/*.env", "**/*.csv"]
 
@@ -49,7 +47,7 @@ skip-checking-short-docstrings = true
 skip-checking-raises = true
 allow-init-docstring = true
 check-style-mismatch = true
-exclude = 'src/qai_hub_models/extern/.*|src/qai_hub_models/models/llama_v2_7b_chat/modeling_llama.py'
+exclude = 'src/qai_hub_models/extern/.*|src/qai_hub_models/models/llama_v2_7b_chat/modeling_llama\.py'
 
 [tool.mypy]
 ignore_missing_imports = true

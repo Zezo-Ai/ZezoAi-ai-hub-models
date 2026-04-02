@@ -14,24 +14,31 @@ set_strict_mode
 
 cd "$(dirname "$0")/../.."
 
-# Uncomment "echo"s below to debug
-
 venv="${VENV_PATH:-qaihm-dev}"
-# echo "Activating venv in ${venv}"
 source "${venv}/bin/activate"
 
-if [[ "$#" -eq 0 || "$#" -gt 100 ]]; then
-  # If the changed file list is empty or especially large, just check the whole package.
-  mypy_files=("-p" "qai_hub_models")
+# First argument is the package directory (src or cli).
+pkg_dir="$1"
+shift
+
+if [[ "$pkg_dir" == "src" ]]; then
+  package="qai_hub_models"
+elif [[ "$pkg_dir" == "cli" ]]; then
+  package="qai_hub_models_cli"
 else
-  # Strip src/ prefix since we cd into src/
-  mypy_files=()
-  for f in "$@"; do
-    mypy_files+=("${f#src/}")
-  done
+  echo "Usage: run_mypy.sh <src|cli> [files...]" >&2
+  exit 1
 fi
 
-# Run mypy from src/ so it can find the package
-cd "${REPO_ROOT}/src"
-# echo "Checking ${mypy_files[*]}"
-mypy --warn-unused-configs --config-file="${REPO_ROOT}/src/pyproject.toml" "${mypy_files[@]}"
+cd "${REPO_ROOT}/${pkg_dir}"
+
+if [[ "$#" -eq 0 || "$#" -gt 100 ]]; then
+  mypy --warn-unused-configs --config-file="${REPO_ROOT}/${pkg_dir}/pyproject.toml" -p "${package}"
+else
+  # Strip the package prefix (src/ or cli/) since we cd into that directory.
+  files=()
+  for f in "$@"; do
+    files+=("${f#${pkg_dir}/}")
+  done
+  mypy --warn-unused-configs --config-file="${REPO_ROOT}/${pkg_dir}/pyproject.toml" "${files[@]}"
+fi

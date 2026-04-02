@@ -20,6 +20,8 @@ from tasks.changes import (
 from tasks.constants import (
     BUILD_ROOT,
     DEFAULT_PYTHON,
+    PY_CLI_INSTALL_ROOT,
+    PY_CLI_SRC_ROOT,
     PY_PACKAGE_SRC_ROOT,
     REPO_ROOT,
     VENV_PATH,
@@ -36,6 +38,7 @@ from tasks.plan import (
     task,
 )
 from tasks.release import (
+    BuildCLIWheelTask,
     BuildWheelTask,
     CreateReleaseVenv,
 )
@@ -63,6 +66,7 @@ from tasks.venv import (
     DownloadQAIRTAutoSDKTask,
     DownloadQDCWheelTask,
     GenerateGlobalRequirementsTask,
+    InstallCLITask,
     SyncLocalQAIHMVenvTask,
 )
 
@@ -139,6 +143,7 @@ RELEASE_VENV = os.path.join(BUILD_ROOT, "release_venv")
 RELEASE_WHEEL_DIR = os.path.join(DEFAULT_RELEASE_DIRECTORY, "wheel")
 RELEASE_REPO_DIR = os.path.join(DEFAULT_RELEASE_DIRECTORY, "repository")
 PRIVATE_WHEEL_DIR = os.path.join(REPO_ROOT, "src", "build", "wheel")
+CLI_WHEEL_DIR = os.path.join(PY_CLI_SRC_ROOT, "build", "wheel")
 
 
 def get_test_venv_wheel_dir() -> str | None:
@@ -152,6 +157,18 @@ def get_test_venv_wheel_dir() -> str | None:
         return RELEASE_WHEEL_DIR
     if on_ci() and not get_env_bool("QAIHM_CI_USE_EDITABLE_INSTALL"):
         return PRIVATE_WHEEL_DIR
+    return None  # editable install
+
+
+def get_cli_wheel_dir() -> str | None:
+    """
+    Get the directory with built cli wheels for testing.
+    Returns None if an editable install should be used instead.
+    """
+    if get_env_bool("QAIHM_TEST_USE_PUBLIC_WHEEL"):
+        return CLI_WHEEL_DIR
+    if on_ci() and not get_env_bool("QAIHM_CI_USE_EDITABLE_INSTALL"):
+        return CLI_WHEEL_DIR
     return None  # editable install
 
 
@@ -226,11 +243,11 @@ class TaskLibrary:
         eq=[
             (
                 RELEASE_WHEEL_DIR,
-                ["build_release_wheel", "create_venv"],
+                ["build_release_wheel", "build_cli_wheel", "create_venv"],
             ),
             (
                 PRIVATE_WHEEL_DIR,
-                ["build_dev_wheel", "create_venv"],
+                ["build_dev_wheel", "build_cli_wheel", "create_venv"],
             ),
             # no dependencies (editable install) otherwise
         ],
@@ -243,6 +260,7 @@ class TaskLibrary:
                 self.venv_path,
                 ["dev"],
                 qaihm_wheel_dir=get_test_venv_wheel_dir(),
+                cli_wheel_dir=get_cli_wheel_dir(),
             ),
         )
 
@@ -457,6 +475,7 @@ class TaskLibrary:
             exit_after_single_model_failure=False,
             test_trace=False,
             qaihm_wheel_dir=get_test_venv_wheel_dir(),
+            cli_wheel_dir=get_cli_wheel_dir(),
             run_mypy=True,
         )
 
@@ -506,6 +525,7 @@ class TaskLibrary:
             exit_after_single_model_failure=False,
             test_trace=False,
             qaihm_wheel_dir=get_test_venv_wheel_dir(),
+            cli_wheel_dir=get_cli_wheel_dir(),
         )
 
     @public_task("Run pre-quantize ONNX compile jobs for all models.")
@@ -616,7 +636,7 @@ class TaskLibrary:
         return plan.add_step(step_id, release_venv_task)
 
     @public_task(description="Build Release Python Wheel")
-    @depends(["install_release_deps"])
+    @depends(["install_release_deps", "build_cli_wheel"])
     def build_release_wheel(
         self, plan: Plan, step_id: str = "build_release_wheel"
     ) -> str:
@@ -628,11 +648,48 @@ class TaskLibrary:
         )
 
     @public_task("Build Development Python Wheel")
-    @depends(["install_release_deps"])
+    @depends(["install_release_deps", "build_cli_wheel"])
     def build_dev_wheel(self, plan: Plan, step_id: str = "build_dev_wheel") -> str:
         return plan.add_step(
             step_id,
             BuildWheelTask(RELEASE_VENV, PRIVATE_WHEEL_DIR, release_wheel=False),
+        )
+
+    @public_task("Build CLI Python Wheel")
+    @depends(["install_release_deps"])
+    def build_cli_wheel(self, plan: Plan, step_id: str = "build_cli_wheel") -> str:
+        return plan.add_step(
+            step_id,
+            BuildCLIWheelTask(RELEASE_VENV, CLI_WHEEL_DIR, PY_CLI_INSTALL_ROOT),
+        )
+
+    @public_task("Install dependencies for the CLI package.")
+    @depends_if(
+        get_cli_wheel_dir(),
+        eq=[
+            (CLI_WHEEL_DIR, ["build_cli_wheel", "create_venv"]),
+        ],
+        default=["create_venv"],
+    )
+    def install_cli_deps(self, plan: Plan, step_id: str = "install_cli_deps") -> str:
+        return plan.add_step(
+            step_id,
+            InstallCLITask(self.venv_path, get_cli_wheel_dir()),
+        )
+
+    @public_task("Run tests for the CLI package.")
+    @depends(["install_cli_deps"])
+    def test_cli(self, plan: Plan, step_id: str = "test_cli") -> str:
+        return plan.add_step(
+            step_id,
+            PyTestTask(
+                group_name="Test CLI",
+                venv=self.venv_path,
+                files_or_dirs=PY_CLI_SRC_ROOT,
+                parallel=True,
+                config_file=os.path.join(PY_CLI_INSTALL_ROOT, "pyproject.toml"),
+                junit_xml_path=os.environ.get("QAIHM_JUNIT_XML_PATH"),
+            ),
         )
 
     @public_task("Push QAIHM Assets to AWS S3")

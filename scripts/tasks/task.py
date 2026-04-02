@@ -359,10 +359,18 @@ class CompositeTask(Task):
         continue_after_single_task_failure: bool = False,
         raise_on_failure: bool = True,
         show_subtasks_in_failure_message: bool = True,
+        junit_xml_path: str | None = None,
+        junit_testsuite: str = "",
+        junit_name: str = "",
+        junit_classname: str = "",
     ) -> None:
         super().__init__(
             group_name,
             raise_on_failure,
+            junit_xml_path=junit_xml_path,
+            junit_testsuite=junit_testsuite,
+            junit_name=junit_name,
+            junit_classname=junit_classname,
             # Don't group logs if subtasks use groups. GH can't handle nested groups.
             group_logs_on_ci=not any(t.group_logs_on_ci for t in tasks),
         )

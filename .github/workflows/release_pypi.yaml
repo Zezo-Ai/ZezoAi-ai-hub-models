@@ -64,7 +64,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Build public wheel
+      - name: Build wheels
         run: |
           python3 scripts/build_and_test.py build_release_wheel
 
@@ -76,4 +76,4 @@ jobs:
         run: |
           source build/release_venv/bin/activate
           pip install twine
-          twine upload --verbose src/build/release/wheel/*.whl
+          twine upload --verbose src/build/release/wheel/*.whl cli/build/wheel/*.whl

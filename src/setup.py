@@ -9,6 +9,7 @@ import re
 from typing import Literal
 
 from setuptools import find_packages, setup
+from setuptools_scm import get_version
 
 PACKAGE_ROOT = (pathlib.Path(__file__).parent / "qai_hub_models").absolute()
 MODELS_ROOT = PACKAGE_ROOT / "models"
@@ -119,10 +120,18 @@ def _get_excluded_packages() -> list[str]:
     )
 
 
+def _get_install_requires() -> list[str]:
+    version = get_version(root="..")
+    reqs = _load_requirements(PACKAGE_ROOT / REQS_FILENAME)
+    reqs.append(f"qai_hub_models_cli=={version}")
+    return reqs
+
+
 setup(
     packages=find_packages(
         include=["qai_hub_models*"], exclude=_get_excluded_packages()
     ),
+    install_requires=_get_install_requires(),
     extras_require=_get_extras(),
     exclude_package_data=_get_excluded_package_data(),
 )
