@@ -416,13 +416,13 @@ class QcGEGLU(nn.Module):
             self.hidden_proj.weight.copy_(
                 linear_weight[:dim_out, :].view(dim_out, dim_in, 1, 1)
             )
-            if linear_bias and self.hidden_proj.bias:
+            if linear_bias is not None and self.hidden_proj.bias is not None:
                 self.hidden_proj.bias.copy_(linear_bias[:dim_out])
 
             self.gate_proj.weight.copy_(
                 linear_weight[dim_out:, :].view(dim_out, dim_in, 1, 1)
             )
-            if linear_bias and self.gate_proj.bias:
+            if linear_bias is not None and self.gate_proj.bias is not None:
                 self.gate_proj.bias.copy_(linear_bias[dim_out:])
 
     def gelu(self, gate: torch.Tensor) -> torch.Tensor:

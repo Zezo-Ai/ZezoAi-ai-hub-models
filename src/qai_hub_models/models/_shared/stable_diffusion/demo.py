@@ -4,11 +4,16 @@
 # ---------------------------------------------------------------------
 
 
+import copy
 import os
 
+import torch
 from PIL import Image
 
-from qai_hub_models.models._shared.controlnet.model import ControlNetBase
+from qai_hub_models.models._shared.controlnet.model import (
+    ControlNetBase,
+    ControlUnetBase,
+)
 from qai_hub_models.models._shared.stable_diffusion.app import (
     OUT_H,
     OUT_W,
@@ -103,6 +108,12 @@ def stable_diffusion_demo(
         help="Number of diffusion steps",
     )
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="Random generator seed",
+    )
+    parser.add_argument(
         "--guidance-scale",
         type=float,
         default=default_guidance_scale,
@@ -112,23 +123,28 @@ def stable_diffusion_demo(
 
     validate_on_device_demo_args(args, model_id)
 
+    if args.eval_mode == EvalMode.ON_DEVICE:
+        host_device = torch.device("cpu")
+    else:
+        host_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     canny_image = None
     if use_controlnet:
         # TODO: load this into torch.Tensor
         canny_image_pil = Image.open(args.image)
-        canny_image = make_canny(canny_image_pil, OUT_H, OUT_W)
+        canny_image = make_canny(canny_image_pil, OUT_H, OUT_W).to(host_device)
 
     controlnet = None
     if args.eval_mode == EvalMode.FP:
-        model_kwargs = get_model_kwargs(model_cls, vars(args))
-        # model = model_cls.from_pretrained(**kwargs)
+        model_kwargs = dict(get_model_kwargs(model_cls, vars(args)))
+        model_kwargs["host_device"] = host_device
 
         text_encoder_cls = model_cls.component_classes[0]
         assert issubclass(text_encoder_cls, TextEncoderBase)
         text_encoder = text_encoder_cls.torch_from_pretrained(**model_kwargs)
 
         unet_cls = model_cls.component_classes[1]
-        assert issubclass(unet_cls, UnetBase)
+        assert issubclass(unet_cls, (UnetBase, ControlUnetBase))
         unet = unet_cls.torch_from_pretrained(**model_kwargs)
 
         vae_cls = model_cls.component_classes[2]
@@ -140,7 +156,9 @@ def stable_diffusion_demo(
             assert issubclass(controlnet_cls, ControlNetBase)
             controlnet = controlnet_cls.torch_from_pretrained(**model_kwargs)
     else:
-        models = demo_model_components_from_cli_args(model_cls, model_id, args)
+        cli_args = copy.copy(args)
+        cli_args.host_device = host_device
+        models = demo_model_components_from_cli_args(model_cls, model_id, cli_args)
         if use_controlnet:
             text_encoder, unet, vae_decoder, controlnet = models  # type: ignore[assignment]
         else:
@@ -158,12 +176,14 @@ def stable_diffusion_demo(
         scheduler=scheduler,
         # OnDeviceModel account for channel_last already
         channel_last_latent=False,
+        host_device=host_device,
         controlnet=controlnet,
     )
 
     image = app.generate_image(
         args.prompt,
         num_steps=args.num_steps,
+        seed=args.seed,
         guidance_scale=args.guidance_scale,
         cond_image=canny_image,
     )

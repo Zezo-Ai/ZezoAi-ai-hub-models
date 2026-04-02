@@ -140,8 +140,9 @@ def stable_diffusion_quantize(
         checkpoint=args.checkpoint,
         use_controlnet=use_controlnet,
         prompt_path=args.prompt,
-        image_cond_path=args.image_cond,
     )
+    if use_controlnet:
+        dataset_options["image_cond_path"] = args.image_cond
 
     # get_calibration_data is also used in submit_quantize_job for non-aimet
     # models

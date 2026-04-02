@@ -140,10 +140,10 @@ class StableDiffusionApp:
                 cond_embeddings, uncond_embeddings = torch.split(embeddings, 1, 0)
             else:
                 cond_embeddings = self.text_encoder(
-                    text_input.input_ids.type(torch.int32)
+                    text_input.input_ids.type(torch.int32).to(self.host_device)
                 )
                 uncond_embeddings = self.text_encoder(
-                    uncond_input.input_ids.type(torch.int32)
+                    uncond_input.input_ids.type(torch.int32).to(self.host_device)
                 )
             return cond_embeddings, uncond_embeddings
 
@@ -293,10 +293,18 @@ def run_diffusion_steps_on_latents(
     with torch.no_grad():
         # Prepare scheduler and initial noise
         scheduler.set_timesteps(num_steps)  # type: ignore[attr-defined]
+
         latents_shape = (1, 4, OUT_H // 8, OUT_W // 8)
-        generator = torch.manual_seed(seed)
+        generator = torch.Generator(device=host_device).manual_seed(seed)
         latents = torch.randn(latents_shape, generator=generator, device=host_device)
-        latents = latents * scheduler.init_noise_sigma  # type: ignore[attr-defined]
+        init_sigma = scheduler.init_noise_sigma  # type: ignore[attr-defined]
+        assert float(init_sigma) != 0.0, (
+            "init_noise_sigma is 0.0 — scheduler may not be properly configured. "
+            "Check that the scheduler matches the model (e.g. prediction_type, beta schedule)."
+        )
+        if isinstance(init_sigma, torch.Tensor):
+            init_sigma = init_sigma.to(host_device)
+        latents = latents * init_sigma
 
         # Initialize storage for UNet calibration data
         unet_inputs = defaultdict(list)
@@ -310,8 +318,8 @@ def run_diffusion_steps_on_latents(
             time_input = torch.as_tensor([[t]], dtype=torch.float32).to(host_device)
 
             latent_input = scheduler.scale_model_input(  # type: ignore[attr-defined]
-                latents, t
-            )
+                latents.to("cpu"), t
+            ).to(host_device)
             if channel_last_latent:
                 latent_input = _make_channel_last_torch(latent_input).to(host_device)
 
@@ -383,10 +391,13 @@ def run_diffusion_steps_on_latents(
                 )
 
             if channel_last_latent:
-                noise_pred = _make_channel_first_torch(noise_pred).to(host_device)
+                noise_pred = _make_channel_first_torch(noise_pred)
+            # Scheduler runs on CPU (its internal tensors are on CPU).
+            # Move noise_pred and latents to CPU for the step, then back.
+            noise_pred = noise_pred.to("cpu")
             latents = scheduler.step(  # type: ignore[attr-defined]
-                noise_pred, t, latents
-            ).prev_sample
+                noise_pred, t, latents.to("cpu")
+            ).prev_sample.to(host_device)
 
         if return_all_steps:
             vae_inputs = {"latent": [latents]}

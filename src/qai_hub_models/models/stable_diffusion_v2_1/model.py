@@ -18,7 +18,7 @@ from qai_hub_models.models._shared.stable_diffusion.model import (
 )
 from qai_hub_models.utils.base_model import CollectionModel
 
-MODEL_ASSET_VERSION = 3
+MODEL_ASSET_VERSION = 4
 MODEL_ID = __name__.split(".")[-2]
 HF_REPO = "sd2-community/stable-diffusion-2-1"
 
