@@ -874,7 +874,9 @@ def export_model(
     if not skip_summary:
         print_tool_versions(tool_versions, tool_versions_are_from_device_job)
         {% if print_demo_cmd -%}
-        print_on_target_demo_cmd(compile_job{{"s.values()" if is_collection_model}}, Path(__file__).parent, device)
+        print_on_target_demo_cmd(
+            link_job{{"s.values()" if is_collection_model}} if link_job{{ optional_s }} else compile_job{{"s.values()" if is_collection_model}}, Path(__file__).parent, device
+        )
         {%- endif %}
 
     if downloaded_model_path:

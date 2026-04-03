@@ -409,8 +409,21 @@ class AsyncOnDeviceModel:
         compile_output_names = None
         if isinstance(self.model.producer, (hub.CompileJob, hub.QuantizeJob)):
             self.input_names = self.input_names or list(self.model.producer.shapes)
-        if isinstance(self.model.producer, hub.CompileJob):
-            compile_options = parse_compile_options(self.model.producer)
+        elif isinstance(self.model.producer, hub.LinkJob) and isinstance(
+            self.model.producer.models[0].producer, hub.CompileJob
+        ):
+            self.input_names = self.input_names or list(
+                self.model.producer.models[0].producer.shapes
+            )
+        if isinstance(self.model.producer, (hub.CompileJob, hub.LinkJob)):
+            if isinstance(self.model.producer, hub.LinkJob) and isinstance(
+                self.model.producer.models[0].producer, hub.CompileJob
+            ):
+                compile_options = parse_compile_options(
+                    self.model.producer.models[0].producer
+                )
+            elif isinstance(self.model.producer, hub.CompileJob):
+                compile_options = parse_compile_options(self.model.producer)
             self.channel_last_input = compile_options.channel_last_input or []
             self.channel_last_output = compile_options.channel_last_output or []
             compile_output_names = compile_options.output_names or []
@@ -476,6 +489,23 @@ class AsyncOnDeviceModel:
             out = cast(
                 InputSpec, cast(hub.CompileJob, self.model.producer).target_shapes
             )
+            return transpose_channel_last_to_first_input_specs(
+                out, self.channel_last_input
+            )
+        if self.model.producer._job_type == hub.JobType.LINK:
+            out = cast(
+                InputSpec,
+                cast(
+                    hub.CompileJob,
+                    cast(
+                        hub.LinkJob,
+                        self.model.producer,
+                    )
+                    .models[0]
+                    .producer,
+                ).target_shapes,
+            )
+
             return transpose_channel_last_to_first_input_specs(
                 out, self.channel_last_input
             )

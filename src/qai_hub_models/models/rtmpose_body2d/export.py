@@ -484,7 +484,9 @@ def export_model(
 
     if not skip_summary:
         print_tool_versions(tool_versions, tool_versions_are_from_device_job)
-        print_on_target_demo_cmd(compile_job, Path(__file__).parent, device)
+        print_on_target_demo_cmd(
+            link_job if link_job else compile_job, Path(__file__).parent, device
+        )
 
     if downloaded_model_path:
         print(f"{model_name} was saved to {downloaded_model_path}\n")
