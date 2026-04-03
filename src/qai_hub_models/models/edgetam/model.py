@@ -100,8 +100,8 @@ class EdgeTAMLoader(SAM2LoaderBase):
             )
 
 
-@CollectionModel.add_component(EdgeTAMEncoder)
-@CollectionModel.add_component(EdgeTAMDecoder)
+@CollectionModel.add_component(EdgeTAMEncoder, "encoder")
+@CollectionModel.add_component(EdgeTAMDecoder, "decoder")
 class EdgeTAM(CollectionModel):
     def __init__(
         self, sam2: Sam2, encoder: EdgeTAMEncoder, decoder: EdgeTAMDecoder

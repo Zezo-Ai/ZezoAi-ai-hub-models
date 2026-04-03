@@ -23,8 +23,8 @@ MODEL_ASSET_VERSION = 1
 OPUS_MT_VERSION = "Helsinki-NLP/opus-mt-es-en"
 
 
-@CollectionModel.add_component(OpusMTEncoder)
-@CollectionModel.add_component(OpusMTDecoder)
+@CollectionModel.add_component(OpusMTEncoder, "encoder")
+@CollectionModel.add_component(OpusMTDecoder, "decoder")
 class OpusMTEsEn(OpusMT):
     @classmethod
     def get_opus_mt_version(cls) -> str:

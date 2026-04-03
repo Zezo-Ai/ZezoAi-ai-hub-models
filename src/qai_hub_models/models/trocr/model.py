@@ -310,8 +310,8 @@ class TrOCRDecoder(BaseModel):
         return cls(cast(TrOCRForCausalLM, TrOCR.load_source_model().decoder))
 
 
-@CollectionModel.add_component(TrOCRDecoder)
-@CollectionModel.add_component(TrOCREncoder)
+@CollectionModel.add_component(TrOCRDecoder, "decoder")
+@CollectionModel.add_component(TrOCREncoder, "encoder")
 class TrOCR(CollectionModel):
     def __init__(
         self,

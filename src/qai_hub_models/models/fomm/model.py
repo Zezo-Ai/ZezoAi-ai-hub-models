@@ -193,8 +193,8 @@ class FOMMGenerator(BaseModel):
         return ["image"]
 
 
-@CollectionModel.add_component(FOMMDetector)
-@CollectionModel.add_component(FOMMGenerator)
+@CollectionModel.add_component(FOMMDetector, "detector")
+@CollectionModel.add_component(FOMMGenerator, "generator")
 class FOMM(CollectionModel):
     """Exportable FOMM for Image Editing"""
 

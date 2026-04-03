@@ -173,8 +173,8 @@ class EasyOCRRecognizer(BaseModel):
         return ["image"]
 
 
-@CollectionModel.add_component(EasyOCRDetector)
-@CollectionModel.add_component(EasyOCRRecognizer)
+@CollectionModel.add_component(EasyOCRDetector, "detector")
+@CollectionModel.add_component(EasyOCRRecognizer, "recognizer")
 class EasyOCR(CollectionModel):
     def __init__(
         self,

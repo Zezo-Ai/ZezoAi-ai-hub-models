@@ -126,9 +126,8 @@ def stable_diffusion_quantize(
     torch.manual_seed(args.seed)
 
     host_device = torch.device(args.host_device)
-    component_cls = dict(
-        zip(model_cls.component_class_names, model_cls.component_classes, strict=False)
-    )[args.component]
+    component_cls = model_cls.component_classes[args.component]
+    assert issubclass(component_cls, BaseModel)
     component = component_cls.from_pretrained(
         checkpoint=args.checkpoint, host_device=host_device
     )

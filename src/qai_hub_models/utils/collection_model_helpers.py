@@ -15,7 +15,7 @@ def get_components(model_id: str) -> list[str] | None:
     Parse the <model_id>/model.py to extract component names from any decorator
     that calls:
 
-    @CollectionModel.add_component(<some_key>, <component>)
+    @CollectionModel.add_component(<component_class>, <component_name>)
 
     Returns a list of component names (as strings), or None if
     no CollectionModel.add_component call is found.
@@ -27,9 +27,8 @@ def get_components(model_id: str) -> list[str] | None:
     tree = ast.parse(source, filename=model_path)
     components: list[str] = []
 
-    # Walk through all nodes in the AST
-    for node in ast.walk(tree):
-        # We only care about class definitions (which may have decorators)
+    # Iterate top-level nodes in source order (not ast.walk, which has no ordering guarantee)
+    for node in tree.body:
         if isinstance(node, ast.ClassDef):
             for decorator in node.decorator_list:
                 if (
@@ -38,16 +37,12 @@ def get_components(model_id: str) -> list[str] | None:
                     and isinstance(decorator.func.value, ast.Name)
                     and decorator.func.value.id == "CollectionModel"
                     and decorator.func.attr == "add_component"
+                    and len(decorator.args) >= 2
                 ):
-                    # Expecting exactly one argument: the component.
-                    if len(decorator.args) == 1:
-                        component_arg = decorator.args[0]
-                        if isinstance(component_arg, ast.Name):
-                            components.append(component_arg.id)
-                    if len(decorator.args) == 2:
-                        component_arg = decorator.args[1]
-                        if isinstance(component_arg, ast.Constant):
-                            components.append(str(component_arg.value))
+                    # component_name is the required second positional arg
+                    component_arg = decorator.args[1]
+                    if isinstance(component_arg, ast.Constant):
+                        components.append(str(component_arg.value))
             if components:
                 break  # only check first class defined in the file with added components
     return components if components else None

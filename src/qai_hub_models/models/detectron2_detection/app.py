@@ -224,7 +224,7 @@ class Detectron2DetectionApp(ProposalBasedDetectionApp):
         collection_model: CollectionModel,
     ) -> DatasetEntries:
         batch_size = get_batch_size(input_spec) or 1
-        proposal_generator = collection_model.components["Detectron2ProposalGenerator"]
+        proposal_generator = collection_model.components["proposal_generator"]
         assert isinstance(proposal_generator, BaseModel)
         dataset = get_dataset_from_name(
             calibration_dataset_name,

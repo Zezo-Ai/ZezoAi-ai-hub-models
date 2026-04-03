@@ -499,16 +499,16 @@ class TokenGenerator_Part5(BasePrecompiledModel):
         )
 
 
-@CollectionModel.add_component(PromptProcessor_Part1)
-@CollectionModel.add_component(PromptProcessor_Part2)
-@CollectionModel.add_component(PromptProcessor_Part3)
-@CollectionModel.add_component(PromptProcessor_Part4)
-@CollectionModel.add_component(PromptProcessor_Part5)
-@CollectionModel.add_component(TokenGenerator_Part1)
-@CollectionModel.add_component(TokenGenerator_Part2)
-@CollectionModel.add_component(TokenGenerator_Part3)
-@CollectionModel.add_component(TokenGenerator_Part4)
-@CollectionModel.add_component(TokenGenerator_Part5)
+@CollectionModel.add_component(PromptProcessor_Part1, "prompt_processor_part_1")
+@CollectionModel.add_component(PromptProcessor_Part2, "prompt_processor_part_2")
+@CollectionModel.add_component(PromptProcessor_Part3, "prompt_processor_part_3")
+@CollectionModel.add_component(PromptProcessor_Part4, "prompt_processor_part_4")
+@CollectionModel.add_component(PromptProcessor_Part5, "prompt_processor_part_5")
+@CollectionModel.add_component(TokenGenerator_Part1, "token_generator_part_1")
+@CollectionModel.add_component(TokenGenerator_Part2, "token_generator_part_2")
+@CollectionModel.add_component(TokenGenerator_Part3, "token_generator_part_3")
+@CollectionModel.add_component(TokenGenerator_Part4, "token_generator_part_4")
+@CollectionModel.add_component(TokenGenerator_Part5, "token_generator_part_5")
 class Baichuan2_7B_Quantized(PrecompiledCollectionModel):
     """
     Baichuan2_7B_Quantized class consists of

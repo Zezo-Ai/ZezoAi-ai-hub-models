@@ -565,29 +565,29 @@ class SAM(CollectionModel):
         )
 
 
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoder")
-@CollectionModel.add_component(SAMDecoder, "SamDecoder")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder")
+@CollectionModel.add_component(SAMDecoder, "sam_decoder")
 class _SAMBase(SAM):
     pass
 
 
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart1")
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart2")
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart3")
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart4")
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart5")
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart6")
-@CollectionModel.add_component(SAMDecoder)
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_1")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_2")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_3")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_4")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_5")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_6")
+@CollectionModel.add_component(SAMDecoder, "sam_decoder")
 class _SAMLarge(SAM):
     pass
 
 
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart1")
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart2")
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart3")
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart4")
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart5")
-@CollectionModel.add_component(SAMEncoderPart, "SAMEncoderPart6")
-@CollectionModel.add_component(SAMDecoder)
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_1")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_2")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_3")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_4")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_5")
+@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_6")
+@CollectionModel.add_component(SAMDecoder, "sam_decoder")
 class _SAMHuge(SAM):
     pass

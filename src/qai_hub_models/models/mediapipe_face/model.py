@@ -410,8 +410,8 @@ class FaceLandmarkDetector(BaseModel):
         return "human_faces_192"
 
 
-@CollectionModel.add_component(FaceDetector)
-@CollectionModel.add_component(FaceLandmarkDetector)
+@CollectionModel.add_component(FaceDetector, "face_detector")
+@CollectionModel.add_component(FaceLandmarkDetector, "face_landmark_detector")
 class MediaPipeFace(CollectionModel):
     def __init__(
         self,

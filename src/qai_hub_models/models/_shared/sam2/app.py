@@ -317,10 +317,10 @@ class SAM2App:
 
         # Determine encoder component dynamically
         encoder_name = next(
-            (name for name in collection_model.components if "Encoder" in name), None
+            (name for name in collection_model.components if "encoder" in name), None
         )
         if not encoder_name:
-            raise ValueError("Could not find Encoder component in collection model.")
+            raise ValueError("Could not find encoder component in collection model.")
 
         encoder = collection_model.components[encoder_name]
         assert isinstance(encoder, BaseModel)

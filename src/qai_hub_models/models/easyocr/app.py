@@ -673,7 +673,7 @@ class EasyOCRApp:
         collection_model: CollectionModel,
     ) -> DatasetEntries:
         batch_size = get_batch_size(input_spec) or 1
-        encoder = collection_model.components["EasyOCRDetector"]
+        encoder = collection_model.components["detector"]
         assert isinstance(encoder, BaseModel)
 
         dataset = get_dataset_from_name(
@@ -688,7 +688,7 @@ class EasyOCRApp:
         dataloader = DataLoader(torch_dataset, batch_size=batch_size)
 
         # Create a EasyOCRApp instance
-        recognizer = collection_model.components.get("EasyOCRRecognizer", model)
+        recognizer = collection_model.components.get("recognizer", model)
         app_instance = cls(
             detector=encoder,
             recognizer=recognizer,  # type: ignore[arg-type]

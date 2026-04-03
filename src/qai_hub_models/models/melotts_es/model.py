@@ -56,11 +56,11 @@ class T5Decoder_ES(T5Decoder):
         return cls(copy.deepcopy(get_t5model()), MAX_NUM_INPUT_IDS)
 
 
-@CollectionModel.add_component(Encoder_ES)
-@CollectionModel.add_component(Flow_ES)
-@CollectionModel.add_component(Decoder_ES)
-@CollectionModel.add_component(T5Encoder_ES)
-@CollectionModel.add_component(T5Decoder_ES)
+@CollectionModel.add_component(Encoder_ES, "encoder")
+@CollectionModel.add_component(Flow_ES, "flow")
+@CollectionModel.add_component(Decoder_ES, "decoder")
+@CollectionModel.add_component(T5Encoder_ES, "t5_encoder")
+@CollectionModel.add_component(T5Decoder_ES, "t5_decoder")
 class MeloTTS_ES(CollectionModel):
     def __init__(
         self,

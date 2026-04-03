@@ -753,11 +753,10 @@ def demo_model_components_from_cli_args(
 
     cli_args_comp = copy.deepcopy(cli_args)
 
-    for i, (cls, comp) in enumerate(
-        zip(model_cls.component_classes, model_cls.component_class_names, strict=False)
-    ):
+    for i, (comp, cls) in enumerate(model_cls.component_classes.items()):
         if cli_args.hub_model_id:
             cli_args_comp.hub_model_id = cli_args.hub_model_id.split(",")[i]
+        assert issubclass(cls, BaseModel)
         res.append(demo_model_from_cli_args(cls, model_id, cli_args_comp, comp))
 
     return tuple(res)

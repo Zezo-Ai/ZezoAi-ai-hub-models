@@ -344,8 +344,8 @@ class MaskRCNNROIHead(BaseModel):
         return compile_options
 
 
-@CollectionModel.add_component(MaskRCNNProposalGenerator)
-@CollectionModel.add_component(MaskRCNNROIHead)
+@CollectionModel.add_component(MaskRCNNProposalGenerator, "proposal_generator")
+@CollectionModel.add_component(MaskRCNNROIHead, "roi_head")
 class MaskRCNN(CollectionModel):
     """MaskRCNN Instance Segmentation Model"""
 

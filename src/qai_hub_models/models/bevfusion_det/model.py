@@ -355,10 +355,10 @@ class BEVFusionDecoder(BaseModel):
         return compile_options
 
 
-@CollectionModel.add_component(BEVFusionEncoder1)
-@CollectionModel.add_component(BEVFusionEncoder2)
-@CollectionModel.add_component(BEVFusionEncoder3)
-@CollectionModel.add_component(BEVFusionDecoder)
+@CollectionModel.add_component(BEVFusionEncoder1, "encoder_1")
+@CollectionModel.add_component(BEVFusionEncoder2, "encoder_2")
+@CollectionModel.add_component(BEVFusionEncoder3, "encoder_3")
+@CollectionModel.add_component(BEVFusionDecoder, "decoder")
 class BEVFusion(CollectionModel):
     def __init__(
         self,

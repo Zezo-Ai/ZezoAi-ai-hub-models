@@ -153,9 +153,9 @@ class ZipformerApp(CollectionAppProtocol):
         input_spec: InputSpec,
         collection_model: HfZipformer,
     ) -> DatasetEntries:
-        encoder_fpm = collection_model.components["ZipformerEncoder"]
-        decoder_fpm = collection_model.components["ZipformerDecoder"]
-        joiner_fpm = collection_model.components["ZipformerJoiner"]
+        encoder_fpm = collection_model.components["encoder"]
+        decoder_fpm = collection_model.components["decoder"]
+        joiner_fpm = collection_model.components["joiner"]
         batch_size = get_batch_size(input_spec) or 1
         assert callable(encoder_fpm) and callable(decoder_fpm) and callable(joiner_fpm)
         assert batch_size == 1, batch_size

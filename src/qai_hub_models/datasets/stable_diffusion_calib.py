@@ -136,13 +136,13 @@ class StableDiffusionCalibDatasetBase(BaseDataset, ABC):
         tokenizer = self.sd_cls.make_tokenizer()
         scheduler = self.sd_cls.make_scheduler(self.checkpoint)
 
-        text_encoder_cls = self.sd_cls.component_classes[0]
+        text_encoder_cls = self.sd_cls.component_classes["text_encoder"]
         assert issubclass(text_encoder_cls, TextEncoderBase)
         text_encoder_hf = text_encoder_cls.torch_from_pretrained(
             checkpoint=self.checkpoint, host_device=self.host_device
         )
 
-        unet_cls = self.sd_cls.component_classes[1]
+        unet_cls = self.sd_cls.component_classes["unet"]
         assert issubclass(unet_cls, UnetBase)
         unet_hf = unet_cls.torch_from_pretrained(
             checkpoint=self.checkpoint,
@@ -152,7 +152,7 @@ class StableDiffusionCalibDatasetBase(BaseDataset, ABC):
 
         controlnet_hf = None
         if self.use_controlnet:
-            controlnet_cls = self.sd_cls.component_classes[3]
+            controlnet_cls = self.sd_cls.component_classes["controlnet"]
             assert issubclass(controlnet_cls, ControlNetBase)
             controlnet_hf = controlnet_cls.torch_from_pretrained(
                 checkpoint=self.checkpoint,

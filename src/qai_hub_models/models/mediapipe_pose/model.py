@@ -334,8 +334,8 @@ class PoseLandmarkDetector(BaseModel):
         return options + " --range_scheme min_max"
 
 
-@CollectionModel.add_component(PoseDetector)
-@CollectionModel.add_component(PoseLandmarkDetector)
+@CollectionModel.add_component(PoseDetector, "pose_detector")
+@CollectionModel.add_component(PoseLandmarkDetector, "pose_landmark_detector")
 class MediaPipePose(CollectionModel):
     def __init__(
         self,

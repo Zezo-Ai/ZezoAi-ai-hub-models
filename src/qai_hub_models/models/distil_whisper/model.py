@@ -91,8 +91,8 @@ class DistilWhisperDecoder(HfWhisperDecoder):
         return compile_options
 
 
-@CollectionModel.add_component(DistilWhisperEncoder)
-@CollectionModel.add_component(DistilWhisperDecoder)
+@CollectionModel.add_component(DistilWhisperEncoder, "encoder")
+@CollectionModel.add_component(DistilWhisperDecoder, "decoder")
 class DistilWhisper(HfWhisper):
     @classmethod
     def get_hf_whisper_version(cls) -> str:

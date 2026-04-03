@@ -148,8 +148,8 @@ class SAM2Loader(SAM2LoaderBase):
         )
 
 
-@CollectionModel.add_component(SAM2Encoder)
-@CollectionModel.add_component(SAM2Decoder)
+@CollectionModel.add_component(SAM2Encoder, "encoder")
+@CollectionModel.add_component(SAM2Decoder, "decoder")
 class SAM2(CollectionModel):
     def __init__(self, sam2: Sam2, encoder: SAM2Encoder, decoder: SAM2Decoder) -> None:
         super().__init__(*[encoder, decoder])

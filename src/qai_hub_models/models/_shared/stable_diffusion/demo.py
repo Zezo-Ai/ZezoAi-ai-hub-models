@@ -139,20 +139,20 @@ def stable_diffusion_demo(
         model_kwargs = dict(get_model_kwargs(model_cls, vars(args)))
         model_kwargs["host_device"] = host_device
 
-        text_encoder_cls = model_cls.component_classes[0]
+        text_encoder_cls = model_cls.component_classes["text_encoder"]
         assert issubclass(text_encoder_cls, TextEncoderBase)
         text_encoder = text_encoder_cls.torch_from_pretrained(**model_kwargs)
 
-        unet_cls = model_cls.component_classes[1]
+        unet_cls = model_cls.component_classes["unet"]
         assert issubclass(unet_cls, (UnetBase, ControlUnetBase))
         unet = unet_cls.torch_from_pretrained(**model_kwargs)
 
-        vae_cls = model_cls.component_classes[2]
+        vae_cls = model_cls.component_classes["vae"]
         assert issubclass(vae_cls, VaeDecoderBase)
         vae_decoder = vae_cls.torch_from_pretrained(**model_kwargs)
 
         if use_controlnet:
-            controlnet_cls = model_cls.component_classes[3]
+            controlnet_cls = model_cls.component_classes["controlnet"]
             assert issubclass(controlnet_cls, ControlNetBase)
             controlnet = controlnet_cls.torch_from_pretrained(**model_kwargs)
     else:

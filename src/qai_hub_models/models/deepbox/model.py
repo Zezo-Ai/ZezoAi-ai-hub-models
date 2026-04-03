@@ -152,8 +152,8 @@ class VGG3DDetection(BaseModel):
         return "kitti"
 
 
-@CollectionModel.add_component(Yolo2DDetection)
-@CollectionModel.add_component(VGG3DDetection)
+@CollectionModel.add_component(Yolo2DDetection, "yolo_2d_detection")
+@CollectionModel.add_component(VGG3DDetection, "vgg_3d_detection")
 class DeepBox(PretrainedCollectionModel):
     def __init__(
         self, yolo_2d_det: Yolo2DDetection, vgg_3d_det: VGG3DDetection

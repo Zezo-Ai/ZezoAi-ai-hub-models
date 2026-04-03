@@ -245,8 +245,8 @@ class HandLandmarkDetector(BaseModel):
         return {"image": [load_numpy(numpy_inputs)]}
 
 
-@CollectionModel.add_component(HandDetector)
-@CollectionModel.add_component(HandLandmarkDetector)
+@CollectionModel.add_component(HandDetector, "hand_detector")
+@CollectionModel.add_component(HandLandmarkDetector, "hand_landmark_detector")
 class MediaPipeHand(PretrainedCollectionModel):
     def __init__(
         self,

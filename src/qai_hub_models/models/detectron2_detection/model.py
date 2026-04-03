@@ -200,8 +200,8 @@ class Detectron2ROIHead(Detectron2):
         return compile_options
 
 
-@CollectionModel.add_component(Detectron2ProposalGenerator)
-@CollectionModel.add_component(Detectron2ROIHead)
+@CollectionModel.add_component(Detectron2ProposalGenerator, "proposal_generator")
+@CollectionModel.add_component(Detectron2ROIHead, "roi_head")
 class Detectron2Detection(CollectionModel):
     def __init__(
         self,

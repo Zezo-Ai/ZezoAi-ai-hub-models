@@ -88,8 +88,8 @@ class WhisperSmallDecoderQuantizable(WhisperDecoderQuantizableBase):
         return onnx_file, aimet_encodings
 
 
-@CollectionModel.add_component(WhisperSmallEncoderQuantizable)
-@CollectionModel.add_component(WhisperSmallDecoderQuantizable)
+@CollectionModel.add_component(WhisperSmallEncoderQuantizable, "encoder")
+@CollectionModel.add_component(WhisperSmallDecoderQuantizable, "decoder")
 class WhisperSmallQuantized(CollectionModel):
     def __init__(
         self,

@@ -308,10 +308,14 @@ class TrackAnythingSegment(TrackAnything):
         return ["masks", "hidden"]
 
 
-@CollectionModel.add_component(TrackAnythingEncodeKeyWithShrinkage)
-@CollectionModel.add_component(TrackAnythingEncodeValue)
-@CollectionModel.add_component(TrackAnythingEncodeKeyWithoutShrinkage)
-@CollectionModel.add_component(TrackAnythingSegment)
+@CollectionModel.add_component(
+    TrackAnythingEncodeKeyWithShrinkage, "encode_key_with_shrinkage"
+)
+@CollectionModel.add_component(TrackAnythingEncodeValue, "encode_value")
+@CollectionModel.add_component(
+    TrackAnythingEncodeKeyWithoutShrinkage, "encode_key_without_shrinkage"
+)
+@CollectionModel.add_component(TrackAnythingSegment, "segment")
 class TrackAnythingWrapper(CollectionModel):
     def __init__(
         self,

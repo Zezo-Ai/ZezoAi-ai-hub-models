@@ -291,8 +291,8 @@ class MobileSAMLoader:
             block.mlp = Conv2DInplaceLinearSAMTransformerMLPBlock(block.mlp)
 
 
-@CollectionModel.add_component(MobileSAMEncoder)
-@CollectionModel.add_component(MobileSAMDecoder)
+@CollectionModel.add_component(MobileSAMEncoder, "encoder")
+@CollectionModel.add_component(MobileSAMDecoder, "decoder")
 class MobileSAM(CollectionModel):
     def __init__(
         self, sam: Sam, encoder: MobileSAMEncoder, decoder: MobileSAMDecoder

@@ -38,28 +38,28 @@ def test_collection_model_demo() -> None:
     class Component3(SimpleBaseModel):
         pass
 
-    @CollectionModel.add_component(Component1)
-    @CollectionModel.add_component(Component2)
+    @CollectionModel.add_component(Component1, "component_1")
+    @CollectionModel.add_component(Component2, "component_2")
     class DummyCollection(PretrainedCollectionModel):
         pass
 
     # Second subclass shouldn't interfere with DummyCollection
-    @CollectionModel.add_component(Component1)
-    @CollectionModel.add_component(Component2)
-    @CollectionModel.add_component(Component3)
+    @CollectionModel.add_component(Component1, "component_1")
+    @CollectionModel.add_component(Component2, "component_2")
+    @CollectionModel.add_component(Component3, "component_3")
     class SecondCollection(PretrainedCollectionModel):
         pass
 
     # Second subclass shouldn't interfere with DummyCollection
-    @CollectionModel.add_component(Component1)
+    @CollectionModel.add_component(Component1, "component_1")
     @CollectionModel.reset_components()
     class ThirdCollection(SecondCollection):
         pass
 
     # Access class vars via component_classes
-    assert DummyCollection.component_classes[0] is Component1
-    assert DummyCollection.component_classes[1] is Component2
-    assert DummyCollection.component_class_names == ["Component1", "Component2"]
+    assert DummyCollection.component_classes["component_1"] is Component1
+    assert DummyCollection.component_classes["component_2"] is Component2
+    assert DummyCollection.component_class_names == ["component_1", "component_2"]
 
     assert len(ThirdCollection.component_class_names) == 1
     assert len(ThirdCollection.component_classes) == 1
@@ -67,15 +67,15 @@ def test_collection_model_demo() -> None:
     model = DummyCollection.from_pretrained()
 
     # Access components via model.components
-    assert list(model.components.keys()) == ["Component1", "Component2"]
-    assert isinstance(model.components["Component1"], Component1)
+    assert list(model.components.keys()) == ["component_1", "component_2"]
+    assert isinstance(model.components["component_1"], Component1)
 
     # Instantiate with __init__ directly with positional args
     comp1_instance = Component1()
     comp2_instance = Component2()
     model3 = DummyCollection(comp1_instance, comp2_instance)
-    assert model3.components["Component1"] is comp1_instance
-    assert model3.components["Component2"] is comp2_instance
+    assert model3.components["component_1"] is comp1_instance
+    assert model3.components["component_2"] is comp2_instance
 
 
 def test_missing_from_pretrained() -> None:
@@ -88,7 +88,7 @@ def test_missing_from_pretrained() -> None:
         # Override from_pretrained with a non-callable value.
         from_pretrained = None  # type: ignore[assignment]
 
-    @CollectionModel.add_component(BrokenComponent)
+    @CollectionModel.add_component(BrokenComponent, "broken_component")
     class BrokenCollection(PretrainedCollectionModel):
         pass
 

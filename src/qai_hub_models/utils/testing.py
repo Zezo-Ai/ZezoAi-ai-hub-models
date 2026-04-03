@@ -591,7 +591,7 @@ def skip_invalid_runtime_device(
     device: ScorecardDevice,
 ) -> None:
     if issubclass(model_cls, CollectionModel):
-        for component_cls in model_cls.component_classes:
+        for component_cls in model_cls.component_classes.values():
             _skip_if_unsupported_reason(component_cls, runtime, device)
         return
     # BaseModel or BasePrecompiledModel

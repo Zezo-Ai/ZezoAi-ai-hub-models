@@ -318,9 +318,9 @@ class ZipformerJoiner(BaseModel):
         return Precision.w16a16
 
 
-@CollectionModel.add_component(ZipformerEncoder)
-@CollectionModel.add_component(ZipformerDecoder)
-@CollectionModel.add_component(ZipformerJoiner)
+@CollectionModel.add_component(ZipformerEncoder, "encoder")
+@CollectionModel.add_component(ZipformerDecoder, "decoder")
+@CollectionModel.add_component(ZipformerJoiner, "joiner")
 class HfZipformer(CollectionModel):
     def __init__(
         self, encoder: "Zipformer", decoder: "Decoder", joiner: "Joiner"

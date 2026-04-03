@@ -45,10 +45,10 @@ class BertWrapper_ZH(BertWrapper):
         return cls(get_bert_model("CHINESE"))
 
 
-@CollectionModel.add_component(Encoder_ZH)
-@CollectionModel.add_component(Flow_ZH)
-@CollectionModel.add_component(Decoder_ZH)
-@CollectionModel.add_component(BertWrapper_ZH)
+@CollectionModel.add_component(Encoder_ZH, "encoder")
+@CollectionModel.add_component(Flow_ZH, "flow")
+@CollectionModel.add_component(Decoder_ZH, "decoder")
+@CollectionModel.add_component(BertWrapper_ZH, "bert_wrapper")
 class MeloTTS_ZH(CollectionModel):
     def __init__(
         self, encoder: Encoder, flow: Flow, decoder: Decoder, bert_model: BertWrapper

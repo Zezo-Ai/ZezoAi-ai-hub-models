@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import re
 import shutil
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -54,20 +55,20 @@ class CollectionModel:
     See test_base_model.py for usage examples.
     """
 
-    component_classes: list[type[BaseModel]] = []
+    component_classes: dict[str, type[BaseModel | BasePrecompiledModel]] = {}
     component_class_names: list[str] = []
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        # Make copies of the list for each subclass so they don't share state
-        cls.component_classes = list(cls.component_classes)
+        # Make copies for each subclass so they don't share state
+        cls.component_classes = dict(cls.component_classes)
         cls.component_class_names = list(cls.component_class_names)
 
     def __init__(self, *args: BaseModel | BasePrecompiledModel) -> None:
         component_names = type(self).component_class_names
         components: dict[
             str, BaseModel | BasePrecompiledModel
-        ] = {}  # class name -> instantiated object
+        ] = {}  # name -> instantiated object
 
         # Process positional arguments.
         if len(args) != len(component_names):
@@ -75,14 +76,13 @@ class CollectionModel:
                 f"CollectionModel has {len(component_names)} ordered arguments, "
                 "each of which should correspond with a single component."
             )
-        for i, (name, arg) in enumerate(zip(component_names, args, strict=False)):
-            expected_class = type(self).component_classes[i]
-            if not isinstance(arg, (expected_class, ExecutableModelProtocol)):
+        for name, arg in zip(component_names, args, strict=False):
+            expected_class = type(self).component_classes[name]
+            if not isinstance(arg, expected_class):
                 raise TypeError(
                     f"Expected component '{name}' to be an instance "
-                    f"of {name} or ExecutableModelProtocol, got {type(arg).__name__}"
+                    f"of {expected_class.__name__}, got {type(arg).__name__}"
                 )
-            assert isinstance(arg, (BaseModel, BasePrecompiledModel))
             components[name] = arg
 
         # Check that all required components are provided.
@@ -95,8 +95,8 @@ class CollectionModel:
     @classmethod
     def add_component(
         cls,
-        component_class: type,
-        component_name: str | None = None,
+        component_class: type[BaseModel | BasePrecompiledModel],
+        component_name: str,
         subfolder_hf: str | None = None,
     ) -> Callable[[type[CollectionModelT]], type[CollectionModelT]]:
         """
@@ -112,7 +112,7 @@ class CollectionModel:
         component_class
             Component class to add to the CollectionModel.
         component_name
-            Name the component. By default uses component_class.__name__.
+            Name the component.
         subfolder_hf
             By default the same as component_name. Specify this
             only when Huggingface uses a different subfolder name than the desired
@@ -127,11 +127,21 @@ class CollectionModel:
         """
 
         def decorator(subclass: type[CollectionModelT]) -> type[CollectionModelT]:
-            name = component_name or component_class.__name__
-            if name in subclass.component_class_names:
+            name = component_name
+            assert re.fullmatch(r"[a-z][a-z0-9_]*", name), (
+                f"component_name must be lowercase snake_case, got: {name!r}"
+            )
+            assert issubclass(component_class, (BaseModel, BasePrecompiledModel)), (
+                f"component_class must be a subclass of BaseModel or "
+                f"BasePrecompiledModel, got: {component_class!r}"
+            )
+            if name in subclass.component_classes:
                 raise ValueError(f"Component with name {name} already registered")
-            # prepend list
-            subclass.component_classes.insert(0, component_class)
+            # prepend — outer decorators should appear first
+            subclass.component_classes = {
+                name: component_class,
+                **subclass.component_classes,
+            }
             subclass.component_class_names.insert(0, name)
 
             # Component class from_pretrained would look for default_subfolder
@@ -142,8 +152,8 @@ class CollectionModel:
             # This is needed for controlnet where the controlnet is from a
             # different repo without subfolders
             subfolder = subfolder_hf if subfolder_hf is not None else name
-            component_class.default_subfolder = component_name  # type: ignore[attr-defined]
-            component_class.default_subfolder_hf = subfolder  # type: ignore[attr-defined]
+            component_class.default_subfolder = component_name  # type: ignore[union-attr]
+            component_class.default_subfolder_hf = subfolder  # type: ignore[union-attr]
             return subclass
 
         return decorator
@@ -158,7 +168,7 @@ class CollectionModel:
         """
 
         def decorator(subclass: type[CollectionModel]) -> type[CollectionModel]:
-            subclass.component_classes = []
+            subclass.component_classes = {}
             subclass.component_class_names = []
             return subclass
 
@@ -289,10 +299,9 @@ class PretrainedCollectionModel(CollectionModel, FromPretrainedProtocol):
             return fn(**supported)
 
         components = []
-        for _name, component_cls in zip(
-            cls.component_class_names, cls.component_classes, strict=False
-        ):
+        for component_cls in cls.component_classes.values():
             # call component_cls.from_pretrained but only with the args it accepts
+            assert issubclass(component_cls, BaseModel)
             comp = _call_with_supported(component_cls.from_pretrained, base_kwargs)
             components.append(comp)
 
@@ -308,7 +317,7 @@ class PrecompiledCollectionModel(CollectionModel, FromPrecompiledProtocol):
         using their own from_precompiled() methods.
         """
         components = []
-        for component_cls in cls.component_classes:
+        for component_cls in cls.component_classes.values():
             if not (
                 hasattr(component_cls, "from_precompiled")
                 and callable(component_cls.from_precompiled)

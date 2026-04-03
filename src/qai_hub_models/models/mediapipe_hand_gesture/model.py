@@ -1047,9 +1047,9 @@ class CannedGestureClassifier(BaseModel):
 # ------------------------------------------------------------------------------------
 
 
-@CollectionModel.add_component(PalmDetector)
-@CollectionModel.add_component(HandLandmarkDetector)
-@CollectionModel.add_component(CannedGestureClassifier)
+@CollectionModel.add_component(PalmDetector, "palm_detector")
+@CollectionModel.add_component(HandLandmarkDetector, "hand_landmark_detector")
+@CollectionModel.add_component(CannedGestureClassifier, "canned_gesture_classifier")
 class MediaPipeHandGesture(PretrainedCollectionModel):
     """Collection model that wires detector, landmark, embedder, classifier."""
 

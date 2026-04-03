@@ -296,8 +296,8 @@ class MeloTTSApp(CollectionAppProtocol):
             collection_model.language
         )
         language_ = collection_model.language()
-        encoder_fpm = collection_model.components[f"Encoder_{LANGUAGE_MAP[language_]}"]
-        flow_fpm = collection_model.components[f"Flow_{LANGUAGE_MAP[language_]}"]
+        encoder_fpm = collection_model.components["encoder"]
+        flow_fpm = collection_model.components["flow"]
         batch_size = get_batch_size(input_spec) or 1
         assert callable(encoder_fpm) and callable(flow_fpm)
         assert batch_size == 1, f"Batch size must be 1, found {batch_size}"

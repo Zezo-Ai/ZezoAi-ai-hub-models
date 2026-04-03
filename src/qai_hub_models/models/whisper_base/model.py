@@ -17,8 +17,8 @@ MODEL_ASSET_VERSION = 1
 WHISPER_VERSION = "openai/whisper-base"
 
 
-@CollectionModel.add_component(HfWhisperEncoder)
-@CollectionModel.add_component(HfWhisperDecoder)
+@CollectionModel.add_component(HfWhisperEncoder, "encoder")
+@CollectionModel.add_component(HfWhisperDecoder, "decoder")
 class WhisperBase(HfWhisper):
     @classmethod
     def get_hf_whisper_version(cls) -> str:
