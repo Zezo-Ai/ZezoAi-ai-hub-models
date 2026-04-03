@@ -32,14 +32,14 @@ def test_cli_no_qai_hub_models(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Qualcomm AI Hub Models CLI" in captured.out
 
 
-def test_version_mismatch_raises() -> None:
-    """Verify a RuntimeError is raised when package versions differ."""
+def test_version_mismatch_exits() -> None:
+    """Verify sys.exit(1) is called when package versions differ."""
     with (
         patch(
             "qai_hub_models_cli.cli.version",
             side_effect=lambda pkg: "1.0.0" if pkg == "qai_hub_models_cli" else "2.0.0",
         ),
-        pytest.raises(RuntimeError, match="Version mismatch"),
+        pytest.raises(SystemExit),
     ):
         _check_version_match()
 

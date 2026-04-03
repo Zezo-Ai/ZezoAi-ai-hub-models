@@ -23,6 +23,7 @@ from qai_hub_models.utils.aws import (
     s3_download,
     s3_file_exists,
 )
+from qai_hub_models.utils.path_helpers import get_next_free_path
 
 
 def fetch_prerelease_assets(
@@ -107,6 +108,7 @@ def fetch_prerelease_assets(
             dst_path = Path(
                 os.path.join(output_folder, asset_name) if output_folder else asset_name
             )
-            s3_download(bucket, asset.s3_key, dst_path)
+            dst_path = get_next_free_path(dst_path)
+            s3_download(bucket, asset.s3_key, dst_path, verbose)
             return dst_path
     raise ValueError("No pre-release assets found for the specified configuration.")

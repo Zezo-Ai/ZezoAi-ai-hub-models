@@ -90,10 +90,14 @@ def list_s3_files_in_folder_recursive(
     return [obj for obj in objs if not obj.key.endswith("/")]
 
 
-def s3_download(bucket: Bucket, key: str, local_file_path: str | os.PathLike) -> None:
+def s3_download(
+    bucket: Bucket, key: str, local_file_path: str | os.PathLike, verbose: bool = True
+) -> None:
     """Download file at s3://<bucket>/<key> to local_file_path."""
     obj = bucket.Object(key)
-    with tqdm.tqdm(total=obj.content_length, unit="B", unit_scale=True) as t:
+    with tqdm.tqdm(
+        total=obj.content_length, unit="B", unit_scale=True, disable=not verbose
+    ) as t:
         attempt_with_s3_credentials_warning(
             lambda: obj.download_file(
                 str(local_file_path),
