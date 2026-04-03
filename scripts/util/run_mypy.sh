@@ -14,7 +14,7 @@ set_strict_mode
 
 cd "$(dirname "$0")/../.."
 
-venv="${VENV_PATH:-qaihm-dev}"
+venv="${VENV_PATH:-${VIRTUAL_ENV:-qaihm-dev}}"
 source "${venv}/bin/activate"
 
 # First argument is the package directory (src or cli).
