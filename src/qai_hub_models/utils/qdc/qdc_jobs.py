@@ -227,7 +227,7 @@ class QDCJobs:
         self, job_id: str, timeout: int = DEFAULT_JOB_TIMEOUT
     ) -> None:
         """
-        Poll until job logs are uploaded (completed/nologs/failed).
+        Poll until job logs are uploaded (completed/failed).
 
         Parameters
         ----------
@@ -246,7 +246,7 @@ class QDCJobs:
         elapsed = 0
         while elapsed <= timeout:
             status = qdc_api.get_job_log_upload_status(self.client, job_id).lower()
-            if status not in {"completed", "nologs", "failed"}:
+            if status not in {"completed", "failed"}:
                 print(
                     f"Job is completed and the server is uploading logs, "
                     f"waiting for {POLL_INTERVAL} seconds."
