@@ -143,7 +143,7 @@ RELEASE_VENV = os.path.join(BUILD_ROOT, "release_venv")
 RELEASE_WHEEL_DIR = os.path.join(DEFAULT_RELEASE_DIRECTORY, "wheel")
 RELEASE_REPO_DIR = os.path.join(DEFAULT_RELEASE_DIRECTORY, "repository")
 PRIVATE_WHEEL_DIR = os.path.join(REPO_ROOT, "src", "build", "wheel")
-CLI_WHEEL_DIR = os.path.join(PY_CLI_SRC_ROOT, "build", "wheel")
+CLI_WHEEL_DIR = os.path.join(PY_CLI_INSTALL_ROOT, "build", "wheel")
 
 
 def get_test_venv_wheel_dir() -> str | None:

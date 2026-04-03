@@ -71,8 +71,8 @@ class BuildWheelTask(CompositeTask):
                         # single quotes surround the path for safety.
                         f"rm -rf '{EGG_INFO_DIR}'",
                         # Remove old wheels
-                        # single quotes around the path for safety (double quotes would cause * to be incorrectly interpreted by the shell)
-                        f"rm -f '{os.path.join(wheel_dir, 'qai_hub_models-*.whl')}'",
+                        # Quote the directory path but leave the glob unquoted so the shell expands it.
+                        f"rm -f '{str(wheel_dir).rstrip('/')}/'qai_hub_models-*.whl",
                         f"python -m build --wheel --outdir {wheel_dir} {os.path.join(REPO_ROOT, 'src')}"
                         + (" > /dev/null" if on_ci() else ""),
                         f"echo 'Wheel can be found at {wheel_dir}'",
@@ -101,7 +101,7 @@ class BuildCLIWheelTask(CompositeTask):
                 venv=venv,
                 commands=[
                     f"rm -rf '{CLI_EGG_INFO_DIR}'",
-                    f"rm -f '{os.path.join(wheel_dir, 'qai_hub_models_cli-*.whl')}'",
+                    f"rm -f '{str(wheel_dir).rstrip('/')}/'qai_hub_models_cli-*.whl",
                     f"python -m build --wheel --outdir {wheel_dir} {src_dir}",
                 ],
             )
