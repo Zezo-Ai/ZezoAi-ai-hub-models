@@ -12,8 +12,8 @@ from packaging.version import Version
 from qai_hub_models._version import __version__ as qaihm_version
 
 # Torch version requirements for PT2 export
-PT2_MIN_TORCH_VERSION = "2.8"
-PT2_LESS_THAN_TORCH_VERSION = "2.9"
+PT2_MIN_TORCH_VERSION = "2.9"
+PT2_LESS_THAN_TORCH_VERSION = "2.12"
 
 
 def ensure_supported_version(

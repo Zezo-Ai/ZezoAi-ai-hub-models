@@ -12,8 +12,8 @@ Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.
 Install the package via pip:
 ```bash
 # NOTE: 3.10 <= PYTHON_VERSION < 3.14 is supported.
-pip install wheel==0.45.1 "torch>=2.1,<2.9.0" "setuptools>=77.0.3"
-pip install "qai-hub-models[detectron2-detection]" git+https://github.com/facebookresearch/detectron2.git@d38d716 --no-build-isolation
+pip install "torch>=2.1,<2.12.0" "setuptools>=80"
+pip install "qai-hub-models[detectron2-detection]" git+https://github.com/facebookresearch/detectron2.git@8a9d885 --no-build-isolation
 ```
 
 ### 2. Configure Qualcomm® AI Hub Workbench

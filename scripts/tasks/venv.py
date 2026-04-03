@@ -95,7 +95,7 @@ def get_torch_cpu_install_command(
 
     # Get versions for each package.
     packages_to_versions: dict[str, str | None] = dict.fromkeys(
-        packages or ["torch", "torchvision", "torchaudio"]
+        packages or ["torch", "torchvision", "torchaudio", "torchcodec"]
     )
     for reqfile in reqfiles_to_check[::-1]:
         packages_to_versions = {
@@ -284,6 +284,9 @@ class SyncLocalQAIHMVenvTask(CompositeTask):
     ) -> None:
         extras_str = f"[{','.join(extras)}]" if extras else ""
 
+        no_build_isolation = flags and (
+            "--use-pep517" in flags or "--no-build-isolation" in flags
+        )
         if flags is not None and uv_installed():
             # use pep 517 is default behavior for UV, and therefore is not a valid arg.
             flags = flags.replace("--use-pep517", "")
@@ -295,6 +298,13 @@ class SyncLocalQAIHMVenvTask(CompositeTask):
 
         if torch_cpu_cmd := get_torch_cpu_install_command(extras):
             commands.append(torch_cpu_cmd)
+
+        if no_build_isolation and (qaihm_wheel_dir is None or cli_wheel_dir is None):
+            # No build isolation means pypi/uv won't install the minimum build deps to build the AI Hub Models wheel.
+            # Install them manually instead.
+            commands.append(
+                f"{get_pip()} install 'setuptools-scm>=9,<10' 'setuptools>=80'"
+            )
 
         if pre_install:
             commands.append(f"{get_pip()} install {pre_install}")

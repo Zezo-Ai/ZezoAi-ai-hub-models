@@ -79,6 +79,7 @@ class Midas(DepthEstimationModel):
                 "tf_efficientnet_lite3",
                 pretrained=False,
                 skip_validation=True,
+                trust_repo=True,  # type: ignore[arg-type,unused-ignore]
             )
             wipe_sys_modules(sys.modules["geffnet"])
 

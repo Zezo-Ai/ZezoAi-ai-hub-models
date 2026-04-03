@@ -37,13 +37,21 @@ OUTPUT_PYTORCH_34MINUS = CachedWebModelAsset.from_asset_store(
 OUTPUT_PYTORCH_35PLUS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "corners_pt35_plus.npy"
 )
+OUTPUT_PYTORCH_211PLUS = CachedWebModelAsset.from_asset_store(
+    MODEL_ID, MODEL_ASSET_VERSION, "corners_pt211_plus.npy"
+)
 
 
 def _get_expected_output() -> np.ndarray:
-    if parse_version(importlib.metadata.distribution("torch").version) >= parse_version(
-        "2.5.0"
-    ):
-        # The numerics of torch.inverse subtly changed in pytorch 3.5.
+    torch_version = parse_version(importlib.metadata.distribution("torch").version)
+    if torch_version >= parse_version("2.11.0"):
+        # pytorch/pytorch#154983 changed LU factorization on CPU to avoid using
+        # transposed matrices, which subtly changes torch.inverse numerics for
+        # the 4x4 ego2global matrices (~3e-5 diff). This propagates through
+        # the network and drops 3 borderline detections (67 -> 64 boxes).
+        return load_numpy(OUTPUT_PYTORCH_211PLUS.fetch())
+    if torch_version >= parse_version("2.5.0"):
+        # The numerics of torch.inverse subtly changed in pytorch 2.5.
         # This changes the network input slightly, which results in 10% different output.
         return load_numpy(OUTPUT_PYTORCH_35PLUS.fetch())
     return load_numpy(OUTPUT_PYTORCH_34MINUS.fetch())

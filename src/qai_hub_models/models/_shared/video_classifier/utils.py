@@ -4,7 +4,6 @@
 # ---------------------------------------------------------------------
 
 import torch
-import torchvision.io
 from torchvision import transforms
 
 from qai_hub_models.utils.path_helpers import QAIHM_PACKAGE_ROOT
@@ -135,8 +134,14 @@ def read_video_per_second(path: str) -> torch.Tensor:
     video_tensor : torch.Tensor
         Reads video from path and converts to torch tensor.
     """
-    input_video, _, _ = torchvision.io.read_video(path, pts_unit="sec")
-    return input_video
+    try:
+        from torchvision.io import read_video as tv_read_video
+
+        return tv_read_video(path)[0]
+    except ImportError:
+        from torchcodec.decoders import VideoDecoder
+
+        return VideoDecoder(path, dimension_order="NHWC").get_all_frames().data
 
 
 def preprocess_video_kinetics_400(input_video: torch.Tensor) -> torch.Tensor:
