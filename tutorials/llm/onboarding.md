@@ -1,6 +1,6 @@
 # LLM Onboarding
 
-This document describes the modifications required to onboard Large Language Models (LLMs) such as **Llama 3** and **Qwen 2.5** into [AI Hub Models](https://github.com/quic/ai-hub-models) and deploy them on Qualcomm hardware. It serves as a reference for understanding the overall onboarding process.
+This document describes the modifications required to onboard Large Language Models (LLMs) such as **Llama 3** and **Qwen 2.5** into [AI Hub Models](https://github.com/qualcomm/ai-hub-models) and deploy them on Qualcomm hardware. It serves as a reference for understanding the overall onboarding process.
 
 Your model may require additional changes or features not yet supported by the runtime. Onboarding LLMs is a complex process that often involves non-trivial adaptations. This guide is not a step-by-step tutorial, but rather a companion to exploring the AI Hub Models source code.
 
@@ -227,7 +227,7 @@ Model classes are defined in `model.py`. Examples:
 
 ### Clone and Rename
 
-To onboard a new model, first clone the [ai-hub-models](https://github.com/quic/ai-hub-models) repository. Identify a similar model and copy it as a starting point:
+To onboard a new model, first clone the [ai-hub-models](https://github.com/qualcomm/ai-hub-models) repository. Identify a similar model and copy it as a starting point:
 
     cp -r qai_hub_models/models/llama_v3_2_3b_instruct qai_hub_models/models/my_new_model
 

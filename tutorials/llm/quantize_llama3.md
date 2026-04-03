@@ -172,7 +172,7 @@ qualitatively on select prompts.
 
 To evaluate on the quantized model, you will have to provide the Hugging Face model name or the default model config will be used.
 
-Evaluate PPL score on [WikiText (English)](https://github.com/quic/ai-hub-models/blob/main/qai_hub_models/datasets/wikitext.py) using the unquantized model:
+Evaluate PPL score on [WikiText (English)](../../src/qai_hub_models/datasets/wikitext.py) using the unquantized model:
 
 ```sh
 python -m qai_hub_models.models.llama_v3_2_3b_instruct.evaluate \
