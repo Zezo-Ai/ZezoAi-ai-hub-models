@@ -303,23 +303,22 @@ def generate_code_for_model(model_name: str) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "--models",
         "-m",
         nargs="+",
         type=str,
-        default=None,
         help="Models for which to generate export.py.",
     )
-    parser.add_argument(
+    group.add_argument(
         "--all",
         "-a",
         action="store_true",
         help="If set, generates files for all models.",
     )
     args = parser.parse_args()
-    assert args.all or args.models, "Must specify -a or -m."
-    models = parser.parse_args().models if args.models else MODEL_IDS
+    models = args.models if args.models else MODEL_IDS
     modified_files = []
     for model in models:
         modified_files.extend(generate_code_for_model(model))
