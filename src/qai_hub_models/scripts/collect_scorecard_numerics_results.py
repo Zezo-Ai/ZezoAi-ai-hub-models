@@ -8,6 +8,7 @@ import argparse
 import datetime
 import os
 import subprocess
+from pathlib import Path
 
 import pandas as pd
 
@@ -86,6 +87,11 @@ def main() -> None:
     if not using_prod_hub and args.sync_code_gen:
         print("Warning: Can't sync code gen if deployment is not prod.")
         args.sync_code_gen = False
+
+    accuracy_path = Path(args.accuracy_csv_path)
+    if not accuracy_path.exists() or accuracy_path.stat().st_size == 0:
+        print("No accuracy CSV found. Not updating any numerics files.")
+        return
 
     modified_files: list[str] = []
     accuracy_df = pd.read_csv(args.accuracy_csv_path)

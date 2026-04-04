@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+from pathlib import Path
 
 from qai_hub_models.configs.info_yaml import QAIHMModelInfo
 from qai_hub_models.scorecard.envvars import (
@@ -51,6 +52,11 @@ def main() -> None:
     # Verify args are compatible with the chosen deployment.
     args = parse_args()
     pytorch_models, _ = validate_and_split_enabled_models(args.models)
+
+    assets_path = Path(args.release_assets_yaml)
+    if not assets_path.exists() or assets_path.stat().st_size == 0:
+        print("No scorecard release assets found. Not updating any files.")
+        return
 
     modified_files: list[str] = []
     scorecard_assets = ScorecardAssetYaml.from_yaml(args.release_assets_yaml)

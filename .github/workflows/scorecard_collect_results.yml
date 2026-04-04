@@ -307,7 +307,7 @@ jobs:
 
       - name: Update release asset files for models
         id: create-release-assets-files
-        if: ${{ !cancelled() && steps.download-zip-asset-artifact.outputs.matched-artifacts-count > 0 }}
+        if: ${{ !cancelled() && steps.download-zip-asset-artifact.outcome == 'success' }}
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
