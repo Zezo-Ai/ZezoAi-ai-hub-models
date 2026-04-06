@@ -19,7 +19,7 @@ from qai_hub_models.scripts.release_huggingface_model_cards import (
 from qai_hub_models.scripts.utils.huggingface_model_card_helpers import (
     generate_hf_manifest,
 )
-from qai_hub_models.utils.asset_loaders import load_yaml
+from qai_hub_models.utils.asset_loaders import load_json
 from qai_hub_models.utils.path_helpers import MODEL_IDS, QAIHM_MODELS_ROOT
 
 # Fake deprecated model name that doesn't exist in MODEL_IDS
@@ -122,7 +122,7 @@ def test_generate_and_dry_run_release_hf_model_cards() -> None:
             f"Model {NEVER_DEPRECATE_MODEL} should NOT be deprecated (in HF_REPO_NAMES_TO_NEVER_DEPRECATE)"
         )
 
-        # Verify release_assets.yaml is created for models with release assets
+        # Verify release_assets.json is created for models with release assets
         models_with_manifest = 0
         for model_id in model_ids:
             model_info = QAIHMModelInfo.from_model(model_id)
@@ -131,7 +131,7 @@ def test_generate_and_dry_run_release_hf_model_cards() -> None:
             )
 
             model_output_dir = output_dir / model_id
-            manifest_path = model_output_dir / "release_assets.yaml"
+            manifest_path = model_output_dir / "release_assets.json"
 
             # Models with release assets and no sharing restriction should have manifest
             if not release_assets.empty and not model_info.restrict_model_sharing:
@@ -141,12 +141,12 @@ def test_generate_and_dry_run_release_hf_model_cards() -> None:
                 models_with_manifest += 1
 
                 # Verify manifest structure
-                manifest = load_yaml(manifest_path)
+                manifest = load_json(manifest_path)
                 assert "version" in manifest, (
-                    "release_assets.yaml should have 'version' key"
+                    "release_assets.json should have 'version' key"
                 )
                 assert "precisions" in manifest, (
-                    "release_assets.yaml should have 'precisions' key"
+                    "release_assets.json should have 'precisions' key"
                 )
 
                 # Verify at least one precision has download_url
@@ -161,12 +161,12 @@ def test_generate_and_dry_run_release_hf_model_cards() -> None:
             # Models without release assets should not have manifest
             elif release_assets.empty:
                 assert not manifest_path.exists(), (
-                    f"Model {model_id} has no release assets, should not have release_assets.yaml"
+                    f"Model {model_id} has no release assets, should not have release_assets.json"
                 )
 
         # Ensure we actually tested some models with manifests
         assert models_with_manifest > 0, (
-            "Expected at least one model with release assets to verify release_assets.yaml"
+            "Expected at least one model with release assets to verify release_assets.json"
         )
 
 

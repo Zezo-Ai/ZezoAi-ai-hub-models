@@ -364,12 +364,12 @@ def write_hf_model_card_and_license(
     with open(license_path, "w") as license_file:
         license_file.write(license_text)
 
-    # Write release_assets.yaml with download URLs for release assets.
+    # Write release_assets.json with download URLs for release assets.
     if not model_info.restrict_model_sharing:
         manifest = generate_hf_manifest(model_info.id, qaihm_version)
         if manifest is not None:
-            manifest_path = output_dir / "release_assets.yaml"
-            manifest.to_yaml(manifest_path)
+            manifest_path = output_dir / "release_assets.json"
+            manifest.to_json(manifest_path)
 
 
 def write_deprecated_hf_model_card(output_dir: str | os.PathLike) -> None:
