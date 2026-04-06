@@ -1,6 +1,47 @@
-supported_devices: []
-supported_chipsets: []
+supported_devices:
+- Snapdragon X Elite CRD
+- Snapdragon X2 Elite CRD
+- Samsung Galaxy S25
+- Dragonwing IQ-9075 EVK
+supported_chipsets:
+- qualcomm-snapdragon-x-elite
+- qualcomm-snapdragon-x2-elite
+- qualcomm-snapdragon-8-elite-for-galaxy
+- qualcomm-qcs9075
 precisions:
   w4a16:
     components:
-      Qwen3-4B-Instruct-2507: {}
+      Qwen3-4B-Instruct-2507:
+        performance_metrics:
+          Snapdragon X Elite CRD:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 18.665884017944336
+                time_to_first_token_range_milliseconds:
+                  min: 113.8905
+                  max: 3644.496
+          Snapdragon X2 Elite CRD:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 32.21429328918457
+                time_to_first_token_range_milliseconds:
+                  min: 75.8052
+                  max: 2425.7664
+          Samsung Galaxy S25:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 26.716510581970216
+                time_to_first_token_range_milliseconds:
+                  min: 67.5
+                  max: 2160.0
+          Dragonwing IQ-9075 EVK:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 20.75587863922119
+                time_to_first_token_range_milliseconds:
+                  min: 96.7072
+                  max: 3094.6304
