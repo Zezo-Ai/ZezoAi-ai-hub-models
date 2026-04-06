@@ -251,7 +251,7 @@ jobs:
 
       - name: Run Link Jobs (Pytorch Recipes)
         id: run-link-jobs
-        if: ${{ !cancelled() && steps.run-compile-jobs.conclusion == 'success' }}
+        if: ${{ !cancelled() && steps.run-compile-jobs.conclusion != 'skipped' }}
         env:
           QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/build/test-results/link-junit.xml
         run: |
@@ -262,7 +262,7 @@ jobs:
 
       - name: Run Profile & Inference Jobs (Static Models)
         id: run-profile-jobs-static
-        if: ${{ !cancelled() && inputs.test_scope != 'unit' && inputs.test_scope != 'unit_and_compile' && inputs.test_scope != 'compile_only' && steps.run-compile-jobs-static.conclusion == 'success' }}
+        if: ${{ !cancelled() && inputs.test_scope != 'unit' && inputs.test_scope != 'unit_and_compile' && inputs.test_scope != 'compile_only' && steps.run-compile-jobs-static.conclusion != 'skipped' }}
         run: |
           source "${{env.VENV_PATH}}/bin/activate"
           if [[ "${{ inputs.test_scope }}" == "perf" ]]; then
@@ -275,7 +275,7 @@ jobs:
 
       - name: Run Profile & Inference Jobs (Pytorch Recipes)
         id: run-profile-jobs-e2e
-        if: ${{ !cancelled() && inputs.test_scope != 'unit' && inputs.test_scope != 'unit_and_compile' && inputs.test_scope != 'compile_only' && steps.run-compile-jobs.conclusion == 'success' }}
+        if: ${{ !cancelled() && inputs.test_scope != 'unit' && inputs.test_scope != 'unit_and_compile' && inputs.test_scope != 'compile_only' && steps.run-compile-jobs.conclusion != 'skipped' }}
         env:
           QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/build/test-results/profile-inference-junit.xml
         run: |
