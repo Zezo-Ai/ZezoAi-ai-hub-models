@@ -38,8 +38,8 @@ EXPECTED_MODEL_SETS = {
 SELECTED_DEVICES = {
     ("mask2former", DEFAULT_SCORECARD_DEVICE.chipset),
     ("mediapipe_face", DEFAULT_SCORECARD_DEVICE.chipset),
-    ("mediapipe_face::FaceLandmarkDetector", DEFAULT_SCORECARD_DEVICE.chipset),
-    ("mediapipe_face::FaceDetector", DEFAULT_SCORECARD_DEVICE.chipset),
+    ("mediapipe_face::face_landmark_detector", DEFAULT_SCORECARD_DEVICE.chipset),
+    ("mediapipe_face::face_detector", DEFAULT_SCORECARD_DEVICE.chipset),
     ("yolov8_det", DEFAULT_SCORECARD_DEVICE.chipset),
     ("amt_torchscript", DEFAULT_SCORECARD_DEVICE.chipset),
     ("efficientformer_onnx", "qualcomm-sa8295p"),
@@ -67,10 +67,10 @@ def validate_results_df(results_df: pd.DataFrame) -> list[str]:
         results_df[["model_id", "chipset"]].apply(tuple, axis=1).isin(SELECTED_DEVICES)
     ]
     unfound_model_sets = deepcopy(EXPECTED_MODEL_SETS)
-    unfound_model_sets["mediapipe_face::FaceLandmarkDetector"] = deepcopy(
+    unfound_model_sets["mediapipe_face::face_landmark_detector"] = deepcopy(
         unfound_model_sets["mediapipe_face"]
     )
-    unfound_model_sets["mediapipe_face::FaceDetector"] = deepcopy(
+    unfound_model_sets["mediapipe_face::face_detector"] = deepcopy(
         unfound_model_sets["mediapipe_face"]
     )
 
@@ -109,10 +109,10 @@ def validate_scorecard_df(scorecard_df: pd.DataFrame) -> list[str]:
         .isin(SELECTED_DEVICES)
     ]
     unfound_model_sets = deepcopy(EXPECTED_MODEL_SETS)
-    unfound_model_sets["mediapipe_face::FaceLandmarkDetector"] = deepcopy(
+    unfound_model_sets["mediapipe_face::face_landmark_detector"] = deepcopy(
         unfound_model_sets["mediapipe_face"]
     )
-    unfound_model_sets["mediapipe_face::FaceDetector"] = deepcopy(
+    unfound_model_sets["mediapipe_face::face_detector"] = deepcopy(
         unfound_model_sets["mediapipe_face"]
     )
     unfound_model_sets.pop("mediapipe_face")
