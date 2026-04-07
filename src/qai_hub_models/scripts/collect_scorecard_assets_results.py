@@ -72,7 +72,7 @@ def main() -> None:
 
             if scorecard_model_assets := scorecard_assets.models.get(model_id):
                 # Remove assets for unsupported paths
-                remove_asset_failures(
+                scorecard_model_assets = remove_asset_failures(
                     scorecard_model_assets, model_info.code_gen_config.disabled_paths
                 )
 

@@ -68,18 +68,29 @@ def combine_split_artifacts(
             if yaml_path.exists():
                 data = load_yaml(yaml_path)
                 if data:
-                    # Check for duplicate keys
-                    duplicates = set(combined_data.keys()) & set(data.keys())
+                    # release-assets.yaml nests everything under
+                    # "models", so merge on that key to avoid later
+                    # splits overwriting earlier ones.
+                    if yaml_file == "release-assets.yaml":
+                        combined_data.setdefault("models", {})
+                        entries = data.get("models") or {}
+                        merge_into = combined_data["models"]
+                    else:
+                        entries = data
+                        merge_into = combined_data
+
+                    duplicates = set(merge_into.keys()) & set(entries.keys())
                     if duplicates:
                         print(
                             f"Warning: Duplicate keys found in {yaml_file}: {duplicates}"
                         )
-                    combined_data.update(data)
+                    merge_into.update(entries)
 
         if combined_data:
             output_path = output_dir / yaml_file
             save_yaml(output_path, combined_data)
-            print(f"Combined {yaml_file}: {len(combined_data)} entries")
+            num_entries = len(combined_data.get("models", combined_data))
+            print(f"Combined {yaml_file}: {num_entries} entries")
 
     # Merge CSV files by concatenating rows
     for csv_file in MERGE_CSV_FILES:
