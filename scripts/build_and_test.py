@@ -784,9 +784,10 @@ def plan_from_dependencies(
                     )
                     sys.exit(1)
         if len(unfulfilled_deps) == 0:
-            # add task_name to plan
-            task_adder: Callable[[Plan], str] = getattr(task_library, task_name)
-            task_adder(plan)
+            # add task_name to plan (if not already present)
+            if not plan.has_step(task_name):
+                task_adder: Callable[[Plan], str] = getattr(task_library, task_name)
+                task_adder(plan)
         else:
             # Look at task_name again later when its deps are satisfied
             work_list.append(task_name)
