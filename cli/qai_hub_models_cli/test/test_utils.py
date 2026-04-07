@@ -11,70 +11,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from qai_hub_models_cli.utils import (
-    MIN_SUPPORTED_VERSION,
-    UnsupportedVersionError,
     download,
     extract_zip_file,
     get_next_free_path,
-    normalize_version,
-    validate_version,
 )
-
-# ── normalize_version ────────────────────────────────────────────────
-
-
-def test_normalize_version_strips_v_prefix() -> None:
-    assert normalize_version("v0.45.0") == "0.45.0"
-
-
-def test_normalize_version_no_prefix() -> None:
-    assert normalize_version("0.45.0") == "0.45.0"
-
-
-def test_normalize_version_lowercases() -> None:
-    assert normalize_version("V0.45.0") == "0.45.0"
-
-
-def test_normalize_version_double_v() -> None:
-    """Removeprefix only strips one leading 'v'."""
-    assert normalize_version("vv0.45.0") == "v0.45.0"
-
-
-# ── validate_version ────────────────────────────────────────────────
-
-
-def test_validate_version_below_floor() -> None:
-    with pytest.raises(UnsupportedVersionError, match="not supported"):
-        validate_version("v0.43.0")
-
-
-def test_validate_version_at_floor() -> None:
-    validate_version(f"v{MIN_SUPPORTED_VERSION}")
-
-
-def test_validate_version_dev_version_rejected() -> None:
-    with pytest.raises(UnsupportedVersionError, match="dev version"):
-        validate_version("0.45.0.dev1")
-
-
-def test_validate_version_above_installed_on_release() -> None:
-    with (
-        patch("qai_hub_models_cli.utils.__version__", "0.45.0"),
-        pytest.raises(UnsupportedVersionError, match="newer than the installed"),
-    ):
-        validate_version("v0.46.0")
-
-
-def test_validate_version_above_installed_ok_on_dev() -> None:
-    """Ceiling check is skipped on dev installs."""
-    with patch("qai_hub_models_cli.utils.__version__", "0.45.0.dev1"):
-        validate_version("v0.99.0")
-
-
-def test_validate_version_at_installed() -> None:
-    with patch("qai_hub_models_cli.utils.__version__", "0.45.0"):
-        validate_version("v0.45.0")
-
 
 # ── get_next_free_path ───────────────────────────────────────────────
 
@@ -195,3 +135,15 @@ def test_download_with_extract(tmp_path: Path) -> None:
     assert (result / "data.txt").read_text() == "payload"
     # Zip should not be kept.
     assert not (tmp_path / "model.zip").exists()
+
+
+# ── extract_zip_file path traversal ─────────────────────────────────
+
+
+def test_extract_zip_rejects_path_traversal(tmp_path: Path) -> None:
+    zip_path = tmp_path / "evil.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("../../etc/passwd", "pwned")
+
+    with pytest.raises(ValueError, match="Unsafe zip entry"):
+        extract_zip_file(zip_path, tmp_path / "extracted")

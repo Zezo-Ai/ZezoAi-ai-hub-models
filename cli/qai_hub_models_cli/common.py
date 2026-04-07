@@ -5,7 +5,11 @@
 from __future__ import annotations
 
 from enum import Enum
+from pathlib import Path
 
+import platformdirs
+
+CACHE_DIR = Path(platformdirs.user_cache_dir("qai_hub_models")) / "cli"
 STORE_URL = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com"
 ASSET_FOLDER = "qai-hub-models/models/{model_id}/releases/v{version}"
 

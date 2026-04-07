@@ -8,19 +8,19 @@ import os
 from pathlib import Path
 
 import requests
+from packaging.version import Version
 
-from qai_hub_models_cli._version import __version__
 from qai_hub_models_cli.common import (
     ASSET_FOLDER,
     STORE_URL,
     Precision,
     TargetRuntime,
 )
-from qai_hub_models_cli.utils import (
-    download,
-    get_next_free_path,
-    normalize_version,
-    validate_version,
+from qai_hub_models_cli.utils import download, get_next_free_path
+from qai_hub_models_cli.versions import (
+    CURRENT_VERSION,
+    verify_not_dev_release,
+    verify_version_supported,
 )
 
 ASSET_FILENAME = "{model_id}-{runtime}-{precision}.zip"
@@ -33,7 +33,7 @@ def _asset_url(
     model_id: str,
     runtime: TargetRuntime | str,
     precision: Precision | str,
-    version: str,
+    version: Version,
     chipset: str | None = None,
 ) -> tuple[str, str]:
     """Return (url, filename) for the asset."""
@@ -44,7 +44,7 @@ def _asset_url(
     precision_str = (
         precision.value if isinstance(precision, Precision) else precision.lower()
     )
-    ver = normalize_version(version)
+    ver = str(version)
     if chipset is not None:
         filename = ASSET_CHIPSET_FILENAME.format(
             model_id=model_id,
@@ -67,7 +67,7 @@ def get_asset_url(
     model_id: str,
     runtime: TargetRuntime | str,
     precision: Precision | str,
-    version: str,
+    version: Version,
     chipset: str | None = None,
 ) -> str:
     """
@@ -82,7 +82,7 @@ def get_asset_url(
     precision
         Model precision.
     version
-        AI Hub Models version tag.
+        AI Hub Models version.
     chipset
         Optional chipset name.
 
@@ -100,7 +100,8 @@ def get_asset_url(
     # distributed as standard S3 zips. Check if the model exists and
     # supports llama_cpp, then direct the user to the model README
     # for download instructions instead of failing on a missing asset.
-    validate_version(version)
+    verify_not_dev_release(version)
+    verify_version_supported(version)
 
     # TODO(#18374): Read available assets from a manifest
     # instead of making HEAD requests.
@@ -125,9 +126,12 @@ def get_asset_url(
     if _head(url) == 200:
         return url
 
+    chipset_msg = f", chipset={chipset!r}" if chipset else ""
     raise FileNotFoundError(
         f"No asset found for model={model_id!r}, runtime={runtime!r}, "
-        f"precision={precision!r}, version={version!r}."
+        f"precision={precision!r}, version={version!r}{chipset_msg}.\n"
+        "  - Browse available models: https://aihub.qualcomm.com/models\n"
+        "  - List valid devices/chipsets: qai-hub list-devices (from the qai_hub package)"
     )
 
 
@@ -137,7 +141,7 @@ def fetch(
     output_dir: str | os.PathLike,
     precision: Precision | str = Precision.FLOAT,
     chipset: str | None = None,
-    version: str = __version__,
+    version: Version = CURRENT_VERSION,
     extract: bool = False,
     quiet: bool = False,
 ) -> Path:
@@ -160,8 +164,7 @@ def fetch(
     chipset
         Chipset name for device-specific (AOT compiled) runtimes.
     version
-        AI Hub Models version tag (e.g. ``"v0.45.0"`` or ``"0.45.0"``).
-        Defaults to the CLI package version.
+        AI Hub Models version. Defaults to the installed CLI version.
     extract
         If True, extract the downloaded zip archive.
     quiet

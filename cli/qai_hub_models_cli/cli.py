@@ -7,10 +7,19 @@ import contextlib
 import sys
 from importlib.metadata import PackageNotFoundError, version
 
+from packaging.version import Version
+from packaging.version import parse as parse_version
+
 from qai_hub_models_cli._version import __version__
 from qai_hub_models_cli.common import Precision, TargetRuntime
 from qai_hub_models_cli.fetch import fetch, get_asset_url
-from qai_hub_models_cli.utils import UnsupportedVersionError
+from qai_hub_models_cli.versions import (
+    CURRENT_VERSION,
+    UnsupportedVersionError,
+    get_supported_versions,
+    normalize_version,
+    print_upgrade_notice,
+)
 
 
 def _check_version_match() -> None:
@@ -27,6 +36,11 @@ def _check_version_match() -> None:
             "Please reinstall both packages from the same version."
         )
         sys.exit(1)
+
+
+def _parse_version(s: str) -> Version:
+    """Argparse type function: normalize and parse a version string."""
+    return parse_version(normalize_version(s))
 
 
 def _run_fetch(args: argparse.Namespace) -> None:
@@ -49,7 +63,7 @@ def _run_fetch(args: argparse.Namespace) -> None:
             chipset=args.chipset,
             version=args.qaihm_version,
             extract=args.extract,
-            output_dir=args.output,
+            output_dir=args.output_dir,
             quiet=args.quiet,
         )
     except Exception as e:
@@ -63,10 +77,14 @@ def _run_fetch(args: argparse.Namespace) -> None:
 
     if args.quiet:
         print(result)
-    elif args.extract:
+        return
+
+    if args.extract:
         print(f"Extracted to: {result}")
     else:
         print(f"Saved to: {result}")
+
+    print_upgrade_notice()
 
 
 def add_fetch_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
@@ -100,13 +118,14 @@ def add_fetch_parser(subparsers: argparse._SubParsersAction) -> argparse.Argumen
         "--chipset",
         default=None,
         type=str.lower,
-        help="Chipset name for device-specific (AOT compiled) runtimes.",
+        help="Chipset name for device-specific (AOT compiled) runtimes. "
+        "Run `qai-hub list-devices` (from the qai_hub package) to see valid names.",
     )
     parser.add_argument(
         "-v",
         "--version",
-        default=__version__,
-        type=str.lower,
+        default=CURRENT_VERSION,
+        type=_parse_version,
         dest="qaihm_version",
         help=f"AI Hub Models version tag (e.g. v0.45.0 or 0.45.0). Default: {__version__}.",
     )
@@ -118,7 +137,7 @@ def add_fetch_parser(subparsers: argparse._SubParsersAction) -> argparse.Argumen
     )
     parser.add_argument(
         "-o",
-        "--output",
+        "--output-dir",
         default=".",
         help="Output directory. Default: current directory.",
     )
@@ -137,6 +156,39 @@ def add_fetch_parser(subparsers: argparse._SubParsersAction) -> argparse.Argumen
     return parser
 
 
+def _run_versions(args: argparse.Namespace) -> None:
+    supported = get_supported_versions(force_refresh=True)
+    installed = CURRENT_VERSION
+
+    if args.quiet:
+        print(", ".join(str(v) for v in supported))
+        return
+
+    print("Supported AI Hub Models Versions:")
+    labeled = [f"{v} (installed)" if v == installed else str(v) for v in supported]
+    print(", ".join(labeled))
+    print_upgrade_notice()
+
+
+def add_versions_parser(
+    subparsers: argparse._SubParsersAction,
+) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser(
+        "versions",
+        help="List all AI Hub Models versions supported by this CLI.",
+        description="List all AI Hub Models versions supported by this CLI. "
+        "Shows which version is currently installed and whether newer versions are available.",
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Print versions as a plain comma-separated list without the (installed) marker or upgrade notice.",
+    )
+    parser.set_defaults(func=_run_versions)
+    return parser
+
+
 def main(args: list[str] | None = None) -> None:
     _check_version_match()
 
@@ -144,9 +196,14 @@ def main(args: list[str] | None = None) -> None:
         prog="qai_hub_models",
         description="Qualcomm AI Hub Models CLI.",
     )
-
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
     subparsers = parser.add_subparsers()
     add_fetch_parser(subparsers)
+    add_versions_parser(subparsers)
 
     # Allow qai_hub_models to add subcommands if installed
     with contextlib.suppress(ImportError):

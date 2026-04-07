@@ -12,65 +12,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import requests
-from packaging.version import parse as parse_version
 from tqdm import tqdm
-
-from qai_hub_models_cli._version import __version__
-
-MIN_SUPPORTED_VERSION = "0.44.0"
-
-
-class UnsupportedVersionError(RuntimeError):
-    pass
-
-
-def normalize_version(version: str) -> str:
-    """Lowercase and strip leading 'v' from a version string."""
-    return version.lower().removeprefix("v")
-
-
-def validate_version(version: str) -> None:
-    """
-    Validate that a requested version is readable by this version of the CLI.
-
-    Ensures *version* is at or above ``MIN_SUPPORTED_VERSION``,
-    which is the earliest release that published per-device assets to S3.
-
-    Also ensures *version* does not exceed the currently installed package
-    version, since assets for a newer release may rely on schema or runtime
-    changes not present in the current install. This ceiling check is
-    skipped on dev builds, which are always ahead of the latest release.
-
-    Parameters
-    ----------
-    version
-        Requested version string.
-
-    Raises
-    ------
-    ValueError
-        If *version* is below the minimum or above the installed version.
-    """
-    requested = parse_version(normalize_version(version))
-
-    if requested.is_devrelease:
-        raise UnsupportedVersionError(
-            f"Version {version} is a dev version and has no published assets. "
-            f"Provide a release version (e.g. v0.45.0)."
-        )
-
-    floor = parse_version(MIN_SUPPORTED_VERSION)
-    if requested < floor:
-        raise UnsupportedVersionError(
-            f"Version {version} is not supported. Minimum supported version is v{MIN_SUPPORTED_VERSION}."
-        )
-
-    installed = parse_version(__version__)
-    if not installed.is_devrelease and requested > installed:
-        raise UnsupportedVersionError(
-            f"Version {version} is newer than the installed version ({__version__}). "
-            f"Upgrade the package or use version v{__version__} or earlier."
-        )
 
 
 def get_next_free_path(path: str | os.PathLike, delim: str = "-") -> Path:

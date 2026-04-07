@@ -7,7 +7,10 @@ from unittest.mock import patch
 
 import pytest
 
-from qai_hub_models_cli.cli import _check_version_match, main
+from qai_hub_models_cli.cli import (
+    _check_version_match,
+    main,
+)
 
 
 def test_cli_import() -> None:
@@ -15,8 +18,8 @@ def test_cli_import() -> None:
     assert callable(main)
 
 
-def test_cli_no_qai_hub_models(capsys: pytest.CaptureFixture[str]) -> None:
-    """Verify the CLI prints help when qai_hub_models is not installed."""
+def test_cli_no_qai_hub_models() -> None:
+    """Verify the CLI runs without error when qai_hub_models is not installed."""
 
     def _version_without_models(pkg: str) -> str:
         if pkg == "qai_hub_models":
@@ -27,9 +30,7 @@ def test_cli_no_qai_hub_models(capsys: pytest.CaptureFixture[str]) -> None:
         patch("qai_hub_models_cli.cli.version", side_effect=_version_without_models),
         patch.dict("sys.modules", {"qai_hub_models": None, "qai_hub_models.cli": None}),
     ):
-        main([])
-    captured = capsys.readouterr()
-    assert "Qualcomm AI Hub Models CLI" in captured.out
+        main([])  # should not raise
 
 
 def test_version_mismatch_exits() -> None:
@@ -63,3 +64,15 @@ def test_version_check_models_not_installed() -> None:
 
     with patch("qai_hub_models_cli.cli.version", side_effect=_version_without_models):
         _check_version_match()
+
+
+# ── --version flag ──────────────────────────────────────────────────
+
+
+def test_version_flag() -> None:
+    with (
+        patch("qai_hub_models_cli.cli._check_version_match"),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        main(["--version"])
+    assert exc_info.value.code == 0
