@@ -154,7 +154,7 @@ class Qwen2_5_7B_Instruct(LlamaMixin):
                 num_key_value_heads=4,
                 num_attention_heads=28,
             )
-        return Llama3Base._get_input_spec(
+        input_spec = Llama3Base._get_input_spec(
             num_hidden_layers=llm_config["num_hidden_layers"],
             sequence_length=sequence_length,
             context_length=context_length,
@@ -163,6 +163,10 @@ class Qwen2_5_7B_Instruct(LlamaMixin):
             num_attention_heads=llm_config["num_attention_heads"],
             llm_io_type=llm_io_type,
         )
+        if "input_ids" in input_spec:
+            shape, _ = input_spec["input_ids"]
+            input_spec["input_ids"] = (shape, "int64")
+        return input_spec
 
     def get_hub_compile_options(
         self,
