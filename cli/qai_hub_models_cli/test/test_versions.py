@@ -270,6 +270,7 @@ def test_get_published_versions_cache_hit(tmp_path: Path) -> None:
     cache_file = tmp_path / "published-versions.txt"
     cache_file.write_text(MOCK_VERSIONS_TEXT)
     with (
+        _mock_installed("0.49.0"),
         patch("qai_hub_models_cli.versions._VERSIONS_CACHE", cache_file),
         patch("qai_hub_models_cli.versions.CACHE_DIR", tmp_path),
         patch("qai_hub_models_cli.versions.requests.get") as mock_get,

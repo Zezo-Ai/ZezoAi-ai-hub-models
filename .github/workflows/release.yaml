@@ -37,7 +37,8 @@ jobs:
   release_code:
       name: Release code to Repository
       secrets: inherit
-      needs: [approve]
+      needs: [approve, test_public_wheel]
+      if: ${{ !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
       uses: ./.github/workflows/release_code.yaml
       with:
           skip_approval: true
@@ -45,8 +46,8 @@ jobs:
   release_pypi:
       name: Release wheel to ${{ inputs.target == 'prod' && 'PyPi' || 'test PyPi' }}
       secrets: inherit
-      needs: [approve]
-      if: ${{ !cancelled() && (needs.approve.result == 'success' || needs.approve.result == 'skipped') }}
+      needs: [approve, test_public_wheel]
+      if: ${{ !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
       uses: ./.github/workflows/release_pypi.yaml
       with:
           target: ${{ inputs.target }}
@@ -54,18 +55,18 @@ jobs:
 
   release_huggingface:
       name: Release Hugging Face Model Cards
-      if: ${{ inputs.target == 'prod' }}
+      if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
       secrets: inherit
-      needs: [approve]
+      needs: [approve, test_public_wheel]
       uses: ./.github/workflows/release_huggingface.yaml
       with:
           skip_approval: true
 
   release_assets:
       name: Release Assets
-      if: ${{ inputs.target == 'prod' }}
+      if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
       secrets: inherit
-      needs: [approve]
+      needs: [approve, test_public_wheel]
       uses: ./.github/workflows/release_assets.yaml
       with:
           skip_approval: true
@@ -73,8 +74,8 @@ jobs:
   sync_public_website:
     name: Sync Public Website & Create Public Website PR
     secrets: inherit
-    if: ${{ inputs.target == 'prod' }}
-    needs: [approve]
+    if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
+    needs: [approve, test_public_wheel]
     uses: ./.github/workflows/release_website.yml
     with:
       source_branch_name: ${{ github.ref }}
