@@ -282,11 +282,11 @@ class QAIHMModelInfo(BaseQAIHMConfig):
             if session.head(animated_banner_url).status_code != requests.codes.ok:
                 raise ValueError(f"Animated banner is missing at {animated_banner_url}")
 
-        expected_qaihm_repo = Path("qai_hub_models") / "models" / self.id
+        expected_qaihm_repo = Path("src") / "qai_hub_models" / "models" / self.id
         if expected_qaihm_repo != ASSET_CONFIG.get_qaihm_repo(self.id):
             raise ValueError("QAIHM repo not pointing to expected relative path")
 
-        expected_example_use = f"qai_hub_models/models/{self.id}#example--usage"
+        expected_example_use = f"src/qai_hub_models/models/{self.id}#example--usage"
         if expected_example_use != ASSET_CONFIG.get_example_use(self.id):
             raise ValueError(
                 "Example-usage field not pointing to expected relative path"
