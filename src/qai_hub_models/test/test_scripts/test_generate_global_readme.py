@@ -14,17 +14,32 @@ TEST_MODELS = ["resnet50", "easyocr", "litehrnet"]
 
 
 def test_generate_global_readme() -> None:
-    # Verify the generated README contains the expected model table
     models = [QAIHMModelInfo.from_model(model_id) for model_id in TEST_MODELS]
 
     with TemporaryDirectory() as tmp_dir:
-        readme_path = generate_global_readme(models, Path(tmp_dir))
-        with open(readme_path) as f:
-            readme = f.read()
+        os.makedirs(os.path.join(tmp_dir, "src"))
+        pypi_dir = os.path.join(tmp_dir, "src")
+        repo_path, pypi_path = generate_global_readme(
+            models, Path(tmp_dir), Path(pypi_dir)
+        )
+
+        with open(repo_path) as f:
+            repo_readme = f.read()
+        with open(pypi_path) as f:
+            pypi_readme = f.read()
 
     with open(
         os.path.join(os.path.dirname(__file__), "summary_table_expected.md")
     ) as expected_f:
         expected_table = expected_f.read()
 
-    assert expected_table in readme
+    # Repo README has relative links
+    assert expected_table in repo_readme
+
+    # PyPI README has model directory with package names instead of relative links
+    with open(
+        os.path.join(os.path.dirname(__file__), "pypi_table_expected.md")
+    ) as expected_f:
+        expected_pypi_table = expected_f.read()
+
+    assert expected_pypi_table in pypi_readme

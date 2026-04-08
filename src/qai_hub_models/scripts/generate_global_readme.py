@@ -22,6 +22,7 @@ from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.path_helpers import (
     MODEL_IDS,
     QAIHM_PACKAGE_NAME,
+    QAIHM_PACKAGE_SRC_ROOT,
     QAIHM_REPO_ROOT,
 )
 
@@ -88,26 +89,37 @@ def _get_model_directory(models: list[QAIHMModelInfo]) -> list[dict[str, Any]]:
 
 def generate_global_readme(
     models: list[QAIHMModelInfo],
-    output_root: Path,
-) -> Path:
-    """Generate the global README.md by filling in the model table."""
+    repo_root: Path,
+    pypi_root: Path,
+) -> tuple[Path, Path]:
+    """Generate the repo README and PyPI README by filling in the model table.
+
+    Returns (repo_readme_path, pypi_readme_path).
+    """
     models = [m for m in models if m.status == MODEL_STATUS.PUBLISHED]
     model_directory = _get_model_directory(models)
-    readme = GLOBAL_README_TEMPLATE.module.render(model_directory=model_directory)  # type: ignore[attr-defined]
 
-    readme_path = output_root / "README.md"
-    with open(readme_path, "w") as f:
-        f.write(readme)
+    paths: list[Path] = []
+    for root, include_relative_links in [
+        (repo_root, True),
+        (pypi_root, False),
+    ]:
+        readme = GLOBAL_README_TEMPLATE.module.render(  # type: ignore[attr-defined]
+            model_directory=model_directory,
+            include_relative_links=include_relative_links,
+        )
+        readme_path = root / "README.md"
+        with open(readme_path, "w") as f:
+            f.write(readme)
+        paths.append(readme_path)
 
-    return readme_path
+    return paths[0], paths[1]
 
 
 def main() -> None:
     """Generate the global README with a summary table for all models (including private ones)."""
-    generate_global_readme(
-        [QAIHMModelInfo.from_model(mid) for mid in MODEL_IDS],
-        QAIHM_REPO_ROOT,
-    )
+    models = [QAIHMModelInfo.from_model(mid) for mid in MODEL_IDS]
+    generate_global_readme(models, QAIHM_REPO_ROOT, QAIHM_PACKAGE_SRC_ROOT)
 
 
 if __name__ == "__main__":

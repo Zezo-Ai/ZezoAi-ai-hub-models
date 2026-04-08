@@ -13,7 +13,8 @@ from qai_hub_models.utils.asset_loaders import load_yaml
 MODELS_PACKAGE_NAME = "models"
 QAIHM_PACKAGE_NAME = "qai_hub_models"
 QAIHM_PACKAGE_ROOT = Path(__file__).parent.parent
-QAIHM_REPO_ROOT = QAIHM_PACKAGE_ROOT.parent.parent
+QAIHM_PACKAGE_SRC_ROOT = QAIHM_PACKAGE_ROOT.parent
+QAIHM_REPO_ROOT = QAIHM_PACKAGE_SRC_ROOT.parent
 
 
 def is_internal_repo() -> bool:

@@ -372,6 +372,8 @@ jobs:
           git ls-files -co src/qai_hub_models | grep "\/models/.*/evaluate\.py$" | xargs git add
           git ls-files -co src/qai_hub_models | grep "\/models/.*/test_generated\.py$" | xargs git add
           git ls-files -co src/qai_hub_models | grep "\/models/.*/README\.md$" | xargs git add
+          git add README.md
+          git add src/README.md
 
           git add src/qai_hub_models/scorecard/intermediates/*.yaml
           git add src/qai_hub_models/scorecard/intermediates/accuracy.csv

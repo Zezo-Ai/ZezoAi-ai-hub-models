@@ -20,7 +20,7 @@
                 - package_name: str - Python package name
                 - readme_path: str - Path to model README
 #}
-{% macro render(model_directory) %}
+{% macro render(model_directory, include_relative_links=true) %}
 # [Qualcomm® AI Hub Models](https://aihub.qualcomm.com/)
 
 [![Release](https://img.shields.io/github/v/release/quic/ai-hub-models)](https://github.com/qualcomm/ai-hub-models/releases/latest)
@@ -53,8 +53,9 @@ The package is available via pip:
 pip install qai_hub_models
 ```
 
-Some models (e.g. [YOLOv7](src/qai_hub_models/models/yolov7)) require
-additional dependencies. View the model README (at [qai_hub_models/models/model_id](src/qai_hub_models/models/yolov7)) for installation instructions.
+Some models (e.g. {% if include_relative_links %}[YOLOv7](src/qai_hub_models/models/yolov7){% else %}YOLOv7{% endif %}) require
+additional dependencies. {% if include_relative_links %}View the model README (at [qai_hub_models/models/model_id](src/qai_hub_models/models/yolov7)) for installation instructions.{% else %}See the model's install instructions in the [GitHub repository](https://github.com/qualcomm/ai-hub-models).{% endif %}
+
 
 &nbsp;
 
@@ -113,7 +114,7 @@ _End-to-end_ demos:
 
 **Native** applications that can run our models (with pre- and post-processing) on physical devices are published in the [AI Hub Apps repository](https://github.com/qualcomm/ai-hub-apps/).
 
-**Python** applications are defined for all models [(from qai_hub_models.models.\<model_name> import App)](src/qai_hub_models/models/yolov7/app.py). These apps wrap model inference with pre- and post-processing steps written using torch & numpy. **These apps are optimized to be an easy-to-follow example, rather than to minimize prediction time.**
+**Python** applications are defined for all models {% if include_relative_links %}[(from qai_hub_models.models.\<model_name> import App)](src/qai_hub_models/models/yolov7/app.py){% else %}(from qai_hub_models.models.\<model_name> import App){% endif %}. These apps wrap model inference with pre- and post-processing steps written using torch & numpy. **These apps are optimized to be an easy-to-follow example, rather than to minimize prediction time.**
 
 &nbsp;
 
@@ -161,7 +162,7 @@ and many more.
 
 ### {{ domain.name }}
 
-| Model | README |
+| Model | {% if include_relative_links %}README{% else %}Package{% endif %} |
 | -- | -- |
 {% for section in domain.sections %}
 {% if section.title %}
@@ -171,7 +172,7 @@ and many more.
 | | |
 {% endif %}
 {% for row in section.rows %}
-| [{{ row.name }}]({{ row.model_url }}) | [{{ row.package_name }}]({{ row.readme_path }}) |
+| [{{ row.name }}]({{ row.model_url }}) | {% if include_relative_links %}[{{ row.package_name }}]({{ row.readme_path }}){% else %}`{{ row.package_name }}`{% endif %} |
 {% endfor %}
 {% endfor %}
 {% endfor %}
@@ -185,5 +186,5 @@ Email: ai-hub-support@qti.qualcomm.com.
 
 ## LICENSE
 
-Qualcomm® AI Hub Models is licensed under BSD-3. See the [LICENSE file](LICENSE).
+Qualcomm® AI Hub Models is licensed under BSD-3. See the [LICENSE file]({% if include_relative_links %}LICENSE{% else %}https://github.com/qualcomm/ai-hub-models/blob/main/LICENSE{% endif %}).
 {% endmacro %}
