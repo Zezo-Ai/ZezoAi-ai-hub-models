@@ -138,3 +138,26 @@ Onboarding sub-guides (loaded only when needed):
 
 Other guides:
 - `.claude/docs/github-ci-guide.md` — using `gh` CLI to fetch PR comments, check CI status, and read test failure logs
+
+## Qualcomm AI Hub SDK (`qai_hub`)
+
+The `qai_hub` Python package is the SDK for compiling, profiling, and running inference on Qualcomm devices via AI Hub. To explore the API, read the local source — it is the authoritative reference and always matches the installed version.
+
+Find the installed package location with:
+
+```bash
+python3 -c "import qai_hub, os; print(os.path.dirname(qai_hub.__file__))"
+```
+
+Key files inside that directory:
+- **`hub.py`** — top-level API surface (~50 lines). Lists every public function: `get_job`, `get_model`, `submit_compile_job`, `submit_profile_job`, `upload_model`, etc.
+- **`client.py`** — full API implementation (~5,500 lines). Contains all classes, methods, and docstrings: `Model`, `Device`, `CompileJob`, `ProfileJob`, `InferenceJob`, `QuantizeJob`, `LinkJob`, `Job`, `Client`, etc.
+
+To look up any API, grep the local source:
+
+```bash
+grep -n "def submit_compile_job" <qai_hub_dir>/client.py
+grep -n "class ProfileJob" <qai_hub_dir>/client.py
+```
+
+Prefer reading the local source over fetching web docs. The web docs at `https://workbench.aihub.qualcomm.com/docs/` can be used as a fallback if the local source is insufficient.
