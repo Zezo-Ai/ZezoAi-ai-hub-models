@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import os
+import traceback
 from collections.abc import Iterable
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -175,7 +176,7 @@ def release_hf_model_cards(
     deprecate_removed_models: bool = False,
     commit_msg: str | None = None,
     dry_run: bool = False,
-) -> None:
+) -> list[tuple[str, Exception]]:
     """
     Generate HuggingFace model cards and release them to HuggingFace.
     Deprecate models that no longer exist in qai_hub_models/models but still exist on HuggingFace.
@@ -199,28 +200,47 @@ def release_hf_model_cards(
         release. Required when dry_run is False.
     dry_run
         If True, generates model cards without pushing to HuggingFace.
+
+    Returns
+    -------
+    failed_models : list[tuple[str, Exception]]
+        List of (model_id, exception) tuples for models that failed to release.
     """
+    failed_models: list[tuple[str, Exception]] = []
+
     if deprecate_removed_models:
         for deprecated_model_name in get_deprecated_hf_model_repo_names():
-            print(f"Deprecating HuggingFace model repo: {deprecated_model_name}")
-            deprecate_hf_model(
-                hf_repo_name=deprecated_model_name,
+            try:
+                print(f"Deprecating HuggingFace model repo: {deprecated_model_name}")
+                deprecate_hf_model(
+                    hf_repo_name=deprecated_model_name,
+                    version=version,
+                    output_dir=output_dir,
+                    huggingface_token=huggingface_token,
+                    dry_run=dry_run,
+                )
+            except Exception as e:  # noqa: PERF203
+                print(f"ERROR: Failed to deprecate {deprecated_model_name}: {e}")
+                traceback.print_exc()
+                failed_models.append((f"deprecate:{deprecated_model_name}", e))
+
+    for model_id in model_list:
+        try:
+            print(f"Releasing {model_id} to HuggingFace")
+            release_model_to_hf(
+                model_id=model_id,
                 version=version,
                 output_dir=output_dir,
                 huggingface_token=huggingface_token,
+                commit_msg=commit_msg,
                 dry_run=dry_run,
             )
+        except Exception as e:  # noqa: PERF203
+            print(f"ERROR: Failed to release {model_id}: {e}")
+            traceback.print_exc()
+            failed_models.append((model_id, e))
 
-    for model_id in model_list:
-        print(f"Releasing {model_id} to HuggingFace")
-        release_model_to_hf(
-            model_id=model_id,
-            version=version,
-            output_dir=output_dir,
-            huggingface_token=huggingface_token,
-            commit_msg=commit_msg,
-            dry_run=dry_run,
-        )
+    return failed_models
 
 
 def parse_args() -> argparse.Namespace:
@@ -279,7 +299,7 @@ def main() -> None:
         else contextlib.nullcontext(args.output_dir)
     ) as output_dir:
         assert output_dir is not None
-        release_hf_model_cards(
+        failed_models = release_hf_model_cards(
             huggingface_token=args.huggingface_token,
             model_list=model_list,
             version=args.version,
@@ -288,6 +308,18 @@ def main() -> None:
             commit_msg=args.commit_msg,
             dry_run=args.dry_run,
         )
+
+        # Report summary of failures (inside context so temp dir persists for debugging)
+        if failed_models:
+            print("\n" + "=" * 60)
+            print(f"Release completed with {len(failed_models)} failure(s):")
+            print("=" * 60)
+            for model_id, error in failed_models:
+                # Truncate error message to avoid potential token leakage in logs
+                error_msg = str(error)[:200]
+                print(f"  - {model_id}: {type(error).__name__}: {error_msg}")
+            print("=" * 60)
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":

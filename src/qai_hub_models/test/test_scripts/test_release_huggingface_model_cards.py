@@ -78,13 +78,16 @@ def test_generate_and_dry_run_release_hf_model_cards() -> None:
         TemporaryDirectory() as tmpdir,
     ):
         output_dir = Path(tmpdir)
-        release_hf_model_cards(
+        failed_models = release_hf_model_cards(
             model_list=model_ids,
             version="0.0.0",
             deprecate_removed_models=True,
             output_dir=output_dir,
             dry_run=True,
         )
+
+        # Verify no models failed
+        assert failed_models == [], f"Expected no failures, but got: {failed_models}"
 
         # Verify output for each model
         for model_id in model_ids:
