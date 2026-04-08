@@ -174,7 +174,7 @@ def export_model(
         If set, zip the assets after downloading.
     **additional_model_kwargs
         Additional optional kwargs used to customize
-        `model_cls.from_precompiled`
+        `model_cls.from_precompiled` and per-component `get_input_spec`
 
     Returns
     -------

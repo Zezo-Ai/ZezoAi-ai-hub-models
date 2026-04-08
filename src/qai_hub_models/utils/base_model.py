@@ -186,12 +186,13 @@ class CollectionModel:
 
     def sample_inputs(
         self,
-        input_spec: InputSpec | None = None,
+        input_specs: dict[str, InputSpec] | None = None,
         use_channel_last_format: bool = True,
     ) -> dict[str, SampleInputsType]:
         return {
             component_name: component.sample_inputs(
-                input_spec=input_spec, use_channel_last_format=use_channel_last_format
+                input_spec=input_specs.get(component_name) if input_specs else None,
+                use_channel_last_format=use_channel_last_format,
             )
             for component_name, component in self.components.items()
         }

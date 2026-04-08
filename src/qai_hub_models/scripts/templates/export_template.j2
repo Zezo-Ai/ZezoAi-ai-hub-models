@@ -43,7 +43,7 @@ from qai_hub_models.utils.args import (
     export_parser,
     get_export_model_name,
     {%- if not is_precompiled %}
-    {{- "" if is_collection_model else "\n    get_input_spec_kwargs," }}
+    {{- "\n    get_component_input_spec_kwargs," if is_collection_model else "\n    get_input_spec_kwargs," }}
     get_model_kwargs,
     {%- endif %}
 )
@@ -95,6 +95,7 @@ def quantize_model(
     {%- if not is_collection_model %}
     input_spec: InputSpec | None = None,
     {%- else %}
+    input_specs: dict[str, InputSpec] | None = None,
     components: list[str] | None = None,
     {%- endif %}
 ) -> {{ "dict[str, hub.client.QuantizeJob]" if is_collection_model else "hub.client.QuantizeJob" }}:
@@ -105,7 +106,7 @@ def quantize_model(
         component_precision = component_precisions[component_name]
         component = model.components[component_name]
         assert isinstance(component, BaseModel)
-        input_spec = component.get_input_spec()
+        input_spec = input_specs[component_name] if input_specs else component.get_input_spec()
         if component_precision != Precision.float:
     {%- else %}
     input_spec = input_spec or model.get_input_spec()
@@ -155,6 +156,7 @@ def compile_model(
     {%- if not is_collection_model %}
     input_spec: InputSpec | None = None,
     {%- else %}
+    input_specs: dict[str, InputSpec] | None = None,
     components: list[str] | None = None,
     {%- endif %}
     extra_options: str = "",
@@ -164,7 +166,7 @@ def compile_model(
     for component_name in (components or Model.component_class_names):
         component = model.components[component_name]
         assert isinstance(component, BaseModel)
-        input_spec = component.get_input_spec()
+        input_spec = input_specs[component_name] if input_specs else component.get_input_spec()
     {%- else %}
     input_spec = input_spec or model.get_input_spec()
     {%- endif %}
@@ -543,6 +545,7 @@ def export_model(
         Additional optional kwargs used to customize
         `model_cls.from_pre{{ "compiled" if is_precompiled else "trained" }}`
         {{- "" if is_collection_model else " and `model.get_input_spec`" }}
+        {{- " and per-component `get_input_spec`" if is_collection_model else "" }}
 
     Returns
     -------
@@ -627,6 +630,13 @@ def export_model(
     input_spec = model.get_input_spec(
         **get_input_spec_kwargs(model, additional_model_kwargs)
     )
+    {%- else %}
+    input_specs: dict[str, InputSpec] = {
+        name: model.components[name].get_input_spec(
+            **get_component_input_spec_kwargs(Model, name, additional_model_kwargs)
+        )
+        for name in components
+    }
     {%- endif %}
     {% if can_use_quantize_job %}
     # {{ steps.quantize }}
@@ -657,6 +667,7 @@ def export_model(
                 {%- if not is_collection_model %}
                 input_spec=input_spec,
                 {%- else %}
+                input_specs=input_specs,
                 components=[c for c, p in component_precisions.items() if c in components and p != Precision.float],
                 {%- endif %}
             )
@@ -672,11 +683,13 @@ def export_model(
                 model_name,
                 onnx_model{{ optional_s }},
                 num_calibration_samples,
+                {%- if is_collection_model %}
                 quantize_options,
-                {%- if not is_collection_model %}
-                input_spec,
-                {%- else %}
+                input_specs,
                 components,
+                {%- else %}
+                quantize_options,
+                input_spec,
                 {%- endif %}
             )
             if skip_compiling:
@@ -714,6 +727,7 @@ def export_model(
         {%- if not is_collection_model %}
         input_spec=input_spec,
         {%- else %}
+        input_specs=input_specs,
         components=components,
         {%- endif %}
         extra_options=compile_options,
@@ -775,9 +789,7 @@ def export_model(
     if not skip_inferencing:
         inference_job{{ optional_s }} = inference_model(
             model.sample_inputs(
-                {%- if not is_collection_model %}
-                input_spec=input_spec,
-                {%- endif %}
+                {{ "input_spec" if not is_collection_model else "input_specs" }}={{ "input_spec" if not is_collection_model else "input_specs" }},
                 use_channel_last_format=target_runtime.channel_last_native_execution
             ),
             model_name,
@@ -856,7 +868,7 @@ def export_model(
             inference_job = inference_jobs[component_name]
         {%- endif %}
         {%- filter indent(width=4 if is_collection_model else 0) %}
-        sample_inputs = {{ model_var }}.sample_inputs({{ "" if is_collection_model else "input_spec, "}}use_channel_last_format=False)
+        sample_inputs = {{ model_var }}.sample_inputs({{ "input_specs[component_name], " if is_collection_model else "input_spec, "}}use_channel_last_format=False)
         torch_out = torch_inference(
             {{ model_var }}, sample_inputs, return_channel_last_output=target_runtime.channel_last_native_execution
         )

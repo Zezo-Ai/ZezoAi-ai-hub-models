@@ -30,6 +30,7 @@ from qai_hub_models.models.protocols import (
 )
 from qai_hub_models.utils.base_model import (
     BaseModel,
+    BasePrecompiledModel,
     CollectionModel,
     HubModel,
     TargetRuntime,
@@ -841,6 +842,51 @@ def get_input_spec_kwargs(
     return input_spec_kwargs
 
 
+def _get_input_spec_params(
+    model_cls: type[BaseModel | BasePrecompiledModel],
+) -> dict[str, inspect.Parameter]:
+    """Return the non-self parameters of get_input_spec, ignoring variadic params (*args, **kwargs)."""
+    sig = inspect.signature(model_cls.get_input_spec)
+    return {
+        name: param
+        for name, param in sig.parameters.items()
+        if name != "self"
+        and param.kind
+        not in [inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD]
+    }
+
+
+def _resolve_param_type(
+    param: inspect.Parameter, model_cls: type[BaseModel | BasePrecompiledModel]
+) -> type:
+    """
+    Resolve a parameter annotation to a concrete type.
+
+    locate() converts a string type annotation to a class type.
+    Any type can be resolved as long as it's accessible in this scope.
+
+    TODO(#16652): This is brittle since it requires the parameter
+    to be imported into that scope exactly, which may not be its
+    native location.
+    """
+    if param.annotation is inspect.Parameter.empty:
+        raise TypeError(
+            f"Parameter '{param.name}' of {model_cls.__name__}.get_input_spec "
+            "has no type annotation."
+        )
+    if isinstance(param.annotation, type):
+        return param.annotation
+    type_ = locate(param.annotation.split(" | ", 1)[0])
+    if type_ is None:
+        type_ = locate(f"{model_cls.__module__}.{param.annotation}")
+    if not isinstance(type_, type):
+        raise TypeError(
+            f"Annotation '{param.annotation}' for '{param.name}' did not resolve "
+            f"to a type (got {type_!r})."
+        )
+    return type_
+
+
 def get_model_input_spec_parser(
     model_cls: type[BaseModel], parser: QAIHMArgumentParser | None = None
 ) -> QAIHMArgumentParser:
@@ -856,39 +902,66 @@ def get_model_input_spec_parser(
         for param in FunctionDoc(func=model_cls.get_input_spec)["Parameters"]
     }
 
-    get_input_spec_sig = inspect.signature(model_cls.get_input_spec)
-    for name, param in get_input_spec_sig.parameters.items():
-        if name == "self":
-            continue
-        if param.kind in [
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-        ]:
-            # ignore variadic params: *args, **kwargs
-            continue
-        type_: type | object
-        if isinstance(param.annotation, type):
-            type_ = param.annotation
-        else:
-            # locate() converts string type to cls type
-            # Any type can be resolved as long as it's accessible in this scope
-            type_ = locate(param.annotation.split(" | ", 1)[0])
-            if type_ is None:
-                # TODO(#16652): This is brittle since it requires the parameter
-                # to be imported into that scope exactly, which may not be its
-                # native location.
-                type_ = locate(f"{model_cls.__module__}.{param.annotation}")
-            assert isinstance(type_, type)
-
+    for name, param in _get_input_spec_params(model_cls).items():
+        resolved_type = _resolve_param_type(param, model_cls)
         parser.add_argument(
             f"--{name.replace('_', '-')}",
-            type=type_,
+            type=resolved_type,
             default=param.default,
             help=input_spec_docs.get(
                 name, f"For documentation, see {model_cls.__name__}::get_input_spec."
             ),
         )
     return parser
+
+
+def get_collection_model_input_spec_parser(
+    model_cls: type[CollectionModel],
+    parser: QAIHMArgumentParser | None = None,
+) -> QAIHMArgumentParser:
+    """
+    Generate CLI arguments for per-component input spec customization.
+
+    For each component, adds ``--{component_name}-{param_name}`` arguments.
+    """
+    if not parser:
+        parser = get_parser()
+
+    for comp_name, comp_cls in model_cls.component_classes.items():
+        params = _get_input_spec_params(comp_cls)
+        for param_name, param in params.items():
+            cli_name = f"--{comp_name.replace('_', '-')}-{param_name.replace('_', '-')}"
+            resolved_type = _resolve_param_type(param, comp_cls)
+            parser.add_argument(
+                cli_name,
+                type=resolved_type,
+                default=None,
+                help=f"Set {param_name} for {comp_name}.",
+            )
+
+    return parser
+
+
+def get_component_input_spec_kwargs(
+    model_cls: type[CollectionModel],
+    component_name: str,
+    args_dict: Mapping[str, Any],
+) -> dict[str, Any]:
+    """
+    Extract input spec kwargs for a specific component from CLI args.
+
+    For each parameter in the component's ``get_input_spec`` signature:
+    - Use ``{component_name}_{param_name}`` if set
+    - Else skip (component uses its default)
+    """
+    comp_cls = model_cls.component_classes[component_name]
+    params = _get_input_spec_params(comp_cls)
+    kwargs: dict[str, Any] = {}
+    for param_name in params:
+        prefixed_key = f"{component_name}_{param_name}"
+        if prefixed_key in args_dict and args_dict[prefixed_key] is not None:
+            kwargs[param_name] = args_dict[prefixed_key]
+    return kwargs
 
 
 def input_spec_from_cli_args(
@@ -941,6 +1014,8 @@ def _evaluate_export_common_parser(
 
         if issubclass(model_cls, BaseModel):
             parser = get_model_input_spec_parser(model_cls, parser)
+        elif issubclass(model_cls, CollectionModel):
+            parser = get_collection_model_input_spec_parser(model_cls, parser)
 
         supported_precisions = {
             precision

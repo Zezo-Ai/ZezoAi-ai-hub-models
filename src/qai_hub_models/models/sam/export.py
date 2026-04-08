@@ -26,6 +26,7 @@ from qai_hub_models.models.sam import MODEL_ID, App, Model
 from qai_hub_models.utils import quantization as quantization_utils
 from qai_hub_models.utils.args import (
     export_parser,
+    get_component_input_spec_kwargs,
     get_export_model_name,
     get_model_kwargs,
 )
@@ -38,7 +39,7 @@ from qai_hub_models.utils.base_model import BaseModel, CollectionModel
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import CollectionExportResult, ExportResult
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
-from qai_hub_models.utils.input_spec import make_torch_inputs
+from qai_hub_models.utils.input_spec import InputSpec, make_torch_inputs
 from qai_hub_models.utils.onnx.helpers import download_and_unzip_workbench_onnx_model
 from qai_hub_models.utils.path_helpers import get_next_free_path
 from qai_hub_models.utils.printing import (
@@ -60,6 +61,7 @@ def quantize_model(
     onnx_models: dict[str, hub.Model],
     num_calibration_samples: int | None,
     extra_options: str = "",
+    input_specs: dict[str, InputSpec] | None = None,
     components: list[str] | None = None,
 ) -> dict[str, hub.client.QuantizeJob]:
     component_precisions = (
@@ -72,7 +74,9 @@ def quantize_model(
         component_precision = component_precisions[component_name]
         component = model.components[component_name]
         assert isinstance(component, BaseModel)
-        input_spec = component.get_input_spec()
+        input_spec = (
+            input_specs[component_name] if input_specs else component.get_input_spec()
+        )
         if component_precision != Precision.float:
             print(f"Quantizing {component_name}.")
             if (
@@ -110,6 +114,7 @@ def compile_model(
     target_runtime: TargetRuntime,
     precision: Precision,
     source_models: dict[str, hub.Model] | None = None,
+    input_specs: dict[str, InputSpec] | None = None,
     components: list[str] | None = None,
     extra_options: str = "",
 ) -> dict[str, hub.client.CompileJob]:
@@ -117,7 +122,9 @@ def compile_model(
     for component_name in components or Model.component_class_names:
         component = model.components[component_name]
         assert isinstance(component, BaseModel)
-        input_spec = component.get_input_spec()
+        input_spec = (
+            input_specs[component_name] if input_specs else component.get_input_spec()
+        )
         if source_models and (source_model := source_models.get(component_name)):
             model_to_compile = source_model
         else:
@@ -374,7 +381,7 @@ def export_model(
         If set, zip the assets after downloading.
     **additional_model_kwargs
         Additional optional kwargs used to customize
-        `model_cls.from_pretrained`
+        `model_cls.from_pretrained` and per-component `get_input_spec`
 
     Returns
     -------
@@ -430,6 +437,12 @@ def export_model(
     model = Model.from_pretrained(
         **get_model_kwargs(Model, dict(**additional_model_kwargs, precision=precision))
     )
+    input_specs: dict[str, InputSpec] = {
+        name: model.components[name].get_input_spec(
+            **get_component_input_spec_kwargs(Model, name, additional_model_kwargs)
+        )
+        for name in components
+    }
 
     # 2. Converts the PyTorch model to ONNX and quantizes the ONNX model.
     quantize_jobs: dict[str, hub.client.QuantizeJob] = {}
@@ -450,6 +463,7 @@ def export_model(
                 device,
                 TargetRuntime.ONNX,
                 precision,
+                input_specs=input_specs,
                 components=[
                     c
                     for c, p in component_precisions.items()
@@ -464,6 +478,7 @@ def export_model(
                 onnx_models,
                 num_calibration_samples,
                 quantize_options,
+                input_specs,
                 components,
             )
             if skip_compiling:
@@ -485,6 +500,7 @@ def export_model(
         target_runtime,
         precision,
         quantized_models,
+        input_specs=input_specs,
         components=components,
         extra_options=compile_options,
     )
@@ -520,7 +536,8 @@ def export_model(
     if not skip_inferencing:
         inference_jobs = inference_model(
             model.sample_inputs(
-                use_channel_last_format=target_runtime.channel_last_native_execution
+                input_specs=input_specs,
+                use_channel_last_format=target_runtime.channel_last_native_execution,
             ),
             model_name,
             device,
@@ -574,7 +591,9 @@ def export_model(
             component = model.components[component_name]
             assert isinstance(component, BaseModel)
             inference_job = inference_jobs[component_name]
-            sample_inputs = component.sample_inputs(use_channel_last_format=False)
+            sample_inputs = component.sample_inputs(
+                input_specs[component_name], use_channel_last_format=False
+            )
             torch_out = torch_inference(
                 component,
                 sample_inputs,

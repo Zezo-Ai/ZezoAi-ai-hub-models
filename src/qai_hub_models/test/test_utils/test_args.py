@@ -261,6 +261,11 @@ def test_parse_whisper_export() -> None:
         "fetch_static_assets",
         "components",
         "zip_assets",
+        # Per-component input spec args
+        "encoder_num_mel_bin",
+        "decoder_num_blocks",
+        "decoder_attention_dim",
+        "decoder_num_heads",
     }
     assert set(vars(args).keys()) == gt_set
 
@@ -353,6 +358,11 @@ def test_parse_whisper_evaluate() -> None:
         "chipset",
         "device_os",
         "device_str",
+        # Per-component input spec args
+        "encoder_num_mel_bin",
+        "decoder_num_blocks",
+        "decoder_attention_dim",
+        "decoder_num_heads",
     }
     assert set(vars(args).keys()) == gt_set
     assert args.device is None

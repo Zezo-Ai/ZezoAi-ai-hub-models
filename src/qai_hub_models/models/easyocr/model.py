@@ -149,13 +149,13 @@ class EasyOCRRecognizer(BaseModel):
 
     @staticmethod
     def get_input_spec(
-        recog_batch_size: int = 1,
+        batch_size: int = 1,
         max_detection_height: int = 64,
         max_detection_width: int = 800,
     ) -> InputSpec:
         return {
             "image": (
-                (recog_batch_size, 1, max_detection_height, max_detection_width),
+                (batch_size, 1, max_detection_height, max_detection_width),
                 "float32",
             ),
         }
