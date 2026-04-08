@@ -38,7 +38,7 @@ jobs:
       name: Release code to Repository
       secrets: inherit
       needs: [approve, test_public_wheel]
-      if: ${{ !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
+      if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
       uses: ./.github/workflows/release_code.yaml
       with:
           skip_approval: true
@@ -53,11 +53,12 @@ jobs:
           target: ${{ inputs.target }}
           skip_approval: true
 
+  # HF release verifies assets exist on S3 before pushing model cards
   release_huggingface:
       name: Release Hugging Face Model Cards
-      if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
+      if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' && needs.release_assets.result == 'success' }}
       secrets: inherit
-      needs: [approve, test_public_wheel]
+      needs: [approve, test_public_wheel, release_assets]
       uses: ./.github/workflows/release_huggingface.yaml
       with:
           skip_approval: true
