@@ -7,6 +7,7 @@ import configparser
 import contextlib
 import logging
 import os
+import shutil
 import subprocess
 import sys
 
@@ -139,6 +140,21 @@ def credentials_valid() -> bool:
     return True
 
 
+def _pass_initialized() -> bool:
+    """Check if pass (password-store) has a valid GPG key configured."""
+    gpg_id_file = os.path.expanduser("~/.password-store/.gpg-id")
+    if not os.path.exists(gpg_id_file):
+        return False
+    with open(gpg_id_file) as f:
+        key_id = f.readline().strip()
+    result = subprocess.run(
+        ["gpg", "--list-keys", key_id],
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
 def is_password_saved() -> bool:
     if sys.platform == "darwin":
         result = subprocess.run(
@@ -205,6 +221,17 @@ if __name__ == "__main__":
         command.append("--skip-prompt")
 
     env: dict[str, str] = os.environ.copy()
+
+    if sys.platform == "linux" and not _pass_initialized():
+        command.append("--disable-keychain")
+        if shutil.which("pass"):
+            print(
+                "pass is installed but not configured. Disabling keychain for now.\n"
+                "To set up pass so saml2aws can save your password:\n\n"
+                "gpg --batch --passphrase '' --quick-gen-key saml2aws\n"
+                "pass init $(gpg --list-keys --with-colons saml2aws"
+                " | awk -F: '/^fpr/{print $10; exit}')\n"
+            )
 
     try:
         subprocess.run(command, check=True, env=env)
