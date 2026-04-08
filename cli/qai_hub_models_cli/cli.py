@@ -202,14 +202,18 @@ def main(args: list[str] | None = None) -> None:
         version=f"%(prog)s {__version__}",
     )
     subparsers = parser.add_subparsers()
-    add_fetch_parser(subparsers)
-    add_versions_parser(subparsers)
 
-    # Allow qai_hub_models to add subcommands if installed
+    # qai_hub_models registers its own subcommands when installed
     with contextlib.suppress(ImportError):
         from qai_hub_models.cli import configure_parser
 
         configure_parser(subparsers)
+
+    # Standalone CLI defaults (skipped when qai_hub_models provides them)
+    if "fetch" not in subparsers.choices:
+        add_fetch_parser(subparsers)
+    if "versions" not in subparsers.choices:
+        add_versions_parser(subparsers)
 
     parsed = parser.parse_args(args)
     if hasattr(parsed, "func"):
