@@ -29,6 +29,7 @@ class ToolVersions(BaseQAIHMConfig):
     onnx: str | None = None
     onnx_runtime: str | None = None
     tflite: str | None = None
+    litert: str | None = None
     ai_hub_models: str | None = None
 
     @staticmethod
@@ -215,6 +216,9 @@ class ToolVersions(BaseQAIHMConfig):
 
             if tool_version.name == "TensorFlow Lite":
                 out.tflite = tool_version.version
+
+            if tool_version.name == "LiteRT":
+                out.litert = tool_version.version
         if add_aihm_version:
             out.ai_hub_models = pkg_version.__version__
         return out

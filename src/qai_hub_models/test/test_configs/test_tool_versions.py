@@ -404,6 +404,7 @@ def test_extract_tool_versions_from_inference_job(
             [
                 ToolVersion(name="QNN", version="2.25.1234"),
                 ToolVersion(name="TensorFlow Lite", version="1.22.1"),
+                ToolVersion(name="LiteRT", version="1.4.2"),
             ]
         ),
     ):
@@ -411,6 +412,7 @@ def test_extract_tool_versions_from_inference_job(
             qairt=QAIRTVersion("2.25.1234", validate_exists_on_ai_hub=False),
             tflite="1.22.1",
             ai_hub_models="1.2.3",
+            litert="1.4.2",
         )
 
     # Inference job: Success (no QAIRT version in job results)
