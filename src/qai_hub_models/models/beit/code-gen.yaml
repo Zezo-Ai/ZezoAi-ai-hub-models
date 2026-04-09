@@ -3,6 +3,9 @@ supported_precisions:
 - w8a16
 has_on_target_demo: true
 disabled_paths:
+  float:
+    qnn_dlc:
+      scorecard_accuracy_failure: 'Device accuracy (2.8 %) deviates from benchmark (83.2 %) by -80.400 %, threshold: 10.0 %'
   w8a16:
     qnn_dlc:
-      scorecard_accuracy_failure: Torch and On-device accuracy diff (-82.900 %) above threshold (10.0 %)
+      scorecard_accuracy_failure: 'Device accuracy (0.1 %) deviates from benchmark (83.2 %) by -83.100 %, threshold: 10.0 %'

@@ -25,7 +25,7 @@ on:
           type: string
 
         previous_results_branch:
-          description: The branch with previous scorecard results. The new jobs are compared with these older results. This will also be the base for the created PR.
+          description: The branch with previous scorecard results. The new jobs are compared with these older results.
           required: true
           type: string
           default: main
@@ -470,7 +470,7 @@ jobs:
               owner,
               repo,
               head: '${{ env.PR_REF_NAME }}',
-              base: '${{ inputs.previous_results_branch }}',
+              base: 'main',
               body: [
                 'Update data for [${{ inputs.action_id || inputs.latest_results_branch }} scorecard](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.action_id == '' && github.run_id || inputs.action_id }}).',
                 '',

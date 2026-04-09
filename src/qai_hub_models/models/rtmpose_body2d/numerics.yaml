@@ -3,21 +3,17 @@ metrics:
   dataset_link: http://images.cocodataset.org/
   dataset_split_description: val2017 split
   metric_name: Mean Average Precision
-  metric_description: Percentage of keypoints that are close to the expected location.
+  metric_description: Mean Average Precision (across predicted classes).
   metric_unit: mAP
   metric_range:
     min: 0.0
     max: 100.0
   metric_enablement_threshold: 10.0
+  benchmark_value: 51.7
   num_partial_samples: 500
   partial_torch_metric: 51.7
   device_metric:
     Samsung Galaxy S25:
-      w8a16:
-        qnn_dlc:
-          partial_metric: 51.4
-        onnx:
-          partial_metric: 51.4
       float:
         tflite:
           partial_metric: 50.5
@@ -25,3 +21,8 @@ metrics:
           partial_metric: 50.5
         onnx:
           partial_metric: 50.5
+      w8a16:
+        qnn_dlc:
+          partial_metric: 51.4
+        onnx:
+          partial_metric: 51.4

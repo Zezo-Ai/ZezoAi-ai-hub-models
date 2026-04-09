@@ -9,10 +9,16 @@ metrics:
     min: 0.0
     max: 100.0
   metric_enablement_threshold: 10.0
+  benchmark_value: 97.1
   num_partial_samples: 250
   partial_torch_metric: 97.1
   device_metric:
     Samsung Galaxy S25:
+      w8a16:
+        qnn_dlc:
+          partial_metric: 97.0
+        onnx:
+          partial_metric: 97.0
       w8a8:
         tflite:
           partial_metric: 95.3
@@ -23,11 +29,6 @@ metrics:
       float:
         tflite:
           partial_metric: 97.0
-        qnn_dlc:
-          partial_metric: 97.0
-        onnx:
-          partial_metric: 97.0
-      w8a16:
         qnn_dlc:
           partial_metric: 97.0
         onnx:

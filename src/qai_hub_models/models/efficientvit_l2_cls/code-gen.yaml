@@ -6,15 +6,14 @@ has_on_target_demo: true
 disabled_paths:
   w8a16:
     qnn_dlc:
-      scorecard_failure: 'Profiling Failure(s): jp010vmeg'
+      scorecard_failure: 'Profiling Failure(s): jp01dxl0g'
     onnx:
-      scorecard_accuracy_failure: Torch and On-device accuracy diff (-82.700 %) above threshold (10.0 %)
+      scorecard_accuracy_failure: 'Device accuracy (2.6 %) deviates from benchmark (86.0 %) by -83.400 %, threshold: 10.0 %'
   w8a16_mixed_fp16:
     tflite:
       issue: Revisit based on scorecard results. https://github.com/qcom-ai-hub/tetracode/issues/17039
     qnn_dlc:
-      scorecard_failure: No profile jobs found with default device Samsung Galaxy S25
+      scorecard_failure: 'Profiling Failure(s): jgo1o96k5'
       issue: Revisit based on scorecard results. https://github.com/qcom-ai-hub/tetracode/issues/17039
     onnx:
-      scorecard_failure: No profile jobs found with default device Samsung Galaxy S25
       issue: Revisit based on scorecard results. https://github.com/qcom-ai-hub/tetracode/issues/17039

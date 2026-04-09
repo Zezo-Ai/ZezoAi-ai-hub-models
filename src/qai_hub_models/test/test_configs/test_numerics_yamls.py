@@ -7,6 +7,7 @@ import tempfile
 
 import pandas as pd
 
+from qai_hub_models.configs.info_yaml import QAIHMModelInfo
 from qai_hub_models.configs.numerics_yaml import (
     QAIHMModelNumerics,
     get_numerics_yaml_path,
@@ -59,8 +60,12 @@ def test_accuracy_yaml_creation() -> None:
     original_yaml = load_yaml(accuracy_yaml_path)
 
     # Create accuracy struct from scratch using accuracy.csv
+    info = QAIHMModelInfo.from_model(model_id)
     new_struct = create_numerics_struct(
-        model_id, pd.read_csv(ACCURACY_CSV_BASE), get_chipset_registry()
+        model_id,
+        pd.read_csv(ACCURACY_CSV_BASE),
+        get_chipset_registry(),
+        benchmark=info.numerics_benchmark,
     )
     assert new_struct is not None
 

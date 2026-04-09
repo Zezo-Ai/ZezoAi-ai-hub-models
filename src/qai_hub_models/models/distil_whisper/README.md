@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [Distil-Whisper: Distilled Whisper model for fast English automatic speech recognition (ASR)](https://aihub.qualcomm.com/models/distil_whisper)
 
 Distil-Whisper Small English is a distilled version of Whisper Small, optimized for fast and efficient automatic speech recognition.

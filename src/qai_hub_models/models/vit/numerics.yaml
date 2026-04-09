@@ -2,13 +2,14 @@ metrics:
 - dataset_name: imagenet
   dataset_link: https://www.image-net.org/
   dataset_split_description: validation split
-  metric_name: Classification Accuracy
-  metric_description: Percentage of inputs that were correctly classified.
+  metric_name: Top-1 Accuracy
+  metric_description: Percentage of top 1 model predictions that are correct.
   metric_unit: '%'
   metric_range:
     min: 0.0
     max: 100.0
   metric_enablement_threshold: 10.0
+  benchmark_value: 81.1
   num_partial_samples: 1000
   partial_torch_metric: 80.6
   device_metric:
@@ -16,18 +17,18 @@ metrics:
       w8a16:
         onnx:
           partial_metric: 80.6
+      w8a8_mixed_int16:
+        onnx:
+          partial_metric: 80.1
       w8a8:
         tflite:
           partial_metric: 78.5
         onnx:
           partial_metric: 78.1
-      w8a8_mixed_int16:
-        onnx:
-          partial_metric: 80.2
       float:
         tflite:
           partial_metric: 80.6
         qnn_dlc:
-          partial_metric: 80.6
+          partial_metric: 80.5
         onnx:
-          partial_metric: 80.6
+          partial_metric: 80.5
