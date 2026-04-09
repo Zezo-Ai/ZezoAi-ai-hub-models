@@ -10,6 +10,11 @@ from transformers import ElectraForPreTraining, ElectraTokenizer
 from typing_extensions import Self
 
 from qai_hub_models.datasets import DATASET_NAME_MAP
+from qai_hub_models.datasets.wikitext_masked import ElectraWikiTextMasked
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.electra_discriminator_evaluator import (
+    ElectraDiscriminatorEvaluator,
+)
 from qai_hub_models.models._shared.bert_hf.model import BaseBertModel
 from qai_hub_models.models._shared.bert_hf.model_patches import (
     patch_get_extended_attention_mask,
@@ -32,6 +37,9 @@ class ElectraBertBaseDiscrimGoogle(BaseBertModel):
         model.electra.get_extended_attention_mask = patch_get_extended_attention_mask
         return cls(model, tokenizer)
 
+    def get_evaluator(self) -> BaseEvaluator:
+        return ElectraDiscriminatorEvaluator()
+
     @staticmethod
     def eval_datasets() -> list[str]:
         return ["electra_bert_wikitext_masked"]
@@ -44,7 +52,6 @@ class ElectraBertBaseDiscrimGoogle(BaseBertModel):
         self,
         input_tokens: torch.Tensor,
         attention_masks: torch.Tensor,
-        mask_indices: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Parameters
@@ -53,18 +60,19 @@ class ElectraBertBaseDiscrimGoogle(BaseBertModel):
             Input token IDs with shape [batch_size, seq_len]
         attention_masks
             Attention masks with shape [batch_size, seq_len]
-        mask_indices
-            Unused. Accepted for compatibility with WikiTextMasked dataset
-            which returns 3-tuples.
 
         Returns
         -------
         predictions : torch.Tensor
-            Binary output tensor with shape [batch_size, seq_len, vocab_size]
-            where values are rounded to 0 or 1
+            Binary predictions for every token position, shape [seq_len]
+            (for batch_size=1). Values: 1 = fake/replaced, 0 = real.
         """
         logits = self.model(input_tokens, attention_mask=attention_masks).logits
         return torch.round((torch.sign(logits[0]) + 1) / 2)
+
+    @classmethod
+    def get_dataset_class(cls, tokenizer_name: str) -> type:
+        return ElectraWikiTextMasked
 
     @staticmethod
     def get_input_spec(
@@ -81,6 +89,4 @@ class ElectraBertBaseDiscrimGoogle(BaseBertModel):
         return ["predictions"]
 
 
-DATASET_NAME_MAP["electra_bert_wikitext_masked"] = (
-    ElectraBertBaseDiscrimGoogle.get_dataset_class(WEIGHTS_NAME)
-)
+DATASET_NAME_MAP["electra_bert_wikitext_masked"] = ElectraWikiTextMasked

@@ -137,3 +137,19 @@ class WikiTextMasked(BaseDataset):
             link="https://huggingface.co/datasets/wikitext",
             split_description="wikitext-2-raw-v1 validation split",
         )
+
+
+class ElectraWikiTextMasked(WikiTextMasked):
+    """WikiTextMasked variant for the ELECTRA discriminator.
+
+    Repacks the batch so that ``mask_indices`` is returned as ground truth
+    instead of a third model input.  The ELECTRA discriminator only takes
+    ``(input_tokens, attention_masks)`` and the evaluator needs ``mask_pos``
+    to index into the full-sequence binary output.
+    """
+
+    def __getitem__(
+        self, idx: int
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        (input_tokens, attention_masks, mask_indices), _label = super().__getitem__(idx)
+        return (input_tokens, attention_masks), mask_indices
