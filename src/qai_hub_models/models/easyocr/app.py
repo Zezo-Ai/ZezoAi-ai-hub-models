@@ -87,8 +87,8 @@ class EasyOCRApp:
         self,
         detector: Callable[[torch.Tensor], torch.Tensor],
         recognizer: Callable[[torch.Tensor], torch.Tensor],
-        detector_img_shape: tuple[int, int],
-        recognizer_img_shape: tuple[int, int],
+        detector_img_shape: tuple[int, ...],
+        recognizer_img_shape: tuple[int, ...],
         lang_list: list[str],
         decoder_mode: str = "greedy",
     ) -> None:
@@ -702,8 +702,8 @@ class EasyOCRApp:
         app_instance = cls(
             detector=detector,
             recognizer=recognizer,
-            detector_img_shape=detector_spec["image"][0][2:],  # type: ignore[arg-type]
-            recognizer_img_shape=recognizer_spec["image"][0][2:],  # type: ignore[arg-type]
+            detector_img_shape=detector_spec["image"][0][2:],
+            recognizer_img_shape=recognizer_spec["image"][0][2:],
             lang_list=["en"],
             decoder_mode="greedy",
         )

@@ -251,7 +251,7 @@ class HfWhisperDecoder(BaseModel):
         Returns the input specification (name -> (shape, type). This can be
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        specs = dict(
+        specs: InputSpec = dict(
             input_ids=((1, 1), "int32"),
             attention_mask=((1, 1, 1, MEAN_DECODE_LEN), "float32"),
         )

@@ -220,7 +220,7 @@ def pad_to_square(frame: np.ndarray, pad_value: float = 255) -> np.ndarray:
 
 def resize_pad(
     image: torch.Tensor,
-    dst_size: tuple[int, int],
+    dst_size: tuple[int, ...],
     pad_mode: str = "constant",
     pad_value: float = 0.0,
     vertical_float: Literal["center", "top", "bottom"] = "center",

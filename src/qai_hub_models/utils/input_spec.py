@@ -10,19 +10,74 @@ from typing import Any, TypeGuard
 import numpy as np
 import torch
 
+from qai_hub_models.configs.tensor_spec import (
+    ColorFormat,
+    ImageMetadata,
+    IoType,
+    TensorSpec,
+)
 from qai_hub_models.models.common import SampleInputsType
 
+# ---------------------------------------------------------------------------
+# InputSpec Type Definition
+# ---------------------------------------------------------------------------
 # PyTorch trace doesn't capture the input specs. Hence we need an additional
-# InputSpec (name -> (shape, type)) when submitting profiling job to Qualcomm AI Hub Workbench.
+# InputSpec (name -> (shape, type)) when submitting profiling job to AI Hub.
 # This is a subtype of qai_hub.InputSpecs
-InputSpec = dict[str, tuple[tuple[int, ...], str]]
+#
+# Values can be either:
+#   - Plain tuple: (shape, dtype) - for models without metadata
+#   - TensorSpec: with optional metadata for semantic type info
+InputSpec = dict[str, tuple[tuple[int, ...], str] | TensorSpec]
+
+# Re-export for backwards compatibility
+__all__ = [
+    "ColorFormat",
+    "ImageMetadata",
+    "InputSpec",
+    "IoType",
+    "TensorSpec",
+    "broadcast_data_to_multi_batch",
+    "get_batch_size",
+    "make_torch_inputs",
+    "str_to_torch_dtype",
+    "to_hub_input_specs",
+]
+
+
+def to_hub_input_specs(
+    input_spec: InputSpec,
+) -> dict[str, tuple[tuple[int, ...], str]]:
+    """
+    Convert InputSpec to hub-compatible format.
+
+    This strips any TensorSpec metadata to produce a plain dict
+    that can be passed to qai_hub APIs.
+
+    Parameters
+    ----------
+    input_spec
+        The InputSpec from model.get_input_spec()
+
+    Returns
+    -------
+    dict[str, tuple[tuple[int, ...], str]]
+        A hub-compatible input specification.
+    """
+    result: dict[str, tuple[tuple[int, ...], str]] = {}
+    for name, entry in input_spec.items():
+        if isinstance(entry, TensorSpec):
+            result[name] = (entry.shape, entry.dtype)
+        else:
+            result[name] = entry
+    return result
 
 
 def is_input_spec(value: Any) -> TypeGuard[InputSpec]:
-    """Check if value is an InputSpec (values are tuples, not dicts)."""
+    """Check if value is an InputSpec (values are tuples or TensorSpecs, not dicts)."""
     if not isinstance(value, dict) or not value:
         return False
-    return isinstance(next(iter(value.values())), tuple)
+    return isinstance(next(iter(value.values())), (tuple, TensorSpec))
 
 
 def is_input_spec_dict(value: Any) -> TypeGuard[dict[str, InputSpec]]:

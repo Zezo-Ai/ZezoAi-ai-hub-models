@@ -39,6 +39,7 @@ from qai_hub_models.utils.export_result import (
     CollectionExportResult,
     ExportResult,
 )
+from qai_hub_models.utils.input_spec import to_hub_input_specs
 from qai_hub_models.utils.model_cache import CacheMode, get_or_create_cached_model
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 from qai_hub_models.utils.printing import (
@@ -491,7 +492,7 @@ def export_model(
 
             submitted_compile_job = hub.submit_compile_job(
                 model=uploaded_models[i],
-                input_specs=split_input_spec,
+                input_specs=to_hub_input_specs(split_input_spec),
                 device=device,
                 name=full_name,
                 options=model_compile_options,

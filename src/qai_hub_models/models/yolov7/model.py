@@ -17,6 +17,7 @@ from qai_hub_models.models._shared.yolo.model import DEFAULT_YOLO_IMAGE_INPUT_HW
 from qai_hub_models.models._shared.yolo.utils import detect_postprocess_split_input
 from qai_hub_models.models.common import Precision
 from qai_hub_models.utils.asset_loaders import SourceAsRoot, find_replace_in_repo
+from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.set_env import set_temp_env
 
 YOLOV7_SOURCE_REPOSITORY = "https://github.com/WongKinYiu/yolov7"
@@ -76,9 +77,7 @@ class YoloV7(Yolo):
             split_output,
         )
 
-    def _get_input_spec_for_instance(
-        self, batch_size: int = 1
-    ) -> dict[str, tuple[tuple[int, ...], str]]:
+    def _get_input_spec_for_instance(self, batch_size: int = 1) -> InputSpec:
         return super().get_input_spec(
             batch_size, self.yolov7_detector.h, self.yolov7_detector.w
         )

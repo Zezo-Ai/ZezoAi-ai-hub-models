@@ -38,6 +38,7 @@ from qai_hub_models.utils.base_model import (
 from qai_hub_models.utils.envvars import DevModeEnvvar
 from qai_hub_models.utils.evaluate import EvalMode
 from qai_hub_models.utils.inference import OnDeviceModel, compile_model_from_args
+from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.qai_hub_helpers import (
     can_access_qualcomm_ai_hub,
 )
@@ -971,7 +972,7 @@ def get_component_input_spec_kwargs(
 
 def input_spec_from_cli_args(
     model: HubModel | OnDeviceModel, cli_args: argparse.Namespace
-) -> hub.InputSpecs:
+) -> InputSpec | hub.InputSpecs:
     """
     Create this model's input spec from an argparse namespace.
     Default behavior is to assume the CLI args have the same names as get_input_spec method args.

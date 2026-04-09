@@ -50,8 +50,8 @@ def main(is_test: bool = False) -> None:
     app = EasyOCRApp(
         detector,  # type: ignore[arg-type]
         recognizer,  # type: ignore[arg-type]
-        tuple(python_model.detector.get_input_spec()["image"][0][2:4]),  # type: ignore[arg-type]
-        tuple(python_model.recognizer.get_input_spec()["image"][0][2:4]),  # type: ignore[arg-type]
+        tuple(python_model.detector.get_input_spec()["image"][0][2:4]),
+        tuple(python_model.recognizer.get_input_spec()["image"][0][2:4]),
         python_model.lang_list,
     )
     print("Model Loaded")

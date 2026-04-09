@@ -20,7 +20,13 @@ from qai_hub_models.utils.asset_loaders import (
 )
 from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -143,8 +149,21 @@ class ACT(BaseModel):
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "qpos": ((batch_size, 14), "float32"),
-            "image": ((batch_size, 3, height, width), "float32"),
+            "qpos": TensorSpec(
+                shape=(batch_size, 14),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+                description="Robot joint positions [left_arm(7) | right_arm(7)]",
+            ),
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
         }
 
     def get_hub_compile_options(

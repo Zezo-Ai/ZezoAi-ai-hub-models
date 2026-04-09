@@ -17,7 +17,11 @@ from typing import Any, cast
 import qai_hub as hub
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.metadata_yaml import ModelFileMetadata, ModelMetadata
+from qai_hub_models.configs.metadata_yaml import (
+    ModelFileMetadata,
+    ModelMetadata,
+    merge_input_metadata,
+)
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.models.whisper_small_quantized import MODEL_ID, Model
@@ -28,11 +32,11 @@ from qai_hub_models.utils.args import (
     get_model_kwargs,
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
-from qai_hub_models.utils.base_model import PretrainedCollectionModel
+from qai_hub_models.utils.base_model import BaseModel, PretrainedCollectionModel
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import CollectionExportResult, ExportResult
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, to_hub_input_specs
 from qai_hub_models.utils.onnx.helpers import download_and_unzip_workbench_onnx_model
 from qai_hub_models.utils.path_helpers import get_next_free_path
 from qai_hub_models.utils.printing import (
@@ -75,7 +79,7 @@ def compile_model(
         print(f"Optimizing model {component_name} to run on-device")
         submitted_compile_job = hub.submit_compile_job(
             model=model_to_compile,
-            input_specs=input_spec,
+            input_specs=to_hub_input_specs(input_spec),
             device=device,
             name=f"{model_name}_{component_name}",
             options=model_compile_options,
@@ -193,6 +197,12 @@ def download_model(
             # Generate metadata using the actual downloaded filename
             model_file_metadata[model_file_name] = ModelFileMetadata.from_hub_model(
                 target_model
+            )
+            # Merge semantic metadata from get_input_spec()
+            component = model.components[component_name]
+            assert isinstance(component, BaseModel)
+            merge_input_metadata(
+                model_file_metadata[model_file_name], component.get_input_spec()
             )
 
         # Extract and save metadata alongside downloaded model

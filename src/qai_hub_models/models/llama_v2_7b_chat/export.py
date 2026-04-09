@@ -26,6 +26,7 @@ from qai_hub_models.utils.base_model import TargetRuntime
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import CollectionExportResult, ExportResult
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
+from qai_hub_models.utils.input_spec import to_hub_input_specs
 from qai_hub_models.utils.model_cache import CacheMode
 from qai_hub_models.utils.printing import (
     print_inference_metrics,
@@ -238,7 +239,7 @@ def export_model(
             print(f"Optimizing model {sub_component_name} to run on-device")
             submitted_compile_job = hub.submit_compile_job(
                 model=current_model,
-                input_specs=input_spec,
+                input_specs=to_hub_input_specs(input_spec),
                 device=device,
                 name=f"{model_name}_{sub_component_name}",
                 calibration_data=quant_calibration_data,

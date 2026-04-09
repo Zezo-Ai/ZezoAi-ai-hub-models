@@ -15,6 +15,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from qai_hub_models.configs.tensor_spec import (
+    QuantizationParameters,
+    TensorSpec,
+)
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
@@ -22,26 +26,7 @@ from qai_hub_models.utils.base_config import BaseQAIHMConfig
 if TYPE_CHECKING:
     import qai_hub as hub
 
-
-class QuantizationParameters(BaseQAIHMConfig):
-    """Quantization parameters for a tensor."""
-
-    scale: float
-    zero_point: int
-
-
-class TensorSpec(BaseQAIHMConfig):
-    """
-    Specification for an input or output tensor.
-
-    Extends the existing InputSpec format with additional metadata fields
-    for documentation and quantization parameters.
-    """
-
-    shape: list[int]
-    dtype: str
-    description: str | None = None
-    quantization_parameters: QuantizationParameters | None = None
+    from qai_hub_models.utils.input_spec import InputSpec
 
 
 class ModelFileMetadata(BaseQAIHMConfig):
@@ -84,7 +69,7 @@ class ModelFileMetadata(BaseQAIHMConfig):
                     )
                 assert tensor_spec.shape is not None
                 inputs[tensor_spec.name] = TensorSpec(
-                    shape=list(tensor_spec.shape),
+                    shape=tuple(tensor_spec.shape),
                     dtype=tensor_spec.dtype,
                     quantization_parameters=quant_params,
                 )
@@ -100,7 +85,7 @@ class ModelFileMetadata(BaseQAIHMConfig):
                     )
                 assert tensor_spec.shape is not None
                 outputs[tensor_spec.name] = TensorSpec(
-                    shape=list(tensor_spec.shape),
+                    shape=tuple(tensor_spec.shape),
                     dtype=tensor_spec.dtype,
                     quantization_parameters=quant_params,
                 )
@@ -189,3 +174,57 @@ class ModelMetadata(BaseQAIHMConfig):
             flow_lists=flow_lists,
             **kwargs,
         )
+
+
+def merge_input_metadata(
+    model_file_metadata: ModelFileMetadata,
+    input_spec: InputSpec,
+) -> None:
+    """
+    Merge semantic metadata from get_input_spec() into ModelFileMetadata.
+
+    This function enriches the TensorSpec entries in model_file_metadata.inputs
+    with additional metadata (io_type, image_metadata, value_range, description)
+    from the model's get_input_spec() return value.
+
+    TensorSpec entries in input_spec may have metadata fields set (io_type,
+    image_metadata, etc.). This function copies those fields to the corresponding
+    TensorSpec in model_file_metadata.inputs.
+
+    Parameters
+    ----------
+    model_file_metadata
+        The ModelFileMetadata to enrich (modified in place).
+    input_spec
+        The InputSpec from model.get_input_spec(). TensorSpec entries with
+        metadata fields will have their metadata merged.
+
+    Raises
+    ------
+    ValueError
+        If an input in input_spec is not found in model_file_metadata.inputs.
+        This indicates a bug - the input names should match.
+    """
+    for input_name, spec in input_spec.items():
+        # Find matching input in model_file_metadata
+        if input_name not in model_file_metadata.inputs:
+            raise ValueError(
+                f"Input '{input_name}' from get_input_spec() not found in compiled "
+                f"model metadata. Available inputs: {list(model_file_metadata.inputs.keys())}"
+            )
+
+        # Skip if not a TensorSpec (plain tuple has no metadata)
+        if not isinstance(spec, TensorSpec):
+            continue
+
+        target_spec = model_file_metadata.inputs[input_name]
+
+        # Copy metadata fields if present
+        if spec.io_type is not None:
+            target_spec.io_type = spec.io_type
+        if spec.image_metadata is not None:
+            target_spec.image_metadata = spec.image_metadata
+        if spec.description is not None:
+            target_spec.description = spec.description
+        if spec.value_range != (float("-inf"), float("inf")):
+            target_spec.value_range = spec.value_range

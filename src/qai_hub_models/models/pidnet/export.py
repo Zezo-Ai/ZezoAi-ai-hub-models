@@ -18,7 +18,11 @@ import qai_hub as hub
 import torch
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.metadata_yaml import ModelFileMetadata, ModelMetadata
+from qai_hub_models.configs.metadata_yaml import (
+    ModelFileMetadata,
+    ModelMetadata,
+    merge_input_metadata,
+)
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.models.pidnet import MODEL_ID, Model
@@ -34,7 +38,11 @@ from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import ExportResult
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
-from qai_hub_models.utils.input_spec import InputSpec, make_torch_inputs
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    make_torch_inputs,
+    to_hub_input_specs,
+)
 from qai_hub_models.utils.onnx.helpers import download_and_unzip_workbench_onnx_model
 from qai_hub_models.utils.path_helpers import get_next_free_path
 from qai_hub_models.utils.printing import (
@@ -100,7 +108,7 @@ def compile_model(
     print(f"Optimizing model {model_name} to run on-device")
     submitted_compile_job = hub.submit_compile_job(
         model=model_to_compile,
-        input_specs=input_spec,
+        input_specs=to_hub_input_specs(input_spec),
         device=device,
         name=model_name,
         options=model_compile_options,
@@ -192,6 +200,8 @@ def download_model(
         # Extract and save metadata alongside downloaded model
         metadata_path = dst_path / "metadata.yaml"
         file_metadata = ModelFileMetadata.from_hub_model(target_model)
+        # Merge semantic metadata from get_input_spec()
+        merge_input_metadata(file_metadata, model.get_input_spec())
         model_metadata = ModelMetadata(
             runtime=runtime,
             precision=precision,

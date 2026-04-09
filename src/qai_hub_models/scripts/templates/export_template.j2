@@ -19,7 +19,7 @@ import onnx
 {%- if is_collection_model %}
 from collections.abc import Mapping
 {% endif %}
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, to_hub_input_specs
 {%- if is_collection_model %}
 from qai_hub_models.utils.export_result import CollectionExportResult
 {%- if not is_precompiled %}
@@ -83,7 +83,7 @@ from qai_hub_models.utils.version_helpers import (
 )
 {%- endif %}
 {% if not is_precompiled %}
-from qai_hub_models.configs.metadata_yaml import ModelFileMetadata, ModelMetadata
+from qai_hub_models.configs.metadata_yaml import ModelFileMetadata, ModelMetadata, merge_input_metadata
 {% endif %}
 
 {%- if can_use_quantize_job %}
@@ -216,7 +216,7 @@ def compile_model(
     print(f"Optimizing model { {{- "component_name" if is_collection_model else "model_name" -}} } to run on-device")
     submitted_compile_job = hub.submit_compile_job(
         model=model_to_compile,
-        input_specs=input_spec,
+        input_specs=to_hub_input_specs(input_spec),
         device=device,
         name={{ 'f"{model_name}_{component_name}"' if is_collection_model else 'model_name' }},
         {%- if is_aimet and num_calibration_samples %}
@@ -394,6 +394,10 @@ def download_model(
 
         # Generate metadata using the actual downloaded filename
         model_file_metadata[model_file_name] = ModelFileMetadata.from_hub_model(target_model)
+        # Merge semantic metadata from get_input_spec()
+        component = model.components[component_name]
+        assert isinstance(component, BaseModel)
+        merge_input_metadata(model_file_metadata[model_file_name], component.get_input_spec())
         {%- endif %}
         {%- endfilter %}
 
@@ -403,6 +407,8 @@ def download_model(
         model_metadata = ModelMetadata(runtime=runtime, precision=precision, tool_versions=tool_versions, model_files=model_file_metadata)
         {%- else %}
         file_metadata = ModelFileMetadata.from_hub_model(target_model)
+        # Merge semantic metadata from get_input_spec()
+        merge_input_metadata(file_metadata, model.get_input_spec())
         model_metadata = ModelMetadata(runtime=runtime, precision=precision, tool_versions=tool_versions, model_files={model_file_name: file_metadata})
         {%- endif %}
 

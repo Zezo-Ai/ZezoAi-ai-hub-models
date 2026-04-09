@@ -412,7 +412,7 @@ class Pi05PaliGemmaTokenEmbed(LoadPolicyMixin, BaseModel):
         num_patches = 256
         embed_dim = 2048
 
-        spec: dict[str, tuple[tuple[int, ...], str]] = {
+        spec: InputSpec = {
             "lang_tokens": ((batch_size, MAX_TOKEN_LENGTH), "int32"),
             "lang_mask": ((batch_size, MAX_TOKEN_LENGTH), "float32"),
         }

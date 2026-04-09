@@ -16,6 +16,7 @@ from qai_hub_models.models.efficientvit_l2_seg.model import (
     EfficientViT,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
+from qai_hub_models.utils.input_spec import to_hub_input_specs
 from qai_hub_models.utils.testing import assert_most_same, skip_clone_repo_check
 
 # This image showcases the Cityscapes classes (but is not from the dataset)
@@ -34,7 +35,8 @@ OUTPUT_IMAGE_ASSET = CachedWebModelAsset.from_asset_store(
 @skip_clone_repo_check
 def test_task() -> None:
     app = CityscapesSegmentationApp(
-        EfficientViT.from_pretrained(), EfficientViT.get_input_spec()
+        EfficientViT.from_pretrained(),
+        to_hub_input_specs(EfficientViT.get_input_spec()),
     )
     # fetch and load images
     image = TEST_CITYSCAPES_LIKE_IMAGE_ASSET.fetch()
@@ -53,7 +55,7 @@ def test_task() -> None:
 def test_trace() -> None:
     app = CityscapesSegmentationApp(
         EfficientViT.from_pretrained().convert_to_torchscript(),
-        EfficientViT.get_input_spec(),
+        to_hub_input_specs(EfficientViT.get_input_spec()),
     )
     # fetch and load images
     image = TEST_CITYSCAPES_LIKE_IMAGE_ASSET.fetch()

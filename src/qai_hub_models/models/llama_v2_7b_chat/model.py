@@ -803,7 +803,7 @@ class Llama2_TokenGenerator_1(LlamaMixin):
         # This can be used with the qai_hub python API to declare
         # the model input specification upon submitting a compile job.
 
-        input_spec = {
+        input_spec: InputSpec = {
             "input_ids": ((1, 1), "int32"),
             "attention_mask": ((1, 1, 1, input_seq_length), "float32"),
             "position_ids_cos": ((1, 1, 1, POS_EMBED_DIM), "float32"),
@@ -986,7 +986,7 @@ class Llama2_TokenGenerator_2(LlamaMixin):
         # This can be used with the qai_hub python API to declare
         # the model input specification upon submitting a compile job.
 
-        input_spec = {
+        input_spec: InputSpec = {
             _get_intermediate_logit_name(split_part=2): (
                 (1, 1, ATTENTION_HIDDEN_DIM),
                 "float32",
@@ -1137,7 +1137,7 @@ class Llama2_TokenGenerator_3(LlamaMixin):
         # This can be used with the qai_hub python API to declare
         # the model input specification upon submitting a compile job.
 
-        input_spec = {
+        input_spec: InputSpec = {
             _get_intermediate_logit_name(split_part=3): (
                 (1, 1, ATTENTION_HIDDEN_DIM),
                 "float32",
@@ -1288,7 +1288,7 @@ class Llama2_TokenGenerator_4(LlamaMixin):
         # This can be used with the qai_hub python API to declare
         # the model input specification upon submitting a compile job.
 
-        input_spec = {
+        input_spec: InputSpec = {
             _get_intermediate_logit_name(split_part=4): (
                 (1, 1, ATTENTION_HIDDEN_DIM),
                 "float32",

@@ -151,7 +151,7 @@ class OpusMTDecoder(BaseModel):
         """
         head_dim = attention_dim // num_heads
 
-        specs = {
+        specs: InputSpec = {
             "input_ids": ((1, 1), "int32"),
             "encoder_attention_mask": ((1, MAX_SEQ_LEN_ENC), "int32"),
             "position": ((1,), "int32"),
