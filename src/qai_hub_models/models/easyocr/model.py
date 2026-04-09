@@ -107,7 +107,7 @@ class EasyOCRRecognizer(BaseModel):
         cls,
         lang_list: list = LANG_LIST,
         recog_network: str = "standard",
-        unroll_lstm: bool = True,
+        unroll_lstm: bool = False,
     ) -> Self:
         ocr_reader = Reader(
             lang_list,
@@ -189,7 +189,7 @@ class EasyOCR(PretrainedCollectionModel):
         lang_list: list[str] = LANG_LIST,
         detect_network: str = "craft",
         recog_network: str = "standard",
-        unroll_lstm: bool = True,
+        unroll_lstm: bool = False,
     ) -> Self:
         """
         Create an EasyOCR model.
