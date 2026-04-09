@@ -17,9 +17,14 @@ from qai_hub_models.datasets import DatasetSplit, get_dataset_from_name
 from qai_hub_models.models.common import Precision
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset, load_torch
 from qai_hub_models.utils.base_app import CollectionAppProtocol
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import BaseModel, PretrainedCollectionModel
 from qai_hub_models.utils.evaluate import sample_dataset
-from qai_hub_models.utils.input_spec import InputSpec, get_batch_size
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    get_batch_size,
+    is_input_spec,
+    is_input_spec_dict,
+)
 from qai_hub_models.utils.private_asset_loaders import UnfetchableDatasetError
 from qai_hub_models.utils.qai_hub_helpers import make_hub_dataset_entries
 
@@ -81,12 +86,12 @@ def get_image_quantization_samples(
 
 
 def get_calibration_data(
-    model: BaseModel,
-    input_spec: InputSpec | None = None,
+    model: BaseModel | PretrainedCollectionModel,
+    input_spec_arg: InputSpec | dict[str, InputSpec] | None = None,
     num_samples: int | None = None,
+    component_name: str | None = None,
     dataset_options: dict | None = None,
     app: Any = None,
-    collection_model: CollectionModel | None = None,
 ) -> DatasetEntries:
     """
     Produces a numpy dataset to be used for calibration data of a quantize job.
@@ -97,26 +102,50 @@ def get_calibration_data(
     Parameters
     ----------
     model
-        The model for which to get calibration data.
-    input_spec
-        The input spec of the model. Used to ensure the returned dataset's names
-        match the input names of the model.
+        The model or collection model for which to get calibration data.
+    input_spec_arg
+        For a single model: an InputSpec or None.
+        For a collection model: a dict mapping component names to InputSpecs.
     num_samples
         Number of data samples to use. If not specified, uses
         default specified on dataset.
+    component_name
+        For collection models, the name of the component being calibrated.
     dataset_options
         Additional options to pass to the dataset constructor.
     app
-        The model's app used with collection_model to fetch calibration data
+        The model's app used with collection models to fetch calibration data
         via app.get_calibration_data() if it is instance of CollectionAppProtocol.
-    collection_model
-        It is required when using app-based calibration.
 
     Returns
     -------
     calibration_dataset : DatasetEntries
         Dataset compatible with the format expected by AI Hub Workbench.
     """
+    # Resolve input_spec_arg into input_spec (single) and input_spec_dict (per-component)
+    input_spec: InputSpec | None = None
+    input_spec_dict: dict[str, InputSpec] | None = None
+    if is_input_spec_dict(input_spec_arg):
+        input_spec_dict = input_spec_arg
+    elif is_input_spec(input_spec_arg):
+        input_spec = input_spec_arg
+
+    if isinstance(model, PretrainedCollectionModel):
+        assert component_name is not None, (
+            "component_name is required for collection models"
+        )
+        if isinstance(app, CollectionAppProtocol):
+            return app.get_calibration_data(
+                model,
+                component_name,
+                input_spec_dict,
+                num_samples,
+            )
+        if input_spec_dict:
+            input_spec = input_spec_dict.get(component_name)
+        model = model.components[component_name]
+
+    assert isinstance(model, BaseModel)
     calibration_dataset_name = model.calibration_dataset_name()
     if calibration_dataset_name is None:
         assert num_samples is None, (
@@ -131,10 +160,6 @@ def get_calibration_data(
     input_spec = input_spec or model.get_input_spec()
     batch_size = get_batch_size(input_spec) or 1
     dataset_options = dataset_options or {}
-    if isinstance(app, CollectionAppProtocol) and collection_model is not None:
-        return app.get_calibration_data(
-            model, calibration_dataset_name, num_samples, input_spec, collection_model
-        )
 
     try:
         dataset = get_dataset_from_name(

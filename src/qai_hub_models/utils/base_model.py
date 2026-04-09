@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import inspect
 import os
 import re
 import shutil
@@ -13,7 +12,7 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
 
 import torch
 from qai_hub.client import Device
@@ -35,7 +34,6 @@ from qai_hub_models.models.protocols import (
     HubModelProtocol,
     PretrainedHubModelProtocol,
 )
-from qai_hub_models.utils.checkpoint import CheckpointSpec
 from qai_hub_models.utils.input_spec import (
     InputSpec,
     broadcast_data_to_multi_batch,
@@ -45,17 +43,21 @@ from qai_hub_models.utils.input_spec import (
 from qai_hub_models.utils.path_helpers import QAIHM_PACKAGE_ROOT
 from qai_hub_models.utils.transpose_channel import transpose_channel_first_to_last
 
-CollectionModelT = TypeVar("CollectionModelT", bound="CollectionModel")
+ComponentT = TypeVar("ComponentT", "BaseModel", "BasePrecompiledModel")
+CollectionModelT = TypeVar("CollectionModelT", bound="CollectionModel[Any]")
 
 
-class CollectionModel:
+class CollectionModel(Generic[ComponentT]):
     """
     Model that glues together several BaseModels or BasePrecompiledModel.
+
+    Generic over the component type: CollectionModel[BaseModel] for pretrained,
+    CollectionModel[BasePrecompiledModel] for precompiled.
 
     See test_base_model.py for usage examples.
     """
 
-    component_classes: dict[str, type[BaseModel | BasePrecompiledModel]] = {}
+    component_classes: dict[str, type[ComponentT]] = {}
     component_class_names: list[str] = []
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -64,11 +66,9 @@ class CollectionModel:
         cls.component_classes = dict(cls.component_classes)
         cls.component_class_names = list(cls.component_class_names)
 
-    def __init__(self, *args: BaseModel | BasePrecompiledModel) -> None:
+    def __init__(self, *args: ComponentT) -> None:
         component_names = type(self).component_class_names
-        components: dict[
-            str, BaseModel | BasePrecompiledModel
-        ] = {}  # name -> instantiated object
+        self.components: dict[str, ComponentT] = {}
 
         # Process positional arguments.
         if len(args) != len(component_names):
@@ -83,14 +83,7 @@ class CollectionModel:
                     f"Expected component '{name}' to be an instance "
                     f"of {expected_class.__name__}, got {type(arg).__name__}"
                 )
-            components[name] = arg
-
-        # Check that all required components are provided.
-        missing = [name for name in component_names if name not in components]
-        if missing:
-            raise ValueError(f"Missing components for: {missing}")
-
-        self.components = components
+            self.components[name] = arg
 
     @classmethod
     def add_component(
@@ -261,73 +254,6 @@ class CollectionModel:
             metadata.supplementary_files will be populated with the files written by this function.
         """
         return
-
-
-class PretrainedCollectionModel(CollectionModel, FromPretrainedProtocol):
-    @classmethod
-    def from_pretrained(
-        cls,
-        checkpoint: CheckpointSpec = "DEFAULT",
-        host_device: torch.device | str = torch.device("cpu"),
-        **kwargs: Any,  # any extra you might want to forward
-    ) -> Self:
-        """
-        Instantiate the collection by delegating to each component_cls.from_pretrained,
-        but only passing it the arguments it actually declares.
-        """
-        # common kwargs we'd like to pass
-        base_kwargs: dict[str, Any] = {
-            "checkpoint": checkpoint,
-            "host_device": host_device,
-            **kwargs,
-        }
-
-        # helper to call any fn with only the supported subset of base_kwargs
-        def _call_with_supported(fn: Callable, all_kwargs: dict[str, Any]) -> Any:
-            sig = inspect.signature(fn)
-            params = sig.parameters.values()
-
-            # If fn accepts **kwargs, just pass everything through
-            if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params):
-                return fn(**all_kwargs)
-
-            # Otherwise, filter to only the names fn explicitly declares
-            supported = {
-                name: value
-                for name, value in all_kwargs.items()
-                if name in sig.parameters
-            }
-            return fn(**supported)
-
-        components = []
-        for component_cls in cls.component_classes.values():
-            # call component_cls.from_pretrained but only with the args it accepts
-            assert issubclass(component_cls, BaseModel)
-            comp = _call_with_supported(component_cls.from_pretrained, base_kwargs)
-            components.append(comp)
-
-        # now build and return your collection model however CollectionModel expects
-        return cls(*components)
-
-
-class PrecompiledCollectionModel(CollectionModel, FromPrecompiledProtocol):
-    @classmethod
-    def from_precompiled(cls) -> Self:
-        """
-        Instantiate the CollectionModel by instantiating all registered components
-        using their own from_precompiled() methods.
-        """
-        components = []
-        for component_cls in cls.component_classes.values():
-            if not (
-                hasattr(component_cls, "from_precompiled")
-                and callable(component_cls.from_precompiled)
-            ):
-                raise AttributeError(
-                    f"Component '{component_cls.__name__}' does not have a callable from_precompiled method"
-                )
-            components.append(component_cls.from_precompiled())
-        return cls(*components)
 
 
 class HubModel(HubModelProtocol):
@@ -810,3 +736,30 @@ class BasePrecompiledModel(HubModel, FromPrecompiledProtocol):
             metadata.supplementary_files will be populated with the files written by this function.
         """
         return
+
+
+class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtocol):
+    pass
+
+
+class PrecompiledCollectionModel(
+    CollectionModel[BasePrecompiledModel], FromPrecompiledProtocol
+):
+    @classmethod
+    def from_precompiled(cls) -> Self:
+        """
+        Instantiate the CollectionModel by instantiating all registered components
+        using their own from_precompiled() methods.
+        """
+        components = []
+        for component_cls in cls.component_classes.values():
+            if not (
+                hasattr(component_cls, "from_precompiled")
+                and callable(component_cls.from_precompiled)
+            ):
+                raise AttributeError(
+                    f"Component '{component_cls.__name__}' does not have "
+                    "a callable from_precompiled method"
+                )
+            components.append(component_cls.from_precompiled())
+        return cls(*components)

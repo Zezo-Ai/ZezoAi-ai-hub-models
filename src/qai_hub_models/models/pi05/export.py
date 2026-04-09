@@ -32,7 +32,7 @@ from qai_hub_models.utils.asset_loaders import (
     UNPUBLISHED_MODEL_WARNING,
     query_yes_no,
 )
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import CollectionExportResult, ExportResult
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
@@ -51,7 +51,7 @@ from qai_hub_models.utils.qai_hub_helpers import (
 
 
 def compile_model(
-    model: CollectionModel,
+    model: PretrainedCollectionModel,
     model_name: str,
     device: hub.Device,
     target_runtime: TargetRuntime,
@@ -63,10 +63,7 @@ def compile_model(
     compile_jobs: dict[str, hub.client.CompileJob] = {}
     for component_name in components or Model.component_class_names:
         component = model.components[component_name]
-        assert isinstance(component, BaseModel)
-        input_spec = (
-            input_specs[component_name] if input_specs else component.get_input_spec()
-        )
+        input_spec = (input_specs or {}).get(component_name, component.get_input_spec())
         # Trace the model
         model_to_compile = component.convert_to_hub_source_model(
             target_runtime, output_path, input_spec
@@ -97,7 +94,7 @@ def link_model(
     compiled_models: dict[str, hub.Model],
     device: hub.Device,
     model_name: str,
-    model: CollectionModel,
+    model: PretrainedCollectionModel,
     target_runtime: TargetRuntime,
 ) -> dict[str, hub.client.LinkJob]:
     """Link compiled DLCs to context binary for AOT."""
@@ -107,7 +104,7 @@ def link_model(
     link_jobs: dict[str, hub.client.LinkJob] = {}
     for component_name, compiled_model in compiled_models.items():
         component = model.components[component_name]
-        assert isinstance(component, BaseModel)
+
         link_options = component.get_hub_link_options(target_runtime)
         print(f"Linking {component_name} to context binary")
         link_jobs[component_name] = hub.submit_link_job(
@@ -169,7 +166,7 @@ def inference_model(
 
 def download_model(
     output_dir: os.PathLike | str,
-    model: CollectionModel,
+    model: PretrainedCollectionModel,
     runtime: TargetRuntime,
     precision: Precision,
     tool_versions: ToolVersions,
@@ -456,7 +453,7 @@ def export_model(
     if not skip_summary and not skip_inferencing:
         for component_name in components:
             component = model.components[component_name]
-            assert isinstance(component, BaseModel)
+
             inference_job = inference_jobs[component_name]
             sample_inputs = component.sample_inputs(
                 input_specs[component_name], use_channel_last_format=False

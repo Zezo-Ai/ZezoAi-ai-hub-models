@@ -18,7 +18,11 @@ from transformers.models.trocr.modeling_trocr import (
 )
 from typing_extensions import Self
 
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import (
+    BaseModel,
+    CollectionModel,
+    PretrainedCollectionModel,
+)
 from qai_hub_models.utils.input_spec import InputSpec
 
 HUGGINGFACE_TROCR_MODEL = "microsoft/trocr-small-stage1"
@@ -312,7 +316,7 @@ class TrOCRDecoder(BaseModel):
 
 @CollectionModel.add_component(TrOCRDecoder, "decoder")
 @CollectionModel.add_component(TrOCREncoder, "encoder")
-class TrOCR(CollectionModel):
+class TrOCR(PretrainedCollectionModel):
     def __init__(
         self,
         encoder: BaseModel,

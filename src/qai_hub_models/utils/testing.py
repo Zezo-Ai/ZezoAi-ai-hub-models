@@ -34,6 +34,7 @@ from qai_hub_models.utils.base_model import (
     BaseModel,
     BasePrecompiledModel,
     CollectionModel,
+    PretrainedCollectionModel,
 )
 from qai_hub_models.utils.evaluate import (
     CACHE_SAMPLES_PER_JOB_FILE,
@@ -44,7 +45,11 @@ from qai_hub_models.utils.inference import (
     AsyncOnDeviceResult,
     dataset_entries_from_batch,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    is_input_spec,
+    is_input_spec_dict,
+)
 from qai_hub_models.utils.quantization import get_calibration_data
 from qai_hub_models.utils.testing_async_utils import (  # noqa: F401
     append_line_to_file,
@@ -288,11 +293,12 @@ def get_and_sync_datasets_cache_dir(
 
 
 def mock_get_calibration_data(
-    model: BaseModel,
-    input_spec: InputSpec,
-    num_samples: int,
+    model: BaseModel | PretrainedCollectionModel,
+    input_spec_arg: InputSpec | dict[str, InputSpec] | None = None,
+    num_samples: int | None = None,
+    component_name: str | None = None,
+    dataset_options: dict | None = None,
     app: Any = None,
-    collection_model: CollectionModel | None = None,
 ) -> hub.Dataset:
     """
     Gets the calibration data needed to quantize the input model.
@@ -306,30 +312,47 @@ def mock_get_calibration_data(
     Parameters
     ----------
     model
-        Pytorch model to get calibration data
-    input_spec
-        Model input spec
+        Model or collection model to get calibration data for.
+    input_spec_arg
+        For a single model: an InputSpec or None.
+        For a collection model: a dict mapping component names to InputSpecs.
     num_samples
-        Number of samples used to calibrate
+        Number of samples used to calibrate.
+    component_name
+        For collection models, the name of the component being calibrated.
+    dataset_options
+        Additional options to pass to the dataset constructor.
     app
         Application object. Default is None.
-    collection_model
-        Collection model object. Default is None.
 
     Returns
     -------
     hub.Dataset
         Hub dataset object that was uploaded
     """
-    cache_prefix_name = model.calibration_dataset_name() or model.__class__.__name__
-    cache_prefix = get_folder_name(cache_prefix_name, input_spec)
+    # Resolve component spec for cache key
+    component_spec: InputSpec | None = None
+    if isinstance(model, PretrainedCollectionModel):
+        assert component_name is not None and is_input_spec_dict(input_spec_arg)
+        component_spec = input_spec_arg.get(component_name)
+        cache_prefix_name = f"{model.__class__.__name__}_{component_name}"
+    else:
+        assert isinstance(model, BaseModel) and is_input_spec(input_spec_arg)
+        component_spec = input_spec_arg
+        cache_prefix_name = model.calibration_dataset_name() or model.__class__.__name__
+
+    cache_prefix = get_folder_name(cache_prefix_name, component_spec)
     cache_key = cache_prefix + "_train"
     dataset_ids_file = get_dataset_ids_file()
     dataset_ids = load_yaml(dataset_ids_file)
     if dataset_ids and cache_key in dataset_ids:
         return hub.get_dataset(dataset_ids[cache_key])
     dataset = get_calibration_data(
-        model, input_spec, num_samples, app=app, collection_model=collection_model
+        model,
+        input_spec_arg,
+        num_samples,
+        component_name=component_name,
+        app=app,
     )
     hub_dataset = hub.upload_dataset(dataset)
     append_line_to_file(dataset_ids_file, f"{cache_key}: {hub_dataset.dataset_id}")

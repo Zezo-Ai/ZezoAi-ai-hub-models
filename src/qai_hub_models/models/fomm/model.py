@@ -24,6 +24,7 @@ from qai_hub_models.utils.asset_loaders import (
 from qai_hub_models.utils.base_model import (
     BaseModel,
     CollectionModel,
+    PretrainedCollectionModel,
 )
 from qai_hub_models.utils.input_spec import InputSpec
 
@@ -195,7 +196,7 @@ class FOMMGenerator(BaseModel):
 
 @CollectionModel.add_component(FOMMDetector, "detector")
 @CollectionModel.add_component(FOMMGenerator, "generator")
-class FOMM(CollectionModel):
+class FOMM(PretrainedCollectionModel):
     """Exportable FOMM for Image Editing"""
 
     def __init__(self, detector: FOMMDetector, generator: FOMMGenerator) -> None:

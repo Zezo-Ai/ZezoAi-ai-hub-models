@@ -17,7 +17,7 @@ from qai_hub_models.datasets import DatasetSplit, get_dataset_from_name
 from qai_hub_models.models._shared.proposal_based_detection.app import (
     ProposalBasedDetectionApp,
 )
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.bounding_box_processing import batched_nms
 from qai_hub_models.utils.draw import create_color_map, draw_box_from_xyxy
 from qai_hub_models.utils.evaluate import sample_dataset
@@ -214,22 +214,33 @@ class Detectron2DetectionApp(ProposalBasedDetectionApp):
 
         return out_images
 
+    @staticmethod
+    def calibration_dataset_name() -> str:
+        return "coco"
+
     @classmethod
     def get_calibration_data(
         cls,
-        model: BaseModel,
-        calibration_dataset_name: str,
-        num_samples: int | None,
-        input_spec: InputSpec,
-        collection_model: CollectionModel,
+        collection_model: PretrainedCollectionModel,
+        component_name: str,
+        input_specs: dict[str, InputSpec] | None = None,
+        num_samples: int | None = None,
     ) -> DatasetEntries:
+        model = collection_model.components[component_name]
+        input_spec = (
+            input_specs[component_name] if input_specs else model.get_input_spec()
+        )
         batch_size = get_batch_size(input_spec) or 1
+
         proposal_generator = collection_model.components["proposal_generator"]
-        assert isinstance(proposal_generator, BaseModel)
+        pg_spec = (input_specs or {}).get(
+            "proposal_generator", proposal_generator.get_input_spec()
+        )
+
         dataset = get_dataset_from_name(
-            calibration_dataset_name,
+            cls.calibration_dataset_name(),
             split=DatasetSplit.TRAIN,
-            input_spec=proposal_generator.get_input_spec(),
+            input_spec=pg_spec,
         )
         num_samples = num_samples or dataset.default_num_calibration_samples()
         num_samples = (num_samples // batch_size) * batch_size
@@ -240,7 +251,7 @@ class Detectron2DetectionApp(ProposalBasedDetectionApp):
             [] for _ in range(len(input_spec))
         ]
         for sample_input, _ in dataloader:
-            if model._get_name() == "Detectron2ROIHead":
+            if component_name == "roi_head":
                 features, proposals, objectness_logits = proposal_generator(
                     sample_input
                 )

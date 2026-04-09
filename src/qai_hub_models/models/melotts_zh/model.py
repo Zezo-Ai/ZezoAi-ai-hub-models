@@ -16,7 +16,7 @@ from qai_hub_models.models._shared.melotts.model import (
 from qai_hub_models.models._shared.melotts.utils import (
     write_melotts_supplementary_files,
 )
-from qai_hub_models.utils.base_model import CollectionModel
+from qai_hub_models.utils.base_model import CollectionModel, PretrainedCollectionModel
 
 MODEL_ID = __name__.split(".")[-2]
 
@@ -49,7 +49,7 @@ class BertWrapper_ZH(BertWrapper):
 @CollectionModel.add_component(Flow_ZH, "flow")
 @CollectionModel.add_component(Decoder_ZH, "decoder")
 @CollectionModel.add_component(BertWrapper_ZH, "bert_wrapper")
-class MeloTTS_ZH(CollectionModel):
+class MeloTTS_ZH(PretrainedCollectionModel):
     def __init__(
         self, encoder: Encoder, flow: Flow, decoder: Decoder, bert_model: BertWrapper
     ) -> None:

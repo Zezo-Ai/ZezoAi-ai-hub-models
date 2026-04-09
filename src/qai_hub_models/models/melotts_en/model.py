@@ -23,7 +23,7 @@ from qai_hub_models.models._shared.melotts.model import (
 from qai_hub_models.models._shared.melotts.utils import (
     write_melotts_supplementary_files,
 )
-from qai_hub_models.utils.base_model import CollectionModel
+from qai_hub_models.utils.base_model import CollectionModel, PretrainedCollectionModel
 
 MODEL_ID = __name__.split(".")[-2]
 
@@ -72,7 +72,7 @@ class T5Decoder_EN(T5Decoder):
 @CollectionModel.add_component(BertWrapper_EN, "bert_wrapper")
 @CollectionModel.add_component(T5Encoder_EN, "t5_encoder")
 @CollectionModel.add_component(T5Decoder_EN, "t5_decoder")
-class MeloTTS_EN(CollectionModel):
+class MeloTTS_EN(PretrainedCollectionModel):
     def __init__(
         self,
         encoder: Encoder,

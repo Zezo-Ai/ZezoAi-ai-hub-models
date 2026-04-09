@@ -20,6 +20,7 @@ from qai_hub_models.utils.base_model import (
     BaseModel,
     CollectionModel,
     Precision,
+    PretrainedCollectionModel,
     TargetRuntime,
 )
 from qai_hub_models.utils.input_spec import InputSpec
@@ -129,10 +130,6 @@ class ZipformerEncoder(BaseModel):
             hf_zipformer.encoder.encoder_proj,
         )
 
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "common_voice"
-
     def get_hub_profile_options(
         self,
         target_runtime: TargetRuntime,
@@ -220,10 +217,6 @@ class ZipformerDecoder(BaseModel):
             hf_zipformer.decoder.decoder_proj,
         )
 
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "common_voice"
-
     def get_hub_compile_options(
         self,
         target_runtime: TargetRuntime,
@@ -291,10 +284,6 @@ class ZipformerJoiner(BaseModel):
         hf_zipformer = HfZipformer.from_pretrained()
         return cls(hf_zipformer.joiner.output_linear)
 
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "common_voice"
-
     def get_hub_compile_options(
         self,
         target_runtime: TargetRuntime,
@@ -321,7 +310,7 @@ class ZipformerJoiner(BaseModel):
 @CollectionModel.add_component(ZipformerEncoder, "encoder")
 @CollectionModel.add_component(ZipformerDecoder, "decoder")
 @CollectionModel.add_component(ZipformerJoiner, "joiner")
-class HfZipformer(CollectionModel):
+class HfZipformer(PretrainedCollectionModel):
     def __init__(
         self, encoder: "Zipformer", decoder: "Decoder", joiner: "Joiner"
     ) -> None:

@@ -22,7 +22,9 @@ from collections.abc import Mapping
 from qai_hub_models.utils.input_spec import InputSpec
 {%- if is_collection_model %}
 from qai_hub_models.utils.export_result import CollectionExportResult
-from qai_hub_models.utils.base_model import CollectionModel
+{%- if not is_precompiled %}
+from qai_hub_models.utils.base_model import PretrainedCollectionModel
+{%- endif %}
 from qai_hub_models.models.{{ model_name }} import App
 {% endif %}
 
@@ -87,7 +89,7 @@ from qai_hub_models.configs.metadata_yaml import ModelFileMetadata, ModelMetadat
 {%- if can_use_quantize_job %}
 def quantize_model(
     precision: {{ "Precision | dict[str, Precision]" if is_collection_model else "Precision" }},
-    model: {{ "CollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
     model_name: str,
     onnx_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model" }},
     num_calibration_samples: int | None,
@@ -102,11 +104,14 @@ def quantize_model(
     {%- if is_collection_model %}
     component_precisions = model.get_component_precisions(precision) if isinstance(precision, Precision) else precision
     quantize_jobs: dict[str, hub.client.QuantizeJob] = {}
+    if not input_specs:
+        input_specs = {
+            name: model.components[name].get_input_spec() for name in model.components
+        }
     for component_name in (components or model.component_class_names):
         component_precision = component_precisions[component_name]
         component = model.components[component_name]
-        assert isinstance(component, BaseModel)
-        input_spec = input_specs[component_name] if input_specs else component.get_input_spec()
+
         if component_precision != Precision.float:
     {%- else %}
     input_spec = input_spec or model.get_input_spec()
@@ -120,10 +125,11 @@ def quantize_model(
         )
 
     calibration_data = quantization_utils.get_calibration_data(
-        {{ model_var }},
-        input_spec,
-        num_calibration_samples
-        {{ ', app=App, collection_model=model,' if is_collection_model }}
+        {%- if is_collection_model %}
+        model, input_specs, num_calibration_samples, component_name=component_name, app=App
+        {%- else %}
+        model, input_spec, num_calibration_samples
+        {%- endif %}
     )
     {{ "quantize_jobs[component_name] =" if is_collection_model else "return" }} hub.submit_quantize_job(
         model=onnx_model{{ "s[component_name]" if is_collection_model else "" }},
@@ -142,7 +148,7 @@ def quantize_model(
 
 {%- if not is_precompiled %}
 def compile_model(
-    model: {{ "CollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
     model_name: str,
     device: hub.Device,
     target_runtime: TargetRuntime,
@@ -165,8 +171,7 @@ def compile_model(
     compile_jobs : dict[str, hub.client.CompileJob] = {}
     for component_name in (components or Model.component_class_names):
         component = model.components[component_name]
-        assert isinstance(component, BaseModel)
-        input_spec = input_specs[component_name] if input_specs else component.get_input_spec()
+        input_spec = (input_specs or {}).get(component_name, component.get_input_spec())
     {%- else %}
     input_spec = input_spec or model.get_input_spec()
     {%- endif %}
@@ -235,7 +240,7 @@ def link_model(
     compiled_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model" }},
     device: hub.Device,
     model_name: str,
-    model: {{ "CollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "PrecompiledCollectionModel" if is_precompiled else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
     target_runtime: TargetRuntime,
 ) -> {{ "dict[str, hub.client.LinkJob]" if is_collection_model else "hub.client.LinkJob" }}:
     """Link compiled DLC{{ "s" if is_collection_model else "" }} to context binary for AOT."""
@@ -244,7 +249,7 @@ def link_model(
     link_jobs: dict[str, hub.client.LinkJob] = {}
     for component_name, compiled_model in compiled_models.items():
         component = model.components[component_name]
-        assert isinstance(component, BaseModel)
+
         link_options = component.get_hub_link_options(target_runtime)
         print(f"Linking {component_name} to context binary")
         link_jobs[component_name] = hub.submit_link_job(
@@ -356,7 +361,7 @@ def inference_model(
 {% if not is_precompiled %}
 def download_model(
     output_dir: os.PathLike | str,
-    model: {{ "CollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
     runtime: TargetRuntime,
     precision: Precision,
     tool_versions: ToolVersions,
@@ -864,7 +869,7 @@ def export_model(
         {%- if is_collection_model %}
         for component_name in components:
             component = model.components[component_name]
-            assert isinstance(component, BaseModel)
+
             inference_job = inference_jobs[component_name]
         {%- endif %}
         {%- filter indent(width=4 if is_collection_model else 0) %}

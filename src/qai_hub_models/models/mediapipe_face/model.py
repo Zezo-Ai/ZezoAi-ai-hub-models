@@ -19,7 +19,11 @@ from qai_hub_models.utils.asset_loaders import (
     find_replace_in_repo,
     load_numpy,
 )
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import (
+    BaseModel,
+    CollectionModel,
+    PretrainedCollectionModel,
+)
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.set_env import set_temp_env
 
@@ -412,7 +416,7 @@ class FaceLandmarkDetector(BaseModel):
 
 @CollectionModel.add_component(FaceDetector, "face_detector")
 @CollectionModel.add_component(FaceLandmarkDetector, "face_landmark_detector")
-class MediaPipeFace(CollectionModel):
+class MediaPipeFace(PretrainedCollectionModel):
     def __init__(
         self,
         face_detector: FaceDetector,

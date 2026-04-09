@@ -26,7 +26,7 @@ from qai_hub_models.models._shared.melotts.utils import (
     download_unidic,
 )
 from qai_hub_models.utils.base_app import CollectionAppProtocol
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.input_spec import InputSpec, get_batch_size
 from qai_hub_models.utils.qai_hub_helpers import make_hub_dataset_entries
@@ -283,15 +283,22 @@ class MeloTTSApp(CollectionAppProtocol):
             samplerate=self.tts_object.hps.data.sampling_rate,
         )
 
+    @staticmethod
+    def calibration_dataset_name() -> str:
+        return "common_voice_text"
+
     @classmethod
     def get_calibration_data(
         cls,
-        model: BaseModel,
-        calibration_dataset_name: str,
-        num_samples: int | None,
-        input_spec: InputSpec,
-        collection_model: CollectionModel,
+        collection_model: PretrainedCollectionModel,
+        component_name: str,
+        input_specs: dict[str, InputSpec] | None = None,
+        num_samples: int | None = None,
     ) -> DatasetEntries:
+        model = collection_model.components[component_name]
+        input_spec = (
+            input_specs[component_name] if input_specs else model.get_input_spec()
+        )
         assert hasattr(collection_model, "language") and callable(
             collection_model.language
         )
@@ -311,7 +318,9 @@ class MeloTTSApp(CollectionAppProtocol):
         sdp_ratio = 0.2
 
         dataset = get_dataset_from_name(
-            calibration_dataset_name, DatasetSplit.TRAIN, lang=LANGUAGE_MAP[language_]
+            cls.calibration_dataset_name(),
+            DatasetSplit.TRAIN,
+            lang=LANGUAGE_MAP[language_],
         )
         num_samples = num_samples or dataset.default_samples_per_job()
         num_samples = (num_samples // batch_size) * batch_size
@@ -323,7 +332,7 @@ class MeloTTSApp(CollectionAppProtocol):
         for text, _ in dataloader:
             if isinstance(text, tuple | list):
                 text = text[0]  # batch_size is 1
-            if model._get_name() == f"Flow_{LANGUAGE_MAP[language_]}":
+            if component_name == "flow":
                 phones, tones, lang_ids, bert, ja_bert, phone_len = cls.preprocess_text(
                     tts_object, text=text
                 )
@@ -369,7 +378,7 @@ class MeloTTSApp(CollectionAppProtocol):
                 inputs[4].append(attn_squeezed)
                 inputs[5].append(noise_scale_pt)
 
-            elif model._get_name() == f"Decoder_{LANGUAGE_MAP[language_]}":
+            elif component_name == "decoder":
                 phones, tones, lang_ids, bert, ja_bert, phone_len = cls.preprocess_text(
                     tts_object, text=text
                 )
@@ -433,7 +442,7 @@ class MeloTTSApp(CollectionAppProtocol):
                     inputs[0].append(z_buf)
                     inputs[1].append(g)
                     total_dec_seq_len += MAX_DEC_SEQ_LEN
-            elif model._get_name() == f"BertWrapper_{LANGUAGE_MAP[language_]}":
+            elif component_name == "bert_wrapper":
                 input_ = tokenizer(
                     text,
                     padding="max_length",
@@ -450,6 +459,6 @@ class MeloTTSApp(CollectionAppProtocol):
                     torch.tensor(input_["token_type_ids"].numpy(), dtype=torch.int32)
                 )
             else:
-                raise NotImplementedError(model._get_name())
+                raise NotImplementedError(component_name)
 
         return make_hub_dataset_entries(tuple(inputs), list(input_spec.keys()))

@@ -26,7 +26,7 @@ from qai_hub.client import DatasetEntries
 from torch.utils.data import DataLoader
 
 from qai_hub_models.datasets import DatasetSplit, get_dataset_from_name
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.draw import draw_box_from_corners, draw_box_from_xyxy
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.image_processing import (
@@ -663,23 +663,31 @@ class EasyOCRApp:
 
         return output
 
+    @staticmethod
+    def calibration_dataset_name() -> str:
+        return "icdar2015"
+
     @classmethod
     def get_calibration_data(
         cls,
-        model: BaseModel,
-        calibration_dataset_name: str,
-        num_samples: int | None,
-        input_spec: InputSpec,
-        collection_model: CollectionModel,
+        collection_model: PretrainedCollectionModel,
+        component_name: str,
+        input_specs: dict[str, InputSpec] | None = None,
+        num_samples: int | None = None,
     ) -> DatasetEntries:
+        model = collection_model.components[component_name]
+        input_spec = (
+            input_specs[component_name] if input_specs else model.get_input_spec()
+        )
         batch_size = get_batch_size(input_spec) or 1
-        encoder = collection_model.components["detector"]
-        assert isinstance(encoder, BaseModel)
+
+        detector = collection_model.components["detector"]
+        detector_spec = (input_specs or {}).get("detector", detector.get_input_spec())
 
         dataset = get_dataset_from_name(
-            calibration_dataset_name,
+            cls.calibration_dataset_name(),
             split=DatasetSplit.TRAIN,
-            input_spec=encoder.get_input_spec(),
+            input_spec=detector_spec,
         )
         num_samples = num_samples or dataset.default_num_calibration_samples()
         num_samples = (num_samples // batch_size) * batch_size
@@ -687,13 +695,15 @@ class EasyOCRApp:
         torch_dataset = sample_dataset(dataset, num_samples)
         dataloader = DataLoader(torch_dataset, batch_size=batch_size)
 
-        # Create a EasyOCRApp instance
-        recognizer = collection_model.components.get("recognizer", model)
+        recognizer = collection_model.components["recognizer"]
+        recognizer_spec = (input_specs or {}).get(
+            "recognizer", recognizer.get_input_spec()
+        )
         app_instance = cls(
-            detector=encoder,
-            recognizer=recognizer,  # type: ignore[arg-type]
-            detector_img_shape=encoder.get_input_spec()["image"][0][2:],  # type: ignore[arg-type]
-            recognizer_img_shape=recognizer.get_input_spec()["image"][0][2:],  # type: ignore[arg-type]
+            detector=detector,
+            recognizer=recognizer,
+            detector_img_shape=detector_spec["image"][0][2:],  # type: ignore[arg-type]
+            recognizer_img_shape=recognizer_spec["image"][0][2:],  # type: ignore[arg-type]
             lang_list=["en"],
             decoder_mode="greedy",
         )
@@ -712,19 +722,17 @@ class EasyOCRApp:
                 NHWC_int_numpy_frames
             )
 
-            model_name = model._get_name()
-            if model_name == "EasyOCRDetector":
+            if component_name == "detector":
                 inputs[0].append(detector_input_frames)
 
-            elif model_name == "EasyOCRRecognizer":
+            elif component_name == "recognizer":
                 # Run detector to obtain text boxes
                 with torch.no_grad():
-                    detector_output = encoder(detector_input_frames)
+                    detector_output = detector(detector_input_frames)
                 horizontal_boxes_per_img, free_boxes_per_img = (
                     app_instance.detector_postprocess(detector_output, scales, paddings)
                 )
 
-                # Prepare recognizer inputs
                 batch_cutouts = []
                 for img_gray, horizontal_boxes, free_boxes in zip(
                     NHWC_int_numpy_GRAY_frames,
@@ -732,7 +740,6 @@ class EasyOCRApp:
                     free_boxes_per_img,
                     strict=False,
                 ):
-                    # Get detector output and prepare recognizer input
                     _, cutout_frames_list = app_instance.get_detector_output(
                         img_gray, horizontal_boxes, free_boxes
                     )
@@ -740,13 +747,21 @@ class EasyOCRApp:
 
                 if batch_cutouts:
                     sample_tensor = torch.cat(batch_cutouts)
-                    for single_cutout in sample_tensor.split(1, dim=0):
-                        inputs[0].append(single_cutout)
+                    # Drop the last partial batch — calibration requires
+                    # fixed-size inputs matching the input spec.
+                    for batch in sample_tensor.split(batch_size, dim=0):
+                        if batch.shape[0] == batch_size:
+                            inputs[0].append(batch)
 
             else:
                 raise ValueError(
-                    f"Unsupported model for calibration: {model_name}. "
-                    "Expected 'EasyOCRDetector' or 'EasyOCRRecognizer'."
+                    f"Unsupported component for calibration: {component_name}. "
+                    "Expected 'detector' or 'recognizer'."
                 )
 
+        if not any(inputs):
+            raise ValueError(
+                f"No calibration samples collected for {component_name}. "
+                "Increase num_samples or reduce batch_size."
+            )
         return make_hub_dataset_entries(tuple(inputs), list(input_spec.keys()))

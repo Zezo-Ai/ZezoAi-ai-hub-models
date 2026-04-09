@@ -23,7 +23,11 @@ from qai_hub_models.models._shared.sam.model_patches import (
     sam_decoder_predict_masks,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import (
+    BaseModel,
+    CollectionModel,
+    PretrainedCollectionModel,
+)
 from qai_hub_models.utils.input_spec import InputSpec
 
 MODEL_ID = __name__.split(".")[-2]
@@ -293,7 +297,7 @@ class MobileSAMLoader:
 
 @CollectionModel.add_component(MobileSAMEncoder, "encoder")
 @CollectionModel.add_component(MobileSAMDecoder, "decoder")
-class MobileSAM(CollectionModel):
+class MobileSAM(PretrainedCollectionModel):
     def __init__(
         self, sam: Sam, encoder: MobileSAMEncoder, decoder: MobileSAMDecoder
     ) -> None:

@@ -20,7 +20,10 @@ from qai_hub_models.models._shared.opus_mt.model_adaptation import (
     QcMarianEncoder,
     apply_model_adaptations,
 )
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import (
+    BaseModel,
+    PretrainedCollectionModel,
+)
 from qai_hub_models.utils.input_spec import InputSpec
 
 MODEL_ID = "opus_mt_shared"
@@ -186,7 +189,7 @@ class OpusMTDecoder(BaseModel):
         return output_names
 
 
-class OpusMT(CollectionModel):
+class OpusMT(PretrainedCollectionModel):
     """
     Base OpusMT translation model.
 

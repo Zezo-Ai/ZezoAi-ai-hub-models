@@ -197,7 +197,7 @@ def run_pi05_on_sample(
         [B, Tcfg, Dcfg] denormalized predicted actions.
     """
     app_cfg = Pi05AppConfig.from_policy(policy)
-    app = Pi05App(config=app_cfg, **model.components).eval()  # type: ignore[arg-type]
+    app = Pi05App(config=app_cfg, **model.components).eval()
 
     pred_actions = app.predict_action_chunk(batch=batch, noise=noise)
     return post_processor(pred_actions)

@@ -13,7 +13,11 @@ from typing_extensions import Self
 
 from qai_hub_models.models._shared.detectron2.model import Detectron2
 from qai_hub_models.models.common import Precision
-from qai_hub_models.utils.base_model import CollectionModel, TargetRuntime
+from qai_hub_models.utils.base_model import (
+    CollectionModel,
+    PretrainedCollectionModel,
+    TargetRuntime,
+)
 from qai_hub_models.utils.input_spec import InputSpec
 
 MODEL_ID = __name__.split(".")[-2]
@@ -202,7 +206,7 @@ class Detectron2ROIHead(Detectron2):
 
 @CollectionModel.add_component(Detectron2ProposalGenerator, "proposal_generator")
 @CollectionModel.add_component(Detectron2ROIHead, "roi_head")
-class Detectron2Detection(CollectionModel):
+class Detectron2Detection(PretrainedCollectionModel):
     def __init__(
         self,
         proposal_generator: Detectron2ProposalGenerator,

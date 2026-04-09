@@ -6,11 +6,11 @@
 from __future__ import annotations
 
 from qai_hub_models.models._shared.hf_whisper.model import (
-    CollectionModel,
     HfWhisper,
     HfWhisperDecoder,
     HfWhisperEncoder,
 )
+from qai_hub_models.utils.base_model import CollectionModel
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1

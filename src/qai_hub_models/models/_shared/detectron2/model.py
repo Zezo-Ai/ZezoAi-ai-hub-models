@@ -54,7 +54,3 @@ class Detectron2(BaseModel):
         )
         checkpointer.load(weight)
         return cls(model)
-
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "coco"

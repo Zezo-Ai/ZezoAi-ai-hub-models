@@ -11,7 +11,7 @@ from typing import Protocol, TypeVar, runtime_checkable
 import torch
 from qai_hub.client import DatasetEntries
 
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.input_spec import InputSpec
 
 RUN_MODEL_RETURN_TYPE = list[torch.Tensor] | torch.Tensor
@@ -27,40 +27,41 @@ class BaseCollectionApp(ABC):
 
     @classmethod
     @abstractmethod
-    def from_pretrained(cls, model: CollectionModel) -> BaseCollectionApp:
+    def from_pretrained(cls, model: PretrainedCollectionModel) -> BaseCollectionApp:
         pass
 
 
 @runtime_checkable
 class CollectionAppProtocol(Protocol):
-    """Method required to get calibration data for CollectionModels."""
+    """Protocol for apps that provide calibration data for CollectionModels."""
+
+    @staticmethod
+    def calibration_dataset_name() -> str:
+        """Name of the dataset used for calibration across all components."""
+        ...
 
     @classmethod
     def get_calibration_data(
         cls,
-        model: BaseModel,
-        calibration_dataset_name: str,
-        num_samples: int | None,
-        input_spec: InputSpec,
-        collection_model: CollectionModel,
+        collection_model: PretrainedCollectionModel,
+        component_name: str,
+        input_specs: dict[str, InputSpec] | None = None,
+        num_samples: int | None = None,
     ) -> DatasetEntries:
         """
         Produces a numpy dataset to be used for calibration data of a quantize job.
 
         Parameters
         ----------
-        model
-            The model for which to get calibration data.
-        calibration_dataset_name
-            Dataset name to use for calibration.
+        collection_model
+            The parent collection model.
+        component_name
+            The name of the component being calibrated.
+        input_specs
+            Per-component input specs. If None, uses each component's defaults.
         num_samples
             Number of data samples to use. If not specified, uses
             default specified on dataset.
-        input_spec
-            The input spec of the model. Used to ensure the returned
-            dataset's names match the input names of the model.
-        collection_model
-            It is required when using app-based calibration.
 
         Returns
         -------

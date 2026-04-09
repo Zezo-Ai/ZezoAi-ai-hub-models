@@ -16,7 +16,11 @@ from easyocr.model.modules import BidirectionalLSTM
 from easyocr.model.vgg_model import Model as VGGRecognizer
 from typing_extensions import Self
 
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import (
+    BaseModel,
+    CollectionModel,
+    PretrainedCollectionModel,
+)
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.rnn import UnrolledLSTM
@@ -87,10 +91,6 @@ class EasyOCRDetector(BaseModel):
         return ["results"]
 
     @staticmethod
-    def calibration_dataset_name() -> str:
-        return "icdar2015"
-
-    @staticmethod
     def get_channel_last_inputs() -> list[str]:
         return ["image"]
 
@@ -107,7 +107,7 @@ class EasyOCRRecognizer(BaseModel):
         cls,
         lang_list: list = LANG_LIST,
         recog_network: str = "standard",
-        unroll_lstm: bool = False,
+        unroll_lstm: bool = True,
     ) -> Self:
         ocr_reader = Reader(
             lang_list,
@@ -121,7 +121,7 @@ class EasyOCRRecognizer(BaseModel):
         recognizer = cast(VGGRecognizer | Recognizer, ocr_reader.recognizer)
 
         # Patch LSTM modules with UnrolledLSTM wrappers if needed
-        # As of early 2026, unrolled LSTM is the only path to support quantized LSTM on NPU via LiteRT.
+        # Unrolled LSTM is required to run on NPU via LiteRT (TFLite).
         if unroll_lstm:
             for rnn in recognizer.SequenceModeling:
                 bilstm = cast(BidirectionalLSTM, rnn)
@@ -165,17 +165,13 @@ class EasyOCRRecognizer(BaseModel):
         return ["output_preds"]
 
     @staticmethod
-    def calibration_dataset_name() -> str:
-        return "icdar2015"
-
-    @staticmethod
     def get_channel_last_inputs() -> list[str]:
         return ["image"]
 
 
 @CollectionModel.add_component(EasyOCRDetector, "detector")
 @CollectionModel.add_component(EasyOCRRecognizer, "recognizer")
-class EasyOCR(CollectionModel):
+class EasyOCR(PretrainedCollectionModel):
     def __init__(
         self,
         detector: EasyOCRDetector,
@@ -193,7 +189,7 @@ class EasyOCR(CollectionModel):
         lang_list: list[str] = LANG_LIST,
         detect_network: str = "craft",
         recog_network: str = "standard",
-        unroll_lstm: bool = False,
+        unroll_lstm: bool = True,
     ) -> Self:
         """
         Create an EasyOCR model.
@@ -210,7 +206,7 @@ class EasyOCR(CollectionModel):
             Valid options: standard (determine based on language list), generation1, generation2
         unroll_lstm
             Whether to unroll LSTM layers in the recognizer.
-            As of early 2026, unrolled LSTM is the only path to support quantized LSTM on NPU via LiteRT.
+            Unrolled LSTM is required to run on NPU via LiteRT (TFLite).
 
         Returns
         -------

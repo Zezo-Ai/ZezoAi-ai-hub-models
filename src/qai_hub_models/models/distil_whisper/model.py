@@ -12,13 +12,13 @@ from transformers import WhisperForConditionalGeneration
 
 from qai_hub_models.models._shared.hf_whisper.model import (
     MASK_NEG,
-    CollectionModel,
     HfWhisper,
     HfWhisperDecoder,
     HfWhisperEncoder,
     InputSpec,
 )
 from qai_hub_models.models.common import Precision, TargetRuntime
+from qai_hub_models.utils.base_model import CollectionModel
 
 from .model_patch import monkey_patch_distil_whisper_model
 

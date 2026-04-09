@@ -179,10 +179,6 @@ class SAM2Encoder(BaseModel, ABC):
         ]
 
     @staticmethod
-    def calibration_dataset_name() -> str:
-        return "sav"
-
-    @staticmethod
     def get_hub_litemp_percentage(_: Precision) -> float:
         """Returns the Lite-MP percentage value for the specified mixed precision quantization."""
         return 10
@@ -313,10 +309,6 @@ class SAM2Decoder(BaseModel, ABC):
     @staticmethod
     def get_output_names() -> list[str]:
         return ["masks", "scores"]
-
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "sav"
 
     @staticmethod
     def get_hub_litemp_percentage(_: Precision) -> float:

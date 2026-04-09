@@ -5,8 +5,6 @@
 
 from typing import Any
 
-import pytest
-
 from qai_hub_models.utils.base_model import (
     BaseModel,
     CollectionModel,
@@ -41,7 +39,9 @@ def test_collection_model_demo() -> None:
     @CollectionModel.add_component(Component1, "component_1")
     @CollectionModel.add_component(Component2, "component_2")
     class DummyCollection(PretrainedCollectionModel):
-        pass
+        @classmethod
+        def from_pretrained(cls) -> "DummyCollection":
+            return cls(*[c.from_pretrained() for c in cls.component_classes.values()])
 
     # Second subclass shouldn't interfere with DummyCollection
     @CollectionModel.add_component(Component1, "component_1")
@@ -56,17 +56,15 @@ def test_collection_model_demo() -> None:
     class ThirdCollection(SecondCollection):
         pass
 
-    # Access class vars via component_classes
-    assert DummyCollection.component_classes["component_1"] is Component1
-    assert DummyCollection.component_classes["component_2"] is Component2
+    # Access class vars via component_class_names
     assert DummyCollection.component_class_names == ["component_1", "component_2"]
-
-    assert len(ThirdCollection.component_class_names) == 1
-    assert len(ThirdCollection.component_classes) == 1
+    assert ThirdCollection.component_class_names == ["component_1"]
 
     model = DummyCollection.from_pretrained()
 
-    # Access components via model.components
+    # Access components via model (instance-level access works with generics)
+    assert model.component_classes["component_1"] is Component1
+    assert model.component_classes["component_2"] is Component2
     assert list(model.components.keys()) == ["component_1", "component_2"]
     assert isinstance(model.components["component_1"], Component1)
 
@@ -76,22 +74,3 @@ def test_collection_model_demo() -> None:
     model3 = DummyCollection(comp1_instance, comp2_instance)
     assert model3.components["component_1"] is comp1_instance
     assert model3.components["component_2"] is comp2_instance
-
-
-def test_missing_from_pretrained() -> None:
-    """
-    Raise Attribute error if any component classes misses from_pretrained or
-    from_precompiled method
-    """
-
-    class BrokenComponent(SimpleBaseModel):
-        # Override from_pretrained with a non-callable value.
-        from_pretrained = None  # type: ignore[assignment]
-
-    @CollectionModel.add_component(BrokenComponent, "broken_component")
-    class BrokenCollection(PretrainedCollectionModel):
-        pass
-
-    error_msg = "None is not a callable object"
-    with pytest.raises(TypeError, match=error_msg):
-        BrokenCollection.from_pretrained()

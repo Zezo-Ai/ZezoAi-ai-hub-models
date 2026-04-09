@@ -31,6 +31,7 @@ from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_model import (
     CollectionModel,
     Precision,
+    PretrainedCollectionModel,
     TargetRuntime,
 )
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
@@ -150,7 +151,7 @@ class SAM2Loader(SAM2LoaderBase):
 
 @CollectionModel.add_component(SAM2Encoder, "encoder")
 @CollectionModel.add_component(SAM2Decoder, "decoder")
-class SAM2(CollectionModel):
+class SAM2(PretrainedCollectionModel):
     def __init__(self, sam2: Sam2, encoder: SAM2Encoder, decoder: SAM2Decoder) -> None:
         super().__init__(*[encoder, decoder])
         self.sam2 = sam2

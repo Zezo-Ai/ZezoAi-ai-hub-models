@@ -19,7 +19,6 @@ from torch.utils.data import DataLoader
 from qai_hub_models.datasets import DatasetSplit, get_dataset_from_name
 from qai_hub_models.models.zipformer.model import HfZipformer
 from qai_hub_models.utils.base_app import CollectionAppProtocol
-from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.input_spec import InputSpec, get_batch_size
 from qai_hub_models.utils.qai_hub_helpers import make_hub_dataset_entries
@@ -144,15 +143,22 @@ class ZipformerApp(CollectionAppProtocol):
         }
         return streaming_greedy_search(self.model, origin_fpm, frames)
 
+    @staticmethod
+    def calibration_dataset_name() -> str:
+        return "common_voice"
+
     @classmethod
     def get_calibration_data(
         cls,
-        model: BaseModel,
-        calibration_dataset_name: str,
-        num_samples: int | None,
-        input_spec: InputSpec,
         collection_model: HfZipformer,
+        component_name: str,
+        input_specs: dict[str, InputSpec] | None = None,
+        num_samples: int | None = None,
     ) -> DatasetEntries:
+        model = collection_model.components[component_name]
+        input_spec = (
+            input_specs[component_name] if input_specs else model.get_input_spec()
+        )
         encoder_fpm = collection_model.components["encoder"]
         decoder_fpm = collection_model.components["decoder"]
         joiner_fpm = collection_model.components["joiner"]
@@ -163,7 +169,9 @@ class ZipformerApp(CollectionAppProtocol):
         offset = collection_model.offset
         blank_id = collection_model.blank_id
         context_size = collection_model.context_size
-        dataset = get_dataset_from_name(calibration_dataset_name, DatasetSplit.TRAIN)
+        dataset = get_dataset_from_name(
+            cls.calibration_dataset_name(), DatasetSplit.TRAIN
+        )
         num_samples = num_samples or dataset.default_samples_per_job()
         num_samples = (num_samples // batch_size) * batch_size
         print(f"Loading {num_samples} calibration samples.")
@@ -195,7 +203,7 @@ class ZipformerApp(CollectionAppProtocol):
             hyp = [blank_id] * context_size
             decoder_input = torch.tensor([hyp], dtype=torch.int32)
             decoder_out = decoder_fpm(decoder_input)
-            if model._get_name() == "ZipformerEncoder":
+            if component_name == "encoder":
                 for start in range(0, max_frames, offset):
                     streaming_feature = feature_array[:, start : start + segment, :]
                     if start + segment > max_frames:
@@ -223,7 +231,7 @@ class ZipformerApp(CollectionAppProtocol):
                             )
                             decoder_out = decoder_fpm(decoder_input)
 
-            elif model._get_name() == "ZipformerDecoder":
+            elif component_name == "decoder":
                 for start in range(0, max_frames, offset):
                     streaming_feature = feature_array[:, start : start + segment, :]
                     if start + segment > max_frames:
@@ -250,7 +258,7 @@ class ZipformerApp(CollectionAppProtocol):
                             )
                             decoder_out = decoder_fpm(decoder_input)
 
-            elif model._get_name() == "ZipformerJoiner":
+            elif component_name == "joiner":
                 for start in range(0, max_frames, offset):
                     streaming_feature = feature_array[:, start : start + segment, :]
                     if start + segment > max_frames:
@@ -279,6 +287,6 @@ class ZipformerApp(CollectionAppProtocol):
                             )
                             decoder_out = decoder_fpm(decoder_input)
             else:
-                raise NotImplementedError(model._get_name())
+                raise NotImplementedError(component_name)
 
         return make_hub_dataset_entries(tuple(inputs), list(input_spec.keys()))

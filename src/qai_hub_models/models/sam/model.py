@@ -31,7 +31,11 @@ from qai_hub_models.models.sam.model_patches import (
     SplitHeadSAMEncoderAttention,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import (
+    BaseModel,
+    CollectionModel,
+    PretrainedCollectionModel,
+)
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.window_partitioning import (
     window_partition_5d,
@@ -534,7 +538,7 @@ class SAMLoader:
         return encoder_splits
 
 
-class SAM(CollectionModel):
+class SAM(PretrainedCollectionModel):
     def __init__(
         self, sam: Sam, encoder_splits: list[SAMEncoderPart], decoder: SAMDecoder
     ) -> None:

@@ -29,7 +29,7 @@ from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_model import (
     BaseModel,
-    CollectionModel,
+    PretrainedCollectionModel,
 )
 from qai_hub_models.utils.input_spec import InputSpec
 
@@ -327,7 +327,7 @@ class HfWhisperDecoder(BaseModel):
         return compile_options
 
 
-class HfWhisper(CollectionModel):
+class HfWhisper(PretrainedCollectionModel):
     def __init__(
         self,
         encoder: HfWhisperEncoder,

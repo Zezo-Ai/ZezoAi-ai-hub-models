@@ -16,7 +16,11 @@ from qai_hub_models.utils.asset_loaders import (
     SourceAsRoot,
     load_yaml,
 )
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import (
+    BaseModel,
+    CollectionModel,
+    PretrainedCollectionModel,
+)
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import InputSpec
 
@@ -316,7 +320,7 @@ class TrackAnythingSegment(TrackAnything):
     TrackAnythingEncodeKeyWithoutShrinkage, "encode_key_without_shrinkage"
 )
 @CollectionModel.add_component(TrackAnythingSegment, "segment")
-class TrackAnythingWrapper(CollectionModel):
+class TrackAnythingWrapper(PretrainedCollectionModel):
     def __init__(
         self,
         EncodeKeyWithShrinkage: TrackAnythingEncodeKeyWithShrinkage,

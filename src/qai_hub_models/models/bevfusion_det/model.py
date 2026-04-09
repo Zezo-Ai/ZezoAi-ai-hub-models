@@ -35,6 +35,7 @@ from qai_hub_models.utils.base_model import (
     BaseModel,
     CollectionModel,
     Precision,
+    PretrainedCollectionModel,
     TargetRuntime,
 )
 from qai_hub_models.utils.bounding_box_processing_3d import (
@@ -359,7 +360,7 @@ class BEVFusionDecoder(BaseModel):
 @CollectionModel.add_component(BEVFusionEncoder2, "encoder_2")
 @CollectionModel.add_component(BEVFusionEncoder3, "encoder_3")
 @CollectionModel.add_component(BEVFusionDecoder, "decoder")
-class BEVFusion(CollectionModel):
+class BEVFusion(PretrainedCollectionModel):
     def __init__(
         self,
         encoder1: BEVFusionEncoder1,

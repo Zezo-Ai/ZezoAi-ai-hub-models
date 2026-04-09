@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Any, TypeGuard
+
 import numpy as np
 import torch
 
@@ -14,6 +16,20 @@ from qai_hub_models.models.common import SampleInputsType
 # InputSpec (name -> (shape, type)) when submitting profiling job to Qualcomm AI Hub Workbench.
 # This is a subtype of qai_hub.InputSpecs
 InputSpec = dict[str, tuple[tuple[int, ...], str]]
+
+
+def is_input_spec(value: Any) -> TypeGuard[InputSpec]:
+    """Check if value is an InputSpec (values are tuples, not dicts)."""
+    if not isinstance(value, dict) or not value:
+        return False
+    return isinstance(next(iter(value.values())), tuple)
+
+
+def is_input_spec_dict(value: Any) -> TypeGuard[dict[str, InputSpec]]:
+    """Check if value is a dict of InputSpecs (values are dicts)."""
+    if not isinstance(value, dict) or not value:
+        return False
+    return isinstance(next(iter(value.values())), dict)
 
 
 def str_to_torch_dtype(s: str) -> torch.dtype:

@@ -24,9 +24,7 @@ from qai_hub_models.utils.args import (
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.base_model import (
-    BaseModel,
     BasePrecompiledModel,
-    CollectionModel,
     PrecompiledCollectionModel,
 )
 from qai_hub_models.utils.export_result import CollectionExportResult, ExportResult
@@ -45,7 +43,7 @@ def link_model(
     compiled_models: dict[str, hub.Model],
     device: hub.Device,
     model_name: str,
-    model: CollectionModel,
+    model: PrecompiledCollectionModel,
     target_runtime: TargetRuntime,
 ) -> dict[str, hub.client.LinkJob]:
     """Link compiled DLCs to context binary for AOT."""
@@ -55,7 +53,7 @@ def link_model(
     link_jobs: dict[str, hub.client.LinkJob] = {}
     for component_name, compiled_model in compiled_models.items():
         component = model.components[component_name]
-        assert isinstance(component, BaseModel)
+
         link_options = component.get_hub_link_options(target_runtime)
         print(f"Linking {component_name} to context binary")
         link_jobs[component_name] = hub.submit_link_job(

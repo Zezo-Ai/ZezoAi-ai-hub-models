@@ -35,7 +35,7 @@ from qai_hub_models.utils.asset_loaders import (
     UNPUBLISHED_MODEL_WARNING,
     query_yes_no,
 )
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import CollectionExportResult, ExportResult
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
@@ -56,7 +56,7 @@ from qai_hub_models.utils.qai_hub_helpers import (
 
 def quantize_model(
     precision: Precision | dict[str, Precision],
-    model: CollectionModel,
+    model: PretrainedCollectionModel,
     model_name: str,
     onnx_models: dict[str, hub.Model],
     num_calibration_samples: int | None,
@@ -70,13 +70,14 @@ def quantize_model(
         else precision
     )
     quantize_jobs: dict[str, hub.client.QuantizeJob] = {}
+    if not input_specs:
+        input_specs = {
+            name: model.components[name].get_input_spec() for name in model.components
+        }
     for component_name in components or model.component_class_names:
         component_precision = component_precisions[component_name]
         component = model.components[component_name]
-        assert isinstance(component, BaseModel)
-        input_spec = (
-            input_specs[component_name] if input_specs else component.get_input_spec()
-        )
+
         if component_precision != Precision.float:
             print(f"Quantizing {component_name}.")
             if (
@@ -88,11 +89,11 @@ def quantize_model(
                 )
 
             calibration_data = quantization_utils.get_calibration_data(
-                component,
-                input_spec,
+                model,
+                input_specs,
                 num_calibration_samples,
+                component_name=component_name,
                 app=App,
-                collection_model=model,
             )
             quantize_jobs[component_name] = hub.submit_quantize_job(
                 model=onnx_models[component_name],
@@ -108,7 +109,7 @@ def quantize_model(
 
 
 def compile_model(
-    model: CollectionModel,
+    model: PretrainedCollectionModel,
     model_name: str,
     device: hub.Device,
     target_runtime: TargetRuntime,
@@ -121,10 +122,7 @@ def compile_model(
     compile_jobs: dict[str, hub.client.CompileJob] = {}
     for component_name in components or Model.component_class_names:
         component = model.components[component_name]
-        assert isinstance(component, BaseModel)
-        input_spec = (
-            input_specs[component_name] if input_specs else component.get_input_spec()
-        )
+        input_spec = (input_specs or {}).get(component_name, component.get_input_spec())
         if source_models and (source_model := source_models.get(component_name)):
             model_to_compile = source_model
         else:
@@ -167,7 +165,7 @@ def link_model(
     compiled_models: dict[str, hub.Model],
     device: hub.Device,
     model_name: str,
-    model: CollectionModel,
+    model: PretrainedCollectionModel,
     target_runtime: TargetRuntime,
 ) -> dict[str, hub.client.LinkJob]:
     """Link compiled DLCs to context binary for AOT."""
@@ -177,7 +175,7 @@ def link_model(
     link_jobs: dict[str, hub.client.LinkJob] = {}
     for component_name, compiled_model in compiled_models.items():
         component = model.components[component_name]
-        assert isinstance(component, BaseModel)
+
         link_options = component.get_hub_link_options(target_runtime)
         print(f"Linking {component_name} to context binary")
         link_jobs[component_name] = hub.submit_link_job(
@@ -239,7 +237,7 @@ def inference_model(
 
 def download_model(
     output_dir: os.PathLike | str,
-    model: CollectionModel,
+    model: PretrainedCollectionModel,
     runtime: TargetRuntime,
     precision: Precision,
     tool_versions: ToolVersions,
@@ -589,7 +587,7 @@ def export_model(
     if not skip_summary and not skip_inferencing:
         for component_name in components:
             component = model.components[component_name]
-            assert isinstance(component, BaseModel)
+
             inference_job = inference_jobs[component_name]
             sample_inputs = component.sample_inputs(
                 input_specs[component_name], use_channel_last_format=False

@@ -18,7 +18,7 @@ from torchvision.transforms.functional import resize
 
 from qai_hub_models.datasets import DatasetSplit, get_dataset_from_name
 from qai_hub_models.models._shared.sam2.model_patches import mask_postprocessing
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.image_processing import (
     numpy_image_to_torch,
@@ -304,30 +304,36 @@ class SAM2App:
 
         return upscaled_masks, scores
 
+    @staticmethod
+    def calibration_dataset_name() -> str:
+        return "sav"
+
     @classmethod
     def get_calibration_data(
         cls,
-        model: BaseModel,
-        calibration_dataset_name: str,
-        num_samples: int | None,
-        input_spec: InputSpec,
-        collection_model: CollectionModel,
+        collection_model: PretrainedCollectionModel,
+        component_name: str,
+        input_specs: dict[str, InputSpec] | None = None,
+        num_samples: int | None = None,
     ) -> DatasetEntries:
+        model = collection_model.components[component_name]
+        input_spec = (
+            input_specs[component_name] if input_specs else model.get_input_spec()
+        )
         batch_size = get_batch_size(input_spec) or 1
 
-        # Determine encoder component dynamically
-        encoder_name = next(
-            (name for name in collection_model.components if "encoder" in name), None
-        )
-        if not encoder_name:
-            raise ValueError("Could not find encoder component in collection model.")
+        if "encoder" not in collection_model.components:
+            raise ValueError(
+                "SAM2App.get_calibration_data requires a component named 'encoder'. "
+                f"Available components: {list(collection_model.components)}"
+            )
+        encoder = collection_model.components["encoder"]
+        encoder_spec = (input_specs or {}).get("encoder", encoder.get_input_spec())
 
-        encoder = collection_model.components[encoder_name]
-        assert isinstance(encoder, BaseModel)
         dataset = get_dataset_from_name(
-            calibration_dataset_name,
+            cls.calibration_dataset_name(),
             split=DatasetSplit.TRAIN,
-            input_spec=encoder.get_input_spec(),
+            input_spec=encoder_spec,
         )
         num_samples = num_samples or dataset.default_num_calibration_samples()
         num_samples = (num_samples // batch_size) * batch_size
@@ -338,7 +344,7 @@ class SAM2App:
             [] for _ in range(len(input_spec))
         ]
         for sample_input, _ in dataloader:
-            if "Decoder" in model._get_name():
+            if component_name == "decoder":
                 sample_input = encoder(*sample_input)
             if isinstance(sample_input, (tuple, list)):
                 for i, tensor in enumerate(sample_input):

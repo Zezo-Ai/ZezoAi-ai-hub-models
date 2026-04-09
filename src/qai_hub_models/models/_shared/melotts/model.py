@@ -434,10 +434,6 @@ class Flow(BaseModel):
         )
 
     @staticmethod
-    def calibration_dataset_name() -> str:
-        return "common_voice_text"
-
-    @staticmethod
     def component_precision() -> Precision:
         return Precision.w8a16
 
@@ -499,10 +495,6 @@ class Decoder(BaseModel):
             device,
             context_graph_name="decoder",
         )
-
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "common_voice_text"
 
     @staticmethod
     def component_precision() -> Precision:

@@ -16,7 +16,12 @@ from typing_extensions import Self
 
 from qai_hub_models.models.common import Precision
 from qai_hub_models.models.maskrcnn.model_patches import _onnx_merge_levels_optimized
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel, TargetRuntime
+from qai_hub_models.utils.base_model import (
+    BaseModel,
+    CollectionModel,
+    PretrainedCollectionModel,
+    TargetRuntime,
+)
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import InputSpec
 
@@ -346,7 +351,7 @@ class MaskRCNNROIHead(BaseModel):
 
 @CollectionModel.add_component(MaskRCNNProposalGenerator, "proposal_generator")
 @CollectionModel.add_component(MaskRCNNROIHead, "roi_head")
-class MaskRCNN(CollectionModel):
+class MaskRCNN(PretrainedCollectionModel):
     """MaskRCNN Instance Segmentation Model"""
 
     def __init__(

@@ -20,7 +20,7 @@ from qai_hub_models.models._shared.sam2.model import (
     SAM2Loader as SAM2LoaderBase,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, SourceAsRoot
-from qai_hub_models.utils.base_model import CollectionModel
+from qai_hub_models.utils.base_model import CollectionModel, PretrainedCollectionModel
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -102,7 +102,7 @@ class EdgeTAMLoader(SAM2LoaderBase):
 
 @CollectionModel.add_component(EdgeTAMEncoder, "encoder")
 @CollectionModel.add_component(EdgeTAMDecoder, "decoder")
-class EdgeTAM(CollectionModel):
+class EdgeTAM(PretrainedCollectionModel):
     def __init__(
         self, sam2: Sam2, encoder: EdgeTAMEncoder, decoder: EdgeTAMDecoder
     ) -> None:
