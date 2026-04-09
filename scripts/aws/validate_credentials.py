@@ -5,6 +5,7 @@
 
 import configparser
 import contextlib
+import functools
 import logging
 import os
 import shutil
@@ -124,6 +125,7 @@ def add_default_credentials_section() -> None:
         config.write(f)
 
 
+@functools.cache
 def credentials_valid() -> bool:
     session = boto3.Session(profile_name=PROFILE)
     sts_client = session.client("sts")
@@ -140,6 +142,7 @@ def credentials_valid() -> bool:
     return True
 
 
+@functools.cache
 def _pass_initialized() -> bool:
     """Check if pass (password-store) has a valid GPG key configured."""
     gpg_id_file = os.path.expanduser("~/.password-store/.gpg-id")
@@ -155,6 +158,7 @@ def _pass_initialized() -> bool:
     return result.returncode == 0
 
 
+@functools.cache
 def is_password_saved() -> bool:
     if sys.platform == "darwin":
         result = subprocess.run(
@@ -170,6 +174,17 @@ def is_password_saved() -> bool:
         )
         if result.stdout.find("saml2aws") != -1:
             return True
+    elif sys.platform == "linux" and _pass_initialized():
+        result = subprocess.run(
+            [
+                "pass",
+                "show",
+                "saml2aws/https:/account.activedirectory.windowsazure.com",
+            ],
+            capture_output=True,
+            check=False,
+        )
+        return result.returncode == 0
 
     return False
 
