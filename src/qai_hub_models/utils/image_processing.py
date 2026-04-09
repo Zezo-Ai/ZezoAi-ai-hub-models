@@ -70,7 +70,12 @@ def app_to_net_image_inputs(
     if isinstance(pixel_values_or_image, list):
         frames = []
         for image in pixel_values_or_image:
-            NHWC_int_numpy_frames.append(np.array(image.convert(image_layout)))
+            if image_layout == "BGR":
+                # PIL does not support BGR natively; decode as RGB then flip channels.
+                rgb = np.array(image.convert("RGB"))
+                NHWC_int_numpy_frames.append(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+            else:
+                NHWC_int_numpy_frames.append(np.array(image.convert(image_layout)))
             frames.append(preprocess_PIL_image(image, to_float=to_float))
         NCHW_torch_frames = torch.cat(frames)
     elif isinstance(pixel_values_or_image, torch.Tensor):
