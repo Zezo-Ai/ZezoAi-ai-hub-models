@@ -34,20 +34,26 @@ jobs:
     steps:
       - run: echo "Release approved"
 
+  # Code release (public repo tag) must wait for assets so that the
+  # published tag's fetch APIs work immediately on install.
   release_code:
       name: Release code to Repository
       secrets: inherit
-      needs: [approve, test_public_wheel]
-      if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
+      needs: [approve, test_public_wheel, release_assets]
+      if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' && needs.release_assets.result == 'success' }}
       uses: ./.github/workflows/release_code.yaml
       with:
           skip_approval: true
 
+  # PyPI release must run after the asset release. The published wheel's
+  # fetch APIs (e.g. fetch_huggingface_weights, fetch_qaihm_asset) expect
+  # release assets to already be available on S3. Publishing the wheel
+  # before assets are uploaded would give users a broken install.
   release_pypi:
       name: Release wheel to ${{ inputs.target == 'prod' && 'PyPi' || 'test PyPi' }}
       secrets: inherit
-      needs: [approve, test_public_wheel]
-      if: ${{ !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
+      needs: [approve, test_public_wheel, release_assets]
+      if: ${{ !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' && (inputs.target != 'prod' || needs.release_assets.result == 'success') }}
       uses: ./.github/workflows/release_pypi.yaml
       with:
           target: ${{ inputs.target }}
