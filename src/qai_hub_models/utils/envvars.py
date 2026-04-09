@@ -15,3 +15,21 @@ class IsOnCIEnvvar(QAIHMBoolEnvvar):
     @classmethod
     def default(cls) -> bool:
         return False
+
+
+class DevModeEnvvar(QAIHMBoolEnvvar):
+    """
+    If true, disables interactive prompts and validation checks for development.
+
+    This skips:
+    - The unpublished model warning prompt (auto-accepts)
+    - The supported precision/runtime validation (allows any combination)
+    """
+
+    VARNAME = "QAIHM_DEV_MODE"
+    CLI_ARGNAMES = ["--dev-mode"]
+    CLI_HELP_MESSAGE = "If set, skips interactive prompts and allows unsupported precision/runtime combinations."
+
+    @classmethod
+    def default(cls) -> bool:
+        return False

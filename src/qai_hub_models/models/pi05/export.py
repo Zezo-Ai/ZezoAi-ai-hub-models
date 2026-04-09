@@ -29,8 +29,7 @@ from qai_hub_models.utils.args import (
 )
 from qai_hub_models.utils.asset_loaders import (
     ASSET_CONFIG,
-    UNPUBLISHED_MODEL_WARNING,
-    query_yes_no,
+    check_unpublished_model_warning,
 )
 from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.compare import torch_inference
@@ -493,8 +492,7 @@ def export_model(
 
 def main() -> None:
     warnings.filterwarnings("ignore")
-    print("WARNING:", UNPUBLISHED_MODEL_WARNING)
-    if not query_yes_no("Continue?"):
+    if not check_unpublished_model_warning():
         return
     supported_precision_runtimes: dict[Precision, list[TargetRuntime]] = {
         Precision.float: [

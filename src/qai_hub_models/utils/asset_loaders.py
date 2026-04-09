@@ -41,7 +41,7 @@ from tqdm import tqdm
 
 from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.utils.aws import can_access_private_s3
-from qai_hub_models.utils.envvars import IsOnCIEnvvar
+from qai_hub_models.utils.envvars import DevModeEnvvar, IsOnCIEnvvar
 from qai_hub_models.utils.version_helpers import QAIHMVersion
 
 ASSET_BASES_DEFAULT_PATH = os.path.join(
@@ -105,6 +105,21 @@ UNPUBLISHED_MODEL_WARNING = (
     "We do not provide support for unpublished models. "
     "If this model was previously published, use earlier releases."
 )
+
+
+def check_unpublished_model_warning() -> bool:
+    """
+    Check if user wants to continue with an unpublished model.
+
+    In dev mode (QAIHM_DEV_MODE=1), CI (QAIHM_CI=1), or pytest, silently returns True.
+    Otherwise, prints warning and prompts user for confirmation.
+
+    Returns True if user wants to continue, False otherwise.
+    """
+    if DevModeEnvvar.get() or IsOnCIEnvvar.get() or os.environ.get("PYTEST_VERSION"):
+        return True
+    print("WARNING:", UNPUBLISHED_MODEL_WARNING)
+    return query_yes_no("Continue?")
 
 
 def query_yes_no(question: str, default: str | None = "yes") -> bool:

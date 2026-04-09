@@ -35,6 +35,7 @@ from qai_hub_models.utils.base_model import (
     HubModel,
     TargetRuntime,
 )
+from qai_hub_models.utils.envvars import DevModeEnvvar
 from qai_hub_models.utils.evaluate import EvalMode
 from qai_hub_models.utils.inference import OnDeviceModel, compile_model_from_args
 from qai_hub_models.utils.qai_hub_helpers import (
@@ -277,6 +278,7 @@ class QAIHMArgumentParser(argparse.ArgumentParser):
             fetch_static_assets is not None
             or precision is None
             or target_runtime is None
+            or DevModeEnvvar.get()
         ):
             return
 
@@ -402,11 +404,14 @@ def add_precision_arg(
         help=precision_help,
     )
     if len(supported_precisions) > 1:
+        quantize_options = [
+            str(p) for p in supported_precisions if p != Precision.float
+        ]
         group.add_argument(
             "--quantize",
             action=get_quantize_action_with_default(default_if_arg_explicitly_passed),
             default=None,
-            choices=[str(p) for p in supported_precisions if p != Precision.float],
+            metavar=f"{{{', '.join(quantize_options)}}}",
             help=f"Quantize the model to this precision. If passed without an explicit argument, precision {default_if_arg_explicitly_passed} will be used. If set, this always supercedes the '--precision' argument.",
             nargs="?",
         )
