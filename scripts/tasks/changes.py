@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .constants import (
     PUBLIC_BENCH_MODELS,
+    PY_PACKAGE_INSTALL_ROOT,
     PY_PACKAGE_MODELS_ROOT,
     PY_PACKAGE_RELATIVE_MODELS_ROOT,
     PY_PACKAGE_RELATIVE_SRC_ROOT,
@@ -53,7 +54,10 @@ MANUAL_EDGES = {
     "src/qai_hub_models/scorecard/execution_helpers.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/scorecard/device.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/scorecard/envvars.py": REPRESENTATIVE_EXPORT_FILES,
-    "src/qai_hub_models/utils/base_model.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/utils/base_model.py": [
+        *REPRESENTATIVE_EXPORT_FILES,
+        "src/qai_hub_models/models/stable_diffusion_v1_5/model.py",
+    ],
     "src/qai_hub_models/utils/default_export_device.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/utils/quantization.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/utils/input_spec.py": REPRESENTATIVE_EXPORT_FILES,
@@ -82,10 +86,10 @@ def get_python_import_expression(filepath: str) -> str:
     Given a filepath, return the expression used to import the file
     in other modules.
 
-    For example, qiasm_model_zoo/models/trocr/model.py ->
-        qiasm_model_zoo.models.trocr.model
+    For example, src/qai_hub_models/models/trocr/model.py ->
+        qai_hub_models.models.trocr.model
     """
-    rel_path = os.path.relpath(filepath, REPO_ROOT)
+    rel_path = os.path.relpath(filepath, PY_PACKAGE_INSTALL_ROOT)
     init_suffix = "/__init__.py"
     if rel_path.endswith(init_suffix):
         rel_path = rel_path[: -len(init_suffix)]

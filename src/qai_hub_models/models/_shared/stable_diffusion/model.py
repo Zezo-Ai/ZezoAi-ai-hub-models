@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING, Any, cast
 
 from tokenizers import Tokenizer
@@ -457,6 +458,36 @@ class StableDiffusionBase(PretrainedCollectionModel):
     guidance_scale: float = 7.5
     default_num_steps: int = 20
     hf_repo_id: str = ""
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        checkpoint: CheckpointSpec = "DEFAULT",
+        host_device: torch.device | str = torch.device("cpu"),
+        **kwargs: Any,
+    ) -> Self:
+        """
+        Instantiate the collection by calling from_pretrained on each
+        registered component, passing only the kwargs each component accepts.
+        """
+        base_kwargs: dict[str, Any] = {
+            "checkpoint": checkpoint,
+            "host_device": host_device,
+            **kwargs,
+        }
+        components = []
+        for component_cls in cls.component_classes.values():
+            sig = inspect.signature(component_cls.from_pretrained)
+            if any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+            ):
+                supported = base_kwargs
+            else:
+                supported = {
+                    k: v for k, v in base_kwargs.items() if k in sig.parameters
+                }
+            components.append(component_cls.from_pretrained(**supported))
+        return cls(*components)
 
     @staticmethod
     def make_tokenizer() -> Tokenizer:
