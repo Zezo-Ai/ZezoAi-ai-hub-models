@@ -244,7 +244,10 @@ def draw_box_from_xyxy(
         )
 
 
-def create_color_map(num_classes: Number) -> np.ndarray:
+def create_color_map(
+    num_classes: Number,
+    colors: dict[int, tuple[int, int, int]] | None = None,
+) -> np.ndarray:
     """
     Assign a random color to each class in the dataset to produce a segmentation mask for drawing.
 
@@ -252,6 +255,9 @@ def create_color_map(num_classes: Number) -> np.ndarray:
     ----------
     num_classes
         Number of colors to produce.
+    colors
+        Optional dict mapping class index to an (R, G, B) tuple.
+        Overrides the randomly generated color for those classes.
 
     Returns
     -------
@@ -267,4 +273,7 @@ def create_color_map(num_classes: Number) -> np.ndarray:
         0, 256, size=(int(num_classes), 3), dtype=np.uint8
     )
     color_map[0] = [0, 0, 0]  # Background class, usually black
+    if colors is not None:
+        for idx, rgb in colors.items():
+            color_map[idx] = rgb
     return color_map

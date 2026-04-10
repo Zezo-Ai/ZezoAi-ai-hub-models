@@ -12,7 +12,7 @@ from qai_hub_models.models.sinet.model import MODEL_ASSET_VERSION, MODEL_ID, SIN
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.testing import skip_clone_repo_check
 
-OUTPUT_IMAGE_LOCAL_PATH = "sinet_demo_output.png"
+OUTPUT_IMAGE_LOCAL_PATH = "sinet_demo_output_v3.png"
 OUTPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, OUTPUT_IMAGE_LOCAL_PATH
 )

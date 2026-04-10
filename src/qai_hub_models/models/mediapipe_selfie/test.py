@@ -15,7 +15,7 @@ from qai_hub_models.models.mediapipe_selfie.model import (
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 
 OUTPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
-    MODEL_ID, MODEL_ASSET_VERSION, "selfie_output.png"
+    MODEL_ID, MODEL_ASSET_VERSION, "selfie_output_v3.png"
 )
 
 
