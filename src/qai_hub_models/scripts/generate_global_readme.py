@@ -38,7 +38,7 @@ GLOBAL_README_TEMPLATE = jinja_env.get_template("global_readme_template.j2")
 
 def _get_model_row(model: QAIHMModelInfo) -> dict[str, str]:
     """Build a row dict for a single model entry."""
-    readme_path = str(model.get_readme_path(Path(QAIHM_PACKAGE_NAME)))
+    readme_path = str(model.get_readme_path(Path("src") / QAIHM_PACKAGE_NAME))
     if os.path.exists(model.get_perf_yaml_path()):
         model_url = str(ASSET_CONFIG.get_website_url(model.id, relative=False))
     else:
