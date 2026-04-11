@@ -97,6 +97,7 @@ class ShiftedWindowAttentionInf(torch.nn.Module):
             dropout=self.model.dropout,
             qkv_bias=self.model.qkv.bias,
             proj_bias=self.model.proj.bias,
+            logit_scale=getattr(self.model, "logit_scale", None),
             training=self.model.training,
         )
 
