@@ -317,8 +317,9 @@ class QcMarianDecoder(torch.nn.Module):
         # Register final_logits_bias as a parameter to properly handle it in ONNX/QNN export
         # Clone, detach, and squeeze to convert from [1, vocab_size] to [vocab_size]
         # This avoids rank mismatch issues during QNN conversion
+        assert callable(marian_model.final_logits_bias.clone)
         self.final_logits_bias = torch.nn.Parameter(
-            marian_model.final_logits_bias.clone().detach().squeeze(0),  # type: ignore[operator]
+            marian_model.final_logits_bias.clone().detach().squeeze(0),
             requires_grad=False,
         )
 

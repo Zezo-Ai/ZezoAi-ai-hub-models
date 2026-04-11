@@ -45,7 +45,7 @@ def write_opus_mt_supplementary_files(
     metadata
         Model metadata object to update with supplementary file info
     """
-    if metadata.runtime != TargetRuntime.QNN_CONTEXT_BINARY:
+    if metadata.runtime != TargetRuntime.VOICE_AI:
         return
 
     # Parse language pair from model name (e.g., "Helsinki-NLP/opus-mt-en-es" -> "en", "es")

@@ -62,8 +62,7 @@ from qai_hub_models.utils.testing_export_eval import (
 #   For example, models that allow JIT (on-device) compile will not test AOT runtimes; we assume that if it works on JIT it will work on AOT.
 ENABLED_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
     Precision.float: [
-        TargetRuntime.QNN_CONTEXT_BINARY,
-        TargetRuntime.PRECOMPILED_QNN_ONNX,
+        TargetRuntime.VOICE_AI,
     ],
 }
 
@@ -74,8 +73,7 @@ ENABLED_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
 #   For example, models that allow JIT (on-device) compile will not test AOT runtimes; we assume that if it works on JIT it will work on AOT.
 PASSING_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
     Precision.float: [
-        TargetRuntime.QNN_CONTEXT_BINARY,
-        TargetRuntime.PRECOMPILED_QNN_ONNX,
+        TargetRuntime.VOICE_AI,
     ],
 }
 
