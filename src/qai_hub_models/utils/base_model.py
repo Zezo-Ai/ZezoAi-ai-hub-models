@@ -18,7 +18,7 @@ import torch
 from qai_hub.client import Device
 from typing_extensions import Self
 
-from qai_hub_models.configs.metadata_yaml import ModelMetadata
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.models.common import (
     Precision,

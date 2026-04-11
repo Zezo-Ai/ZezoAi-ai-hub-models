@@ -21,7 +21,7 @@ from transformers import (
 from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder
 from typing_extensions import Self
 
-from qai_hub_models.configs.metadata_yaml import ModelMetadata
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.models._shared.hf_whisper.model_adaptation import (
     monkey_patch_model,
 )

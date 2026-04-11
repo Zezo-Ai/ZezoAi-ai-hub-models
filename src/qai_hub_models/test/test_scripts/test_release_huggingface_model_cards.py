@@ -227,6 +227,14 @@ def test_generate_hf_manifest() -> None:
                         "Manifest should not include s3_key (only download_url)"
                     )
 
+    # Verify to_json / from_json round-trip
+    with TemporaryDirectory() as tmpdir:
+        json_path = Path(tmpdir) / "release_assets.json"
+        manifest.to_json(json_path)
+        assert json_path.exists()
+        loaded = QAIHMModelReleaseAssets.from_json(json_path)
+        assert loaded == manifest
+
     # Test edge case: model with no release assets
     # Find a model without release-assets.yaml
     model_without_assets = next(

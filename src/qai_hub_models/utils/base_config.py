@@ -127,6 +127,7 @@ class BaseQAIHMConfig(BaseModel):
         path: str | os.PathLike,
         exclude_defaults: bool = True,
         exclude_none: bool = True,
+        indent: int | None = 4,
     ) -> None:
         """
         Converts this class to a dict and saves that dict to a JSON file.
@@ -139,13 +140,26 @@ class BaseQAIHMConfig(BaseModel):
             Whether to exclude fields with default values.
         exclude_none
             Whether to exclude fields with None values.
+        indent
+            Number of spaces for indentation. None produces compact (single-line) output. Defaults to 4.
         """
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(
                 self.model_dump_json(
-                    exclude_defaults=exclude_defaults, exclude_none=exclude_none
+                    exclude_defaults=exclude_defaults,
+                    exclude_none=exclude_none,
+                    indent=indent,
                 )
             )
+
+    @classmethod
+    def from_json(
+        cls,
+        path: str | Path,
+    ) -> Self:
+        """Reads the JSON file at the given path and loads it into an instance of this class."""
+        with open(path) as f:
+            return cls.model_validate_json(f.read())
 
     @classmethod
     def from_yaml(

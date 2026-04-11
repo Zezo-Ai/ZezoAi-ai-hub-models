@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from qai_hub_models.configs.metadata_yaml import ModelMetadata
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.models._shared.opus_mt.model import (
     MAX_SEQ_LEN_DEC,
     MAX_SEQ_LEN_ENC,

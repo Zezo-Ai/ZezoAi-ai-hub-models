@@ -24,7 +24,7 @@ import torch
 from transformers import WhisperConfig
 from typing_extensions import Self
 
-from qai_hub_models.configs.metadata_yaml import ModelMetadata
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.models._shared.hf_whisper_quantized.model import (
     WhisperDecoderQuantizableBase,
     WhisperEncoderQuantizableBase,

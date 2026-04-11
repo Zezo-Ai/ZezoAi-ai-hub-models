@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from qai_hub_models.configs.metadata_yaml import (
+from qai_hub_models.configs.model_metadata import (
     ModelFileMetadata,
     ModelMetadata,
     merge_input_metadata,
@@ -21,7 +21,7 @@ from qai_hub_models.configs.tensor_spec import (
 )
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.common import Precision, TargetRuntime
-from qai_hub_models.utils.asset_loaders import load_yaml
+from qai_hub_models.utils.asset_loaders import load_json
 from qai_hub_models.utils.input_spec import InputSpec
 
 # Default values for required ModelMetadata fields in tests
@@ -138,9 +138,8 @@ def test_model_metadata_multiple_components() -> None:
     assert "unet" in model_metadata.model_files
 
 
-def test_metadata_yaml_roundtrip() -> None:
-    """Test saving and loading metadata YAML with flow-style lists."""
-    # Create metadata
+def test_metadata_json_roundtrip() -> None:
+    """Test to_json / from_json round-trip for ModelMetadata."""
     file_metadata = ModelFileMetadata(
         inputs={"image": TensorSpec(shape=(1, 3, 224, 224), dtype="float32")},
         outputs={"logits": TensorSpec(shape=(1, 1000), dtype="float32")},
@@ -152,25 +151,28 @@ def test_metadata_yaml_roundtrip() -> None:
         model_files={"ResNet50": file_metadata},
     )
 
-    # Save to YAML
     with tempfile.TemporaryDirectory() as tmpdir:
-        yaml_path = Path(tmpdir) / "metadata.yaml"
-        model_metadata.to_yaml(yaml_path)
+        json_path = Path(tmpdir) / "metadata.json"
+        model_metadata.to_json(json_path)
 
-        # Verify file exists
-        assert yaml_path.exists()
+        assert json_path.exists()
 
-        # Load back and verify structure
-        loaded_dict = load_yaml(yaml_path)
-        assert "model_files" in loaded_dict
-        assert "ResNet50" in loaded_dict["model_files"]
-        assert "inputs" in loaded_dict["model_files"]["ResNet50"]
-        assert "outputs" in loaded_dict["model_files"]["ResNet50"]
+        # True object round-trip via from_json
+        loaded = ModelMetadata.from_json(json_path)
+        assert loaded == model_metadata
 
-        # Verify flow-style lists (should be on one line)
-        content = yaml_path.read_text()
-        assert "[1, 3, 224, 224]" in content  # Flow style
-        assert "[1, 1000]" in content  # Flow style
+        # Verify raw dict structure via load_json
+        loaded_dict = load_json(json_path)
+        assert loaded_dict["model_files"]["ResNet50"]["inputs"]["image"]["shape"] == [
+            1,
+            3,
+            224,
+            224,
+        ]
+        assert loaded_dict["model_files"]["ResNet50"]["outputs"]["logits"]["shape"] == [
+            1,
+            1000,
+        ]
 
 
 def test_metadata_with_quantization_roundtrip() -> None:
@@ -201,14 +203,16 @@ def test_metadata_with_quantization_roundtrip() -> None:
         model_files={"ResNet50": file_metadata},
     )
 
-    # Save and load
     with tempfile.TemporaryDirectory() as tmpdir:
-        yaml_path = Path(tmpdir) / "metadata.yaml"
-        model_metadata.to_yaml(yaml_path)
+        json_path = Path(tmpdir) / "metadata.json"
+        model_metadata.to_json(json_path)
 
-        loaded_dict = load_yaml(yaml_path)
+        # True object round-trip
+        loaded = ModelMetadata.from_json(json_path)
+        assert loaded == model_metadata
 
-        # Verify quantization parameters are present
+        # Verify quantization parameters in raw dict
+        loaded_dict = load_json(json_path)
         input_spec = loaded_dict["model_files"]["ResNet50"]["inputs"]["image"]
         assert "quantization_parameters" in input_spec
         assert input_spec["quantization_parameters"]["scale"] == 0.003921568859368563
@@ -448,15 +452,15 @@ def test_merge_input_metadata_multiple_inputs() -> None:
     assert boxes_spec.value_range == (0.0, 640.0)
 
 
-def test_merge_input_metadata_yaml_roundtrip() -> None:
-    """Test that merged metadata survives YAML save/load roundtrip."""
+def test_merge_input_metadata_json_roundtrip() -> None:
+    """Test that merged metadata survives JSON save/load roundtrip."""
     file_metadata = ModelFileMetadata(
         inputs={"image": TensorSpec(shape=(1, 3, 224, 224), dtype="float32")},
         outputs={"logits": TensorSpec(shape=(1, 1000), dtype="float32")},
     )
 
     # Use non-default values to ensure they get serialized
-    # (default values are omitted in YAML serialization)
+    # (default values are omitted in JSON serialization)
     input_spec: InputSpec = {
         "image": TensorSpec(
             shape=(1, 3, 224, 224),
@@ -479,11 +483,11 @@ def test_merge_input_metadata_yaml_roundtrip() -> None:
     )
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        yaml_path = Path(tmpdir) / "metadata.yaml"
-        model_metadata.to_yaml(yaml_path)
+        json_path = Path(tmpdir) / "metadata.json"
+        model_metadata.to_json(json_path)
 
         # Load back and verify merged fields
-        loaded_dict = load_yaml(yaml_path)
+        loaded_dict = load_json(json_path)
         input_spec_loaded = loaded_dict["model_files"]["mobilenet_v2.tflite"]["inputs"][
             "image"
         ]

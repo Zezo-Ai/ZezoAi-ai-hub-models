@@ -13,7 +13,7 @@ from huggingface_hub import hf_hub_download
 from platformdirs import user_cache_path
 from unidic.download import download_version as _download_unidic
 
-from qai_hub_models.configs.metadata_yaml import ModelMetadata
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.models._shared.melotts.generate_bert_binary_rules import (
     generate_bert_tokenizer_binary,
 )

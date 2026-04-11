@@ -18,7 +18,7 @@ import qai_hub as hub
 import torch
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.metadata_yaml import (
+from qai_hub_models.configs.model_metadata import (
     ModelFileMetadata,
     ModelMetadata,
     merge_input_metadata,
@@ -197,7 +197,7 @@ def download_model(
             model_file_name = os.path.basename(downloaded_path)
 
         # Extract and save metadata alongside downloaded model
-        metadata_path = dst_path / "metadata.yaml"
+        metadata_path = dst_path / "metadata.json"
         file_metadata = ModelFileMetadata.from_hub_model(target_model)
         # Merge semantic metadata from get_input_spec()
         merge_input_metadata(file_metadata, model.get_input_spec())
@@ -211,7 +211,7 @@ def download_model(
         # Dump supplementary files into the model folder
         model.write_supplementary_files(dst_path, model_metadata)
 
-        model_metadata.to_yaml(metadata_path)
+        model_metadata.to_json(metadata_path)
         if zip_assets:
             output_path = Path(
                 shutil.make_archive(

@@ -19,7 +19,7 @@ import torch
 from torch.utils import mobile_optimizer
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.metadata_yaml import (
+from qai_hub_models.configs.model_metadata import (
     ModelFileMetadata,
     ModelMetadata,
     merge_input_metadata,
@@ -284,7 +284,7 @@ def download_model(
             )
 
         # Extract and save metadata alongside downloaded model
-        metadata_path = dst_path / "metadata.yaml"
+        metadata_path = dst_path / "metadata.json"
         model_metadata = ModelMetadata(
             runtime=runtime,
             precision=precision,
@@ -295,7 +295,7 @@ def download_model(
         # Dump supplementary files into the model folder
         model.write_supplementary_files(dst_path, model_metadata)
 
-        model_metadata.to_yaml(metadata_path)
+        model_metadata.to_json(metadata_path)
         if zip_assets:
             output_path = Path(
                 shutil.make_archive(

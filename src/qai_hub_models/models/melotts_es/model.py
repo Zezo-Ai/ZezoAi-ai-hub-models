@@ -5,7 +5,7 @@
 import copy
 import os
 
-from qai_hub_models.configs.metadata_yaml import ModelMetadata
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.models._shared.melotts.model import (
     MAX_NUM_INPUT_IDS,
     Decoder,

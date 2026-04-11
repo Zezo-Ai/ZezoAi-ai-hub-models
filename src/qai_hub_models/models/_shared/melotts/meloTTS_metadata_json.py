@@ -12,7 +12,7 @@ and asset locations.
 
 from __future__ import annotations
 
-from qai_hub_models.configs.metadata_yaml import ModelMetadata
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
 

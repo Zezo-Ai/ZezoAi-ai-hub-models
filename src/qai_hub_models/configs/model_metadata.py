@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 """
-Metadata YAML schema for model I/O specifications.
+Metadata schema for model I/O specifications.
 
-This module defines the structure for metadata.yaml files that document
+This module defines the structure for metadata.json files that document
 model input/output specifications and quantization parameters for a single
 exported model.
 """
@@ -126,7 +126,7 @@ class ModelMetadata(BaseQAIHMConfig):
     The keys in model_files are the actual file names (relative to the root of the export directory),
     making it clear what each metadata entry corresponds to in the exported files.
 
-    This is the class that gets saved to disk as metadata.yaml.
+    This is the class that gets saved to disk as metadata.json.
 
     Attributes
     ----------
