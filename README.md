@@ -179,6 +179,7 @@ and many more.
 | **Image Editing**
 | [AOT-GAN](https://aihub.qualcomm.com/models/aotgan) | [qai_hub_models.models.aotgan](src/qai_hub_models/models/aotgan/README.md) |
 | [DDColor](https://aihub.qualcomm.com/models/ddcolor) | [qai_hub_models.models.ddcolor](src/qai_hub_models/models/ddcolor/README.md) |
+| [DnCNN](https://aihub.qualcomm.com/models/dncnn) | [qai_hub_models.models.dncnn](src/qai_hub_models/models/dncnn/README.md) |
 | [LaMa-Dilated](https://aihub.qualcomm.com/models/lama_dilated) | [qai_hub_models.models.lama_dilated](src/qai_hub_models/models/lama_dilated/README.md) |
 | | |
 | **Super Resolution**

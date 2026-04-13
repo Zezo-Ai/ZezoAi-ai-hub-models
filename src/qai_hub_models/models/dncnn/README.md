@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [DnCNN: Remove Gaussian noise from grayscale images in real-time](https://aihub.qualcomm.com/models/dncnn)
 
 DnCNN is a 17-layer denoising convolutional neural network that uses residual learning to remove Gaussian noise (sigma=25) from grayscale images. The network predicts the noise residual and subtracts it from the input to produce a clean image.
