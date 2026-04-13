@@ -59,14 +59,9 @@ class CavaFaceApp:
             NCHW_torch_images, (self.input_height, self.input_width)
         )[0]
 
-        if use_flip:
-            flipped_tensor = img_tensor.flip(3)
-            img_tensor = torch.cat([img_tensor, flipped_tensor], dim=0)
-
         embeddings = self.model(img_tensor.contiguous())
         if use_flip:
-            flipped_tensor = img_tensor.flip(3)
-            flipped_embeddings = self.model(flipped_tensor.contiguous())
+            flipped_embeddings = self.model(img_tensor.flip(3).contiguous())
             embeddings = (embeddings[0] + flipped_embeddings[0]) / 2
         else:
             embeddings = embeddings[0]

@@ -218,6 +218,7 @@ class FOMM(PretrainedCollectionModel):
             if os.path.exists("demo.py"):
                 os.rename("demo.py", "fomm_demo.py")
             import modules.dense_motion
+            import modules.generator
 
             # Model Patches
             import modules.util

@@ -434,24 +434,7 @@ class CenterPointApp:
             )
         )
         # Merge branches results
-        ret_list = []
-        num_samples = len(rets[0])
-        assert num_samples == 1
-        if num_samples == 1:
-            ret_list = rets[0]
-        else:
-            for i in range(num_samples):
-                ret = {}
-                for k in rets[0][i]:
-                    if k in ["box3d_lidar", "scores"]:
-                        ret[k] = torch.cat([ret[i][k] for ret in rets])
-                    elif k in ["label_preds"]:
-                        flag = 0
-                        for j, num_class in enumerate(self.num_classes):
-                            rets[j][i][k] += flag
-                            flag += num_class
-                        ret[k] = torch.cat([ret[i][k] for ret in rets])
-
-                ret_list.append(ret)
+        assert len(rets[0]) == 1
+        ret_list = rets[0]
 
         return visual(points, ret_list[0], 0)

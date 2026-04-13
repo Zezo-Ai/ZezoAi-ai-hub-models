@@ -485,7 +485,7 @@ class EasyOCRApp:
             # When the input image is padded to match the input shape of the recognizer,
             # empty space (padding) is always added to the right of the image.
             res_text = res_text.strip()
-            if res_text[-1] in ["]", "|"]:
+            if res_text and res_text[-1] in ["]", "|"]:
                 res_text = res_text[:-1].strip()
 
             # Append to the correct list depending on the bbox type.

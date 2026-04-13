@@ -134,7 +134,7 @@ def load_audiofile(path: str | Path) -> tuple[np.ndarray, int]:
     x = x.T.astype(np.float32)
     # Convert to mono and the sample rate expected by YAMNet.
     if x.shape[0] > 1:
-        x = np.mean(x, axis=1)
+        x = np.mean(x, axis=0, keepdims=True)
     return x, sr
 
 

@@ -15,10 +15,7 @@ from skimage.color import rgb2gray
 
 from qai_hub_models.models.face_det_lite.utils import detect
 from qai_hub_models.utils.draw import draw_box_from_xyxy
-from qai_hub_models.utils.image_processing import (
-    app_to_net_image_inputs,
-    numpy_image_to_torch,
-)
+from qai_hub_models.utils.image_processing import app_to_net_image_inputs
 
 
 class FaceDetLiteApp:
@@ -71,13 +68,7 @@ class FaceDetLiteApp:
         [img_array_color], _ = app_to_net_image_inputs(pixel_values_or_image)
 
         img_array = rgb2gray(img_array_color)
-        # (H,W) -> (1,H,W,1)
-        img_array = img_array[np.newaxis, ..., np.newaxis]
-        img_tensor = numpy_image_to_torch(img_array)
-        img_tensor = torch.Tensor(img_array)
-        img_tensor = img_tensor[:, :, :, -1]
-
-        img_tensor = img_tensor[np.newaxis, ...]
+        img_tensor = torch.from_numpy(img_array).unsqueeze(0).unsqueeze(0).float()
         hm, box, landmark = self.model(img_tensor)
         dets = detect(hm, box, landmark, threshold=0.55, nms_iou=-1, stride=8)
         res = []
@@ -92,13 +83,14 @@ class FaceDetLiteApp:
             W = int(w)
             H = int(h)
 
-            if L < 0 or T < 0 or R >= 640 or B >= 480:
+            img_H, img_W = img_array_color.shape[:2]
+            if L < 0 or T < 0 or img_W <= R or img_H <= B:
                 L = max(L, 0)
                 T = max(T, 0)
-                if R >= 640:
-                    R = 640 - 1
-                if B >= 480:
-                    B = 480 - 1
+                if img_W <= R:
+                    R = img_W - 1
+                if img_H <= B:
+                    B = img_H - 1
 
             # Enlarge bounding box to cover more face area
             b_Left = L - int(W * 0.05)
@@ -109,8 +101,8 @@ class FaceDetLiteApp:
             if (
                 b_Left >= 0
                 and b_Top >= 0
-                and b_Width - 1 + b_Left < 640
-                and b_Height - 1 + b_Top < 480
+                and b_Width - 1 + b_Left < img_W
+                and b_Height - 1 + b_Top < img_H
             ):
                 L = b_Left
                 T = b_Top

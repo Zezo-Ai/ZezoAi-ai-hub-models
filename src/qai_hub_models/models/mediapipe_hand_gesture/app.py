@@ -345,6 +345,9 @@ class MediaPipeHandGestureApp(MediaPipeApp):
         # For each input image...
         for batch_idx, roi_4corners in enumerate(batched_roi_4corners):
             if roi_4corners.nelement() == 0:
+                batched_selected_landmarks.append(torch.Tensor())
+                batched_is_right_hand.append([])
+                batched_gesture_labels.append([])
                 continue
             affines = compute_box_affine_crop_resize_matrix(
                 roi_4corners[:, :3], self.landmark_input_dims
@@ -387,9 +390,9 @@ class MediaPipeHandGestureApp(MediaPipeApp):
                     all_landmarks.append(landmarks[ld_batch_idx])
                     all_lr.append(torch.round(lr[ld_batch_idx]).item() == 1)
                     hand = landmarks[ld_batch_idx].unsqueeze(0)
-                    lr = lr[ld_batch_idx].unsqueeze(0)
-                    x64_a = preprocess_hand_x64(hand, lr, mirror=False)
-                    x64_b = preprocess_hand_x64(hand, lr, mirror=True)
+                    lr_single = lr[ld_batch_idx].unsqueeze(0)
+                    x64_a = preprocess_hand_x64(hand, lr_single, mirror=False)
+                    x64_b = preprocess_hand_x64(hand, lr_single, mirror=True)
                     # Classifier expects x64_a and x64_b directly
                     output = self.gesture_classifier(x64_a, x64_b)
                     # ---------------------------------------------------------
@@ -405,10 +408,6 @@ class MediaPipeHandGestureApp(MediaPipeApp):
             )
             batched_is_right_hand.append(all_lr)
             batched_gesture_labels.append(gesture_label)
-        # Add None for these lists, since this batch has no predicted bounding boxes.
-        batched_selected_landmarks.append(torch.Tensor())
-        batched_is_right_hand.append([])
-        batched_gesture_labels.append([])
         return (
             batched_selected_landmarks,
             batched_is_right_hand,

@@ -77,7 +77,6 @@ DRAW_POSE_KEYPOINT_INDICES = [
 ROTATION_VECTOR_OFFSET_RADS = (
     torch.pi / 2
 )  # Offset required when computing rotation of the detected pose.
-FILTER_OOB_BOX = False  # filter out of bound box
 
 
 def _apply_blazepose_fixes(repo_path: str) -> None:
