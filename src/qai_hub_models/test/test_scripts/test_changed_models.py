@@ -176,3 +176,14 @@ def test_utils_not_in_manual_edges_fans_out() -> None:
     # checkpoint.py is imported by SD models, LLM models, etc.
     assert "stable_diffusion_v1_5" in models
     assert len(models) > 5
+
+
+def test_aimet_onnx_utils_change_detects_sd() -> None:
+    """
+    Changing quantization_aimet_onnx.py should detect stable_diffusion_v1_5
+    via its MANUAL_EDGES entry for AIMET coverage.
+    """
+    models = resolve_affected_models(
+        ["src/qai_hub_models/utils/quantization_aimet_onnx.py"]
+    )
+    assert "stable_diffusion_v1_5" in models

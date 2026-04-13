@@ -30,6 +30,14 @@ REPRESENTATIVE_EXPORT_FILES = [
     for model in REPRESENTATIVE_EXPORT_MODELS
 ]
 
+# stable_diffusion_v1_5 is an AIMET collection model (PretrainedCollectionModel
+# with quantized components). Including it in representative sets for base_model.py
+# and quantization_aimet_onnx.py ensures PR CI covers the AIMET/collection model
+# code path, which differs significantly from standard single-component models.
+REPRESENTATIVE_AIMET_MODEL_FILE = (
+    "src/qai_hub_models/models/stable_diffusion_v1_5/model.py"
+)
+
 
 # For certain files that are imported by many models, manually override
 # which files to test. For example, quantization_aimet is imported by all
@@ -56,7 +64,10 @@ MANUAL_EDGES = {
     "src/qai_hub_models/scorecard/envvars.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/utils/base_model.py": [
         *REPRESENTATIVE_EXPORT_FILES,
-        "src/qai_hub_models/models/stable_diffusion_v1_5/model.py",
+        REPRESENTATIVE_AIMET_MODEL_FILE,
+    ],
+    "src/qai_hub_models/utils/quantization_aimet_onnx.py": [
+        REPRESENTATIVE_AIMET_MODEL_FILE,
     ],
     "src/qai_hub_models/utils/default_export_device.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/utils/quantization.py": REPRESENTATIVE_EXPORT_FILES,
