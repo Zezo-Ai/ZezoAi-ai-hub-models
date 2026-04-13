@@ -5,7 +5,6 @@
 
 
 from qai_hub_models.models._shared.segmentation.demo import segmentation_demo
-from qai_hub_models.models.unet_segmentation.app import UNetSegmentationApp
 from qai_hub_models.models.unet_segmentation.model import IMAGE_ADDRESS, MODEL_ID, UNet
 
 
@@ -18,7 +17,6 @@ def main(is_test: bool = False) -> None:
         IMAGE_ADDRESS,
         is_test,
         pad_mode=pad_mode,
-        app_cls=UNetSegmentationApp,
     )
 
 

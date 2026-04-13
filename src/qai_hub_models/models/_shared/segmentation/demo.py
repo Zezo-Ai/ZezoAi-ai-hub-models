@@ -21,7 +21,6 @@ def segmentation_demo(
     model_id: str,
     default_image: CachedWebModelAsset,
     is_test: bool = False,
-    normalize_input: bool = True,
     pad_mode: str = "constant",
     app_cls: type[SegmentationApp] = SegmentationApp,
 ) -> None:
@@ -46,7 +45,6 @@ def segmentation_demo(
 
     app = app_cls(
         model,  # type: ignore[arg-type]
-        normalize_input,
     )
     print("Model Loaded")
 

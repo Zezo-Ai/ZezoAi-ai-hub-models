@@ -14,19 +14,12 @@ import torch.nn.functional as F
 from PIL import Image
 
 from qai_hub_models.utils.draw import create_color_map
-from qai_hub_models.utils.image_processing import (
-    app_to_net_image_inputs,
-    normalize_image_transform,
-)
+from qai_hub_models.utils.image_processing import app_to_net_image_inputs
 
 
 class SegmentationApp:
     """
     This class consists of light-weight "app code" that is required to perform end to end inference for Segmentation.
-
-    The app uses 2 model:
-        * DDRNet
-        * Segformer
 
     For a given image input, the app will:
         * pre-process the image (convert to range[0, 1])
@@ -38,19 +31,12 @@ class SegmentationApp:
     def __init__(
         self,
         model: Callable[[torch.Tensor], torch.Tensor],
-        normalize_input: bool = True,
     ) -> None:
         self.model = model
-        self.normalize_transform = (
-            normalize_image_transform() if normalize_input else lambda x: x
-        )
 
     def predict(self, *args: Any, **kwargs: Any) -> list[Image.Image] | np.ndarray:
         # See segment_image.
         return self.segment_image(*args, **kwargs)
-
-    def normalize_input(self, image: torch.Tensor) -> torch.Tensor:
-        return self.normalize_transform(image)
 
     def segment_image(
         self,
@@ -87,8 +73,6 @@ class SegmentationApp:
         NHWC_int_numpy_frames, NCHW_fp32_torch_frames = app_to_net_image_inputs(
             pixel_values_or_image
         )
-
-        NCHW_fp32_torch_frames = self.normalize_input(NCHW_fp32_torch_frames)
 
         # pred_mask is downsampled
         pred_masks = self.model(NCHW_fp32_torch_frames)

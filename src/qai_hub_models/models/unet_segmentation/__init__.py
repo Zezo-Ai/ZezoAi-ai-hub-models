@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
-from .app import UNetSegmentationApp as App  # noqa: F401
+from qai_hub_models.models._shared.segmentation.app import (
+    SegmentationApp as App,  # noqa: F401
+)
+
 from .model import MODEL_ID  # noqa: F401
 from .model import UNet as Model  # noqa: F401

@@ -8,7 +8,7 @@ from typing import cast
 import numpy as np
 from PIL.Image import fromarray
 
-from qai_hub_models.models.unet_segmentation.app import UNetSegmentationApp
+from qai_hub_models.models._shared.segmentation.app import SegmentationApp
 from qai_hub_models.models.unet_segmentation.demo import IMAGE_ADDRESS
 from qai_hub_models.models.unet_segmentation.demo import main as demo_main
 from qai_hub_models.models.unet_segmentation.model import (
@@ -27,7 +27,7 @@ def test_task() -> None:
     net = UNet.from_pretrained()
 
     img = load_image(IMAGE_ADDRESS)
-    mask = cast(np.ndarray, UNetSegmentationApp(net).predict(img, raw_output=True))
+    mask = cast(np.ndarray, SegmentationApp(net).predict(img, raw_output=True))
 
     # Convert raw mask of 0s and 1s into a PIL Image
     img = fromarray(mask[0].argmax(0) == 1)
