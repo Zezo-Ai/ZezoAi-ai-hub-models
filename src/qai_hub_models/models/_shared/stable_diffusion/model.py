@@ -120,7 +120,7 @@ class TextEncoderQuantizableBase(AIMETOnnxQuantizableMixin, TextEncoderBase):
         checkpoint is an AIMET_ONNX_EXPORT or DEFAULT
         """
         import aimet_onnx
-        from aimet_common.defs import QuantScheme
+        from aimet_onnx.common.defs import QuantScheme
         from aimet_onnx.quantsim import QuantizationSimModel as QuantSimOnnx
         from aimet_onnx.quantsim import load_encodings_to_sim
 
@@ -262,7 +262,7 @@ class UnetQuantizableBase(AIMETOnnxQuantizableMixin, UnetBase):
         checkpoint is an AIMET_ONNX_EXPORT or DEFAULT
         """
         import aimet_onnx
-        from aimet_common.defs import QuantScheme
+        from aimet_onnx.common.defs import QuantScheme
         from aimet_onnx.quantsim import QuantizationSimModel as QuantSimOnnx
         from aimet_onnx.quantsim import load_encodings_to_sim
 
@@ -365,7 +365,7 @@ class VaeDecoderQuantizableBase(AIMETOnnxQuantizableMixin, VaeDecoderBase):
         checkpoint is an AIMET_ONNX_EXPORT or DEFAULT
         """
         import aimet_onnx
-        from aimet_common.defs import QuantScheme
+        from aimet_onnx.common.defs import QuantScheme
         from aimet_onnx.quantsim import QuantizationSimModel as QuantSimOnnx
         from aimet_onnx.quantsim import load_encodings_to_sim
 

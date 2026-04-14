@@ -88,7 +88,7 @@ from qai_hub_models.utils.system_info import has_recommended_memory
 
 AIMET_ONNX_INSTALLED = False
 try:
-    import aimet_common.quantsim as qs
+    import aimet_onnx.common.quantsim as qs
     from aimet_onnx import quantsim
     from aimet_onnx.quantsim import (
         QuantizationSimModel,

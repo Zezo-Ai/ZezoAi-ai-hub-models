@@ -13,11 +13,7 @@ from qai_hub_models.utils.base_model import BaseModel
 
 try:
     import aimet_onnx
-
-    if version.Version(aimet_onnx.__version__) >= version.Version("2.20.0"):
-        from aimet_onnx.common.utils import AimetLogger
-    else:
-        from aimet_common.utils import AimetLogger
+    from aimet_onnx.common.utils import AimetLogger
     from aimet_onnx.quantsim import QuantizationSimModel as QuantSimOnnx
 
     aimet_onnx_is_installed = True

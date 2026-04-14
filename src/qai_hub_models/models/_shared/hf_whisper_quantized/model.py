@@ -25,7 +25,7 @@ import logging
 
 import aimet_onnx
 import onnx
-from aimet_common.defs import QuantScheme
+from aimet_onnx.common.defs import QuantScheme
 from aimet_onnx.cross_layer_equalization import equalize_model
 from aimet_onnx.quantsim import (
     QuantizationSimModel,

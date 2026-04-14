@@ -217,7 +217,7 @@ class ControlUnetQuantizableBase(AIMETOnnxQuantizableMixin, ControlUnetBase):  #
         checkpoint is an AIMET_ONNX_EXPORT or DEFAULT
         """
         import aimet_onnx
-        from aimet_common.defs import QuantScheme
+        from aimet_onnx.common.defs import QuantScheme
         from aimet_onnx.quantsim import QuantizationSimModel as QuantSimOnnx
         from aimet_onnx.quantsim import load_encodings_to_sim
 
@@ -352,7 +352,7 @@ class ControlNetQuantizableBase(AIMETOnnxQuantizableMixin, ControlNetBase):  # t
         checkpoint is an AIMET_ONNX_EXPORT or DEFAULT
         """
         import aimet_onnx
-        from aimet_common.defs import QuantScheme
+        from aimet_onnx.common.defs import QuantScheme
         from aimet_onnx.quantsim import QuantizationSimModel as QuantSimOnnx
         from aimet_onnx.quantsim import load_encodings_to_sim
 

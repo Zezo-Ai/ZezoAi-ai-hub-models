@@ -21,7 +21,7 @@ from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.evaluators.metrics import ACCURACY_TOP1, MetricMetadata
 
 
-class ClassificationEvaluator(BaseEvaluator):
+class NomicEmbedTextEvaluator(BaseEvaluator):
     def __init__(
         self,
         model: torch.nn.Module,
@@ -133,7 +133,9 @@ class ClassificationEvaluator(BaseEvaluator):
                 inputs = self.tokenizer(text, padding="max_length", return_tensors="pt")
                 input_ids = cast(torch.Tensor, inputs["input_ids"])
                 attention_mask = cast(torch.Tensor, inputs["attention_mask"])
-                X_train_list.append(self.model(input_ids, attention_mask))
+                # Call forward() directly to bypass the BaseModel.__call__ mock in scorecard tests.
+                with torch.no_grad():
+                    X_train_list.append(self.model.forward(input_ids, attention_mask))
             X_train = np.concatenate(X_train_list)
 
             clf.fit(X_train, y_train)

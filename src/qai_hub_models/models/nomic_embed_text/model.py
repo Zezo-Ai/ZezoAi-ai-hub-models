@@ -20,7 +20,7 @@ from typing_extensions import Self
 
 from qai_hub_models.evaluators.mteb_classification_evaluator import (
     BaseEvaluator,
-    ClassificationEvaluator,
+    NomicEmbedTextEvaluator,
 )
 from qai_hub_models.utils.asset_loaders import PathLike
 from qai_hub_models.utils.base_model import BaseModel
@@ -171,7 +171,7 @@ class NomicEmbedText(BaseModel):
 
     def get_evaluator(self) -> BaseEvaluator:
         model = NomicEmbedText.from_pretrained(self.model_version, self.seq_length)
-        return ClassificationEvaluator(model, self.seq_length)
+        return NomicEmbedTextEvaluator(model, self.seq_length)
 
     @staticmethod
     def eval_datasets() -> list[str]:

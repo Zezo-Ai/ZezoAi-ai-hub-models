@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import math
 import random
+from typing import Any
 
 import torch
 from datasets import load_dataset
-from transformers import PreTrainedTokenizerBase
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from qai_hub_models.datasets.common import BaseDataset, DatasetMetadata, DatasetSplit
 
@@ -147,6 +148,10 @@ class ElectraWikiTextMasked(WikiTextMasked):
     ``(input_tokens, attention_masks)`` and the evaluator needs ``mask_pos``
     to index into the full-sequence binary output.
     """
+
+    def __init__(self, **kwargs: Any) -> None:
+        tokenizer = AutoTokenizer.from_pretrained("google/electra-base-discriminator")
+        super().__init__(tokenizer=tokenizer, **kwargs)
 
     def __getitem__(
         self, idx: int

@@ -355,6 +355,20 @@ class QAIHMModelInfo(BaseQAIHMConfig):
 
         return self
 
+    def can_promote_to_published(self) -> tuple[bool, str]:
+        """
+        Check whether this model meets all prerequisites for promotion to PUBLISHED.
+
+        Returns (True, "") if promotion is safe, or (False, reason) if not.
+        """
+        if not self.has_static_banner:
+            return False, "model has no static banner asset"
+
+        if not self.code_gen_config.supports_at_least_1_runtime:
+            return False, "model does not support at least one export path"
+
+        return True, ""
+
     def get_package_name(self) -> str:
         return f"{QAIHM_PACKAGE_NAME}.{MODELS_PACKAGE_NAME}.{self.id}"
 

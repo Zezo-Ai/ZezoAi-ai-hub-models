@@ -314,14 +314,20 @@ def update_model_publish_status(model_info: QAIHMModelInfo) -> bool:
     cg = model_info.code_gen_config
 
     # Update model status & reason, if applicable
-    if cg.supports_at_least_1_runtime:
-        # Promote PENDING or UNPUBLISHED (with scorecard reason) to PUBLISHED
-        if model_info.status == MODEL_STATUS.PENDING:
+    if model_info.status == MODEL_STATUS.PENDING:
+        can_promote, reason = model_info.can_promote_to_published()
+        if can_promote:
             model_info.status = MODEL_STATUS.PUBLISHED
             model_info.status_reason = None
             print(f"{model_info.id} | Set model to PUBLISHED")
             return True
-    elif model_info.status == MODEL_STATUS.PUBLISHED:
+        if cg.supports_at_least_1_runtime:
+            # Model has passing runtimes but is missing other requirements
+            print(f"{model_info.id} | Skipping promotion to PUBLISHED: {reason}")
+    elif (
+        not cg.supports_at_least_1_runtime
+        and model_info.status == MODEL_STATUS.PUBLISHED
+    ):
         # Demote PUBLISHED to PENDING if no longer eligible
         model_info.status = MODEL_STATUS.PENDING
         model_info.status_reason = "No successful runtimes in scorecard (this field was auto-populated by the scorecard run)"

@@ -14,8 +14,8 @@ import onnx
 import onnxruntime
 import qai_hub as hub
 import torch
-from aimet_common.defs import QuantScheme
 from aimet_onnx import quant_analyzer
+from aimet_onnx.common.defs import QuantScheme
 from aimet_onnx.quantsim import (
     QuantizationSimModel,
     _apply_constraints,
