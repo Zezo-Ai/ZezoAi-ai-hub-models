@@ -275,7 +275,7 @@ jobs:
 
       - name: Run Profile & Inference Jobs (Pytorch Recipes)
         id: run-profile-jobs-e2e
-        if: ${{ !cancelled() && inputs.test_scope != 'unit' && inputs.test_scope != 'unit_and_compile' && inputs.test_scope != 'compile_only' && steps.run-compile-jobs.conclusion != 'skipped' }}
+        if: ${{ !cancelled() && inputs.test_scope != 'unit' && inputs.test_scope != 'unit_and_compile' && inputs.test_scope != 'compile_only' && steps.run-compile-jobs.conclusion != 'skipped' && steps.run-link-jobs.conclusion != 'skipped' }}
         env:
           QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/build/test-results/profile-inference-junit.xml
         run: |
@@ -291,6 +291,17 @@ jobs:
             --venv="${{ env.VENV_PATH }}" \
             --python="${{ steps.setup_python.outputs.python-path }}" \
             "$QAIHM_TEST_DEVICE_TASK"
+
+      - name: Test Model Zip File Creation (Pytorch Recipes)
+        id: run-export-tests
+        if: ${{ !cancelled() && inputs.test_scope == 'unit_and_compile' && steps.run-compile-jobs.conclusion != 'skipped' && steps.run-link-jobs.conclusion != 'skipped' }}
+        env:
+          QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/build/test-results/export-junit.xml
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            --python="${{ steps.setup_python.outputs.python-path }}" \
+            test_export_scripts
 
       - name: Combine JUnit XML Files
         if: ${{ always() }}

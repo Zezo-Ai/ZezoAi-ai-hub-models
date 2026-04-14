@@ -9,9 +9,12 @@ import contextlib
 import itertools
 import math
 import os
+import sys
 import tempfile
 from collections.abc import Callable, Mapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import nullcontext, suppress
+from pathlib import Path
 from typing import Any, Literal, cast
 from unittest import mock
 
@@ -62,6 +65,7 @@ from qai_hub_models.utils.hub_clients import (
     get_default_hub_deployment,
 )
 from qai_hub_models.utils.inference import AsyncOnDeviceModel
+from qai_hub_models.utils.onnx.helpers import ONNXBundle
 from qai_hub_models.utils.qai_hub_helpers import assert_success_and_get_target_models
 from qai_hub_models.utils.testing import (
     get_and_sync_datasets_cache_dir,
@@ -230,17 +234,81 @@ def patch_hub_with_cached_jobs(
     profile_jobs_to_patch: list[hub.ProfileJob] = []
     inference_jobs_to_patch: list[hub.InferenceJob] = []
 
+    # Submit all fetch_async_test_jobs calls in parallel
+    quantize_future: Future | None = None
+    compile_future: Future | None = None
+    link_future: Future | None = None
+    profile_future: Future | None = None
+    inference_future: Future | None = None
+
+    with ThreadPoolExecutor() as pool:
+        if patch_quantization:
+            quantize_future = pool.submit(
+                fetch_async_test_jobs,
+                hub.JobType.QUANTIZE,
+                model_id,
+                precision,
+                None,
+                device,
+                component_names,
+                raise_if_not_successful=True,
+            )
+
+        if patch_compile:
+            assert path
+            compile_future = pool.submit(
+                fetch_async_test_jobs,
+                hub.JobType.COMPILE,
+                model_id,
+                precision,
+                path,
+                device,
+                component_names,
+                raise_if_not_successful=True,
+            )
+
+        if patch_link:
+            assert path
+            link_future = pool.submit(
+                fetch_async_test_jobs,
+                hub.JobType.LINK,
+                model_id,
+                precision,
+                path,
+                device,
+                component_names,
+                raise_if_not_successful=True,
+            )
+
+        if patch_profile:
+            assert path
+            profile_future = pool.submit(
+                fetch_async_test_jobs,
+                hub.JobType.PROFILE,
+                model_id,
+                precision,
+                path,
+                device,
+                component_names,
+                raise_if_not_successful=True,
+            )
+
+        if patch_inference:
+            assert path
+            inference_future = pool.submit(
+                fetch_async_test_jobs,
+                hub.JobType.INFERENCE,
+                model_id,
+                precision,
+                path,
+                device,
+                component_names,
+                raise_if_not_successful=True,
+            )
+
     # Collect pre-quantization (to ONNX) compile jobs & quantize jobs
-    if patch_quantization:
-        if quantize_jobs := fetch_async_test_jobs(
-            hub.JobType.QUANTIZE,
-            model_id,
-            precision,
-            None,
-            device,
-            component_names,
-            raise_if_not_successful=True,
-        ):
+    if quantize_future is not None:
+        if quantize_jobs := quantize_future.result():
             pre_quantize_compile_jobs = {
                 component_name: cast(
                     hub.CompileJob,
@@ -258,62 +326,26 @@ def patch_hub_with_cached_jobs(
         elif precision != Precision.float:
             raise CachedScorecardJobError("Could not find cached quantize jobs.")
 
-    if patch_compile:
-        assert path
-        if compile_jobs := fetch_async_test_jobs(
-            hub.JobType.COMPILE,
-            model_id,
-            precision,
-            path,
-            device,
-            component_names,
-            raise_if_not_successful=True,
-        ):
+    if compile_future is not None:
+        if compile_jobs := compile_future.result():
             compile_jobs_to_patch.extend(compile_jobs.values())
         else:
             raise CachedScorecardJobError("Could not find cached compile jobs.")
 
-    if patch_link:
-        assert path
-        if link_jobs := fetch_async_test_jobs(
-            hub.JobType.LINK,
-            model_id,
-            precision,
-            path,
-            device,
-            component_names,
-            raise_if_not_successful=True,
-        ):
+    if link_future is not None:
+        if link_jobs := link_future.result():
             link_jobs_to_patch.extend(link_jobs.values())
         else:
             raise CachedScorecardJobError("Could not find cached link jobs.")
 
-    if patch_profile:
-        assert path
-        if profile_jobs := fetch_async_test_jobs(
-            hub.JobType.PROFILE,
-            model_id,
-            precision,
-            path,
-            device,
-            component_names,
-            raise_if_not_successful=True,
-        ):
+    if profile_future is not None:
+        if profile_jobs := profile_future.result():
             profile_jobs_to_patch.extend(profile_jobs.values())
         else:
             raise CachedScorecardJobError("Could not find cached profile jobs.")
 
-    if patch_inference:
-        assert path
-        if inference_jobs := fetch_async_test_jobs(
-            hub.JobType.INFERENCE,
-            model_id,
-            precision,
-            path,
-            device,
-            component_names,
-            raise_if_not_successful=True,
-        ):
+    if inference_future is not None:
+        if inference_jobs := inference_future.result():
             inference_jobs_to_patch.extend(inference_jobs.values())
         else:
             raise CachedScorecardJobError("Could not find cached inference jobs.")
@@ -1259,10 +1291,18 @@ def export_test_e2e(
         patch_inference=False,
     )
 
-    # The export test calls export, which will always trace the model.
-    # However, that trace goes unused since we are using pre-created compile jobs.
+    # Export will always trace the model.
+    # However, that trace goes unused during this test because we are using pre-created compile jobs.
     # Patch over tracing / export to speed up the test.
     mocks: list[mock._patch] = []
+    export_module = sys.modules[export_model.__module__]
+    mocks.append(
+        mock.patch.object(
+            torch.jit,
+            "trace",
+            mock.MagicMock(return_value=None),
+        )
+    )
     if issubclass(model_cls, PretrainedCollectionModel):
         mocks.extend(
             mock.patch.object(
@@ -1281,6 +1321,49 @@ def export_test_e2e(
             )
         )
 
+    # Skip calibration data loading step; the result is also unused during this test.
+    if qutils := getattr(export_module, "quantization_utils", None):
+        mocks.append(
+            mock.patch.object(
+                qutils, "get_calibration_data", mock.MagicMock(return_value=None)
+            )
+        )
+
+    s3_bucket: Bucket | None = None
+    with contextlib.suppress(ValueError):
+        s3_bucket = get_qaihm_s3(QAIHM_PRIVATE_S3_BUCKET)[0]
+    upload_to_s3 = (
+        s3_bucket is not None
+        and scorecard_path.is_published
+        and not S3ArtifactsDirEnvvar.is_default()
+    )
+
+    # Skip model download when we aren't uploading to S3 to speed up the test.
+    # Downloading the model for each test is slow and is not needed for basic export tests.
+    if not upload_to_s3:
+        mocks.append(
+            mock.patch.object(
+                hub.Model,
+                "download",
+                side_effect=[
+                    Path(f"{component}.onnx")
+                    for component in (component_names or [model_id])
+                ],
+            )
+        )
+        mocks.append(
+            mock.patch.object(
+                export_module,
+                "download_and_unzip_workbench_onnx_model",
+                mock.MagicMock(
+                    side_effect=[
+                        ONNXBundle(Path(), f"{component}.onnx")
+                        for component in (component_names or [model_id])
+                    ]
+                ),
+            )
+        )
+
     # Test export script end to end
     with (
         device_patch,
@@ -1291,16 +1374,6 @@ def export_test_e2e(
         profile_job_patch,
         tempfile.TemporaryDirectory() as tmpdir,
     ):
-        s3_bucket: Bucket | None = None
-        with contextlib.suppress(ValueError):
-            s3_bucket = get_qaihm_s3(QAIHM_PRIVATE_S3_BUCKET)[0]
-
-        skip_upload_to_s3 = (
-            not scorecard_path.is_published
-            or s3_bucket is None
-            or S3ArtifactsDirEnvvar.is_default()
-        )
-
         with contextlib.ExitStack() as stack:
             for m in mocks:
                 stack.enter_context(m)
@@ -1310,14 +1383,16 @@ def export_test_e2e(
                 target_runtime=scorecard_path.runtime,
                 compile_options=scorecard_path.compile_path.get_compile_options(),
                 profile_options=scorecard_path.get_profile_options(),
-                skip_downloading=skip_upload_to_s3,
                 skip_profiling=not has_cached_profile_jobs,
                 skip_inferencing=True,
                 output_dir=tmpdir,
                 zip_assets=True,
             )
 
-        if result.download_path is not None and s3_bucket is not None:
+        assert result.download_path is not None
+
+        if upload_to_s3:
+            assert s3_bucket is not None  # mypy
             assets_cache_path = get_release_assets_file()
             assets_cache = ScorecardAssetYaml.from_yaml(
                 assets_cache_path, create_empty_if_no_file=True
