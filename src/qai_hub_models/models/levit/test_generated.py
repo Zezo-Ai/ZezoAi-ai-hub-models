@@ -395,7 +395,9 @@ def test_export(
 ) -> None:
     skip_invalid_runtime_device(Model, scorecard_path.runtime, device)
     try:
-        export_test_e2e(export_model, MODEL_ID, precision, scorecard_path, device)
+        export_test_e2e(
+            export_model, Model, MODEL_ID, precision, scorecard_path, device
+        )
     except CachedScorecardJobError as e:
         pytest.skip(str(e))
 

@@ -49,6 +49,7 @@ from qai_hub_models.utils.aws import (
     get_qaihm_s3,
     s3_multipart_upload,
 )
+from qai_hub_models.utils.base_app import PretrainedCollectionModel
 from qai_hub_models.utils.base_model import BaseModel, CollectionModel
 from qai_hub_models.utils.evaluate import (
     DEFAULT_NUM_EVAL_SAMPLES,
@@ -1186,6 +1187,7 @@ def inference_via_export(
 
 def export_test_e2e(
     export_model: ExportFunc,
+    model_cls: type[BaseModel | CollectionModel],
     model_id: str,
     precision: Precision,
     scorecard_path: ScorecardProfilePath,
@@ -1207,6 +1209,8 @@ def export_test_e2e(
     ----------
     export_model
         Export script function.
+    model_cls
+        The model class used during export.
     model_id
         Model ID.
     precision
@@ -1226,10 +1230,9 @@ def export_test_e2e(
     )
 
     # Check for cached link jobs (only relevant for AOT runtimes)
-    is_aot = scorecard_path.runtime.is_aot_compiled
     link_jobs_cache_path = get_async_test_job_cache_path(hub.JobType.LINK)
     has_cached_link_jobs = (
-        is_aot
+        scorecard_path.runtime.uses_hub_link
         and os.path.exists(link_jobs_cache_path)
         and os.stat(link_jobs_cache_path).st_size > 0
     )
@@ -1256,6 +1259,28 @@ def export_test_e2e(
         patch_inference=False,
     )
 
+    # The export test calls export, which will always trace the model.
+    # However, that trace goes unused since we are using pre-created compile jobs.
+    # Patch over tracing / export to speed up the test.
+    mocks: list[mock._patch] = []
+    if issubclass(model_cls, PretrainedCollectionModel):
+        mocks.extend(
+            mock.patch.object(
+                component_cls,
+                "convert_to_hub_source_model",
+                mock.MagicMock(return_value=None),
+            )
+            for component_cls in model_cls.component_classes.values()
+        )
+    elif issubclass(model_cls, BaseModel):
+        mocks.append(
+            mock.patch.object(
+                model_cls,
+                "convert_to_hub_source_model",
+                mock.MagicMock(return_value=None),
+            )
+        )
+
     # Test export script end to end
     with (
         device_patch,
@@ -1276,18 +1301,21 @@ def export_test_e2e(
             or S3ArtifactsDirEnvvar.is_default()
         )
 
-        result = export_model(
-            device=device.execution_device,
-            precision=precision,
-            target_runtime=scorecard_path.runtime,
-            compile_options=scorecard_path.compile_path.get_compile_options(),
-            profile_options=scorecard_path.get_profile_options(),
-            skip_downloading=skip_upload_to_s3,
-            skip_profiling=not has_cached_profile_jobs,
-            skip_inferencing=True,
-            output_dir=tmpdir,
-            zip_assets=True,
-        )
+        with contextlib.ExitStack() as stack:
+            for m in mocks:
+                stack.enter_context(m)
+            result = export_model(
+                device=device.execution_device,
+                precision=precision,
+                target_runtime=scorecard_path.runtime,
+                compile_options=scorecard_path.compile_path.get_compile_options(),
+                profile_options=scorecard_path.get_profile_options(),
+                skip_downloading=skip_upload_to_s3,
+                skip_profiling=not has_cached_profile_jobs,
+                skip_inferencing=True,
+                output_dir=tmpdir,
+                zip_assets=True,
+            )
 
         if result.download_path is not None and s3_bucket is not None:
             assets_cache_path = get_release_assets_file()

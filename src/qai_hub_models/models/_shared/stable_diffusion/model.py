@@ -139,7 +139,8 @@ class TextEncoderQuantizableBase(AIMETOnnxQuantizableMixin, TextEncoderBase):
             print(f"Warning: Found {num_erf} Erf ops instead of Gelu")
 
         # fuse_qkv breaks attention's projection matmul -> add pattern
-        onnx_model, _ = simplify(onnx_model, skipped_optimizers=["fuse_qkv"])
+        if checkpoint != "DEFAULT":
+            onnx_model, _ = simplify(onnx_model, skipped_optimizers=["fuse_qkv"])
 
         # Clip attention masks (containing -3.4e34 to reasonable values for
         # encodings to properly represent. Must run after simplify which
@@ -377,7 +378,8 @@ class VaeDecoderQuantizableBase(AIMETOnnxQuantizableMixin, VaeDecoderBase):
             torch_to_onnx_options={"opset_version": 20},
         )
 
-        onnx_model, _ = simplify(onnx_model, skipped_optimizers=["fuse_qkv"])
+        if checkpoint != "DEFAULT":
+            onnx_model, _ = simplify(onnx_model, skipped_optimizers=["fuse_qkv"])
 
         quant_sim = QuantSimOnnx(
             model=onnx_model,

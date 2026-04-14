@@ -332,7 +332,7 @@ def test_val_accuracy(precision: Precision, scorecard_path: ScorecardProfilePath
 def test_export(precision: Precision, scorecard_path: ScorecardProfilePath, device: ScorecardDevice) -> None:
     skip_invalid_runtime_device(Model, scorecard_path.runtime, device)
     try:
-        export_test_e2e(export_model, MODEL_ID, precision, scorecard_path, device{% if is_collection_model %}, ALL_COMPONENTS{% endif %})
+        export_test_e2e(export_model, Model, MODEL_ID, precision, scorecard_path, device{% if is_collection_model %}, ALL_COMPONENTS{% endif %})
     except CachedScorecardJobError as e:
         pytest.skip(str(e))
 
