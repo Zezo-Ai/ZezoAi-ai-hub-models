@@ -17,8 +17,8 @@ from qai_hub_models.utils.asset_loaders import (
     load_torch,
 )
 
-YOLOVR_SOURCE_REPOSITORY = "https://github.com/WongKinYiu/yolor.git"
-YOLOVR_SOURCE_REPO_COMMIT = "3ca250ae2247ca13911fa498cbe8e2c9b6bab5b0"
+YOLOR_SOURCE_REPOSITORY = "https://github.com/WongKinYiu/yolor.git"
+YOLOR_SOURCE_REPO_COMMIT = "3ca250ae2247ca13911fa498cbe8e2c9b6bab5b0"
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
 DEFAULT_WEIGHTS = CachedWebModelAsset.from_asset_store(
@@ -41,8 +41,8 @@ class YoloR(Yolo):
         include_postprocessing: bool = True,
     ) -> Self:
         with SourceAsRoot(
-            YOLOVR_SOURCE_REPOSITORY,
-            YOLOVR_SOURCE_REPO_COMMIT,
+            YOLOR_SOURCE_REPOSITORY,
+            YOLOR_SOURCE_REPO_COMMIT,
             MODEL_ID,
             MODEL_ASSET_VERSION,
         ):

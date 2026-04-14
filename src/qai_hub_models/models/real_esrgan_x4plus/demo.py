@@ -14,11 +14,10 @@ from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "real_esrgan_x4plus_demo.jpg"
 )
-WEIGHTS_HELP_MSG = "RealESRGAN checkpoint `.pth` name from the Real-ESRGAN repo. Can be set to any of the model names defined here: https://github.com/xinntao/Real-ESRGAN/blob/master/docs/model_zoo.md to automatically download the file instead."
 
 
 # Run Real-ESRGAN end-to-end on a sample image.
-# The demo will display a image with the predicted bounding boxes.
+# The demo will display the super-resolved (upscaled) image.
 def main(is_test: bool = False) -> None:
     super_resolution_demo(
         model_cls=Real_ESRGAN_x4plus,

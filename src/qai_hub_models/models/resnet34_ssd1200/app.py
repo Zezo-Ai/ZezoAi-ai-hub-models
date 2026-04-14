@@ -13,6 +13,7 @@ from qai_hub_models.models._shared.yolo.app import YoloObjectDetectionApp
 class ResNet34SSDApp(YoloObjectDetectionApp):
     def check_image_size(self, pixel_values: torch.Tensor) -> None:
         h, w = pixel_values.shape[-2:]
-        assert h == 1200 and w == 1200, (
-            f"ResNet34SSD only supports 1200x1200 input. Received: {h}x{w}"
-        )
+        if h != 1200 or w != 1200:
+            raise ValueError(
+                f"ResNet34SSD only supports 1200x1200 input. Received: {h}x{w}"
+            )

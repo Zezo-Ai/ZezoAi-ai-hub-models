@@ -165,7 +165,7 @@ class FootTrackNet(BaseModel):
         )  # simple one landmark
 
     def load_weights(self, base_file: str) -> None:
-        """Load pretrined weights"""
+        """Load pretrained weights"""
         _, ext = os.path.splitext(base_file)
         if ext in {".pkl", ".pth"}:
             print("Loading pretrained weights into state dict...")

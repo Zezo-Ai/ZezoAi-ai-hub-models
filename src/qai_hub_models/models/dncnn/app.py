@@ -62,5 +62,5 @@ class DnCNNApp:
         for i in range(output.shape[0]):
             out_arr = output[i].squeeze().detach().numpy()
             out_arr = np.clip(out_arr * 255.0, 0, 255).astype(np.uint8)
-            results.append(Image.fromarray(out_arr))
+            results.append(Image.fromarray(out_arr, mode="L"))
         return results

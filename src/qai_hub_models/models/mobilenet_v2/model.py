@@ -60,7 +60,7 @@ def _load_mobilenet_v2_source_model() -> torch.nn.Module:
         MODEL_ID,
         MODEL_ASSET_VERSION,
     ):
-        # necessary import. `modeling.deeplab` comes from the DeepLabV3 repo.
+        # necessary import. `MobileNetV2` comes from the MobileNetV2 repo.
         from MobileNetV2 import MobileNetV2 as _MobileNetV2
 
         return _MobileNetV2(

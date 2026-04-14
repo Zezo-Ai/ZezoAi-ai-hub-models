@@ -46,7 +46,7 @@ def restructure_topk(
     scores: torch.Tensor, K: int = 20
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Cutomized function for top_k specific for this the FootTrackNet. Wil restructure the original coordinates, class id from the floored index.
+    Customized function for top_k specific to FootTrackNet. Will restructure the original coordinates, class id from the floored index.
     After top k operation. this will specifically decoding the coordinates, class from the topk result.
 
     Parameters

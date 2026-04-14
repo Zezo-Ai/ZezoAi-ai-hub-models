@@ -17,7 +17,7 @@ def main(is_test: bool = False) -> None:
     )
 
     audio_path = app.predict(DEFAULT_TEXTS[model.language()])
-    print(f"ENGLISH Audio generated and saved to {audio_path}")
+    print(f"{model.language()} Audio generated and saved to {audio_path}")
 
 
 if __name__ == "__main__":

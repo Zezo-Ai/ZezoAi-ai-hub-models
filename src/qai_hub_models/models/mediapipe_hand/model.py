@@ -71,7 +71,7 @@ HAND_LANDMARK_CONNECTIONS = [  # Landmark model will output 18 points. They map 
 
 # Palm detector model parameters.
 BATCH_SIZE = 1
-DETECT_SCORE_SLIPPING_THRESHOLD = 100  # Clip output scores to this maximum value.
+DETECT_SCORE_CLIPPING_THRESHOLD = 100  # Clip output scores to this maximum value.
 DETECT_MIN_SCORE_THRESH = 0.75  # Minimum score to consider a detection valid.
 DETECT_DEFAULT_INCLUDE_POSTPROCESSING = False
 DETECT_DXY, DETECT_DSCALE = (
@@ -95,7 +95,7 @@ class HandDetector(BaseModel):
         self,
         detector: Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]],
         anchors: torch.Tensor,
-        score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> None:
         super().__init__()
@@ -151,7 +151,7 @@ class HandDetector(BaseModel):
         detector_weights: str = "blazepalm.pth",
         detector_anchors: str = "anchors_palm.npy",
         min_score_thresh: float = DETECT_MIN_SCORE_THRESH,
-        score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> Self:
         with MediaPipePyTorchAsRoot():
@@ -264,7 +264,7 @@ class MediaPipeHand(PretrainedCollectionModel):
         detector_anchors: str = "anchors_palm.npy",
         landmark_detector_weights: str = "blazehand_landmark.pth",
         detector_min_score_thresh: float = DETECT_MIN_SCORE_THRESH,
-        detector_score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        detector_score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_detector_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> Self:
         return cls(

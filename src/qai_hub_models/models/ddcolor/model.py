@@ -67,7 +67,7 @@ class DDColor(BaseModel):
             image (torch.Tensor) : Input tensor of shape (1, 3, H, W) representing a grayscale RGB image with range [0, 1].
 
         Returns :
-            torch.Tensor: Output tensor of shape (1, 2, 256, 256) represting the predicted AB color channels.
+            torch.Tensor: Output tensor of shape (1, 2, 256, 256) representing the predicted AB color channels.
         """
         return self.model(image)
 
@@ -112,13 +112,8 @@ class DDColor(BaseModel):
 
     @staticmethod
     def get_hub_litemp_percentage(_: Precision) -> float:
-        """
-        Returns the Lite-MP percentage value for the specified mixed precision quantization.
-
-        The returned value is a constant 10.0.
-
-        """
-        return 10
+        """Returns the Lite-MP percentage value for mixed precision quantization."""
+        return 10.0
 
     @classmethod
     def get_labels_file_name(cls) -> str | None:

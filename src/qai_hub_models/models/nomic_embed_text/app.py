@@ -22,7 +22,7 @@ class NomicEmbedTextApp:
     The app uses 1 model:
         * Nomic Embedding Text
 
-    For a given image input, the app will:
+    For a given text input, the app will:
         * tokenize the text
         * Run inference
         * Returns transformer embeddings

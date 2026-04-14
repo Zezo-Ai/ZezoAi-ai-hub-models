@@ -69,11 +69,11 @@ class SplitHeadSAMEncoderAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, H, W, _ = x.shape
         """
-        #original code
+        # Original code (replaced by split-head implementation below):
         # qkv with shape (3, B, nHead, H * W, C)
-        qkv = self.qkv(x).reshape(B, H * W, 3, self.self.num_heads, -1).permute(2, 0, 3, 1, 4)
+        # qkv = self.qkv(x).reshape(B, H * W, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
         # q, k, v with shape (B * nHead, H * W, C)
-        q0, k0, v0 = qkv.reshape(3, B * self.self.num_heads, H * W, -1).unbind(0)
+        # q0, k0, v0 = qkv.reshape(3, B * self.num_heads, H * W, -1).unbind(0)
         """
         x_list: list[torch.Tensor] = []
         for i in range(self.num_heads):

@@ -18,7 +18,7 @@ from qai_hub_models.models._shared.mediapipe.utils import preprocess_hand_x64
 from qai_hub_models.models.mediapipe_hand.model import (
     DETECT_DSCALE,
     DETECT_DXY,
-    DETECT_SCORE_SLIPPING_THRESHOLD,
+    DETECT_SCORE_CLIPPING_THRESHOLD,
     HAND_LANDMARK_CONNECTIONS,
     MIDDLE_FINDER_KEYPOINT_INDEX,
     ROTATION_VECTOR_OFFSET_RADS,
@@ -111,7 +111,7 @@ class MediaPipeHandGestureApp(MediaPipeApp):
             DETECT_DXY,
             DETECT_DSCALE,
             min_detector_hand_box_score,
-            DETECT_SCORE_SLIPPING_THRESHOLD,
+            DETECT_SCORE_CLIPPING_THRESHOLD,
             nms_iou_threshold,
             min_landmark_score,
             HAND_LANDMARK_CONNECTIONS,

@@ -31,6 +31,8 @@ def test_task() -> None:
 @pytest.mark.trace
 @skip_clone_repo_check
 def test_trace() -> None:
+    # check_trace=False: EfficientFormer uses dynamic control flow that
+    # produces non-deterministic trace outputs, causing trace check to fail.
     run_imagenet_classifier_trace_test(
         EfficientFormer.from_pretrained(), check_trace=False
     )

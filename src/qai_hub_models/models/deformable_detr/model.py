@@ -38,4 +38,6 @@ class DeformableDETR(DETR):
             An instance of the DetectionEvaluator class.
         """
         image_height, image_width = self.get_input_spec()["image"][0][2:]
+        # Lower threshold than base DETR (0.5) to capture more detections
+        # from deformable attention, which produces more diffuse scores.
         return DetectionEvaluator(image_height, image_width, score_threshold=0.4)

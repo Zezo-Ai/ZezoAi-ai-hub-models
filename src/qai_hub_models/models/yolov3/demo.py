@@ -12,7 +12,6 @@ from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "yolov3_demo_640.jpg"
 )
-print(IMAGE_ADDRESS)
 
 
 def main(is_test: bool = False) -> None:

@@ -23,8 +23,8 @@ def test_demo() -> None:
 
 def test_transcribe() -> None:
     """
-    Test that HfWhisperApp produces end to end transcription results that
-    matches with the original model
+    Test that ZipformerApp produces end to end transcription results that
+    match the original model.
     """
     model = HfZipformer.from_pretrained()
     app = ZipformerApp(model.encoder, model.decoder, model.joiner, model)

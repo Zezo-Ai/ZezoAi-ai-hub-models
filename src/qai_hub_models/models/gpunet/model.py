@@ -32,7 +32,7 @@ class GPUNet(ImagenetClassifier):
                 str(gpu_net_repo_path),
                 "configs/model_hub.py",
                 "if download:",
-                "if download and not(Path(checkpointPath).exists()):",
+                "if download and not Path(checkpointPath).exists():",
             )
             sys.path.append(str(gpu_net_repo_path))
 

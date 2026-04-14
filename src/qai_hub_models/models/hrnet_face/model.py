@@ -102,7 +102,7 @@ class HRNetFace(BaseModel):
         width: int = 256,
     ) -> InputSpec:
         """
-        Returns the input specification (name -> (shape, type) of the hand landmark detector.
+        Returns the input specification (name -> (shape, type) of the face landmark detector.
         This can be used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {"image": ((1, 3, height, width), "float32")}

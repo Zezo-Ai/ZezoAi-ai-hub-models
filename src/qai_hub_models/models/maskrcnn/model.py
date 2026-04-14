@@ -223,9 +223,9 @@ class MaskRCNNROIHead(BaseModel):
             "3": features_3,
         }
 
-        # Infer image shape from features_0 (features are at 1/4 resolution of input)
-        # Calculate the stride from feature map to input image
-        feature_stride = 4  # FPN level 0 has stride of 4
+        # Infer image shape from features_0 (features are at 1/4 resolution of input).
+        # FPN level 0 stride is 4 for ResNet-50 backbone (conv1 stride 2 * layer1 stride 2).
+        feature_stride = 4
         image_h, image_w = (
             features_0.shape[2] * feature_stride,
             features_0.shape[3] * feature_stride,

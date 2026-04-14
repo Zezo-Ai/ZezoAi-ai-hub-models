@@ -14,7 +14,7 @@ from qai_hub_models.models._shared.mediapipe.app import MediaPipeApp
 from qai_hub_models.models.mediapipe_pose.model import (
     DETECT_DSCALE,
     DETECT_DXY,
-    DETECT_SCORE_SLIPPING_THRESHOLD,
+    DETECT_SCORE_CLIPPING_THRESHOLD,
     DRAW_POSE_KEYPOINT_INDICES,
     FILTER_OOB_BOX,
     POSE_KEYPOINT_INDEX_END,
@@ -131,7 +131,7 @@ class MediaPipePoseApp(MediaPipeApp):
             DETECT_DXY,
             DETECT_DSCALE,
             min_detector_pose_box_score,
-            DETECT_SCORE_SLIPPING_THRESHOLD,
+            DETECT_SCORE_CLIPPING_THRESHOLD,
             nms_iou_threshold,
             min_landmark_score,
             POSE_LANDMARK_CONNECTIONS,

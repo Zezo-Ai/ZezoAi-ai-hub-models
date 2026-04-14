@@ -615,7 +615,7 @@ class PosenetApp:
                 predicted_images: PIL.Image.Image
                     Image with keypoints drawn.
         """
-        original_size = (image.size[-2], image.size[-1])
+        original_size = image.size
         image, scale, padding = pil_resize_pad(
             image, (self.input_height, self.input_width)
         )

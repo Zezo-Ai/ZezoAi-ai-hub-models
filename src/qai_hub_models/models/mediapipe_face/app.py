@@ -14,7 +14,7 @@ from qai_hub_models.models._shared.mediapipe.app import MediaPipeApp
 from qai_hub_models.models.mediapipe_face.model import (
     DETECT_DSCALE,
     DETECT_DXY,
-    DETECT_SCORE_SLIPPING_THRESHOLD,
+    DETECT_SCORE_CLIPPING_THRESHOLD,
     FACE_LANDMARK_CONNECTIONS,
     LEFT_EYE_KEYPOINT_INDEX,
     RIGHT_EYE_KEYPOINT_INDEX,
@@ -124,7 +124,7 @@ class MediaPipeFaceApp(MediaPipeApp):
             detect_box_offset_xy=DETECT_DXY,
             detect_box_scale=DETECT_DSCALE,
             min_detector_box_score=min_detector_face_box_score,
-            detector_score_clipping_threshold=DETECT_SCORE_SLIPPING_THRESHOLD,
+            detector_score_clipping_threshold=DETECT_SCORE_CLIPPING_THRESHOLD,
             nms_iou_threshold=nms_iou_threshold,
             min_landmark_score=min_landmark_score,
             landmark_connections=FACE_LANDMARK_CONNECTIONS,

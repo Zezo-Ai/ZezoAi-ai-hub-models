@@ -169,7 +169,7 @@ FACE_LANDMARK_CONNECTIONS = [
 
 # Face detector model parameters.
 BATCH_SIZE = 1
-DETECT_SCORE_SLIPPING_THRESHOLD = 100  # Clip output scores to this maximum value.
+DETECT_SCORE_CLIPPING_THRESHOLD = 100  # Clip output scores to this maximum value.
 DETECT_DEFAULT_INCLUDE_POSTPROCESSING = False
 DETECT_DXY, DETECT_DSCALE = (
     0,
@@ -222,7 +222,7 @@ class FaceDetector(BaseModel):
             tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         ],
         anchors: torch.Tensor,
-        score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> None:
         super().__init__()
@@ -299,7 +299,7 @@ class FaceDetector(BaseModel):
         cls,
         detector_weights: str = "blazefaceback.pth",
         detector_anchors: str = "anchors_face_back.npy",
-        score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> FaceDetector:
         with MediaPipePyTorchAsRoot() as repo_path:
@@ -432,7 +432,7 @@ class MediaPipeFace(PretrainedCollectionModel):
         detector_weights: str = "blazefaceback.pth",
         detector_anchors: str = "anchors_face_back.npy",
         landmark_detector_weights: str = "blazeface_landmark.pth",
-        detector_score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        detector_score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_detector_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> MediaPipeFace:
         """

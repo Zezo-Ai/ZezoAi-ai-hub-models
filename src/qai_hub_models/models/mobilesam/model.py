@@ -256,10 +256,10 @@ class MobileSAMLoader:
     @staticmethod
     def _patch_mobilesam_for_qnn_comatibility(sam: Sam) -> None:
         """Apply a patch to the SAM class for compatibility with QNN."""
-        # Normalize pixel_mean and pixel_std for fp ([0, 1]) input
-        # Allows network inputs to be float instead of int.
-        sam.pixel_mean = sam.pixel_mean / 255.0  # [0-255] -> [0, 1]
-        sam.pixel_std = sam.pixel_std / 255.0  # [0-255] -> [0, 1]
+        # Scale mean/std from [0-255] space to [0-1] space so the
+        # normalization in MobileSAMEncoder.forward works with float [0, 1] inputs.
+        sam.pixel_mean = sam.pixel_mean / 255.0
+        sam.pixel_std = sam.pixel_std / 255.0
 
         ###
         # Patch the graph for compatibility with QNN.

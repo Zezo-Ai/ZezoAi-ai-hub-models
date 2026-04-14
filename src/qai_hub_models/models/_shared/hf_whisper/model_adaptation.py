@@ -118,9 +118,6 @@ class SHAAttention(nn.Module):
 
         # Initialize output projection layer
         self.out_proj = Conv2DWithBias(self.embed_dim, self.embed_dim, kernel_size=1)
-
-        # Initialize output projection layer
-        self.out_proj = Conv2DWithBias(self.embed_dim, self.embed_dim, kernel_size=1)
         # Copy and convert the weights from original attention for out_proj
         out_weight = expand_to_rank4(origin_attn.out_proj.weight.data.clone())
         self.out_proj.weight.data.copy_(out_weight)

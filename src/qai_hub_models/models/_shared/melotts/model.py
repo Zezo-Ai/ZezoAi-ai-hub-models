@@ -260,10 +260,10 @@ class Encoder(BaseModel):
         assert hasattr(sdp, "convs") and callable(sdp.convs)
         assert hasattr(sdp, "proj") and callable(sdp.proj)
         assert hasattr(sdp, "flows") and isinstance(sdp.flows, Iterable)
-        x = torch.detach(x)
+        x = x.detach()
         x = sdp.pre(x)
         if g is not None:
-            g = torch.detach(g)
+            g = g.detach()
             x = x + sdp.cond(g)
         x = sdp.convs(x, x_mask)
         x = sdp.proj(x) * x_mask

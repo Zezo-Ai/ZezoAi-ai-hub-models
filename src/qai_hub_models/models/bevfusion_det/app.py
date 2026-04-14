@@ -320,7 +320,7 @@ class BEVFusionApp:
         for img in images:
             W, H = img.size
             fH, fW = BEVFusionEncoder1.get_input_spec()["imgs"][0][-2:]
-            resize = float(np.mean([0.48, 0.48]))
+            resize = 0.48
             resize_dims = (int(W * resize), int(H * resize))
             newW, newH = resize_dims
             crop_h = int(newH) - fH

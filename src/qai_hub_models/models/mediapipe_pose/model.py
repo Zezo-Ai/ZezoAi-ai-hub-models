@@ -61,7 +61,7 @@ POSE_LANDMARK_CONNECTIONS = [
 
 # pose detector model parameters.
 BATCH_SIZE = 1
-DETECT_SCORE_SLIPPING_THRESHOLD = 100  # Clip output scores to this maximum value.
+DETECT_SCORE_CLIPPING_THRESHOLD = 100  # Clip output scores to this maximum value.
 DETECT_DEFAULT_INCLUDE_POSTPROCESSING = False
 FILTER_OOB_BOX = False  # Filter out of bound bbox
 DETECT_DXY, DETECT_DSCALE = (
@@ -113,7 +113,7 @@ class PoseDetector(BaseModel):
             tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         ],
         anchors: torch.Tensor,
-        score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> None:
         super().__init__()
@@ -190,7 +190,7 @@ class PoseDetector(BaseModel):
         cls,
         detector_weights: str = "blazepose.pth",
         detector_anchors: str = "anchors_pose.npy",
-        score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> Self:
         with MediaPipePyTorchAsRoot() as repo_path:
@@ -355,7 +355,7 @@ class MediaPipePose(PretrainedCollectionModel):
         detector_weights: str = "blazepose.pth",
         detector_anchors: str = "anchors_pose.npy",
         landmark_detector_weights: str = "blazepose_landmark.pth",
-        detector_score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        detector_score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_detector_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> Self:
         """

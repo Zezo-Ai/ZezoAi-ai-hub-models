@@ -17,7 +17,7 @@ def main(is_test: bool = False) -> None:
         model.encoder, model.flow, model.decoder, model.tts_object, model.language()
     )
     audio_path = app.predict(DEFAULT_TEXTS[model.language()])
-    print(f"CHINESE Audio generated and saved to {audio_path}")
+    print(f"{model.language()} Audio generated and saved to {audio_path}")
 
 
 if __name__ == "__main__":

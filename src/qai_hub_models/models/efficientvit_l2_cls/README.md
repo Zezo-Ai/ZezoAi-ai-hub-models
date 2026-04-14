@@ -12,7 +12,7 @@ Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.
 Install the package via pip:
 ```bash
 # NOTE: 3.10 <= PYTHON_VERSION < 3.14 is supported.
-pip install "qai-hub-models[efficientvit-l2-cls]"
+pip install qai-hub-models
 ```
 
 ### 2. Configure Qualcomm® AI Hub Workbench

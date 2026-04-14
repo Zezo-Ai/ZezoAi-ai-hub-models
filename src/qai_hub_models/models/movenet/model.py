@@ -67,7 +67,7 @@ class Movenet(BaseModel):
             - `N` -> batch size
             - `1` -> Single detected person
             - `17`-> Number of keypoints detected
-            - `3` -> Each keypoint consists of (x, y) coordinates and confidence score.
+            - `3` -> Each keypoint consists of (y, x) coordinates and confidence score.
         """
         image = image * 255  # Model expects float values in the range [0.0, 255.0]
         return self.model(image)

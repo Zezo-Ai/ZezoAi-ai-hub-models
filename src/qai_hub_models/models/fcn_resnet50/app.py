@@ -21,7 +21,7 @@ def preprocess_image(image: Image) -> torch.Tensor:
     """
     Preprocesses images to be run through torch FCN segmenter
     as prescribed here:
-    https://pytorch.org/hub/pytorch_vision_resnet/
+    https://pytorch.org/hub/pytorch_vision_fcn_resnet101/
 
     Parameters
     ----------

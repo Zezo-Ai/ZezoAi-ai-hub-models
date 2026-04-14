@@ -61,8 +61,8 @@ class DeepBoxApp:
 
     def __init__(
         self,
-        bbox2D_dectector: Yolo2DDetection,
-        bbox3D_dectector: VGG3DDetection,
+        bbox2D_detector: Yolo2DDetection,
+        bbox3D_detector: VGG3DDetection,
         nms_score_threshold: float = 0.5,
         nms_iou_threshold: float = 0.3,
     ) -> None:
@@ -71,10 +71,10 @@ class DeepBoxApp:
 
         Parameters
         ----------
-        bbox2D_dectector
+        bbox2D_detector
             The 2D boundary box detection model.
             Input is an image [N C H W], channel layout is RGB [0-1], output is [pred_boxes, pred_scores, pred_class_idx].
-        bbox3D_dectector
+        bbox3D_detector
             The 3D boundary box detection model.
             Input is an image [N C H W], channel layout is RGB [0-1], output is [proj_matrix, orient, dim, location].
         nms_score_threshold
@@ -82,8 +82,8 @@ class DeepBoxApp:
         nms_iou_threshold
             IOU threshold for when NMS is run on the detector output boxes.
         """
-        self.yolo = bbox2D_dectector
-        self.vgg = bbox3D_dectector
+        self.yolo = bbox2D_detector
+        self.vgg = bbox3D_detector
         self.nms_score_threshold = nms_score_threshold
         self.nms_iou_threshold = nms_iou_threshold
 

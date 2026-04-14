@@ -77,15 +77,15 @@ def get_max_preds(batch_heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 class HRNetPoseApp:
     """
-    This class consists of light-weight "app code" that is required to perform end to end inference with LiteHRNet.
+    This class consists of light-weight "app code" that is required to perform end to end inference with HRNet.
 
     The app uses 1 model:
-        * LiteHRNet
+        * HRNetPose
 
     For a given image input, the app will:
         * pre-process the image
-        * Run LiteHRNet inference
-        * Convert the output into a list of keypoint coordiates
+        * Run HRNet inference
+        * Convert the output into a list of keypoint coordinates
     """
 
     def __init__(

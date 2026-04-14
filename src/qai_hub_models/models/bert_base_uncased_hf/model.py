@@ -17,7 +17,7 @@ WEIGHTS_NAME = "google-bert/bert-base-uncased"
 
 
 class BertBaseUncasedHf(BaseBertModel):
-    """Exportable HuggingFace Albert Model"""
+    """Exportable HuggingFace BERT Model"""
 
     @classmethod
     def from_pretrained(cls, weights: str = WEIGHTS_NAME) -> Self:

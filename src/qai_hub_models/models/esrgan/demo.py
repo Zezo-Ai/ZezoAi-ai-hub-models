@@ -13,7 +13,7 @@ IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
 
 
 # Run ESRGAN end-to-end on a sample image.
-# The demo will display a image upscaled with no loss in quality.
+# The demo will display an image upscaled with minimal loss in quality.
 def main(is_test: bool = False) -> None:
     super_resolution_demo(
         model_cls=ESRGAN,

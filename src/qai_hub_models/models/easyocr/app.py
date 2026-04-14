@@ -630,7 +630,7 @@ class EasyOCRApp:
             free_boxes_per_img,
             strict=False,
         ):
-            img_results_horizonal, img_results_free = self.recognizer_get_text(
+            img_results_horizontal, img_results_free = self.recognizer_get_text(
                 img_gray, horizontal_boxes, free_boxes
             )
 
@@ -638,7 +638,7 @@ class EasyOCRApp:
             img = img.copy()
             texts = []
             confidences = []
-            for box_coords, text, confidence in img_results_horizonal:
+            for box_coords, text, confidence in img_results_horizontal:
                 draw_box_from_xyxy(
                     img,
                     (box_coords[0], box_coords[2]),

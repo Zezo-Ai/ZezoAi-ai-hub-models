@@ -274,8 +274,8 @@ class SAM2Decoder(BaseModel, ABC):
         num_points: int = 2,
         embed_dim: int = 256,
         image_embedding: tuple = (64, 64),
-        high_res_featutes2: tuple = (128, 128),
-        high_res_featutes1: tuple = (256, 256),
+        high_res_features2: tuple = (128, 128),
+        high_res_features1: tuple = (256, 256),
         high_res_features1_dim: int = 32,
         high_res_features2_dim: int = 64,
     ) -> InputSpec:
@@ -287,11 +287,11 @@ class SAM2Decoder(BaseModel, ABC):
         input_spec: InputSpec = {
             "image_embeddings": ((1, embed_dim, *image_embedding), "float32"),
             "high_res_features1": (
-                (1, high_res_features1_dim, *high_res_featutes1),
+                (1, high_res_features1_dim, *high_res_features1),
                 "float32",
             ),
             "high_res_features2": (
-                (1, high_res_features2_dim, *high_res_featutes2),
+                (1, high_res_features2_dim, *high_res_features2),
                 "float32",
             ),
             "sparse_embedding": ((1, num_points + 1, embed_dim), "float32"),

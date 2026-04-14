@@ -60,7 +60,7 @@ def patched_ultralytics_seg_head_forward(
         [self.cv4[i](x[i]).view(bs, self.nm, -1) for i in range(self.nl)], 2
     )  # mask coefficients
     ###
-    # /<Copied From Ultraltics>
+    # /<Copied From Ultralytics>
     ###
 
     boxes, scores = cast(
@@ -113,7 +113,7 @@ def patched_ultralytics_seg_head_26_forward(
         [self.cv4[i](x[i]).view(bs, self.nm, -1) for i in range(self.nl)], 2
     )  # mask coefficients
     ###
-    # /<Copied From Ultraltics>
+    # /<Copied From Ultralytics>
     ###
 
     boxes, scores = cast(

@@ -81,9 +81,10 @@ class TrOCRApp:
             The prediction will be a list of strings (one string per batch) if self.io_processor != None and raw_output=False.
             Otherwise, a `np.ndarray` of shape [batch_size, predicted_sequence_length] is returned. It contains predicted token IDs.
         """
-        gen = self.stream_predicted_text_from_image(pixel_values_or_image, raw_output)
-        _ = last = next(gen)
-        for last in gen:  # noqa: B007
+        last: np.ndarray | list[str]
+        for last in self.stream_predicted_text_from_image(  # noqa: B007
+            pixel_values_or_image, raw_output
+        ):
             pass
         return last
 

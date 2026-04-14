@@ -55,7 +55,7 @@ class AOTGAN(RepaintModel):
         """
         if ckpt_name not in SUPPORTED_PRETRAINED_MODELS:
             raise ValueError(
-                "Unsupported pre_trained model requested. Please provide either 'celeabhq' or 'places2'."
+                "Unsupported pre_trained model requested. Please provide either 'celebahq' or 'places2'."
             )
         downloaded_model_path = CachedWebModelAsset.from_asset_store(
             MODEL_ID,

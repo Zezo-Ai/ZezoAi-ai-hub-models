@@ -16,7 +16,7 @@ from qai_hub_models.models._shared.common import apply_module_function_recursive
 from qai_hub_models.models.common import Precision, SampleInputsType
 from qai_hub_models.models.mediapipe_hand.model import (
     DETECT_MIN_SCORE_THRESH,
-    DETECT_SCORE_SLIPPING_THRESHOLD,
+    DETECT_SCORE_CLIPPING_THRESHOLD,
     HandDetector,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_numpy
@@ -61,7 +61,7 @@ class PalmDetector(HandDetector):
         self,
         detector: nn.Module,
         anchors: torch.Tensor,
-        score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> None:
         super().__init__(
@@ -86,7 +86,7 @@ class PalmDetector(HandDetector):
         detector_weights: str = "blazepalm.pth",
         detector_anchors: str = "anchors_palm.npy",
         min_score_thresh: float = 0.75,
-        score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         # The only difference between this and the base class is the default value of include_postprocessing.
         include_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> Self:
@@ -1074,7 +1074,7 @@ class MediaPipeHandGesture(PretrainedCollectionModel):
         detector_weights: str = "blazepalm.pth",
         detector_anchors: str = "anchors_palm.npy",
         detector_min_score_thresh: float = DETECT_MIN_SCORE_THRESH,
-        detector_score_clipping_threshold: float = DETECT_SCORE_SLIPPING_THRESHOLD,
+        detector_score_clipping_threshold: float = DETECT_SCORE_CLIPPING_THRESHOLD,
         include_detector_postprocessing: bool = DETECT_DEFAULT_INCLUDE_POSTPROCESSING,
     ) -> Self:
         return cls(

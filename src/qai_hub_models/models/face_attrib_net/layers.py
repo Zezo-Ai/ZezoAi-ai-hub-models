@@ -210,7 +210,7 @@ class DownsampleBlock(nn.Module):
             self.activ = nn.ReLU()
         else:
             self.activ = None
-            assert 0, f"Unsupported activation function: {activ_type}"
+            raise ValueError(f"Unsupported activation function: {activ_type}")
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -300,7 +300,7 @@ class NormalBlock(nn.Module):
             self.activ = nn.ReLU()
         else:
             self.activ = None
-            assert 0, f"Unsupported activation function: {activ_type}"
+            raise ValueError(f"Unsupported activation function: {activ_type}")
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -437,7 +437,7 @@ class Conv2dBlock(nn.Module):
         elif norm == "none":
             self.norm = None
         else:
-            assert 0, f"Unsupported normalization: {norm}"
+            raise ValueError(f"Unsupported normalization: {norm}")
 
         self.activ: nn.Module | None
         if activ == "prelu":
@@ -449,7 +449,7 @@ class Conv2dBlock(nn.Module):
         elif activ == "none":
             self.activ = None
         else:
-            assert 0, f"Unsupported activation layer: {activ}"
+            raise ValueError(f"Unsupported activation layer: {activ}")
 
     def forward(self, x: Tensor) -> Tensor:
         """

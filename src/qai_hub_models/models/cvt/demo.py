@@ -66,8 +66,7 @@ def cvt_demo(
     args = parser.parse_args([] if is_test else None)
 
     # Load images and inputs
-    cam_paths = dict(cameras.items())
-    images = [load_image(str(img.fetch())) for img in cam_paths.values()]
+    images = [load_image(str(img.fetch())) for img in cameras.values()]
     camera_metadata = load_json(cam_metadata.fetch())
 
     # Process model inference

@@ -81,7 +81,7 @@ class CenterNet2DApp:
         """
         self.model = model
         self.decode = decode
-        self.heigth = height
+        self.height = height
         self.width = width
         self.max_dets = max_dets
         self.cat_spec_wh = cat_spec_wh
@@ -121,7 +121,7 @@ class CenterNet2DApp:
         s = np.array([max(height, width), max(height, width)], dtype=np.float32)
 
         image_tensor = pre_process_with_affine(
-            image_array, c, s, 0, (self.heigth, self.width)
+            image_array, c, s, 0, (self.height, self.width)
         )
 
         # model supports only single batch

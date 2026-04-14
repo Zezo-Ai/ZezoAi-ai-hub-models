@@ -1,6 +1,6 @@
 # [NASNet: Imagenet classifier and general purpose backbone](https://aihub.qualcomm.com/models/nasnet)
 
-NASNet is a vision transformer model that can classify images from the Imagenet dataset.
+NASNet is a CNN-based architecture discovered via Neural Architecture Search (NAS) that can classify images from the Imagenet dataset.
 
 This is based on the implementation of NASNet found [here](https://github.com/huggingface/pytorch-image-models/tree/main).
 This repository contains scripts for optimized on-device export suitable to run on Qualcomm® devices. More details on model performance across various devices, can be found [here](https://aihub.qualcomm.com/models/nasnet).

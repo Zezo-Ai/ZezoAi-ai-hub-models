@@ -133,6 +133,8 @@ class StereoNet(BaseModel):
 
             remapped_state_dict[key] = value
 
+        # strict=False because conv3d weights were remapped to CostVolumeOptimized
+        # pointwise_conv format above; extra/missing keys are expected.
         model.load_state_dict(remapped_state_dict, strict=False)
 
         return cls(model)

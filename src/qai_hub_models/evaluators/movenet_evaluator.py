@@ -30,7 +30,7 @@ class MovenetPoseEvaluator(CocoBodyPoseEvaluator):
         Parameters
         ----------
         output
-            Model predictions with shape [batch, N_people, 17, 3] (x, y, confidence).
+            Model predictions with shape [batch, N_people, 17, 3] (y, x, confidence).
         gt
             List with the following tensors:
 
@@ -66,7 +66,7 @@ class MovenetPoseEvaluator(CocoBodyPoseEvaluator):
                 # Scale normalized (0-1) keypoints to input size
                 keypoints *= input_size
 
-                # Flip (x, y)
+                # Flip (y, x) -> (x, y)
                 keypoints = np.flip(keypoints, axis=1).copy()
 
                 # Apply inverse affine transform

@@ -47,7 +47,7 @@ Additional options are documented with the `--help` option.
 
 ## License
 * The license for the original implementation of DLA-102-X can be found
-  [here](hhttps://huggingface.co/datasets/choosealicense/licenses/blob/main/markdown/bsd-3-clause.md).
+  [here](https://huggingface.co/datasets/choosealicense/licenses/blob/main/markdown/bsd-3-clause.md).
 
 ## References
 * [Deep Layer Aggregation](https://arxiv.org/abs/1707.06484)

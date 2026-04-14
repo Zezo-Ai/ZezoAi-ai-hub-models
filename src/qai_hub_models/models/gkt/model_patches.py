@@ -26,7 +26,7 @@ def KernelAttention_forward(
     Key modifications from original:
     - Replaced einops.rearrange with permute/reshape operations to make it 4D
     - Replaced torch.einsum with explicit multiplication and sum operations
-    - Changed mask fill value from -10^9 to -1000 to improve PSNR
+    - Changed mask fill value from -10^9 to -500 to improve PSNR
 
     Dimension notation: b=batch size, n=number of cameras, d=feature dimension,
     HW=flattened spatial dimensions (height * width), g=number of grid points.

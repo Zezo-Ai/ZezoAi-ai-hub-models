@@ -147,10 +147,10 @@ class OptimizedDurationPredictor(nn.Module):
         Tensor
             shape of (1, MAX_SEQ_LEN), the predicted duration
         """
-        x = torch.detach(x)
+        x = x.detach()
 
         if g is not None:
-            g = torch.detach(g)
+            g = g.detach()
             x = x + self.cond(g)
 
         x = self.conv_1(x * x_mask)

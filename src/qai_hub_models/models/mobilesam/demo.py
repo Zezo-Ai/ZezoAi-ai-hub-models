@@ -44,13 +44,7 @@ def main(is_test: bool = False) -> None:
         type=str,
         default="500,575;",
         help="Comma separated x and y coordinate. Multiple coordinate separated by `;`."
-        " e.g. `x1,y1;x2,y2`. Default: `500,375;`",
-    )
-    parser.add_argument(
-        "--single-mask-mode",
-        type=bool,
-        default=True,
-        help="If True, returns single mask. For multiple points multiple masks could lead to better results.",
+        " e.g. `x1,y1;x2,y2`. Default: `500,575;`",
     )
     get_on_device_demo_parser(parser, add_output_dir=True)
 

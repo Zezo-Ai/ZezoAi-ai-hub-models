@@ -46,7 +46,7 @@ def mask2former_demo(
 
     (_, _, height, width) = model_type.get_input_spec()["image"][0]
     orig_image = load_image(args.image)
-    image = orig_image.resize((height, width))
+    image = orig_image.resize((width, height))
 
     app = Mask2FormerApp(model)  # type: ignore[arg-type]
     print("Model Loaded")

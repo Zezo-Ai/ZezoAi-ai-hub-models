@@ -310,7 +310,7 @@ class HfWhisperApp:
 
             audio, audio_sample_rate = a2n.audio_from_file(audio)
             if isinstance(audio, np.ndarray) and audio.ndim == 2:
-                # Audio is multi-channel (e.g., stero); collapse to single.
+                # Audio is multi-channel (e.g., stereo); collapse to single.
                 audio = audio.mean(-1)
 
         assert audio_sample_rate is not None

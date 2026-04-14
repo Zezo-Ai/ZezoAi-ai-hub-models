@@ -19,7 +19,6 @@ MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 3
 # Weights downloaded from https://github.com/quic/aimet-model-zoo/releases/download/phase_2_january_artifacts/deeplab-mobilenet.pth.tar
 DEEPLABV3_WEIGHTS = "deeplab-mobilenet.pth.tar"
-MOBILENET_WEIGHTS = "mobilenet_v2-6a65762b.pth"
 DEEPLABV3_SOURCE_REPOSITORY = "https://github.com/jfzhang95/pytorch-deeplab-xception"
 DEEPLABV3_SOURCE_REPO_COMMIT = "9135e104a7a51ea9effa9c6676a2fcffe6a6a2e6"
 BACKBONE = "mobilenet"

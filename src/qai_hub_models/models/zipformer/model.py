@@ -318,7 +318,6 @@ class HfZipformer(PretrainedCollectionModel):
         self.encoder = encoder
         self.decoder = decoder
         self.joiner = joiner
-        self.training = False
         self.offset = encoder.encoder.decode_chunk_size * 2
         self.segment = self.offset + 7
         self.num_features = encoder.encoder.num_features

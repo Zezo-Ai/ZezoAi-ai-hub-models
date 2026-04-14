@@ -105,6 +105,7 @@ class PointNetApp:
         for data in test_loader:
             inputs = data["pointcloud"].to("cpu").float()
             with torch.no_grad():
+                # Only classification logits needed; ignore critical indices and attention features
                 outputs, _, _ = self.model(
                     inputs.transpose(1, 2)
                 )  # Transpose to (B, 3, N)

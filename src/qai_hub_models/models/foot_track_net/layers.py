@@ -14,7 +14,7 @@ from torch.nn import init
 
 
 class SeModule(nn.Module):
-    """cutomized squeeze exitationm module"""
+    """customized squeeze excitation module"""
 
     def __init__(self, in_size: int, reduction: int = 4) -> None:
         super().__init__()
@@ -277,7 +277,7 @@ class UpModule(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         x: N,C,H,W tensor
-        return: N,C,H,W tesnor.
+        return: N,C,H,W tensor.
         """
         if self.mode == "UCBA":
             return self.conv(self.up(x))
@@ -331,7 +331,7 @@ class DetectModule(nn.Module):
 
 class CropLayer(nn.Module):
     """
-    crop layer. crop the input tensor based onthe specified number of rows and columns
+    crop layer. crop the input tensor based on the specified number of rows and columns
      E.g., (-1, 0) means this layer should crop the first and last rows of the feature map. And (0, -1) crops the first and last columns
     """
 
