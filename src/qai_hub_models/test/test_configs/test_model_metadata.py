@@ -383,7 +383,7 @@ def test_merge_input_metadata_tensor_spec_no_metadata() -> None:
 
 
 def test_merge_input_metadata_mismatched_input_raises() -> None:
-    """Test that mismatched input names raise ValueError."""
+    """Test that mismatched input names raise ValueError when metadata is non-empty."""
     file_metadata = ModelFileMetadata(
         inputs={"image": TensorSpec(shape=(1, 3, 224, 224), dtype="float32")},
         outputs={"logits": TensorSpec(shape=(1, 1000), dtype="float32")},
@@ -399,9 +399,30 @@ def test_merge_input_metadata_mismatched_input_raises() -> None:
         ),
     }
 
-    # Should raise ValueError for mismatched input
+    # Should raise ValueError for mismatched input (non-empty metadata means real mismatch)
     with pytest.raises(ValueError, match="not found in compiled model metadata"):
         merge_input_metadata(file_metadata, input_spec)
+
+
+def test_merge_input_metadata_empty_model_metadata() -> None:
+    """Test merge with empty model metadata (link job models missing I/O specs)."""
+    file_metadata = ModelFileMetadata(inputs={}, outputs={})
+
+    input_spec: InputSpec = {
+        "image": TensorSpec(
+            shape=(1, 3, 224, 224),
+            dtype="float32",
+            io_type=IoType.IMAGE,
+            image_metadata=ImageMetadata(
+                color_format=ColorFormat.RGB,
+                value_range=(0.0, 1.0),
+            ),
+        ),
+    }
+
+    # Should not raise — skips merge entirely when inputs are empty
+    merge_input_metadata(file_metadata, input_spec)
+    assert file_metadata.inputs == {}
 
 
 def test_merge_input_metadata_multiple_inputs() -> None:

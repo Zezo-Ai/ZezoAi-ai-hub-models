@@ -205,6 +205,12 @@ def merge_input_metadata(
         If an input in input_spec is not found in model_file_metadata.inputs.
         This indicates a bug - the input names should match.
     """
+    # Link job models may have empty I/O specs (workbench bug).
+    # Skip metadata merge entirely — compiled shapes can differ from
+    # get_input_spec() (e.g. NCHW -> NHWC conversion during compile).
+    if not model_file_metadata.inputs:
+        return
+
     for input_name, spec in input_spec.items():
         # Find matching input in model_file_metadata
         if input_name not in model_file_metadata.inputs:
@@ -213,7 +219,7 @@ def merge_input_metadata(
                 f"model metadata. Available inputs: {list(model_file_metadata.inputs.keys())}"
             )
 
-        # Skip if not a TensorSpec (plain tuple has no metadata)
+        # Skip if not a TensorSpec (plain tuple has no metadata to merge)
         if not isinstance(spec, TensorSpec):
             continue
 
