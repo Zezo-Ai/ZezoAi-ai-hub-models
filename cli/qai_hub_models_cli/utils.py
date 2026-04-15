@@ -35,6 +35,24 @@ _RETRYABLE_ERRORS = (
 )
 
 
+def _validate_download_response(response: requests.Response, url: str) -> None:
+    """Raise on non-200/206 status or unexpected HTML content-type."""
+    if response.status_code not in (200, 206):
+        response.close()
+        raise requests.HTTPError(
+            f"Unable to download file at {url} (status {response.status_code})",
+            response=response,
+        )
+    content_type = response.headers.get("content-type", "")
+    if "text/html" in content_type.lower():
+        response.close()
+        raise ValueError(
+            f"Expected a downloadable file at {url}"
+            f" but received an HTML response."
+            " The URL may have been redirected to a login or error page."
+        )
+
+
 def _get_total_size(response: requests.Response, bytes_downloaded: int) -> int:
     """Parse total file size from Content-Range or Content-Length headers."""
     content_range = response.headers.get("content-range", "")
@@ -58,11 +76,7 @@ def _download_to_file(
 
         try:
             response = requests.get(url, stream=True, headers=headers, timeout=60)
-            if response.status_code not in (200, 206):
-                raise requests.HTTPError(
-                    f"Unable to download file at {url} (status {response.status_code})",
-                    response=response,
-                )
+            _validate_download_response(response, url)
 
             # Server ignored range request — restart from scratch.
             if bytes_downloaded > 0 and response.status_code == 200:

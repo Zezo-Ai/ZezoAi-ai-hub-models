@@ -1242,8 +1242,31 @@ def download_from_private_s3(
     return dst_path
 
 
+def _validate_download_response(
+    response: requests.Response, url: str, allow_html: bool = False
+) -> None:
+    """Raise on non-200/206 status or unexpected HTML content-type."""
+    if response.status_code not in (200, 206):
+        response.close()
+        raise ValueError(
+            f"Unable to download file at {url} (status {response.status_code})"
+        )
+    content_type = response.headers.get("content-type", "")
+    if not allow_html and "text/html" in content_type.lower():
+        response.close()
+        raise ValueError(
+            f"Expected a downloadable file at {url}"
+            f" but received an HTML response."
+            " The URL may have been redirected to a login or error page."
+        )
+
+
 def download_file(
-    web_url: str, dst_path: str, num_retries: int = 4, verbose: bool = True
+    web_url: str,
+    dst_path: str,
+    num_retries: int = 4,
+    verbose: bool = True,
+    allow_html: bool = False,
 ) -> str:
     """
     Downloads data from the internet and stores in `dst_folder`.
@@ -1266,11 +1289,7 @@ def download_file(
 
                 try:
                     response = requests.get(web_url, stream=True, headers=headers)
-                    if response.status_code not in (200, 206):
-                        raise ValueError(
-                            f"Unable to download file at {web_url}"
-                            f" (status {response.status_code})"
-                        )
+                    _validate_download_response(response, web_url, allow_html)
 
                     # If server doesn't support range requests and returned
                     # full content, restart from scratch.
