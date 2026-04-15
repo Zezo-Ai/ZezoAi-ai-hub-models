@@ -139,6 +139,12 @@ _try_import_dataset(
     ".tricky_llm_prompts", "TrickyLLMPromptsPhi35", name="tricky_llm_prompts_phi35"
 )
 _try_import_dataset(".mmlu", "MMLU")
+_try_import_dataset(".aokvqa", "AOKVQA")
+_try_import_dataset(
+    ".interleaved",
+    "InterleavedAOKVQAWikitext",
+    name="interleaved_aokvqa_wikitext",
+)
 _try_import_dataset(".mmmlu", "MMMLU")
 _try_import_dataset(".mmmlu", "MMMLU_AR", name="mmmlu_ar")
 _try_import_dataset(".mmmlu", "MMMLU_BN", name="mmmlu_bn")

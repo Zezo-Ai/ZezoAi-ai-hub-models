@@ -91,7 +91,8 @@ class PerplexityEvaluator(BaseEvaluator):
                 input_ids, attention_mask, ground_truth = sample  # type:ignore[misc]
                 inputs = [input_ids, attention_mask]
                 inputs = [inp.to(self.device) for inp in inputs]
-                outputs = generator(*inputs)
+                with torch.no_grad():
+                    outputs = generator(*inputs)
                 if callback:
                     callback(inputs, outputs, ground_truth)
                 total_samples += 1
