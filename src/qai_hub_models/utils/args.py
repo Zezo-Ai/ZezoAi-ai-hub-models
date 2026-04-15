@@ -1035,7 +1035,10 @@ def _evaluate_export_common_parser(
             default_if_arg_explicitly_passed=non_float_precision or Precision.float,
             default=(
                 Precision.float
-                if Precision.float in supported_precisions
+                if (
+                    len(supported_precisions) == 0
+                    or Precision.float in supported_precisions
+                )
                 else next(iter(supported_precisions))
             ),
         )

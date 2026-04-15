@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
+import functools
 import logging
 import os
 import re
@@ -44,9 +45,17 @@ def has_qaihm_aws_profile() -> bool:
         return False
 
 
+@functools.lru_cache(maxsize=1)
 def can_access_private_s3() -> bool:
-    """Check if user can access private S3 (CI or has AWS profile)."""
-    return IsOnCIEnvvar.get() or has_qaihm_aws_profile()
+    """Check if user can access private S3 (CI or has AWS profile with valid credentials)."""
+    if not IsOnCIEnvvar.get() or not has_qaihm_aws_profile():
+        return False
+    try:
+        session = boto3.Session(profile_name=QAIHM_AWS_PROFILE)
+        session.client("sts").get_caller_identity()
+        return True
+    except (botocore.exceptions.BotoCoreError, ClientError, NoCredentialsError):
+        return False
 
 
 def attempt_with_s3_credentials_warning(
@@ -66,7 +75,7 @@ def attempt_with_s3_credentials_warning(
         ) in ["400", "ExpiredToken"]:
             raise ValueError(
                 "S3 credentials not found or expired. Run `python scripts/build_and_test.py validate_aws_credentials` and retry."
-            ) from None
+            ) from e
         raise
 
 

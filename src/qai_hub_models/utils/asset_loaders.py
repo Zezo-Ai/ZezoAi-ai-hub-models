@@ -888,6 +888,13 @@ class CachedWebAsset:
             return self.extracted_path
         return self.local_cache_path
 
+    @property
+    def is_fetched(self) -> bool:
+        """Return true if this asset has already been fetched to disk."""
+        return (self.archive_ext and self.is_extracted) or (
+            not self.archive_ext and self.local_cache_path.exists()
+        )
+
     def fetch(
         self,
         extract: bool = False,
@@ -1231,14 +1238,18 @@ def download_from_private_s3(
     """
     dst_path = str(dst_path)
     if not os.path.exists(dst_path):
-        from qai_hub_models.utils.aws import get_qaihm_s3, s3_download
+        from qai_hub_models.utils.aws import (
+            attempt_with_s3_credentials_warning,
+            get_qaihm_s3,
+            s3_download,
+        )
 
         if not s3_url.startswith("s3://"):
             raise ValueError(f"Expected s3:// URL, got: {s3_url}")
         without_prefix = s3_url[len("s3://") :]
         bucket_name, key = without_prefix.split("/", 1)
         bucket, _ = get_qaihm_s3(bucket_name)
-        s3_download(bucket, key, dst_path)
+        attempt_with_s3_credentials_warning(lambda: s3_download(bucket, key, dst_path))
     return dst_path
 
 

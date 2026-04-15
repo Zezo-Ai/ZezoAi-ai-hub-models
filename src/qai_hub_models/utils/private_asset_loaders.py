@@ -72,9 +72,7 @@ class CachedPrivateAsset(CachedWebAsset):
         extract: bool = False,
         local_path: str | Path | None = None,
     ) -> Path:
-        if local_path is not None:
-            return Path(super().fetch(extract=extract, local_path=local_path))
-        if not can_access_private_s3():
+        if not local_path and not self.is_fetched and not can_access_private_s3():
             # No CI env and no AWS profile. Show a helpful error:
             # - Internal repo users get a credential setup prompt
             # - External users get the access_denied_error (e.g., manual download steps)
@@ -88,7 +86,7 @@ class CachedPrivateAsset(CachedWebAsset):
                 f"This is a private asset ({self.url}) and cannot be accessed "
                 "without valid Qualcomm AWS credentials."
             )
-        return Path(super().fetch(extract=extract))
+        return Path(super().fetch(extract=extract, local_path=local_path))
 
 
 class UnfetchableDatasetError(Exception):
