@@ -61,7 +61,7 @@ from qai_hub_models.utils.args import (
     export_parser,
 )
 
-VALID_TARGET_RUNTIMES = Literal[TargetRuntime.GENIE, TargetRuntime.ONNXRUNTIME_GENAI]
+VALID_TARGET_RUNTIMES = Literal[TargetRuntime.GENIE]
 
 
 def _parse_comma_separated_ints(value: str) -> list[int]:
@@ -272,10 +272,6 @@ def export_model(
         raise ValueError(
             "The selected precision (w4) is not supported on this target device. Please try a different precision or target device."
         )
-    if target_runtime == TargetRuntime.ONNXRUNTIME_GENAI and precision == Precision.w4:
-        raise ValueError(
-            "The selected precision (w4) is not supported on target runtime onnxruntime_genai."
-        )
 
     # Instantiation names and input sequence length
     # 1. Initialize PyTorch model
@@ -298,7 +294,6 @@ def export_model(
     sequence_lengths = _ensure_int_list(
         model_params.pop("sequence_length", DEFAULT_EXPORT_SEQUENCE_LENGTHS)
     )
-    prompt_sequence_length = max(sequence_lengths)
 
     # Names follow the ar{seq_len}_cl{ctx_len} convention required by Genie.
     instantiations: list[tuple[str, int, int]] = [
@@ -311,7 +306,6 @@ def export_model(
     output_specs: dict[str, Any] = {}
     link_jobs: dict[str, hub.client.LinkJob] = {}
     profile_options_per_subcomponent: dict[str, str] = {}
-    onnx_model_path_from_sub_component_name: dict[str, str] = {}
     llm_config: PretrainedConfig
 
     sub_component_names: dict[str, list[str]] = {}
@@ -674,27 +668,7 @@ def export_model(
         assert qairt_version is not None
         version = f"{qairt_version.api_version}.{qairt_version.framework.patch}"
 
-        if target_runtime == TargetRuntime.ONNXRUNTIME_GENAI:
-            assert position_processor_cls is not None
-            assert llm_config is not None
-            assert input_encodings_path is not None
-
-            model.prepare_onnxruntime_genai_assets(
-                model_name=model_name,
-                llm_config=llm_config,
-                position_processor_cls=position_processor_cls,
-                encodings_path=input_encodings_path,
-                context_length=max(context_lengths),
-                prompt_sequence_length=prompt_sequence_length,
-                onnx_model_path_from_sub_component_name=onnx_model_path_from_sub_component_name,
-                num_splits=num_splits,
-                qairt_version=qairt_version.full_version,
-                output_dir=output_path,
-            )
-            print(
-                "These models can be deployed on-device using ONNX Runtime with the GenAI extension."
-            )
-        elif (
+        if (
             target_runtime == TargetRuntime.GENIE
             and hasattr(model, "checkpoint")
             and model.checkpoint is not None

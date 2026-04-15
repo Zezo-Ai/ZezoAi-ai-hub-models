@@ -49,7 +49,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
     ONNX = "onnx"
     PRECOMPILED_QNN_ONNX = "precompiled_qnn_onnx"
     GENIE = "genie"
-    ONNXRUNTIME_GENAI = "onnxruntime_genai"
     VOICE_AI = "voice_ai"
     ONNX_DML_GPU = "onnx_dml_gpu"
     QNN_DLC_GPU = "qnn_dlc_gpu"
@@ -85,7 +84,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
             ScorecardProfilePath.QNN_DLC,
             ScorecardProfilePath.QNN_CONTEXT_BINARY,
             ScorecardProfilePath.GENIE,
-            ScorecardProfilePath.ONNXRUNTIME_GENAI,
             ScorecardProfilePath.VOICE_AI,
             ScorecardProfilePath.LLAMA_CPP_CPU,
             ScorecardProfilePath.LLAMA_CPP_GPU,
@@ -214,8 +212,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
             return TargetRuntime.QNN_DLC
         if self == ScorecardProfilePath.GENIE:
             return TargetRuntime.GENIE
-        if self == ScorecardProfilePath.ONNXRUNTIME_GENAI:
-            return TargetRuntime.ONNXRUNTIME_GENAI
         if self == ScorecardProfilePath.VOICE_AI:
             return TargetRuntime.VOICE_AI
         if self == ScorecardProfilePath.LLAMA_CPP_CPU:
@@ -247,8 +243,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
             return ScorecardCompilePath.QNN_DLC_VIA_QNN_EP
         if self == ScorecardProfilePath.GENIE:
             return ScorecardCompilePath.GENIE
-        if self == ScorecardProfilePath.ONNXRUNTIME_GENAI:
-            return ScorecardCompilePath.ONNXRUNTIME_GENAI
         if self == ScorecardProfilePath.VOICE_AI:
             return ScorecardCompilePath.VOICE_AI
         if self == ScorecardProfilePath.LLAMA_CPP_CPU:

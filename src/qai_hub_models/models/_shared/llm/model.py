@@ -1419,10 +1419,10 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
-        if target_runtime not in [TargetRuntime.GENIE, TargetRuntime.ONNXRUNTIME_GENAI]:
+        if target_runtime != TargetRuntime.GENIE:
             raise RuntimeError(
                 f"Unsupported target_runtime provided: {target_runtime}."
-                " Only Generative AI runtimes (Genie, ONNX Runtime GenAI) are supported."
+                " Only Genie runtime is supported."
             )
 
         if precision not in {Precision.w4a16, Precision.w4}:
@@ -1532,38 +1532,6 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         )
 
     eval_datasets = LLMBase.eval_datasets
-
-    @classmethod
-    def prepare_onnxruntime_genai_assets(
-        cls,
-        model_name: str,
-        llm_config: PretrainedConfig,
-        position_processor_cls: type[PositionProcessorBase],
-        encodings_path: str | Path,
-        context_length: int,
-        prompt_sequence_length: int,
-        onnx_model_path_from_sub_component_name: dict[str, str],
-        num_splits: int,
-        qairt_version: str,
-        output_dir: str | Path,
-    ) -> None:
-        """Prepare assets to run the model end to end on-device using ONNX Runtime Gen AI."""
-        from qai_hub_models.models._shared.llm.onnxruntime_genai import (
-            create_onnxruntime_genai_assets,
-        )
-
-        create_onnxruntime_genai_assets(
-            model_name,
-            llm_config,
-            position_processor_cls,
-            encodings_path,
-            context_length,
-            prompt_sequence_length,
-            onnx_model_path_from_sub_component_name,
-            num_splits,
-            qairt_version,
-            output_dir,
-        )
 
     @classmethod
     def prepare_genie_assets(

@@ -367,8 +367,6 @@ def test_qdc(
     ) / ASSET_CONFIG.get_release_asset_name(
         MODEL_ID, TargetRuntime.GENIE, precision, device.chipset
     )
-    if scorecard_path.runtime == TargetRuntime.ONNXRUNTIME_GENAI:
-        pytest.skip("This test is only valid for Genie runtime.")
     if not (genie_bundle_path / "genie_config.json").exists():
         pytest.fail("The genie bundle does not exist.")
     from qai_hub_models.utils.qdc.genie_jobs import (

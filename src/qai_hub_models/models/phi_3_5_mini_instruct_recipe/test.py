@@ -33,8 +33,6 @@ from qai_hub_models.utils.model_cache import CacheMode
         (True, False, TargetRuntime.GENIE),
         (False, True, TargetRuntime.GENIE),
         (False, False, TargetRuntime.GENIE),
-        (False, True, TargetRuntime.ONNXRUNTIME_GENAI),
-        (False, False, TargetRuntime.ONNXRUNTIME_GENAI),
     ],
 )
 def test_cli_device_with_skips(
@@ -62,8 +60,6 @@ def test_cli_device_with_skips(
     [
         ("qualcomm-snapdragon-8gen2", 2048, 256, TargetRuntime.GENIE),
         ("qualcomm-snapdragon-x-elite", 4096, 128, TargetRuntime.GENIE),
-        ("qualcomm-snapdragon-8gen2", 2048, 256, TargetRuntime.ONNXRUNTIME_GENAI),
-        ("qualcomm-snapdragon-x-elite", 4096, 128, TargetRuntime.ONNXRUNTIME_GENAI),
     ],
 )
 def test_cli_chipset_with_options(
@@ -93,9 +89,6 @@ def test_cli_chipset_with_options(
         (CacheMode.ENABLE, True, True, TargetRuntime.GENIE),
         (CacheMode.DISABLE, True, False, TargetRuntime.GENIE),
         (CacheMode.OVERWRITE, False, False, TargetRuntime.GENIE),
-        (CacheMode.ENABLE, True, True, TargetRuntime.ONNXRUNTIME_GENAI),
-        (CacheMode.DISABLE, True, False, TargetRuntime.ONNXRUNTIME_GENAI),
-        (CacheMode.OVERWRITE, False, False, TargetRuntime.ONNXRUNTIME_GENAI),
     ],
 )
 def test_cli_default_device_select_component(

@@ -454,10 +454,6 @@ class TargetRuntime(Enum):
     # https://www.qualcomm.com/developer/software/gen-ai-inference-extensions
     GENIE = "genie"
 
-    # ONNX Runtime GenAI Bundle
-    # https://github.com/microsoft/onnxruntime-genai
-    ONNXRUNTIME_GENAI = "onnxruntime_genai"
-
     # Qualcomm Voice AI
     # https://www.qualcomm.com/products/features/voice-assist
     # https://qpm.qualcomm.com/#/main/tools/details/VoiceAI_ASR_Community
@@ -491,7 +487,6 @@ class TargetRuntime(Enum):
         if (
             self == TargetRuntime.ONNX  # noqa: PLR1714 | Can't merge comparisons and use assert_never
             or self == TargetRuntime.PRECOMPILED_QNN_ONNX
-            or self == TargetRuntime.ONNXRUNTIME_GENAI
         ):
             return InferenceEngine.ONNX
         if self == TargetRuntime.GENIE:
@@ -519,8 +514,6 @@ class TargetRuntime(Enum):
             return "onnx.zip"
         if self == TargetRuntime.GENIE:
             return "genie.zip"
-        if self == TargetRuntime.ONNXRUNTIME_GENAI:
-            return "onnxruntime_genai.zip"
         if (
             self == TargetRuntime.LLAMA_CPP_CPU  # noqa: PLR1714 | Can't merge comparisons and use assert_never
             or self == TargetRuntime.LLAMA_CPP_GPU
@@ -543,7 +536,6 @@ class TargetRuntime(Enum):
             return hub.SourceModelType.TFLITE
         if (
             self == TargetRuntime.GENIE  # noqa: PLR1714 | Can't merge comparisons and use assert_never
-            or self == TargetRuntime.ONNXRUNTIME_GENAI
             or self == TargetRuntime.LLAMA_CPP_CPU
             or self == TargetRuntime.LLAMA_CPP_GPU
             or self == TargetRuntime.LLAMA_CPP_NPU
@@ -607,7 +599,6 @@ class TargetRuntime(Enum):
             # so they support the same precision set as QAIRT paths
             or self == TargetRuntime.PRECOMPILED_QNN_ONNX
             or self == TargetRuntime.GENIE
-            or self == TargetRuntime.ONNXRUNTIME_GENAI
             or self == TargetRuntime.VOICE_AI
         ):
             return precision in [
@@ -683,7 +674,6 @@ class TargetRuntime(Enum):
             TargetRuntime.VOICE_AI,
             TargetRuntime.PRECOMPILED_QNN_ONNX,
             TargetRuntime.GENIE,
-            TargetRuntime.ONNXRUNTIME_GENAI,
         ]
 
     @property
@@ -704,7 +694,6 @@ class TargetRuntime(Enum):
         """
         return self in [
             TargetRuntime.GENIE,
-            TargetRuntime.ONNXRUNTIME_GENAI,
             TargetRuntime.VOICE_AI,
             TargetRuntime.LLAMA_CPP_CPU,
             TargetRuntime.LLAMA_CPP_GPU,

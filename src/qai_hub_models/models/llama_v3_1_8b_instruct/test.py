@@ -141,10 +141,6 @@ def test_create_genie_config() -> None:
         (True, False, TargetRuntime.GENIE),
         (False, True, TargetRuntime.GENIE),
         (False, False, TargetRuntime.GENIE),
-        (True, True, TargetRuntime.ONNXRUNTIME_GENAI),
-        (False, True, TargetRuntime.ONNXRUNTIME_GENAI),
-        (True, False, TargetRuntime.ONNXRUNTIME_GENAI),
-        (False, False, TargetRuntime.ONNXRUNTIME_GENAI),
     ],
 )
 def test_cli_device_with_skips(
@@ -180,8 +176,6 @@ def test_cli_device_with_skips_unsupported_precision_device(
     [
         ("qualcomm-snapdragon-8gen2", 2048, 256, TargetRuntime.GENIE),
         ("qualcomm-snapdragon-x-elite", 4096, 128, TargetRuntime.GENIE),
-        ("qualcomm-snapdragon-8gen2", 2048, 256, TargetRuntime.ONNXRUNTIME_GENAI),
-        ("qualcomm-snapdragon-x-elite", 4096, 128, TargetRuntime.ONNXRUNTIME_GENAI),
     ],
 )
 def test_cli_chipset_with_options(
@@ -211,9 +205,6 @@ def test_cli_chipset_with_options(
         (CacheMode.ENABLE, True, True, TargetRuntime.GENIE),
         (CacheMode.DISABLE, True, False, TargetRuntime.GENIE),
         (CacheMode.OVERWRITE, False, False, TargetRuntime.GENIE),
-        (CacheMode.ENABLE, True, True, TargetRuntime.ONNXRUNTIME_GENAI),
-        (CacheMode.DISABLE, True, False, TargetRuntime.ONNXRUNTIME_GENAI),
-        (CacheMode.OVERWRITE, False, False, TargetRuntime.ONNXRUNTIME_GENAI),
     ],
 )
 def test_cli_default_device_select_component(
@@ -427,8 +418,6 @@ def test_qdc(
     ) / ASSET_CONFIG.get_release_asset_name(
         MODEL_ID, TargetRuntime.GENIE, precision, device.chipset
     )
-    if scorecard_path.runtime == TargetRuntime.ONNXRUNTIME_GENAI:
-        pytest.skip("This test is only valid for Genie runtime.")
     if not (genie_bundle_path / "genie_config.json").exists():
         pytest.fail("The genie bundle does not exist.")
     from qai_hub_models.utils.qdc.genie_jobs import (

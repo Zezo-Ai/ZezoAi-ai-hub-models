@@ -22,7 +22,7 @@ from qai_hub_models.models.qwen2_5_7b_instruct_recipe.model import (
 )
 
 SUPPORTED_PRECISION_RUNTIMES = {
-    Precision.w4a16: [TargetRuntime.GENIE, TargetRuntime.ONNXRUNTIME_GENAI],
+    Precision.w4a16: [TargetRuntime.GENIE],
 }
 DEFAULT_EXPORT_DEVICE = "Snapdragon 8 Elite QRD"
 

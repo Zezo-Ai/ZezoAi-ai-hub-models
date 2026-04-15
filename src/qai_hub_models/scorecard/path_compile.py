@@ -30,7 +30,6 @@ class ScorecardCompilePath(Enum):
     ONNX = "onnx"
     PRECOMPILED_QNN_ONNX = "precompiled_qnn_onnx"
     GENIE = "genie"
-    ONNXRUNTIME_GENAI = "onnxruntime_genai"
     VOICE_AI = "voice_ai"
 
     ONNX_FP16 = "onnx_fp16"
@@ -101,8 +100,6 @@ class ScorecardCompilePath(Enum):
             return TargetRuntime.QNN_DLC
         if self == ScorecardCompilePath.GENIE:
             return TargetRuntime.GENIE
-        if self == ScorecardCompilePath.ONNXRUNTIME_GENAI:
-            return TargetRuntime.ONNXRUNTIME_GENAI
         if self == ScorecardCompilePath.LLAMA_CPP_CPU:
             return TargetRuntime.LLAMA_CPP_CPU
         if self == ScorecardCompilePath.LLAMA_CPP_GPU:

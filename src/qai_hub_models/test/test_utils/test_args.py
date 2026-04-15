@@ -127,7 +127,6 @@ def llama_parser() -> argparse.ArgumentParser:
             Precision.w4a16: [
                 TargetRuntime.QNN_CONTEXT_BINARY,
                 TargetRuntime.PRECOMPILED_QNN_ONNX,
-                TargetRuntime.ONNXRUNTIME_GENAI,
                 TargetRuntime.GENIE,
             ]
         },

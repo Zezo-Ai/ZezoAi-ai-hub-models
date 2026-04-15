@@ -22,7 +22,7 @@ from qai_hub_models.utils.args import QAIHMArgumentParser
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.model_cache import CacheMode
 
-TEST_GENAI_RUNTIMES = [TargetRuntime.GENIE, TargetRuntime.ONNXRUNTIME_GENAI]
+TEST_GENAI_RUNTIMES = [TargetRuntime.GENIE]
 TEST_NUM_COMPONENTS = [1, 3]
 TEST_HUB_JOB_OPTIONS = ["", f"{QAIRTVersion.HUB_FLAG} 2.36", "--extra-option"]
 TEST_HUB_DEVICES: list[tuple[str | None, str | None, str, str, bool]] = [
@@ -132,23 +132,6 @@ class DummyMockModel(LLM_AIMETOnnx):
         "model_cache_mode",
     ),
     [
-        (
-            TargetRuntime.ONNXRUNTIME_GENAI,
-            torch.device("cpu"),
-            "my/checkpoint/path",
-            None,
-            "qualcomm-snapdragon-x-elite",
-            True,
-            False,
-            True,
-            False,
-            "my_output_dir",
-            "",
-            "--link-option hello",
-            "",
-            False,
-            CacheMode.DISABLE,
-        ),
         (
             None,
             None,
