@@ -369,7 +369,10 @@ class ScorecardDevice:
         If this device can run a model, get a set of all chipsets that should also be supported.
         This device's chipset will be included in the list.
 
-        Returned names are sanitized (e.g. "-for-galaxy" suffix is stripped).
+        The device's own chipset is returned unsanitized (e.g.
+        ``qualcomm-snapdragon-8-elite-for-galaxy``) so that Hub API queries
+        match the exact chipset ID.  Consumers that need display names
+        should sanitize explicitly via ``sanitize_chipset_name``.
         """
         if self.form_factor in [
             ScorecardDevice.FormFactor.PHONE,
@@ -382,13 +385,16 @@ class ScorecardDevice:
                 "qualcomm-snapdragon-8gen1",
                 "qualcomm-snapdragon-888",
             ]
-            # Sanitize chipset name (e.g. strip "-for-galaxy" suffix)
-            # so variant devices get the same backward-compatibility expansion.
+            # Sanitize chipset name to find the position in the list,
+            # but return the original (unsanitized) name for the device's own chipset.
             chipset = sanitize_chipset_name(self.chipset)
             if chipset in mobile_chips:
+                idx = mobile_chips.index(chipset)
                 # Return this chipset and all older chipsets.
                 # We don't run older devices in the scorecard, so this is a proxy.
-                return set(mobile_chips[mobile_chips.index(chipset) :])
+                # Use the original unsanitized name for the device's own chipset,
+                # and the canonical names for older chipsets.
+                return {self.chipset} | set(mobile_chips[idx + 1 :])
         if self.form_factor == ScorecardDevice.FormFactor.COMPUTE:
             # If either compute chip works, both work
             compute_chips = {

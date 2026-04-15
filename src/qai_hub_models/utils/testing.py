@@ -202,7 +202,7 @@ def verify_io_names(model_cls: type[BaseModel]) -> None:
 def mock_tabulate_fn(df: pd.DataFrame, **kwargs: Any) -> tuple[list[str], str]:
     psnr_values = []
     for _, value in df.iterrows():
-        psnr_values.append(str(value.psnr))
+        psnr_values.append(f"{value.psnr:.4g}")
     return psnr_values, tabulate(df, **kwargs)  # pyright: ignore[reportArgumentType]
 
 
