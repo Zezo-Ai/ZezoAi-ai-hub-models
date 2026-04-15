@@ -37,6 +37,7 @@ MODEL_ASSET_VERSION = 2
 NUM_LAYERS = 28
 NUM_SPLITS = 6
 NUM_LAYERS_PER_SPLIT = 6
+DEFAULT_PRECISION = Precision.w8a16
 
 # The model is not pulled from this place, but the config/tokenizer might.
 HF_REPO_NAME = "Qwen/Qwen2.5-7B-Instruct"
@@ -70,7 +71,7 @@ class Qwen2_5_7B_Instruct(LlamaMixin):
         sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
         context_length: int = DEFAULT_CONTEXT_LENGTH,
         huggingface_model_name: str = HF_REPO_NAME,
-        precision: Precision = Precision.w8a16,
+        precision: Precision = DEFAULT_PRECISION,
     ) -> Self:
         return cls(
             sequence_length=sequence_length,
