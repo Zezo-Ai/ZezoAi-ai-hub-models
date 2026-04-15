@@ -138,6 +138,7 @@ Onboarding sub-guides (loaded only when needed):
 
 Other guides:
 - `.claude/docs/github-ci-guide.md` — using `gh` CLI to fetch PR comments, check CI status, and read test failure logs
+- `.claude/docs/filing-issues.md` — filing and querying issues in `qcom-ai-hub/tetracode`
 
 ## Qualcomm AI Hub SDK (`qai_hub`)
 
