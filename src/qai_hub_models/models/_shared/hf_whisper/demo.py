@@ -52,7 +52,6 @@ def hf_whisper_demo(model_cls: type[HfWhisper], model_id: str, is_test: bool) ->
         help="For audio streaming, the number of seconds to record between each transcription attempt. A minimum of around 10 seconds is recommended for best accuracy.",
     )
     args = parser.parse_args([] if is_test else None)
-    is_test = is_test or args.is_test
 
     if (args.stream_audio_device is not None) and (args.audio_file is not None):
         raise ValueError("Cannot set both audio-file and stream-audio-device")
