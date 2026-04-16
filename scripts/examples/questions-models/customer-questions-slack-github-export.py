@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import os
+import subprocess
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any, TypedDict
@@ -40,30 +42,31 @@ client = WebClient(token=slack_token)
 # -----------------------------------------------------------------------------
 # Minimal types to keep mypy happy for fields we use
 # -----------------------------------------------------------------------------
-class UserInfoDict(TypedDict, total=False):
-    user: Mapping[str, Any]
-
-
 class ChannelDict(TypedDict, total=False):
     id: str
     name: str
 
 
-class MessageDict(TypedDict, total=False):
-    text: str
-    ts: str
-    reply_count: int
-    user: str
+# Cache for user info: maps user_id -> (display_name, is_internal)
+user_cache: dict[str, tuple[str, bool]] = {}
 
 
-# Cache for user names to avoid repeated API calls
-user_cache: dict[str, str] = {}
+def _is_qualcomm_user(user_data: Mapping[str, Any]) -> bool:
+    """Return True if any profile field indicates a Qualcomm employee."""
+    real_name = str(user_data.get("real_name", "")).lower()
+    if real_name == "slackbot":
+        return True
+    profile = user_data.get("profile")
+    if isinstance(profile, Mapping):
+        display_name = str(profile.get("display_name", "")).lower()
+        return "qualcomm" in real_name or "qualcomm" in display_name
+    return "qualcomm" in real_name
 
 
-def get_user_name(user_id: str) -> str:
-    """Return a display name for a Slack user id."""
+def get_user_info(user_id: str) -> tuple[str, bool]:
+    """Return (display_name, is_internal) for a Slack user id."""
     if not user_id:
-        return "Unknown"
+        return ("Unknown", False)
 
     if user_id in user_cache:
         return user_cache[user_id]
@@ -75,17 +78,138 @@ def get_user_name(user_id: str) -> str:
         if isinstance(data, Mapping):
             user = data.get("user")
             if isinstance(user, Mapping):
+                internal = _is_qualcomm_user(user)
                 name = user.get("real_name")
                 if isinstance(name, str) and name:
-                    user_cache[user_id] = name
-                    return name
-        return "Unknown"
+                    user_cache[user_id] = (name, internal)
+                    return (name, internal)
+        return ("Unknown", False)
     except Exception as e:
         # Keep broad catch for robustness here, but still log.
         logger.warning(
             "Failed to resolve user_id=%s; returning 'Unknown'. Error: %s", user_id, e
         )
-        return "Unknown"
+        return ("Unknown", False)
+
+
+# -----------------------------------------------------------------------------
+# GitHub repos to scan for new issues and PRs
+# -----------------------------------------------------------------------------
+GITHUB_REPOS = [
+    "qualcomm/ai-hub-models",
+    "qualcomm/ai-hub-apps",
+]
+
+DEPENDABOT_LOGINS = {"app/dependabot", "dependabot", "dependabot[bot]"}
+
+
+def _tracker_row(
+    question: str,
+    date_submitted: str,
+    status_or_channel: str,
+    answered: str,
+    medium: str,
+    submitted_by: str,
+) -> list[str]:
+    """Build a single engagement-tracker row."""
+    return [
+        question,
+        "",  # Subject Area
+        date_submitted,
+        status_or_channel,
+        answered,
+        "",  # Tetra PoC
+        medium,
+        submitted_by,
+        "",  # Associated Issues or links
+        "",  # Roadmap commitments
+        "",  # Requests
+        "",  # Last Updated Date
+        "",  # Priority
+    ]
+
+
+def _parse_github_date(created: str) -> str:
+    """Parse an ISO timestamp into YYYY-MM-DD."""
+    if not created:
+        return ""
+    try:
+        dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d")
+    except ValueError:
+        return created[:10]
+
+
+def fetch_github_items(since_date: str) -> list[list[str]]:
+    """Fetch issues and PRs created since *since_date* from GITHUB_REPOS.
+
+    Returns rows matching the engagement tracker columns.
+    Uses the ``gh`` CLI (must be authenticated).
+    """
+    rows: list[list[str]] = []
+    for repo in GITHUB_REPOS:
+        for kind in ("issue", "pr"):
+            label = "issues" if kind == "issue" else "PRs"
+            logger.info("Fetching GitHub %s from %s since %s", label, repo, since_date)
+            try:
+                result = subprocess.run(
+                    [
+                        "gh",
+                        kind,
+                        "list",
+                        "--repo",
+                        repo,
+                        "--state",
+                        "all",
+                        "--search",
+                        f"created:>={since_date}",
+                        "--limit",
+                        "200",
+                        "--json",
+                        "title,body,createdAt,url,comments,author",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                logger.warning("Failed to fetch %s from %s: %s", label, repo, e)
+                continue
+
+            items = json.loads(result.stdout) if result.stdout.strip() else []
+            for item in items:
+                author_info = item.get("author", {})
+                author_login = author_info.get("login", "")
+
+                # Skip bot PRs
+                if kind == "pr" and author_login in DEPENDABOT_LOGINS:
+                    continue
+
+                title = item.get("title", "")
+                body = item.get("body", "")
+                body_oneline = " ".join(body.split())
+                question = (
+                    f"{title} — {body_oneline}".strip() if body_oneline else title
+                )
+
+                comments = item.get("comments", [])
+                comment_count = len(comments) if isinstance(comments, list) else 0
+                answered = "N" if comment_count == 0 else "open items"
+
+                author_name = author_info.get("name") or author_login or "Unknown"
+
+                rows.append(
+                    _tracker_row(
+                        question=question,
+                        date_submitted=_parse_github_date(item.get("createdAt", "")),
+                        status_or_channel=item.get("url", ""),
+                        answered=answered,
+                        medium="GitHub",
+                        submitted_by=author_name,
+                    )
+                )
+            logger.info("Found %d %s from %s", len(items), label, repo)
+    return rows
 
 
 def main() -> None:
@@ -105,6 +229,7 @@ def main() -> None:
         "C089S1F862K",
         "C099Y1GBDKK",
         "C07A5PJ7M8B",
+        "C0840CTJGC8",  # lpcvc
     }
 
     cursor: str | None = None
@@ -143,16 +268,24 @@ def main() -> None:
     one_week_ago = datetime.now() - timedelta(days=7)
     oldest_timestamp = one_week_ago.timestamp()
 
-    output_path = "/Users/meghan/Downloads/slack_messages_all_channels_this_week.csv"
+    output_path = "/Users/meghan/Downloads/slack_github_this_week.csv"
     with open(output_path, "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
         writer.writerow(
             [
-                "Text",
+                "Question",
+                "Subject Area",
                 "Date Submitted",
-                "Channel Name",
-                "Replies in Thread",
-                "Submitted By",
+                "Status or channel",
+                "Answered (y/n/open items)",
+                "Tetra PoC",
+                "Medium Submitted",
+                "Submitted by",
+                "Associated Issues or links",
+                "Roadmap commitments",
+                "Requests",
+                "Last Updated Date",
+                "Priority",
             ]
         )
 
@@ -206,9 +339,18 @@ def main() -> None:
                         user_id = (
                             str(m.get("user", "")) if m.get("user") is not None else ""
                         )
-                        user_name = get_user_name(user_id)
+                        user_name, is_internal = get_user_info(user_id)
+                        if is_internal:
+                            continue
                         writer.writerow(
-                            [text, date_submitted, channel_name, replies, user_name]
+                            _tracker_row(
+                                question=text,
+                                date_submitted=date_submitted,
+                                status_or_channel=channel_name,
+                                answered=replies,
+                                medium="Slack",
+                                submitted_by=user_name,
+                            )
                         )
 
                 hmeta = (
@@ -225,6 +367,15 @@ def main() -> None:
                     msg_cursor = next_cursor
                 else:
                     break
+
+        # -----------------------------------------------------------------
+        # GitHub issues and PRs created this week
+        # -----------------------------------------------------------------
+        since_str = one_week_ago.strftime("%Y-%m-%d")
+        github_rows = fetch_github_items(since_str)
+        for row in github_rows:
+            writer.writerow(row)
+        logger.info("Appended %d GitHub items to export", len(github_rows))
 
     logger.info("✅ Export complete: %s", output_path)
 
