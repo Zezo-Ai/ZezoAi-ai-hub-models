@@ -317,6 +317,7 @@ and many more.
 | [Distil-Whisper](https://aihub.qualcomm.com/models/distil_whisper) | [qai_hub_models.models.distil_whisper](src/qai_hub_models/models/distil_whisper/README.md) |
 | [Whisper-Base](https://aihub.qualcomm.com/models/whisper_base) | [qai_hub_models.models.whisper_base](src/qai_hub_models/models/whisper_base/README.md) |
 | [Whisper-Large-V3-Turbo](https://aihub.qualcomm.com/models/whisper_large_v3_turbo) | [qai_hub_models.models.whisper_large_v3_turbo](src/qai_hub_models/models/whisper_large_v3_turbo/README.md) |
+| [Whisper-Medium](https://aihub.qualcomm.com/models/whisper_medium) | [qai_hub_models.models.whisper_medium](src/qai_hub_models/models/whisper_medium/README.md) |
 | [Whisper-Small](https://aihub.qualcomm.com/models/whisper_small) | [qai_hub_models.models.whisper_small](src/qai_hub_models/models/whisper_small/README.md) |
 | [Whisper-Small-Quantized](https://aihub.qualcomm.com/models/whisper_small_quantized) | [qai_hub_models.models.whisper_small_quantized](src/qai_hub_models/models/whisper_small_quantized/README.md) |
 | [Whisper-Tiny](https://aihub.qualcomm.com/models/whisper_tiny) | [qai_hub_models.models.whisper_tiny](src/qai_hub_models/models/whisper_tiny/README.md) |
