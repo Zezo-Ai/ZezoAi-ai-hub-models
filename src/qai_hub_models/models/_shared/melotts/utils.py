@@ -96,7 +96,7 @@ def write_melotts_supplementary_files(
     metadata
         Model metadata object to update with supplementary file info
     """
-    if metadata.runtime != TargetRuntime.QNN_CONTEXT_BINARY:
+    if metadata.runtime != TargetRuntime.VOICE_AI:
         return
     lang_code = LANGUAGE_MAP[language].lower()
     output_dir = Path(output_dir)

@@ -279,7 +279,7 @@ class MeloTTSApp(CollectionAppProtocol):
         audio = audio.squeeze()[:length]
         sf.write(
             output_path,
-            audio.squeeze().numpy(),
+            audio.detach().cpu().numpy(),
             samplerate=self.tts_object.hps.data.sampling_rate,
         )
 

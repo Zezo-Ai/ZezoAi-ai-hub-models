@@ -1,9 +1,7 @@
 supported_precisions:
 - mixed_with_float
-disabled_paths:
-  mixed_with_float:
-    qnn_context_binary:
-      scorecard_failure: 'Failure due to conversion to QNN context binary (Issue: 18251)'
+orchestrator_runtimes: ["voice_ai"]
+only_allow_orchestrator_runtimes: true
 is_collection_model: true
 requires_aot_prepare: true
 global_requirements_incompatible: true

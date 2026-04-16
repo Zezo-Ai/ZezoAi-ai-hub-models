@@ -14,6 +14,41 @@ if TYPE_CHECKING:
     import melo.models
 
 
+class FFNMod(nn.Module):
+    """
+    Drop-in replacement for melo.attentions.FFN that avoids Conv2D+Relu op fusion.
+
+    When Qairt encounters Conv2D+Relu, it incorrectly converts Conv2D to run on
+    w8fp16 (int8 weight, fp16 activation), which HTP doesn't support. Replacing
+    torch.relu with torch.maximum forces Qairt to treat Conv2D alone, avoiding
+    the problematic fusion.
+    """
+
+    def __init__(self, original_ffn: "melo.attentions.FFN") -> None:
+        super().__init__()
+        self.in_channels = original_ffn.in_channels
+        self.out_channels = original_ffn.out_channels
+        self.filter_channels = original_ffn.filter_channels
+        self.kernel_size = original_ffn.kernel_size
+        self.p_dropout = original_ffn.p_dropout
+        self.activation = original_ffn.activation
+        self.causal = original_ffn.causal
+        self.padding = original_ffn.padding
+        self.conv_1 = original_ffn.conv_1
+        self.conv_2 = original_ffn.conv_2
+        self.drop = original_ffn.drop
+
+    def forward(self, x: Tensor, x_mask: Tensor) -> Tensor:
+        x = self.conv_1(self.padding(x * x_mask))
+        if self.activation == "gelu":
+            x = x * torch.sigmoid(1.702 * x)
+        else:
+            x = torch.maximum(x, torch.tensor(0))
+        x = self.drop(x)
+        x = self.conv_2(self.padding(x * x_mask))
+        return x * x_mask
+
+
 class OptimizedTextEncoder(nn.Module):
     """
     An optimized TextEncoder of the original one from

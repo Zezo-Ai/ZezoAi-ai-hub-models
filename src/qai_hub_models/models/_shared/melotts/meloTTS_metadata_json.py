@@ -223,12 +223,12 @@ def create_tts_metadata(
     assets = ModelAssets()
     for file_name in metadata.model_files:
         lower = file_name.lower()
-        if "bertwrapper" in lower:
-            assets.bert_model = file_name
-        elif "t5encoder" in lower:
+        if "t5_encoder" in lower:
             assets.g2p_encoder = file_name
-        elif "t5decoder" in lower:
+        elif "t5_decoder" in lower:
             assets.g2p_decoder = file_name
+        elif "bert" in lower:
+            assets.bert_model = file_name
         elif "encoder" in lower:
             assets.melo_encoder = file_name
         elif "decoder" in lower:
@@ -242,7 +242,7 @@ def create_tts_metadata(
     # ------------------------------------------------------------------
     # Build the metadata object
     # ------------------------------------------------------------------
-    model_name = f"melo_tts_{LANGUAGE_MAP[language]}"
+    model_name = f"melo-tts-{LANGUAGE_MAP[language]}"
     display_name = f"MeloTTS {language.capitalize()}"
     description = f"MeloTTS text-to-speech model for {language.capitalize()}"
 

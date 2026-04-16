@@ -21,8 +21,10 @@ from transformers import (
 from transformers.models.t5.modeling_t5 import T5Attention
 from typing_extensions import Self
 
+from qai_hub_models.models._shared.common import replace_module_recursively
 from qai_hub_models.models._shared.melotts.charsiu_model import T5AttentionMod
 from qai_hub_models.models._shared.melotts.meloTTS_encoder import (
+    FFNMod,
     OptimizedDurationPredictor,
     OptimizedTextEncoder,
 )
@@ -59,9 +61,20 @@ MAP2 = {"ENGLISH": "EN_NEWEST", "SPANISH": "ES", "CHINESE": "ZH"}
 @lru_cache(maxsize=1)
 def get_tts_object(language: str) -> "TTS":
     download_unidic()
+
+    import melo
     from melo.api import TTS
 
-    return TTS(MAP2[language], device="cpu")
+    tts = TTS(MAP2[language], device="cpu")
+
+    # Monkeypatch melo.attentions.FFN to replace torch.relu with torch.maximum.
+    # This avoids the Conv2D+Relu op fusion bug in Qairt, which incorrectly converts
+    # Conv2D to w8fp16 (int8 weight, fp16 activation) — unsupported on HTP.
+    #
+    # Can be removed when JIRA AISW-177186 is resolved.
+    replace_module_recursively(tts.model, melo.attentions.FFN, FFNMod)
+
+    return tts
 
 
 @lru_cache(maxsize=1)
@@ -228,7 +241,10 @@ class Encoder(BaseModel):
         # y_lengths = torch.sum(w_ceil, [1, 2])    # after converting to context binary, QNN can't sum correctly
         # y_lengths = torch.tensor([w_ceil.detach().numpy().sum() ], dtype=torch.float32) # QNN can't sum correctly
         # y_lengths = torch.tensor([w_ceil.squeeze().cumsum(dim=0)[-1] ], dtype=torch.float32) # QNN can't sum correctly
-        y_lengths = torch.sum(torch.sum(w_ceil, dim=2), dim=1)  # QNN sums correctly
+        # y_lengths = torch.sum(torch.sum(w_ceil, dim=2), dim=1)  #  This doesn't work since April 26
+        y_lengths = torch.sum(w_ceil).unsqueeze(
+            0
+        )  # sum correctly after qairt-converter
         # TODO https://jira-dc.qualcomm.com/jira/projects/AISW/issues/AISW-175294
         return y_lengths, x_mask, m_p, logs_p, g, w_ceil
 
@@ -423,6 +439,9 @@ class Flow(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
+        other_compile_options += (
+            " -O2"  # Can be removed when JIRA AISW-177186 is resolved.
+        )
         if target_runtime.qairt_version_changes_compilation:
             other_compile_options += " --quantize_io  "
         return super().get_hub_compile_options(
