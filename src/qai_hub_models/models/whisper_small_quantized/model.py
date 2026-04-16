@@ -8,6 +8,9 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 # isort: off
 # This verifies aimet is installed, and this must be included first.
 MODEL_ID = __name__.split(".")[-2]
@@ -16,15 +19,20 @@ from qai_hub_models.utils.quantization_aimet_onnx import ensure_aimet_onnx_insta
 ensure_aimet_onnx_installed(model_id=MODEL_ID)
 # isort: on
 
-import base64
-import os
-from pathlib import Path
-
 import torch
 from transformers import WhisperConfig
 from typing_extensions import Self
 
 from qai_hub_models.configs.model_metadata import ModelMetadata
+from qai_hub_models.models._shared.hf_whisper.model import (
+    TIKTOKEN_URL,
+)
+from qai_hub_models.models._shared.hf_whisper.utils import (
+    write_whisper_supplementary_files,
+)
+from qai_hub_models.models._shared.hf_whisper.whisper_metadata_json import (
+    WhisperCapabilities,
+)
 from qai_hub_models.models._shared.hf_whisper_quantized.model import (
     WhisperDecoderQuantizableBase,
     WhisperEncoderQuantizableBase,
@@ -38,11 +46,16 @@ MODEL_ASSET_VERSION = 2
 WHISPER_VERSION = "openai/whisper-small"
 ENCODER_AIMET = "encoder.aimet"
 DECODER_AIMET = "decoder.aimet"
-TIKTOKEN_URL = CachedWebModelAsset(
-    "https://raw.githubusercontent.com/openai/whisper/839639a223b92ad61851baae9ad8a695ccb41ce5/whisper/assets/multilingual.tiktoken",
-    "whisper_small_quantized",
-    1,
-    "multilingual.tiktoken",
+
+# Explicit capability profile for whisper-small-quantized.
+# Declared here (not as class-level defaults) so that each model variant
+# owns its own capability declaration.
+WHISPER_SMALL_QUANTIZED_CAPABILITIES = WhisperCapabilities(
+    streaming=True,
+    file_based=True,
+    real_time=True,
+    language_detection=True,
+    confidence_scores=False,
 )
 
 
@@ -117,19 +130,11 @@ class WhisperSmallQuantized(PretrainedCollectionModel):
     def write_supplementary_files(
         self, output_dir: str | os.PathLike, metadata: ModelMetadata
     ) -> None:
-        whisper_tiktoken = TIKTOKEN_URL.fetch()
-
-        with open(whisper_tiktoken, "rb") as f:
-            lines = f.readlines()
-
-        with open(os.path.join(output_dir, "vocab.bin"), "wb") as f:
-            for line in lines:
-                l = line.split()
-                if len(l) < 2:
-                    continue
-                token = base64.b64decode(line.split()[0])
-                if b"\0" in token:
-                    f.write(token)
-                else:
-                    f.write(token)
-                    f.write(b"\0")
+        write_whisper_supplementary_files(
+            output_dir,
+            metadata,
+            "whisper-small-quantized",
+            WHISPER_SMALL_QUANTIZED_CAPABILITIES,
+            TIKTOKEN_URL,
+            display_name="Whisper Small (Quantized)",
+        )

@@ -505,6 +505,7 @@ def main() -> None:
         Precision.w8a16: [
             TargetRuntime.QNN_CONTEXT_BINARY,
             TargetRuntime.PRECOMPILED_QNN_ONNX,
+            TargetRuntime.VOICE_AI,
         ],
     }
 
