@@ -1065,6 +1065,7 @@ def add_export_function_args(
         # LLM specific args
         "model_cls",
         "position_processor_cls",
+        "model_id",
         "model_name",
         "model_asset_version",
         "sub_components",

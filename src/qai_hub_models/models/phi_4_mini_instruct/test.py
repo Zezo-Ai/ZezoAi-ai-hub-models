@@ -22,6 +22,9 @@ from qai_hub_models.models.phi_4_mini_instruct.export import (
 from qai_hub_models.models.phi_4_mini_instruct.export import (
     main as export_main,
 )
+from qai_hub_models.models.phi_4_mini_instruct.model import (
+    DEFAULT_PRECISION,
+)
 from qai_hub_models.utils.model_cache import CacheMode
 
 
@@ -51,6 +54,7 @@ def test_cli_device_with_skips(
         skip_inferencing,
         skip_profiling,
         target_runtime,
+        precision=DEFAULT_PRECISION,
     )
 
 
@@ -110,6 +114,7 @@ def test_cli_default_device_select_component(
         skip_summary,
         target_runtime,
         decode_sequence_length=1,
+        precision=DEFAULT_PRECISION,
     )
 
 

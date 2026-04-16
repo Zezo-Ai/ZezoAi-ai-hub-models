@@ -25,6 +25,8 @@ from qai_hub_models.utils.asset_loaders import load_json
 from qai_hub_models.utils.input_spec import InputSpec
 
 # Default values for required ModelMetadata fields in tests
+DEFAULT_MODEL_ID = "test_model"
+DEFAULT_MODEL_NAME = "Test-Model"
 DEFAULT_RUNTIME = TargetRuntime.TFLITE
 DEFAULT_PRECISION = Precision.float
 DEFAULT_TOOL_VERSIONS = ToolVersions(ai_hub_models="0.0.0")
@@ -102,6 +104,8 @@ def test_model_metadata_single_component() -> None:
     )
 
     model_metadata = ModelMetadata(
+        model_id=DEFAULT_MODEL_ID,
+        model_name=DEFAULT_MODEL_NAME,
         runtime=DEFAULT_RUNTIME,
         precision=DEFAULT_PRECISION,
         tool_versions=DEFAULT_TOOL_VERSIONS,
@@ -124,6 +128,8 @@ def test_model_metadata_multiple_components() -> None:
     )
 
     model_metadata = ModelMetadata(
+        model_id=DEFAULT_MODEL_ID,
+        model_name=DEFAULT_MODEL_NAME,
         runtime=DEFAULT_RUNTIME,
         precision=DEFAULT_PRECISION,
         tool_versions=DEFAULT_TOOL_VERSIONS,
@@ -145,6 +151,8 @@ def test_metadata_json_roundtrip() -> None:
         outputs={"logits": TensorSpec(shape=(1, 1000), dtype="float32")},
     )
     model_metadata = ModelMetadata(
+        model_id=DEFAULT_MODEL_ID,
+        model_name=DEFAULT_MODEL_NAME,
         runtime=DEFAULT_RUNTIME,
         precision=DEFAULT_PRECISION,
         tool_versions=DEFAULT_TOOL_VERSIONS,
@@ -197,6 +205,8 @@ def test_metadata_with_quantization_roundtrip() -> None:
         },
     )
     model_metadata = ModelMetadata(
+        model_id=DEFAULT_MODEL_ID,
+        model_name=DEFAULT_MODEL_NAME,
         runtime=DEFAULT_RUNTIME,
         precision=DEFAULT_PRECISION,
         tool_versions=DEFAULT_TOOL_VERSIONS,
@@ -497,6 +507,8 @@ def test_merge_input_metadata_json_roundtrip() -> None:
     merge_input_metadata(file_metadata, input_spec)
 
     model_metadata = ModelMetadata(
+        model_id=DEFAULT_MODEL_ID,
+        model_name=DEFAULT_MODEL_NAME,
         runtime=DEFAULT_RUNTIME,
         precision=DEFAULT_PRECISION,
         tool_versions=DEFAULT_TOOL_VERSIONS,

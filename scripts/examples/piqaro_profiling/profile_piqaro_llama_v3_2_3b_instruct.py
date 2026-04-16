@@ -244,7 +244,7 @@ if __name__ == "__main__":
         cache = CacheMode.DISABLE if i == 0 else CacheMode.ENABLE
         export_model(
             model_cls=model_cls,
-            model_name=model_name,
+            model_id=model_name,
             model_asset_version=MODEL_ASSET_VERSION,
             num_splits=num_splits,
             num_layers_per_split=num_layers_per_split,

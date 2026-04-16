@@ -273,6 +273,8 @@ def download_model(
         # Extract and save metadata alongside downloaded model
         metadata_path = dst_path / "metadata.json"
         model_metadata = ModelMetadata(
+            model_id=MODEL_ID,
+            model_name="Track-Anything",
             runtime=runtime,
             precision=precision,
             tool_versions=tool_versions,

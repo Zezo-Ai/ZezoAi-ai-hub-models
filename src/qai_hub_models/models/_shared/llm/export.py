@@ -22,6 +22,7 @@ import qai_hub as hub
 import torch
 from qai_hub.public_rest_api import DatasetEntries
 
+from qai_hub_models.configs.info_yaml import QAIHMModelInfo
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models._shared.llm.model import (
     DEFAULT_EXPORT_SEQUENCE_LENGTHS,
@@ -32,7 +33,11 @@ from qai_hub_models.models.common import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.utils.args import get_input_spec_kwargs, get_model_kwargs
+from qai_hub_models.utils.args import (
+    get_export_model_name,
+    get_input_spec_kwargs,
+    get_model_kwargs,
+)
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import (
@@ -154,7 +159,7 @@ def _infer_output_specs(
 
 def export_model(
     model_cls: type[LLM_AIMETOnnx],
-    model_name: str,
+    model_id: str,
     model_asset_version: int,
     num_splits: int,
     num_layers_per_split: int,
@@ -183,8 +188,8 @@ def export_model(
     ----------
     model_cls
         LLM class to export.
-    model_name
-        Model name.
+    model_id
+        Model identifier (folder name), e.g. "llama_v3_2_3b_instruct".
     model_asset_version
         Identifier used as a cache key to store the model asset.
     num_splits
@@ -208,7 +213,7 @@ def export_model(
         If set, skips waiting for and summarizing results from profiling and inference jobs.
     output_dir
         Directory to store generated assets (e.g. compiled model).
-        Defaults to `<cwd>/build/<model_name>`.
+        Defaults to `<cwd>/build/<model_id>`.
     target_runtime
         Which on-device GenAI runtime to target.
     compile_options
@@ -239,7 +244,12 @@ def export_model(
             * A ProfileJob containing metadata about the profile job (None if profiling skipped).
         * The path to the downloaded model folder (or zip), or None if one or more of: skip_downloading is True, fetch_static_assets is set, or AI Hub Workbench is not accessible
     """
-    output_path = Path(output_dir or Path.cwd() / "build" / model_name)
+    model_name = get_export_model_name(
+        model_cls, model_id, precision, additional_model_kwargs
+    )
+    model_display_name = QAIHMModelInfo.from_model(model_id).name
+
+    output_path = Path(output_dir or Path.cwd() / "build" / model_id)
 
     # Resolves all of the device attributes from a partially specified hub.Device
     hub_devices = hub.get_devices(
@@ -287,7 +297,7 @@ def export_model(
         max_cl = additional_model_kwargs["constrained_device_max_context_length"]
         if any(cl > max_cl for cl in context_lengths):
             raise ValueError(
-                f"The {model_name}'s context length is too large to deploy on SA8295P. "
+                f"The {model_id}'s context length is too large to deploy on SA8295P. "
                 "Please set the context length to 1024 or lower."
             )
 
@@ -685,6 +695,8 @@ def export_model(
                 encodings_path=input_encodings_path,
                 input_specs=input_specs,
                 output_specs=output_specs,
+                model_id=model_id,
+                model_name=model_display_name,
             )
 
             raw_message = f"""
@@ -889,7 +901,7 @@ def export_main(
     export_model(
         model_cls=model_cls,
         position_processor_cls=position_processor_cls,
-        model_name=model_id,
+        model_id=model_id,
         model_asset_version=model_asset_version,
         num_splits=num_splits,
         num_layers_per_split=num_layers_per_split,

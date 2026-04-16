@@ -287,6 +287,8 @@ class Llama3Base_AIMETOnnx(LLM_AIMETOnnx):
         encodings_path: str | os.PathLike | Path,
         input_specs: dict[str, Any],
         output_specs: dict[str, Any],
+        model_id: str,
+        model_name: str,
     ) -> None:
         from transformers import AutoTokenizer
 
@@ -301,6 +303,8 @@ class Llama3Base_AIMETOnnx(LLM_AIMETOnnx):
             encodings_path,
             input_specs,
             output_specs,
+            model_id=model_id,
+            model_name=model_name,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)

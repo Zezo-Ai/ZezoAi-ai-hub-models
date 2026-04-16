@@ -249,7 +249,7 @@ if __name__ == "__main__":
     for device in devices:
         export_model(
             model_cls=model_cls,
-            model_name=model_name,
+            model_id=model_name,
             model_asset_version=MODEL_ASSET_VERSION,
             num_splits=num_splits,
             num_layers_per_split=num_layers_per_split,

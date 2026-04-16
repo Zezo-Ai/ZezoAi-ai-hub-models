@@ -206,6 +206,8 @@ def download_model(
         # Merge semantic metadata from get_input_spec()
         merge_input_metadata(file_metadata, model.get_input_spec())
         model_metadata = ModelMetadata(
+            model_id=MODEL_ID,
+            model_name="ResNet34-SSD",
             runtime=runtime,
             precision=precision,
             tool_versions=tool_versions,

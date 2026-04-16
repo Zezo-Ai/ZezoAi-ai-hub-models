@@ -173,6 +173,8 @@ class LLM_SSD_AIMETOnnx(LLM_AIMETOnnx):
         encodings_path: str | os.PathLike | Path,
         input_specs: dict[str, Any],
         output_specs: dict[str, Any],
+        model_id: str,
+        model_name: str,
     ) -> None:
         super().prepare_genie_assets(
             hub_device,
@@ -185,6 +187,8 @@ class LLM_SSD_AIMETOnnx(LLM_AIMETOnnx):
             encodings_path,
             input_specs,
             output_specs,
+            model_id=model_id,
+            model_name=model_name,
         )
         if cls.FPModel is None or not hasattr(cls.FPModel, "_ssd_forecast_ckpt"):
             return

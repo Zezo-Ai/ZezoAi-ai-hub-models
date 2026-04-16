@@ -404,12 +404,12 @@ def download_model(
         # Extract and save metadata alongside downloaded model
         metadata_path = dst_path / "metadata.json"
         {%- if is_collection_model %}
-        model_metadata = ModelMetadata(runtime=runtime, precision=precision, tool_versions=tool_versions, model_files=model_file_metadata)
+        model_metadata = ModelMetadata(model_id=MODEL_ID, model_name="{{ model_display_name }}", runtime=runtime, precision=precision, tool_versions=tool_versions, model_files=model_file_metadata)
         {%- else %}
         file_metadata = ModelFileMetadata.from_hub_model(target_model)
         # Merge semantic metadata from get_input_spec()
         merge_input_metadata(file_metadata, model.get_input_spec())
-        model_metadata = ModelMetadata(runtime=runtime, precision=precision, tool_versions=tool_versions, model_files={model_file_name: file_metadata})
+        model_metadata = ModelMetadata(model_id=MODEL_ID, model_name="{{ model_display_name }}", runtime=runtime, precision=precision, tool_versions=tool_versions, model_files={model_file_name: file_metadata})
         {%- endif %}
 
         # Dump supplementary files into the model folder

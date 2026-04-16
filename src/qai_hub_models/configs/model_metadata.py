@@ -130,6 +130,10 @@ class ModelMetadata(BaseQAIHMConfig):
 
     Attributes
     ----------
+    model_id
+        The model identifier (folder name), e.g. "mobilenet_v2".
+    model_name
+        The human-readable model name from info.yaml, e.g. "MobileNet-v2".
     runtime
         The target runtime for which the model was exported.
     precision
@@ -147,6 +151,8 @@ class ModelMetadata(BaseQAIHMConfig):
         additional files included in the export that are not model files (e.g., labels, config files).
     """
 
+    model_id: str = ""
+    model_name: str = ""
     runtime: TargetRuntime
     precision: Precision
     tool_versions: ToolVersions

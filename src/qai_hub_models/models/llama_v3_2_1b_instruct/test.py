@@ -43,6 +43,7 @@ from qai_hub_models.models.llama_v3_2_1b_instruct.model import (
     DEFAULT_CONTEXT_LENGTH,
     DEFAULT_EXPORT_CONTEXT_LENGTHS,
     DEFAULT_EXPORT_SEQUENCE_LENGTHS,
+    DEFAULT_PRECISION,
     HF_REPO_NAME,
     MODEL_ASSET_VERSION,
 )
@@ -162,6 +163,7 @@ def test_cli_device_with_skips(
         skip_inferencing,
         skip_profiling,
         target_runtime,
+        precision=DEFAULT_PRECISION,
     )
 
 
@@ -213,6 +215,7 @@ def test_cli_multiple_context_lengths_link_jobs(
         NUM_SPLITS,
         hub.Device(DEFAULT_EXPORT_DEVICE),
         target_runtime,
+        precision=DEFAULT_PRECISION,
     )
 
 
@@ -245,6 +248,7 @@ def test_cli_default_device_select_component(
         skip_summary,
         target_runtime,
         decode_sequence_length=1,
+        precision=DEFAULT_PRECISION,
     )
 
 

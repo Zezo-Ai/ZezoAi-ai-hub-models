@@ -231,6 +231,7 @@ def test_cli_device_with_skips(
     skip_inferencing: bool,
     skip_profiling: bool,
     target_runtime: TargetRuntime,
+    precision: Precision,
 ) -> None:
     context_length = 4096
     sequence_length = 128
@@ -272,6 +273,8 @@ def test_cli_device_with_skips(
             target_runtime.value,
             "--context-length",
             str(context_length),
+            "--checkpoint",
+            f"DEFAULT_{str(precision).upper()}",
         ]
         if not skip_inferencing:
             sys.argv.append("--do-inferencing")
@@ -291,8 +294,9 @@ def test_cli_device_with_skips(
 
         call_args_list = mock_hub.submit_link_job.call_args_list
 
+        expected_model_name = f"{base_name}_{precision}"
         assert all(
-            call.kwargs["name"] == f"{base_name}_part_{i + 1}_of_{parts}"
+            call.kwargs["name"] == f"{expected_model_name}_part_{i + 1}_of_{parts}"
             for i, call in enumerate(call_args_list)
         )
 
@@ -318,6 +322,7 @@ def test_cli_multiple_context_lengths_link_jobs(
     parts: int,
     device: hub.Device,
     target_runtime: TargetRuntime,
+    precision: Precision = Precision.w4a16,  # noqa: PT028
 ) -> None:
     """Link jobs should combine across both sequence and context lengths.
 
@@ -369,6 +374,8 @@ def test_cli_multiple_context_lengths_link_jobs(
             "--sequence-length",
             ",".join(str(sl) for sl in sequence_lengths),
             "--skip-profiling",
+            "--checkpoint",
+            f"DEFAULT_{str(precision).upper()}",
         ]
 
         export_main()
@@ -379,8 +386,9 @@ def test_cli_multiple_context_lengths_link_jobs(
         # Regardless of how many context lengths are used, there must be exactly
         # `parts` link jobs — one per split, combining all (seq, ctx) variants.
         assert mock_hub.submit_link_job.call_count == parts
+        expected_model_name = f"{base_name}_{precision}"
         assert all(
-            call.kwargs["name"] == f"{base_name}_part_{i + 1}_of_{parts}"
+            call.kwargs["name"] == f"{expected_model_name}_part_{i + 1}_of_{parts}"
             for i, call in enumerate(mock_hub.submit_link_job.call_args_list)
         )
 
@@ -450,6 +458,8 @@ def test_cli_chipset_with_options(
             str(context_length),
             "--target-runtime",
             target_runtime.value,
+            "--checkpoint",
+            f"DEFAULT_{str(precision).upper()}",
             "--do-inferencing",
         ]
 
@@ -475,8 +485,9 @@ def test_cli_chipset_with_options(
 
         # Link parts times - num_splits
         assert mock_hub.submit_link_job.call_count == parts
+        expected_model_name = f"{base_name}_{precision}"
         assert all(
-            call.kwargs["name"] == f"{base_name}_part_{i + 1}_of_{parts}"
+            call.kwargs["name"] == f"{expected_model_name}_part_{i + 1}_of_{parts}"
             for i, call in enumerate(mock_hub.submit_link_job.call_args_list)
         )
         mock_get_hub_link_options = (
@@ -551,6 +562,7 @@ def test_cli_default_device_select_component(
     skip_summary: bool,
     target_runtime: TargetRuntime,
     decode_sequence_length: int,
+    precision: Precision,
 ) -> None:
     context_length = 4096
     sequence_length = 128
@@ -599,6 +611,8 @@ def test_cli_default_device_select_component(
             target_runtime.value,
             "--context-length",
             str(context_length),
+            "--checkpoint",
+            f"DEFAULT_{str(precision).upper()}",
         ]
         if skip_download:
             sys.argv.append("--skip-downloading")
@@ -616,6 +630,7 @@ def test_cli_default_device_select_component(
         assert mock_hub.submit_profile_job.call_count == parts * 2
 
         # Check names
+        expected_model_name = f"{base_name}_{precision}"
         for mock in [
             mock_hub.submit_compile_job,
             mock_hub.submit_profile_job,
@@ -628,13 +643,13 @@ def test_cli_default_device_select_component(
                 )
                 assert (
                     call.kwargs["name"]
-                    == f"{base_name}_{instantiation_name}_{(i % parts) + 1}_of_{parts}"
+                    == f"{expected_model_name}_{instantiation_name}_{(i % parts) + 1}_of_{parts}"
                 )
 
         assert mock_get_or_create_cached_model.call_count == parts * 2
         # Check cache mode is correct.
         for call in mock_get_or_create_cached_model.call_args_list:
-            assert call.kwargs["model_name"] == base_name
+            assert call.kwargs["model_name"] == expected_model_name
             assert call.kwargs["cache_mode"] == cache_mode
 
         # check compile jobs have correct device name.

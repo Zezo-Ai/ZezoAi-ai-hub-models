@@ -489,6 +489,8 @@ class LLMMetadata(BaseQAIHMConfig):
         inputs: dict[str, LLMMetadata.IOEntry] = {}
         outputs: dict[str, LLMMetadata.IOEntry] = {}
 
+    model_id: str
+    model_name: str
     components: dict[str, LLMMetadata.Component] = {}
     precision: Precision
     runtime: TargetRuntime
@@ -1546,6 +1548,8 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         encodings_path: str | os.PathLike | Path,
         input_specs: dict[str, Any],
         output_specs: dict[str, Any],
+        model_id: str,
+        model_name: str,
     ) -> None:
         """Prepare assets to run the model end to end on-device using Genie SDK."""
         # Copy necessary config files
@@ -1564,12 +1568,20 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
 
         # Save metadata needed for on-device run (via LLM_QNN)
         llm_metadata = cls._create_llm_metadata(
-            precision, TargetRuntime.GENIE, encodings_path, input_specs, output_specs
+            model_id,
+            model_name,
+            precision,
+            TargetRuntime.GENIE,
+            encodings_path,
+            input_specs,
+            output_specs,
         )
-        llm_metadata.to_yaml(output_path / "metadata.yaml")
+        llm_metadata.to_json(output_path / "metadata.json")
 
     @staticmethod
     def _create_llm_metadata(
+        model_id: str,
+        model_name: str,
         precision: Precision,
         target_runtime: TargetRuntime,
         input_encodings_path: str | os.PathLike | Path,
@@ -1635,7 +1647,12 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             k: make_io_metadata(v, encodings) for k, v in output_specs.items()
         }
 
-        llm_metadata = LLMMetadata(precision=precision, runtime=target_runtime)
+        llm_metadata = LLMMetadata(
+            model_id=model_id,
+            model_name=model_name,
+            precision=precision,
+            runtime=target_runtime,
+        )
         for k, v in input_metadata.items():
             llm_metadata.components[k] = LLMMetadata.Component(
                 inputs=v, outputs=output_metadata[k]
@@ -1804,7 +1821,7 @@ class LLM_QNN(LLMConfigEditor, BaseModel, ABC):
         # Construct ONNX model wrapping the context binaries
         context_bin_paths = sorted(checkpoint_path.glob("*.bin"))
 
-        metadata = LLMMetadata.from_yaml(checkpoint_path / "metadata.yaml")
+        metadata = LLMMetadata.from_json(checkpoint_path / "metadata.json")
 
         tool_versions = ToolVersions.from_yaml(checkpoint_path / "tool-versions.yaml")
         assert tool_versions.qairt is not None
