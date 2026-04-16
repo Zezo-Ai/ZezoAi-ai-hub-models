@@ -9,6 +9,7 @@ import csv
 import json
 import logging
 import os
+import re
 import subprocess
 from collections.abc import Mapping
 from datetime import datetime, timedelta
@@ -49,6 +50,33 @@ class ChannelDict(TypedDict, total=False):
 
 # Cache for user info: maps user_id -> (display_name, is_internal)
 user_cache: dict[str, tuple[str, bool]] = {}
+
+
+def sanitize_text(text: str) -> str:
+    """Strip markdown formatting and fix encoding artifacts for clean CSV output."""
+    text = re.sub(r"\*{1,2}(.+?)\*{1,2}", r"\1", text)
+    text = re.sub(r"~(.+?)~", r"\1", text)
+    text = re.sub(r"`{1,3}(.+?)`{1,3}", r"\1", re.sub(r"```\w*\n?", "```", text))
+    text = re.sub(r"<(https?://[^|>]+)\|([^>]+)>", r"\2 (\1)", text)
+    text = re.sub(r"<(https?://[^>]+)>", r"\1", text)
+    mojibake = {
+        "\u00e2\u0080\u0094": "—",
+        "\u00e2\u0080\u0093": "\u2013",
+        "\u00e2\u0080\u009c": '"',
+        "\u00e2\u0080\u009d": '"',
+        "\u00e2\u0080\u0099": "'",
+        "\u00e2\u0080\u0098": "'",
+        "\u00c2\u00a0": " ",
+        "\u00e2\u0080\u00a6": "...",
+        "\u201a\u00c4\u00ee": "—",
+        "\u201a\u00c4\u00f4": "'",
+        "\u201a\u00c4\u00f2": '"',
+        "\u201a\u00c4\u00fa": '"',
+    }
+    for bad, good in mojibake.items():
+        text = text.replace(bad, good)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def _is_qualcomm_user(user_data: Mapping[str, Any]) -> bool:
@@ -188,7 +216,7 @@ def fetch_github_items(since_date: str) -> list[list[str]]:
                 title = item.get("title", "")
                 body = item.get("body", "")
                 body_oneline = " ".join(body.split())
-                question = (
+                question = sanitize_text(
                     f"{title} — {body_oneline}".strip() if body_oneline else title
                 )
 
@@ -344,7 +372,7 @@ def main() -> None:
                             continue
                         writer.writerow(
                             _tracker_row(
-                                question=text,
+                                question=sanitize_text(text),
                                 date_submitted=date_submitted,
                                 status_or_channel=channel_name,
                                 answered=replies,
