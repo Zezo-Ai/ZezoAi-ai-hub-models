@@ -125,12 +125,13 @@ def link_model(
     model_name: str,
     model: BaseModel,
     target_runtime: TargetRuntime,
+    extra_options: str = "",
 ) -> hub.client.LinkJob:
     """Link compiled DLC to context binary for AOT."""
     assert target_runtime.is_aot_compiled, (
         f"link_model() requires an AOT runtime, got {target_runtime}"
     )
-    link_options = model.get_hub_link_options(target_runtime)
+    link_options = model.get_hub_link_options(target_runtime, extra_options)
     print(f"Linking {model_name} to context binary")
     return hub.submit_link_job(
         [compiled_model],

@@ -129,6 +129,43 @@ class ScorecardCompilePath(Enum):
         """
         return self.value not in TargetRuntime._value2member_map_
 
+    def _get_qairt_version_option(
+        self,
+        include_default: bool = False,
+    ) -> str:
+        """
+        Resolve the QAIRT version option string for this path.
+
+        When QAIHM_TEST_QAIRT_VERSION is set to a non-default value (e.g. "latest"),
+        the explicit version flag is always included. When it is the default,
+        the flag is only included if ``include_default`` is True.
+
+        Parameters
+        ----------
+        include_default
+            If True, include the version flag even when using the default QAIRT version.
+
+        Returns
+        -------
+        option : str
+            A string like ``--qairt_version 2.45``, or empty if no override is needed.
+        """
+        if not self.runtime.qairt_version_changes_compilation:
+            return ""
+
+        qairt_version_str = QAIRTVersionEnvvar.get()
+        with default_hub_client_as(get_hub_client_or_raise(DeploymentEnvvar.get())):
+            qairt_version = QAIRTVersionEnvvar.get_qairt_version(
+                self.runtime, qairt_version_str
+            )
+
+        if QAIRTVersionEnvvar.is_default(qairt_version_str):
+            if include_default:
+                return f" {qairt_version.explicit_hub_option}"
+            return ""
+
+        return f" {qairt_version.explicit_hub_option}"
+
     def get_compile_options(
         self,
         include_target_runtime: bool = False,
@@ -141,31 +178,20 @@ class ScorecardCompilePath(Enum):
         ):
             out += self.runtime.aihub_target_runtime_flag
 
-        if self.runtime.qairt_version_changes_compilation:
-            qairt_version_str = QAIRTVersionEnvvar.get()
-            with default_hub_client_as(get_hub_client_or_raise(DeploymentEnvvar.get())):
-                qairt_version = QAIRTVersionEnvvar.get_qairt_version(
-                    self.runtime, qairt_version_str
-                )
-
-            if QAIRTVersionEnvvar.is_default(qairt_version_str):
-                # We typically don't want the default QAIRT version added here if it matches with the AI Hub Models default.
-                # This allows the export script (which scorecard relies on) to pass in the default version that users will see when they use the CLI.
-                #
-                # Static models do need this included explicitly because they don't rely on export scripts.
-                if include_default_qaihm_qnn_version:
-                    # Certain runtimes use their own default version of QAIRT.
-                    # If the user picks our the qaihm_default tag, we need use the runtime's
-                    # default QAIRT version instead.
-                    out = out + f" {qairt_version.explicit_hub_option}"
-            else:
-                # The explicit option will always pass `--qairt_version 2.XX`,
-                # regardless of whether this is the AI Hub Workbench default.
-                #
-                # This is useful for tracking what QAIRT version applies for scorecard jobs.
-                out = out + f" {qairt_version.explicit_hub_option}"
+        out += self._get_qairt_version_option(
+            include_default=include_default_qaihm_qnn_version
+        )
 
         if self == ScorecardCompilePath.QNN_DLC_VIA_QNN_EP:
             out = out + " --use_qnn_onnx_ep_converter"
 
         return out.strip()
+
+    def get_link_options(self) -> str:
+        """
+        Extra options to pass to the link step.
+
+        Ensures the link step uses the same QAIRT version as the compile step
+        when a non-default version is configured (e.g. ``QAIHM_TEST_QAIRT_VERSION=latest``).
+        """
+        return self._get_qairt_version_option().strip()

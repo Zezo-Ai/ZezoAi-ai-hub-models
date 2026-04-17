@@ -298,6 +298,7 @@ def link_model(
     model_name: str,
     model: {{ "PrecompiledCollectionModel" if is_precompiled else "MultiGraphPretrainedCollectionModel" if has_multi_graph and is_collection_model else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
     target_runtime: TargetRuntime,
+    extra_options: str = "",
 ) -> {{ "dict[str, hub.client.LinkJob]" if is_collection_model else "hub.client.LinkJob" }}:
     """Link compiled DLC{{ "s" if is_collection_model else "" }} to context binary for AOT."""
     assert target_runtime.is_aot_compiled, f"link_model() requires an AOT runtime, got {target_runtime}"
@@ -310,7 +311,7 @@ def link_model(
     {%- endif %}
         component = model.components[component_name]
 
-        link_options = component.get_hub_link_options(target_runtime)
+        link_options = component.get_hub_link_options(target_runtime, extra_options)
         print(f"Linking {component_name} to context binary")
         link_jobs[component_name] = hub.submit_link_job(
             {%- if has_multi_graph %}
@@ -324,7 +325,7 @@ def link_model(
         )
     return link_jobs
     {%- else %}
-    link_options = model.get_hub_link_options(target_runtime)
+    link_options = model.get_hub_link_options(target_runtime, extra_options)
     print(f"Linking {model_name} to context binary")
     return hub.submit_link_job(
         {%- if has_multi_graph %}

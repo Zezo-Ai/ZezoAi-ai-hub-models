@@ -827,6 +827,7 @@ def link_via_export(
         model_id,
         model,
         scorecard_path.runtime,
+        extra_options=scorecard_path.get_link_options(),
     )
 
     # Normalize to dict format
