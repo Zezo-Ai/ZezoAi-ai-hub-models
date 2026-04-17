@@ -218,6 +218,7 @@ def str_with_async_test_metadata(
     path: ScorecardCompilePath | ScorecardProfilePath | TargetRuntime | None,
     device: ScorecardDevice | None,
     component: str | None = None,
+    graph_name: str | None = None,
 ) -> str:
     """
     Generate a string (generally used for printing) that includes the scorecard run metadata with the value.
@@ -238,8 +239,12 @@ def str_with_async_test_metadata(
 
         component: str | None = None
             Name of model component (if applicable)
+
+        graph_name: str | None = None
+            QNN graph name for model
     """
     model_name = f"{model_id}::{component}" if component else model_id
+    model_name = f"{model_name}::{graph_name}" if graph_name else model_name
     return f"{model_name} | {precision} | {f'{path.name} | ' if path else ''}{f'{device.name} | ' if device else ''}{val}"
 
 
@@ -250,6 +255,7 @@ def assert_success_or_cache_job(
     path: ScorecardCompilePath | ScorecardProfilePath | TargetRuntime | None,
     device: ScorecardDevice = cs_universal,
     component: str | None = None,
+    graph_name: str | None = None,
 ) -> None:
     if (
         job is None
@@ -261,7 +267,9 @@ def assert_success_or_cache_job(
     assert job is not None
     cache_path = get_async_test_job_cache_path(job._job_type)
     cache = get_scorecard_job_yaml(job._job_type)
-    cache.set_job_id(job.job_id, path, model_id, device, precision, component)
+    cache.set_job_id(
+        job.job_id, path, model_id, device, precision, component, graph_name
+    )
     cache.to_file(cache_path, append=True)
 
 
@@ -273,6 +281,7 @@ def fetch_async_test_job(
     path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
     component: str | None = None,
+    graph_name: str | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> hub.CompileJob | None: ...
@@ -286,6 +295,7 @@ def fetch_async_test_job(
     path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
     component: str | None = None,
+    graph_name: str | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> hub.ProfileJob | None: ...
@@ -299,6 +309,7 @@ def fetch_async_test_job(
     path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
     component: str | None = None,
+    graph_name: str | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> hub.InferenceJob | None: ...
@@ -312,6 +323,7 @@ def fetch_async_test_job(
     path: ScorecardCompilePath | ScorecardProfilePath | None,
     device: ScorecardDevice,
     component: str | None = None,
+    graph_name: str | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> hub.QuantizeJob | None: ...
@@ -325,6 +337,7 @@ def fetch_async_test_job(
     path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
     component: str | None = None,
+    graph_name: str | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> hub.LinkJob | None: ...
@@ -338,6 +351,7 @@ def fetch_async_test_job(
     path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
     component: str | None = None,
+    graph_name: str | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> hub.Job | None: ...
@@ -350,6 +364,7 @@ def fetch_async_test_job(
     path: ScorecardCompilePath | ScorecardProfilePath | None,
     device: ScorecardDevice,
     component: str | None = None,
+    graph_name: str | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> hub.Job | None:
@@ -370,6 +385,8 @@ def fetch_async_test_job(
         Scorecard device.
     component
         Name of model component. Default is None.
+    graph_name
+        Graph name to fetch for multi-graph models. Default is None.
     cache_path
         Path to the cache file, a pre-parsed ScorecardJobYaml, or None to use the
         default cache path. Default is None.
@@ -398,6 +415,7 @@ def fetch_async_test_job(
         device,
         precision,
         component,
+        graph_name,
         wait_for_job=True,
     )
 
@@ -420,6 +438,7 @@ def fetch_async_test_job(
                 path,
                 device,
                 component,
+                graph_name,
             )
         )
 
@@ -433,7 +452,7 @@ def fetch_async_test_jobs(
     precision: Precision,
     path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
-    component_names: list[str] | None = None,
+    component_names: list[str] | dict[str, list[str] | None] | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> Mapping[str | None, hub.CompileJob] | None: ...
@@ -446,7 +465,7 @@ def fetch_async_test_jobs(
     precision: Precision,
     path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
-    component_names: list[str] | None = None,
+    component_names: list[str] | dict[str, list[str] | None] | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> Mapping[str | None, hub.ProfileJob] | None: ...
@@ -459,7 +478,7 @@ def fetch_async_test_jobs(
     precision: Precision,
     path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
-    component_names: list[str] | None = None,
+    component_names: list[str] | dict[str, list[str] | None] | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> Mapping[str | None, hub.InferenceJob] | None: ...
@@ -472,7 +491,7 @@ def fetch_async_test_jobs(
     precision: Precision,
     path: ScorecardCompilePath | ScorecardProfilePath | None,
     device: ScorecardDevice,
-    component_names: list[str] | None = None,
+    component_names: list[str] | dict[str, list[str] | None] | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> Mapping[str | None, hub.QuantizeJob] | None: ...
@@ -485,7 +504,7 @@ def fetch_async_test_jobs(
     precision: Precision,
     path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
-    component_names: list[str] | None = None,
+    component_names: list[str] | dict[str, list[str] | None] | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> Mapping[str | None, hub.LinkJob] | None: ...
@@ -498,7 +517,7 @@ def fetch_async_test_jobs(
     precision: Precision,
     path: ScorecardCompilePath | ScorecardProfilePath,
     device: ScorecardDevice,
-    component_names: list[str] | None = None,
+    component_names: list[str] | dict[str, list[str] | None] | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> Mapping[str | None, hub.Job] | None: ...
@@ -510,7 +529,7 @@ def fetch_async_test_jobs(
     precision: Precision,
     path: ScorecardCompilePath | ScorecardProfilePath | None,
     device: ScorecardDevice,
-    component_names: list[str] | None = None,
+    component_names: list[str] | dict[str, list[str] | None] | None = None,
     cache_path: str | Path | ScorecardJobYaml | None = None,
     raise_if_not_successful: bool = False,
 ) -> Mapping[str | None, hub.Job] | None:
@@ -531,6 +550,8 @@ def fetch_async_test_jobs(
         Scorecard device.
     component_names
         Name of all model components (if applicable), or None if there are no components.
+        Can pass dict[str, list[str] | None] for multi-graph models where each
+        component can have multiple graph names.
         Default is None.
     cache_path
         Path to the cache file, a pre-parsed ScorecardJobYaml, or None to use the
@@ -554,7 +575,19 @@ def fetch_async_test_jobs(
     ValueError
         If raise_if_not_successful is True and any cached job failed or is still running.
     """
-    components: list[str] | list[None] = component_names or [None]
+    component_gn_pairs: list[tuple[str | None, str | None]]
+    if isinstance(component_names, dict):
+        pairs: list[tuple[str | None, str | None]] = []
+        for cn, gns in component_names.items():
+            if gns is not None:
+                pairs.extend((cn, gn) for gn in gns)
+            else:
+                pairs.append((cn, None))
+        component_gn_pairs = pairs
+    elif isinstance(component_names, list):
+        component_gn_pairs = [(cn, None) for cn in component_names]
+    else:
+        component_gn_pairs = [(None, None)]
 
     # Parse the YAML cache file once, rather than re-reading it per component.
     if not isinstance(cache_path, ScorecardJobYaml):
@@ -562,23 +595,30 @@ def fetch_async_test_jobs(
             job_type, cache_path or get_async_test_job_cache_path(job_type)
         )
 
-    def _fetch(component: str | None) -> tuple[str | None, hub.Job | None]:
-        return component, fetch_async_test_job(
+    def _fetch(
+        component_and_gn: tuple[str | None, str | None],
+    ) -> tuple[str | None, hub.Job | None]:
+        component, graph_name = component_and_gn
+        key = f"{component}_{graph_name}" if graph_name else component
+        return key, fetch_async_test_job(
             job_type,
             model_id,
             precision,
             path,  # type: ignore[arg-type]
             device,
             component,
+            graph_name,
             cache_path,
             raise_if_not_successful,
         )
 
-    if len(components) == 1:
-        component_jobs: dict[str | None, hub.Job | None] = dict([_fetch(components[0])])
+    if len(component_gn_pairs) == 1:
+        component_jobs: dict[str | None, hub.Job | None] = dict(
+            [_fetch(component_gn_pairs[0])]
+        )
     else:
-        with ThreadPoolExecutor(max_workers=len(components)) as pool:
-            component_jobs = dict(pool.map(_fetch, components))
+        with ThreadPoolExecutor(max_workers=len(component_gn_pairs)) as pool:
+            component_jobs = dict(pool.map(_fetch, component_gn_pairs))
 
     if (
         precision in [Precision.mixed, Precision.mixed_with_float]

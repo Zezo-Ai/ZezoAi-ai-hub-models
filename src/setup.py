@@ -71,7 +71,11 @@ def _load_requirements(path: str | os.PathLike) -> list[str]:
         return [
             line.split("#")[0].strip()
             for line in file
-            if line.strip() and not line.startswith("#")
+            if line.strip()
+            and not line.startswith("#")
+            and not line.lstrip().startswith(
+                "-"
+            )  # pip options (e.g. --extra-index-url) are not valid PEP 508 specifiers
         ]
 
 

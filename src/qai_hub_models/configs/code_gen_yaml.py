@@ -149,6 +149,12 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # Enables PT2 export (replaces TorchScript export)
     enable_pt2: bool = False
 
+    # If set, the model returns multiple (input_spec, graph_name) pairs.
+    # The generated export.py will loop over compile specs, submit multiple
+    # compile jobs, and link them into a single context binary.  Models
+    # that do NOT set this flag get the simple single-compile-job path.
+    has_multi_graph: bool = False
+
     # llama.cpp commands for running the model on different runtimes
     llama_cpp_cpu_command: str | None = None
     llama_cpp_gpu_command: str | None = None
@@ -210,6 +216,9 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
 
         if self.requires_aot_prepare and not runtime.is_aot_compiled:
             return "Only runtimes that are compiled to context binary ahead of time are supported."
+
+        if self.has_multi_graph and not runtime.uses_hub_link:
+            return "Multi-graph models require runtimes that support linking (uses_hub_link)."
 
         if (
             not self.requires_aot_prepare

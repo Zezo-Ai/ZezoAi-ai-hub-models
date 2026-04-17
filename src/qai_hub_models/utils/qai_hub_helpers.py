@@ -22,7 +22,7 @@ import qai_hub as hub
 import torch
 from qai_hub.client import DatasetEntries, Device
 
-from qai_hub_models.models.common import TargetRuntime
+from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.utils.asset_loaders import qaihm_temp_dir
 from qai_hub_models.utils.onnx.helpers import (
     safe_torch_onnx_export,
@@ -413,6 +413,53 @@ def download_model_in_memory(model: hub.Model) -> Any:
             onnx_path, _ = extract_onnx_zip(model_file)
             return onnx.load(onnx_path)
         return onnx.load(model_file)
+
+
+def raise_if_fp_is_unsupported(device: hub.Device, precision: Precision) -> None:
+    """
+    Raise ValueError if the device does not support FP16 but the precision
+    requires floating-point activations on the NPU.
+
+    Checks the local devices_and_chipsets YAML first (fast, offline),
+    then falls back to the hub device attributes.
+    """
+    if not precision.has_float_activations:
+        return
+
+    # Try YAML first (fast, offline)
+    supports_fp16: bool | None = None
+    try:
+        from qai_hub_models.configs.devices_and_chipsets_yaml import (
+            DevicesAndChipsetsYaml,
+        )
+
+        yaml_data = DevicesAndChipsetsYaml.load()
+        _device_name, device_details = yaml_data.get_device_details_without_aihub(
+            device
+        )
+        chipset_info = yaml_data.chipsets.get(device_details.chipset)
+        if chipset_info is not None:
+            supports_fp16 = chipset_info.supports_fp16
+    except (ValueError, FileNotFoundError, KeyError):
+        pass
+
+    if supports_fp16 is not None:
+        if not supports_fp16:
+            raise ValueError(
+                f"The selected precision ({precision}) requires FP16 support, "
+                "but the selected device does not support FP16. "
+                "Please try a different precision or target device."
+            )
+        return
+
+    # Fall back to hub device attributes
+    if "htp-supports-fp16:true" not in device.attributes:
+        raise ValueError(
+            f"The selected precision ({precision}) requires FP16 support, "
+            "but the selected device does not support FP16 "
+            "(missing htp-supports-fp16:true attribute). "
+            "Please try a different precision or target device."
+        )
 
 
 def get_device_and_chipset_name(device: hub.Device) -> tuple[str | None, str | None]:

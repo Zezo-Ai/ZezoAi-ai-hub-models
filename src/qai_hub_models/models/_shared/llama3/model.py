@@ -13,6 +13,8 @@ from qai_hub_models.models._shared.llm.model import (
     LLM_QNN,
     DEFAULT_CONTEXT_LENGTH,
     DEFAULT_SEQUENCE_LENGTH,
+    FPModelT,
+    QuantizablePreSplitMixin,
 )
 
 # isort: on
@@ -49,6 +51,7 @@ from qai_hub_models.models._shared.llm.model import (
 )
 from qai_hub_models.models.common import Precision
 from qai_hub_models.utils.aimet.encodings import propagate_memory_encodings
+from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -384,3 +387,87 @@ class Llama3Base_QNN(LLM_QNN):
     FPModel = Llama3Base
     EmbeddingClass = RopeEmbedding
     num_layers_per_split: int
+
+
+class LlamaQuantizablePreSplitMixin(QuantizablePreSplitMixin[FPModelT]):
+    """Llama-specific QuantizablePreSplit that exports ONNX from torch.
+
+    Overrides resolve_default_checkpoint to download only the quantization
+    encodings from the asset store, then export the ONNX model locally
+    from the FP torch model. This avoids storing large ONNX files in the
+    asset store at the cost of a longer first-load time (~30 min).
+    """
+
+    @classmethod
+    def resolve_default_checkpoint(
+        cls,
+        precision: Precision,
+        sequence_length: int,
+        context_length: int,
+        host_device: torch.device,
+        fp_model: FPModelT | None,
+    ) -> tuple[str, FPModelT | None]:
+        """Fetch encodings only and export ONNX from the FP torch model.
+
+        Parameters
+        ----------
+        precision
+            Quantization precision (already validated).
+        sequence_length
+            Sequence length for the model.
+        context_length
+            Context length for the model.
+        host_device
+            Device for computation.
+        fp_model
+            Optional FP model passed by the evaluate framework.
+
+        Returns
+        -------
+        tuple[str, FPModelT | None]
+            (resolved_checkpoint_path, fp_model).
+        """
+        from qai_hub_models.utils.printing import print_with_box
+
+        precision_checkpoint = cls.default_checkpoint[precision]
+        encodings_path = str(
+            CachedWebModelAsset.from_asset_store(
+                cls.model_id,
+                cls.model_asset_version,
+                f"{precision_checkpoint}/model.encodings",
+            ).fetch()
+        )
+        checkpoint = str(Path(encodings_path).parent)
+
+        # Create FP model for ONNX export + tokenizer/config
+        if fp_model is None:
+            fp_model = cls.FPModel.from_pretrained(  # type: ignore[call-arg]
+                sequence_length=sequence_length,
+                context_length=context_length,
+                host_device=host_device,
+            )
+
+        # Export ONNX into checkpoint dir (skips if already exists)
+        ckpt_path = Path(checkpoint)
+        if (
+            not (ckpt_path / "model_dynamic.onnx").exists()
+            or not (ckpt_path / "model.data").exists()
+        ):
+            print_with_box(
+                [
+                    "Exporting ONNX model with dynamic shapes.",
+                    "This may take around 30 minutes.",
+                ]
+            )
+        cls.create_onnx_models(  # type: ignore[attr-defined]
+            checkpoint=checkpoint,
+            fp_model=fp_model,
+            context_length=context_length,
+            host_device=host_device,
+            llm_io_type=fp_model.llm_io_type,
+            use_dynamic_shapes=True,
+        )
+        cls.save_tokenizer_and_config(  # type: ignore[attr-defined]
+            checkpoint=checkpoint, fp_model=fp_model
+        )
+        return checkpoint, fp_model

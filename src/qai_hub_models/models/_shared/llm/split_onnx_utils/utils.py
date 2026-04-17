@@ -225,7 +225,11 @@ def split_onnx_by_names(
 
     if isinstance(onnxfile, ONNXBundle):
         onnx_graph_file = str(onnxfile.onnx_graph_path)
-        encoding_file = str(onnxfile.aimet_encodings_path)
+        encoding_file = (
+            str(onnxfile.aimet_encodings_path)
+            if onnxfile.aimet_encodings_path is not None
+            else None
+        )
         base_dir = str(onnxfile.bundle_path)
         dump_to_bundle = True
     else:

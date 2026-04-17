@@ -23,7 +23,11 @@ from qai_hub_models.utils.input_spec import InputSpec, to_hub_input_specs
 {%- if is_collection_model %}
 from qai_hub_models.utils.export_result import CollectionExportResult
 {%- if not is_precompiled %}
+{%- if has_multi_graph %}
+from qai_hub_models.utils.base_model import MultiGraphPretrainedCollectionModel
+{%- else %}
 from qai_hub_models.utils.base_model import PretrainedCollectionModel
+{%- endif %}
 {%- endif %}
 from qai_hub_models.models.{{ model_name }} import App
 {% endif %}
@@ -89,7 +93,7 @@ from qai_hub_models.configs.model_metadata import ModelFileMetadata, ModelMetada
 {%- if can_use_quantize_job %}
 def quantize_model(
     precision: {{ "Precision | dict[str, Precision]" if is_collection_model else "Precision" }},
-    model: {{ "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "MultiGraphPretrainedCollectionModel" if has_multi_graph and is_collection_model else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
     model_name: str,
     onnx_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model" }},
     num_calibration_samples: int | None,
@@ -148,7 +152,7 @@ def quantize_model(
 
 {%- if not is_precompiled %}
 def compile_model(
-    model: {{ "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "MultiGraphPretrainedCollectionModel" if has_multi_graph and is_collection_model else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
     model_name: str,
     device: hub.Device,
     target_runtime: TargetRuntime,
@@ -162,16 +166,32 @@ def compile_model(
     {%- if not is_collection_model %}
     input_spec: InputSpec | None = None,
     {%- else %}
+    {%- if has_multi_graph %}
+    input_specs: dict[str, dict[str, InputSpec]] | None = None,
+    {%- else %}
     input_specs: dict[str, InputSpec] | None = None,
+    {%- endif %}
     components: list[str] | None = None,
     {%- endif %}
     extra_options: str = "",
+{%- if has_multi_graph %}
+) -> {{ "dict[str, dict[str, hub.client.CompileJob]]" if is_collection_model else "dict[str, hub.client.CompileJob]" }}:
+{%- else %}
 ) -> {{ "dict[str, hub.client.CompileJob]" if is_collection_model else "hub.client.CompileJob" }}:
+{%- endif %}
     {%- if is_collection_model %}
+    {%- if has_multi_graph %}
+    compile_jobs : dict[str, dict[str, hub.client.CompileJob]] = {}
+    all_input_specs = input_specs or model.get_input_spec()
+    all_compile_options = model.get_hub_compile_options(target_runtime, {{ "precision" if can_use_quantize_job else "Precision." + default_aihub_job_precision }}, extra_options, device)
+    {%- else %}
     compile_jobs : dict[str, hub.client.CompileJob] = {}
+    {%- endif %}
     for component_name in (components or Model.component_class_names):
         component = model.components[component_name]
+    {%- if not has_multi_graph %}
         input_spec = (input_specs or {}).get(component_name, component.get_input_spec())
+    {%- endif %}
     {%- else %}
     input_spec = input_spec or model.get_input_spec()
     {%- endif %}
@@ -191,7 +211,7 @@ def compile_model(
     # Trace the model
     {%- endif %}
     {%- if is_aimet %}
-    model_to_compile = {{ model_var }}.convert_to_hub_source_model(target_runtime, output_path, input_spec{{ check_trace }})
+    model_to_compile = {{ model_var }}.convert_to_hub_source_model(target_runtime, output_path, {{ "None" if has_multi_graph else "input_spec" }}{{ check_trace }})
     {%- else %}
     {%- if enable_pt2 %}
     ensure_supported_version("torch", min_version=PT2_MIN_TORCH_VERSION, below_version=PT2_LESS_THAN_TORCH_VERSION)
@@ -212,6 +232,37 @@ def compile_model(
     {%- endif %}
     {%- endfilter %}
 
+    {%- if has_multi_graph %}
+
+    {%- if is_collection_model %}
+    graph_specs = all_input_specs[component_name]
+    graph_compile_options = all_compile_options[component_name]
+    compile_jobs[component_name] = {}
+    {%- else %}
+    graph_specs = {{ model_var }}.get_input_spec()
+    graph_compile_options = {{ model_var }}.get_hub_compile_options(target_runtime, {{ "precision" if can_use_quantize_job else "Precision." + default_aihub_job_precision }}, extra_options, device)
+    compile_jobs: dict[str, hub.client.CompileJob] = {}
+    {%- endif %}
+    for graph_name, graph_input_spec in graph_specs.items():
+        model_compile_options = graph_compile_options[graph_name]
+        print(f"Optimizing model { {{- "component_name" if is_collection_model else "model_name" -}} } to run on-device")
+        submitted_compile_job = hub.submit_compile_job(
+            model=model_to_compile,
+            input_specs=to_hub_input_specs(graph_input_spec),
+            device=device,
+            name={{ 'f"{model_name}_{component_name}"' if is_collection_model else 'model_name' }},
+            {%- if is_aimet and num_calibration_samples %}
+            calibration_data={{ model_var }}.get_calibration_data(num_samples={{ num_calibration_samples }}),
+            {%- endif %}
+            options=model_compile_options,
+        )
+        {%- if is_collection_model %}
+        compile_jobs[component_name][graph_name] = cast(hub.client.CompileJob, submitted_compile_job)
+        {%- else %}
+        compile_jobs[graph_name] = cast(hub.client.CompileJob, submitted_compile_job)
+        {%- endif -%}
+    {%- else %}
+
     model_compile_options = {{ "component" if is_collection_model else "model" }}.get_hub_compile_options(target_runtime, {{ "precision" if can_use_quantize_job else "Precision." + default_aihub_job_precision }}, extra_options, device, {{- "f\"{MODEL_ID}_{component_name.lower()}\"" if is_collection_model else "MODEL_ID" -}})
     print(f"Optimizing model { {{- "component_name" if is_collection_model else "model_name" -}} } to run on-device")
     submitted_compile_job = hub.submit_compile_job(
@@ -229,31 +280,44 @@ def compile_model(
     {%- else %}
     return cast(hub.client.CompileJob, submitted_compile_job)
     {%- endif -%}
+    {%- endif %}
     {%- endfilter %}
-    {%- if is_collection_model %}
+    {%- if has_multi_graph or is_collection_model %}
     return compile_jobs
     {%- endif %}
 {%- endif %}
 
 
 def link_model(
+    {%- if has_multi_graph %}
+    compiled_models: {{ "dict[str, dict[str, hub.Model]]" if is_collection_model else "dict[str, hub.Model]" }},
+    {%- else %}
     compiled_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model" }},
+    {%- endif %}
     device: hub.Device,
     model_name: str,
-    model: {{ "PrecompiledCollectionModel" if is_precompiled else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "PrecompiledCollectionModel" if is_precompiled else "MultiGraphPretrainedCollectionModel" if has_multi_graph and is_collection_model else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
     target_runtime: TargetRuntime,
 ) -> {{ "dict[str, hub.client.LinkJob]" if is_collection_model else "hub.client.LinkJob" }}:
     """Link compiled DLC{{ "s" if is_collection_model else "" }} to context binary for AOT."""
     assert target_runtime.is_aot_compiled, f"link_model() requires an AOT runtime, got {target_runtime}"
     {%- if is_collection_model %}
     link_jobs: dict[str, hub.client.LinkJob] = {}
+    {%- if has_multi_graph %}
+    for component_name, model_dict in compiled_models.items():
+    {%- else %}
     for component_name, compiled_model in compiled_models.items():
+    {%- endif %}
         component = model.components[component_name]
 
         link_options = component.get_hub_link_options(target_runtime)
         print(f"Linking {component_name} to context binary")
         link_jobs[component_name] = hub.submit_link_job(
+            {%- if has_multi_graph %}
+            list(model_dict.values()),
+            {%- else %}
             [compiled_model],
+            {%- endif %}
             device=device,
             name=f"{model_name}_{component_name}",
             options=link_options,
@@ -263,7 +327,11 @@ def link_model(
     link_options = model.get_hub_link_options(target_runtime)
     print(f"Linking {model_name} to context binary")
     return hub.submit_link_job(
+        {%- if has_multi_graph %}
+        list(compiled_models.values()),
+        {%- else %}
         [compiled_model],
+        {%- endif %}
         device=device,
         name=model_name,
         options=link_options,
@@ -271,6 +339,52 @@ def link_model(
     {%- endif %}
 
 
+{% if has_multi_graph -%}
+def profile_model(
+    model_name: str,
+    device: hub.Device,
+    options: {{ "dict[str, dict[str, str]]" if is_collection_model else "dict[str, str]" }},
+    {%- if is_precompiled %}
+    uploaded_models: dict[str, hub.Model],
+    {%- else %}
+    target_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model" }},
+    {%- endif %}
+    {%- if is_collection_model %}
+    components: list[str] | None = None,
+    {%- endif %}
+) -> {{ "dict[str, dict[str, hub.client.ProfileJob]]" if is_collection_model else "dict[str, hub.client.ProfileJob]" }}:
+    {%- if is_collection_model %}
+    profile_jobs: dict[str, dict[str, hub.client.ProfileJob]] = {}
+    for component_name in (components or Model.component_class_names):
+        profile_jobs[component_name] = {}
+        for graph_name, opts in options.get(component_name, {}).items():
+            print(f"Profiling model {component_name} on a hosted device.")
+    {%- else %}
+    profile_jobs: dict[str, hub.client.ProfileJob] = {}
+    for graph_name, opts in options.items():
+        print(f"Profiling model {model_name} on a hosted device.")
+    {%- endif -%}
+    {%- filter indent(width=8 if is_collection_model else 4) %}
+    {%- if is_collection_model %}
+    job_name = f"{model_name}_{component_name}_{graph_name}"
+    {%- else %}
+    job_name = f"{model_name}_{graph_name}"
+    {%- endif %}
+    submitted_profile_job = hub.submit_profile_job(
+        model={{ component_hub_model if is_collection_model else "target_model" }},
+        device=device,
+        name=job_name,
+        options=opts,
+    )
+    {%- if is_collection_model %}
+    profile_jobs[component_name][graph_name] = cast(hub.client.ProfileJob, submitted_profile_job)
+    {%- else %}
+    profile_jobs[graph_name] = cast(hub.client.ProfileJob, submitted_profile_job)
+    {%- endif -%}
+    {%- endfilter %}
+    return profile_jobs
+
+{% else -%}
 def profile_model(
     model_name: str,
     device: hub.Device,
@@ -307,8 +421,60 @@ def profile_model(
     {%- if is_collection_model %}
     return profile_jobs
     {%- endif %}
-
+{% endif %}
 {%- if not is_precompiled %}
+{% if has_multi_graph -%}
+def inference_model(
+    {%- if is_collection_model %}
+    inputs: dict[str, dict[str, SampleInputsType]],
+    {%- else %}
+    inputs: dict[str, SampleInputsType],
+    {%- endif %}
+    model_name: str,
+    device: hub.Device,
+    options: {{ "dict[str, dict[str, str]]" if is_collection_model else "dict[str, str]" }},
+    {%- if is_precompiled %}
+    uploaded_models: dict[str, hub.Model],
+    {%- else %}
+    target_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model" }},
+    {%- endif %}
+    {%- if is_collection_model %}
+    components: list[str] | None = None,
+    {%- endif %}
+) -> {{ "dict[str, dict[str, hub.client.InferenceJob]]" if is_collection_model else "dict[str, hub.client.InferenceJob]" }}:
+    {%- if is_collection_model %}
+    inference_jobs: dict[str, dict[str, hub.client.InferenceJob]] = {}
+    for component_name in (components or Model.component_class_names):
+        inference_jobs[component_name] = {}
+        for graph_name, graph_inputs in inputs.get(component_name, {}).items():
+            print(f"Running inference for {component_name} on a hosted device with example inputs.")
+    {%- else %}
+    inference_jobs: dict[str, hub.client.InferenceJob] = {}
+    for graph_name, graph_inputs in inputs.items():
+        print(f"Running inference for {model_name} on a hosted device with example inputs.")
+    {%- endif -%}
+    {%- filter indent(width=8 if is_collection_model else 4) %}
+    {%- if is_collection_model %}
+    job_name = f"{model_name}_{component_name}_{graph_name}"
+    {%- else %}
+    job_name = f"{model_name}_{graph_name}"
+    {%- endif %}
+    submitted_inference_job = hub.submit_inference_job(
+        model={{ component_hub_model if is_collection_model else "target_model" }},
+        inputs=graph_inputs,
+        device=device,
+        name=job_name,
+        options=options{% if is_collection_model %}.get(component_name, {}){% endif %}.get(graph_name, ""),
+    )
+    {%- if is_collection_model %}
+    inference_jobs[component_name][graph_name] = cast(hub.client.InferenceJob, submitted_inference_job)
+    {%- else %}
+    inference_jobs[graph_name] = cast(hub.client.InferenceJob, submitted_inference_job)
+    {%- endif -%}
+    {%- endfilter %}
+    return inference_jobs
+
+{% else -%}
 def inference_model(
     {%- if is_collection_model %}
     inputs: dict[str, SampleInputsType],
@@ -356,12 +522,13 @@ def inference_model(
     {%- if is_collection_model %}
     return inference_jobs
     {%- endif %}
+{% endif -%}
 {%- endif %}
 
 {% if not is_precompiled %}
 def download_model(
     output_dir: os.PathLike | str,
-    model: {{ "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "MultiGraphPretrainedCollectionModel" if has_multi_graph and is_collection_model else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
     runtime: TargetRuntime,
     precision: Precision,
     tool_versions: ToolVersions,
@@ -395,9 +562,15 @@ def download_model(
         # Generate metadata using the actual downloaded filename
         model_file_metadata[model_file_name] = ModelFileMetadata.from_hub_model(target_model)
         # Merge semantic metadata from get_input_spec()
+        {%- if has_multi_graph %}
+        all_input_specs = model.get_input_spec()
+        for _graph_spec in all_input_specs[component_name].values():
+            merge_input_metadata(model_file_metadata[model_file_name], _graph_spec)
+        {%- else %}
         component = model.components[component_name]
         assert isinstance(component, BaseModel)
         merge_input_metadata(model_file_metadata[model_file_name], component.get_input_spec())
+        {%- endif %}
         {%- endif %}
         {%- endfilter %}
 
@@ -642,12 +815,16 @@ def export_model(
         **get_input_spec_kwargs(model, additional_model_kwargs)
     )
     {%- else %}
+    {%- if has_multi_graph %}
+    input_specs = model.get_input_spec()
+    {%- else %}
     input_specs: dict[str, InputSpec] = {
         name: model.components[name].get_input_spec(
             **get_component_input_spec_kwargs(Model, name, additional_model_kwargs)
         )
         for name in components
     }
+    {%- endif %}
     {%- endif %}
     {% if can_use_quantize_job %}
     # {{ steps.quantize }}
@@ -669,7 +846,11 @@ def export_model(
             {%- if is_collection_model %}
             component_precisions = model.get_component_precisions(precision)
             {%- endif %}
+            {%- if has_multi_graph %}
+            onnx_compile_jobs = compile_model(
+            {%- else %}
             onnx_compile_job{{ optional_s }} = compile_model(
+            {%- endif %}
                 model,
                 model_name,
                 device,
@@ -682,11 +863,22 @@ def export_model(
                 components=[c for c, p in component_precisions.items() if c in components and p != Precision.float],
                 {%- endif %}
             )
+            {%- if has_multi_graph %}
+            {%- if is_collection_model %}
+            flat_onnx_jobs = {k: next(iter(v.values())) for k, v in onnx_compile_jobs.items()}
+            onnx_models = assert_success_and_get_target_models(flat_onnx_jobs)
+            {%- else %}
+            first_onnx_job = next(iter(onnx_compile_jobs.values()))
+            onnx_model = first_onnx_job.get_target_model()
+            assert onnx_model is not None, f"ONNX compile job failed: {first_onnx_job}"
+            {%- endif %}
+            {%- else %}
             {%- if is_collection_model %}
             onnx_models = assert_success_and_get_target_models(onnx_compile_jobs)
             {%- else %}
             onnx_model = onnx_compile_job.get_target_model()
             assert onnx_model is not None, f"ONNX compile job failed: {onnx_compile_job}"
+            {%- endif %}
             {%- endif %}
             quantize_job{{ optional_s }} = quantize_model(
                 {{ "component_precisions" if is_collection_model else "precision" }},
@@ -723,7 +915,11 @@ def export_model(
     {%- endif %}
 
     # {{ steps.compile }}
+    {%- if has_multi_graph %}
+    compile_jobs: {{ "dict[str, dict[str, hub.client.CompileJob]]" if is_collection_model else "dict[str, hub.client.CompileJob]" }} = compile_model(
+    {%- else %}
     compile_job{{ optional_s }}{{ ": dict[str, hub.client.CompileJob]" if is_collection_model else "" }} = compile_model(
+    {%- endif %}
         model,
         model_name,
         device,
@@ -743,6 +939,57 @@ def export_model(
         {%- endif %}
         extra_options=compile_options,
     )
+
+    {%- if has_multi_graph %}
+
+    # {{ steps.link }}
+    link_job{{ optional_s }}{{ ": dict[str, hub.client.LinkJob]" if is_collection_model else ": hub.client.LinkJob" }} | None = None
+    target_model{{ optional_s }}: {{ "dict[str, hub.Model]" if is_collection_model else "hub.Model | None" }}
+    if target_runtime.uses_hub_link:
+        {%- if is_collection_model %}
+        compiled_models: dict[str, dict[str, hub.Model]] = {}
+        for comp_name, jobs_dict in compile_jobs.items():
+            compiled_models[comp_name] = {}
+            for gn, job in jobs_dict.items():
+                target_model = job.get_target_model()
+                assert target_model is not None, f"Compile job failed: {job}"
+                compiled_models[comp_name][gn] = target_model
+        {%- else %}
+        compiled_models: dict[str, hub.Model] = {}
+        for gn, job in compile_jobs.items():
+            target_model = job.get_target_model()
+            assert target_model is not None, f"Compile job failed: {job}"
+            compiled_models[gn] = target_model
+        {%- endif %}
+        link_job{{ optional_s }} = link_model(
+            compiled_models,
+            device,
+            model_name,
+            model,
+            target_runtime,
+        )
+        # Extract target models from link jobs for profile/inference
+        {%- if is_collection_model %}
+        target_models = assert_success_and_get_target_models(link_jobs)
+        {%- else %}
+        target_model = link_job.get_target_model()
+        assert target_model is not None, f"Link job failed: {link_job}"
+        {%- endif %}
+    else:
+        # For JIT runtimes, extract models from compile jobs
+        {%- if is_collection_model %}
+        flat_jobs = {k: next(iter(v.values())) for k, v in compile_jobs.items()}
+        target_models = assert_success_and_get_target_models(flat_jobs)
+        {%- else %}
+        assert len(compile_jobs) == 1, (
+            "Multi-graph compile (get_input_spec returning >1 entry) is only supported "
+            "for AOT runtimes (uses_hub_link=True)"
+        )
+        first_job = next(iter(compile_jobs.values()))
+        target_model = first_job.get_target_model()
+        assert target_model is not None, f"Compile job failed: {first_job}"
+        {%- endif %}
+    {%- else %}
 
     # {{ steps.link }}
     link_job{{ optional_s }}{{ ": dict[str, hub.client.LinkJob]" if is_collection_model else ": hub.client.LinkJob" }} | None = None
@@ -776,14 +1023,37 @@ def export_model(
     target_models = assert_success_and_get_target_models(link_jobs if link_jobs else compile_jobs)
     {%- endif %}
     {%- endif %}
+    {%- endif %}
+
+    {%- if has_multi_graph %}
+    {%- if is_collection_model %}
+    per_component_profile_options = model.get_hub_profile_options(target_runtime, profile_options)
+    per_component_inference_inputs = model.sample_inputs(
+        use_channel_last_format=target_runtime.channel_last_native_execution
+    )
+    {%- else %}
+    profile_options_dict = model.get_hub_profile_options(target_runtime, profile_options)
+    inference_inputs_dict = model.sample_inputs(
+        use_channel_last_format=target_runtime.channel_last_native_execution
+    )
+    {%- endif %}
+    {%- endif %}
 
     # {{ steps.profile }}
+    {%- if has_multi_graph %}
+    profile_job{{ optional_s }}{{ ": dict[str, dict[str, hub.client.ProfileJob]] = {}" if is_collection_model else " : dict[str, hub.client.ProfileJob] = {}" }}
+    {%- else %}
     profile_job{{ optional_s }}{{ ": dict[str, hub.client.ProfileJob] = {}" if is_collection_model else " : hub.client.ProfileJob | None = None" }}
+    {%- endif %}
     if not skip_profiling:
         profile_job{{ optional_s }} = profile_model(
             model_name,
             device,
+            {%- if has_multi_graph %}
+            {{ "per_component_profile_options" if is_collection_model else "profile_options_dict" }},
+            {%- else %}
             model.get_hub_profile_options(target_runtime, profile_options),
+            {%- endif %}
             {%- if is_precompiled %}
             uploaded_models,
             {%- else %}
@@ -796,16 +1066,28 @@ def export_model(
 
     {% if not is_precompiled %}
     # {{ steps.inference }}
+    {%- if has_multi_graph %}
+    inference_job{{ optional_s }}{{ " : dict[str, dict[str, hub.client.InferenceJob]] = {}" if is_collection_model else " : dict[str, hub.client.InferenceJob] = {}" }}
+    {%- else %}
     inference_job{{ optional_s }}{{ " : dict[str, hub.client.InferenceJob] = {}" if is_collection_model else " : hub.client.InferenceJob | None = None" }}
+    {%- endif %}
     if not skip_inferencing:
         inference_job{{ optional_s }} = inference_model(
+            {%- if has_multi_graph %}
+            {{ "per_component_inference_inputs" if is_collection_model else "inference_inputs_dict" }},
+            {%- else %}
             model.sample_inputs(
                 {{ "input_spec" if not is_collection_model else "input_specs" }}={{ "input_spec" if not is_collection_model else "input_specs" }},
                 use_channel_last_format=target_runtime.channel_last_native_execution
             ),
+            {%- endif %}
             model_name,
             device,
+            {%- if has_multi_graph %}
+            {{ "per_component_profile_options" if is_collection_model else "profile_options_dict" }},
+            {%- else %}
             model.get_hub_profile_options(target_runtime, profile_options),
+            {%- endif %}
             {%- if is_precompiled %}
             uploaded_models,
             {%- else %}
@@ -821,6 +1103,34 @@ def export_model(
     tool_versions: ToolVersions | None = None
     tool_versions_are_from_device_job = False
     if not skip_summary{% if not is_precompiled %} or not skip_downloading{% endif %}:
+        {%- if has_multi_graph %}
+        {%- if is_collection_model %}
+        first_profile_jobs_dict = next(iter(profile_jobs.values()), {}) if profile_jobs else {}
+        first_profile_job = next(iter(first_profile_jobs_dict.values()), None)
+        {%- if not is_precompiled %}
+        first_inference_jobs_dict = next(iter(inference_jobs.values()), {}) if inference_jobs else {}
+        inference_job = next(iter(first_inference_jobs_dict.values()), None)
+        first_compile_jobs_dict = next(iter(compile_jobs.values()), {})
+        compile_job = next(iter(first_compile_jobs_dict.values()), None)
+        {%- endif %}
+        {%- else %}
+        first_profile_job = next(iter(profile_jobs.values()), None) if profile_jobs else None
+        {%- if not is_precompiled %}
+        inference_job = next(iter(inference_jobs.values()), None) if inference_jobs else None
+        compile_job = next(iter(compile_jobs.values()), None) if compile_jobs else None
+        {%- endif %}
+        {%- endif %}
+        if first_profile_job is not None and first_profile_job.wait():
+            tool_versions = ToolVersions.from_job(first_profile_job)
+            tool_versions_are_from_device_job = True
+        {%- if not is_precompiled %}
+        elif inference_job is not None and inference_job.wait():
+            tool_versions = ToolVersions.from_job(inference_job)
+            tool_versions_are_from_device_job = True
+        elif compile_job and compile_job.wait():
+            tool_versions = ToolVersions.from_job(compile_job)
+        {%- endif %}
+        {%- else %}
         {%- if is_collection_model %}
         profile_job = next(iter(profile_jobs.values())) if profile_jobs else None
         {%- if not is_precompiled %}
@@ -837,6 +1147,7 @@ def export_model(
             tool_versions_are_from_device_job = True
         elif compile_job and compile_job.wait():
             tool_versions = ToolVersions.from_job(compile_job)
+        {%- endif %}
         {%- endif %}
 
     # {{ steps.download }}
@@ -859,6 +1170,20 @@ def export_model(
 
 
     # {{ steps.summary }}
+    {%- if has_multi_graph %}
+    if not skip_summary and {{ "not skip_profiling" if is_collection_model else "profile_jobs" }}:
+        {%- if is_collection_model %}
+        for component_name in components:
+            for pj in profile_jobs[component_name].values():
+        {%- else %}
+        for pj in profile_jobs.values():
+        {%- endif %}
+        {%- filter indent(width=8 if is_collection_model else 4) %}
+        assert pj.wait().success, "Job failed: " + pj.url
+        profile_data : dict[str, Any] = pj.download_profile()
+        print_profile_metrics_from_job(pj, profile_data)
+        {%- endfilter %}
+    {%- else %}
     if not skip_summary and {{ "not skip_profiling" if is_collection_model else "profile_job is not None" }}:
         {%- if is_collection_model %}
         for component_name in components:
@@ -869,8 +1194,37 @@ def export_model(
         profile_data : dict[str, Any] = profile_job.download_profile()
         print_profile_metrics_from_job(profile_job, profile_data)
         {%- endfilter %}
+    {%- endif %}
 
     {% if not is_precompiled -%}
+    {%- if has_multi_graph %}
+    if not skip_summary and {{ "not skip_inferencing" if is_collection_model else "inference_jobs" }}:
+        {%- if is_collection_model %}
+        all_specs = model.get_input_spec()
+        for component_name in components:
+            component = model.components[component_name]
+            for graph_name, graph_input_spec in all_specs[component_name].items():
+                ij = inference_jobs[component_name][graph_name]
+        {%- else %}
+        graph_specs = model.get_input_spec()
+        for graph_name, graph_input_spec in graph_specs.items():
+            ij = inference_jobs[graph_name]
+        {%- endif %}
+        {%- filter indent(width=8 if is_collection_model else 4) %}
+        sample_inputs = BaseModel.sample_inputs({{ model_var }}, graph_input_spec, use_channel_last_format=False)
+        torch_out = torch_inference(
+            {{ model_var }}, sample_inputs, return_channel_last_output=target_runtime.channel_last_native_execution
+        )
+        assert ij.wait().success, "Job failed: " + ij.url
+        inference_result = ij.download_output_data()
+        assert inference_result is not None
+        {% set skipped_outputs = ", outputs_to_skip=[" ~ outputs_to_skip_validation|join(", ") ~ "]" if outputs_to_skip_validation else "" -%}
+        {% set inference_metrics = ", metrics=\"" ~ inference_metrics ~ "\"" if inference_metrics and inference_metrics != "psnr" else "" -%}
+        print_inference_metrics(
+            ij, inference_result, torch_out, {{ model_var }}.get_output_names(){{ skipped_outputs }}{{ inference_metrics }}
+        )
+        {%- endfilter %}
+    {%- else %}
     if not skip_summary and {{ "not skip_inferencing" if is_collection_model else "inference_job is not None" }}:
         {%- if is_collection_model %}
         for component_name in components:
@@ -893,13 +1247,30 @@ def export_model(
         )
         {%- endfilter %}
     {%- endif %}
+    {%- endif %}
 
     if not skip_summary:
         print_tool_versions(tool_versions, tool_versions_are_from_device_job)
-        {% if print_demo_cmd -%}
+        {%- if print_demo_cmd -%}
+        {%- if has_multi_graph %}
+        {%- if is_collection_model %}
+        if target_runtime.uses_hub_link:
+            assert link_jobs is not None
+            print_on_target_demo_cmd(list(link_jobs.values()), Path(__file__).parent, device)
+        else:
+            print_on_target_demo_cmd([next(iter(jobs.values())) for jobs in compile_jobs.values()], Path(__file__).parent, device)
+        {%- else %}
+        if target_runtime.uses_hub_link:
+            assert link_job is not None
+            print_on_target_demo_cmd(link_job, Path(__file__).parent, device)
+        else:
+            print_on_target_demo_cmd(next(iter(compile_jobs.values())), Path(__file__).parent, device)
+        {%- endif %}
+        {%- else %}
         print_on_target_demo_cmd(
             link_job{{"s.values()" if is_collection_model}} if link_job{{ optional_s }} else compile_job{{"s.values()" if is_collection_model}}, Path(__file__).parent, device
         )
+        {%- endif %}
         {%- endif %}
 
     if downloaded_model_path:
@@ -914,11 +1285,24 @@ def export_model(
         components={
             component_name: ExportResult(
                 {%- if not is_precompiled %}
+                {%- if has_multi_graph %}
+                compile_job=next(iter(compile_jobs[component_name].values())),
+                link_job=link_jobs.get(component_name) if (target_runtime.uses_hub_link and link_jobs) else None,
+                {%- else %}
                 compile_job=compile_jobs[component_name],
                 link_job=link_jobs.get(component_name) if link_jobs else None,
+                {%- endif %}
+                {%- if has_multi_graph %}
+                inference_job=next(iter(inference_jobs[component_name].values()), None) if component_name in inference_jobs else None,
+                {%- else %}
                 inference_job=inference_jobs.get(component_name, None),
                 {%- endif %}
+                {%- endif %}
+                {%- if has_multi_graph %}
+                profile_job=next(iter(profile_jobs[component_name].values()), None) if component_name in profile_jobs else None,
+                {%- else %}
                 profile_job=profile_jobs.get(component_name, None),
+                {%- endif %}
                 {%- if can_use_quantize_job %}
                 quantize_job=quantize_jobs.get(component_name, None),
                 {%- endif %}
@@ -931,11 +1315,24 @@ def export_model(
     {%- else -%}
     return ExportResult(
         {%- if not is_precompiled %}
+        {%- if has_multi_graph %}
+        compile_job=next(iter(compile_jobs.values())),
+        link_job=link_job if target_runtime.uses_hub_link else None,
+        {%- else %}
         compile_job=compile_job,
         link_job=link_job,
+        {%- endif %}
+        {%- if has_multi_graph %}
+        inference_job=next(iter(inference_jobs.values()), None) if inference_jobs else None,
+        {%- else %}
         inference_job=inference_job,
         {%- endif %}
+        {%- endif %}
+        {%- if has_multi_graph %}
+        profile_job=next(iter(profile_jobs.values()), None) if profile_jobs else None,
+        {%- else %}
         profile_job=profile_job,
+        {%- endif %}
         {%- if can_use_quantize_job %}
         quantize_job=quantize_job,
         {%- endif %}

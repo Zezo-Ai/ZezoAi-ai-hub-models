@@ -20,6 +20,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     aimet_onnx_is_installed = False
 import contextlib
+import importlib.metadata
 import itertools
 import os
 import shutil
@@ -29,6 +30,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 
+import onnxruntime
 import torch
 from qai_hub.client import DatasetEntries
 from tqdm.autonotebook import tqdm
@@ -425,6 +427,28 @@ class AIMETOnnxQuantizableMixin(PretrainedHubModelProtocol):
         device: torch.device,
     ) -> list[str | tuple[str, dict[str, int]]]:
         if device.type == "cuda":
+            available = onnxruntime.get_available_providers()
+            if "CUDAExecutionProvider" not in available:
+                msg = (
+                    f"WARNING: GPU requested but CUDAExecutionProvider is not available. "
+                    f"Falling back to CPU. Available providers: {available}"
+                )
+                ort_packages = [
+                    d.name
+                    for d in importlib.metadata.distributions()
+                    if d.name and d.name.startswith("onnxruntime")
+                ]
+                if "onnxruntime" in ort_packages and any(
+                    p != "onnxruntime" for p in ort_packages
+                ):
+                    msg += (
+                        f"\nThis may be caused by the 'onnxruntime' (CPU) package "
+                        f"shadowing a GPU-enabled variant. "
+                        f"Installed onnxruntime packages: {ort_packages}. "
+                        f"Try: pip uninstall onnxruntime && pip install onnxruntime-gpu"
+                    )
+                print(msg)
+                return ["CPUExecutionProvider"]
             return (
                 [
                     ("CUDAExecutionProvider", {"device_id": device.index}),

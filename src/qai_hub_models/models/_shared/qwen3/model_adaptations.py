@@ -189,7 +189,7 @@ class SHAQwen3Attention(Qwen3Attention):
                         torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None
                     ],
                 ],
-                self.forward,  # type: ignore[has-type, unused-ignore]
+                self.forward,  # type: ignore[has-type, arg-type, unused-ignore]
             )
             # pyright doesn't like that self.forward_sha doesn't take kwargs
             self.forward = self.forward_sha  # type: ignore[assignment, unused-ignore]  # pyright: ignore[reportAttributeAccessIssue]
@@ -364,11 +364,11 @@ class QCQwen3MLP(Qwen3MLP):
     def prepare_conv(self) -> None:
         # TODO (https://github.com/qcom-ai-hub/tetracode/issues/17113)
         # Temporarily commented out due to AISW-148745.
-        # self.up_proj = ConvInplaceLinear(self.up_proj)  # type: ignore[has-type, unused-ignore]
-        self.down_proj = ConvInplaceLinear(self.down_proj)  # type: ignore[has-type, unused-ignore]
-        # self.gate_proj = ConvInplaceLinear(self.gate_proj)  # type: ignore[has-type, unused-ignore]
+        # self.up_proj = ConvInplaceLinear(self.up_proj)  # type: ignore[has-type, arg-type, unused-ignore]
+        self.down_proj = ConvInplaceLinear(self.down_proj)  # type: ignore[has-type, arg-type, unused-ignore]
+        # self.gate_proj = ConvInplaceLinear(self.gate_proj)  # type: ignore[has-type, arg-type, unused-ignore]
 
 
 class QCQwen3ForCausalLM(Qwen3ForCausalLM):
     def prepare_conv(self) -> None:
-        self.lm_head = ConvInplaceLinear(self.lm_head)  # type: ignore[has-type, unused-ignore]
+        self.lm_head = ConvInplaceLinear(self.lm_head)  # type: ignore[has-type, arg-type, unused-ignore]

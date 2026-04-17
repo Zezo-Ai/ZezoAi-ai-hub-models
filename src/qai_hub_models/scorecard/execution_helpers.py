@@ -539,6 +539,7 @@ def get_async_job_cache_name(
     device: ScorecardDevice,
     precision: Precision = Precision.float,
     component: str | None = None,
+    graph_name: str | None = None,
 ) -> str:
     """
     Get the key for this job in the YAML that stores asyncronously-ran scorecard jobs.
@@ -555,6 +556,8 @@ def get_async_job_cache_name(
         The precision in which this model is running
     component
         The name of the model component being tested, if applicable
+    graph_name
+        The name of the graph being executed (for multi-graph models)
 
     Returns
     -------
@@ -567,6 +570,7 @@ def get_async_job_cache_name(
         + ("_" + path.name if path else "")
         + ("-" + device.name if device != cs_universal else "")
         + ("_" + component if component else "")
+        + ("_" + graph_name if graph_name else "")
     )
 
 

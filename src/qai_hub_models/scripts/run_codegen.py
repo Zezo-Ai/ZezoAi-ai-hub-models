@@ -27,6 +27,13 @@ from qai_hub_models.utils.path_helpers import (
 HEADER = "# THIS FILE WAS AUTO-GENERATED. DO NOT EDIT MANUALLY."
 
 
+def _is_auto_generated(path: Path) -> bool:
+    """Return True if the file was created by codegen."""
+    with open(path) as f:
+        first_line = f.readline()
+    return HEADER in first_line
+
+
 def _skip_clone_repo_check(model_dir: Path) -> bool:
     original_test_path = model_dir / "test.py"
     if not original_test_path.exists():
@@ -268,7 +275,7 @@ def generate_code_for_model(model_name: str) -> list[str]:
                 environment, model_name, export_options_dict, test_path
             )
         )
-    elif test_path.exists():
+    elif test_path.exists() and _is_auto_generated(test_path):
         os.remove(test_path)
 
     should_generate_conftest = (
@@ -281,7 +288,7 @@ def generate_code_for_model(model_name: str) -> list[str]:
                 environment, model_name, export_options_dict, conftest_path
             )
         )
-    elif conftest_path.exists():
+    elif conftest_path.exists() and _is_auto_generated(conftest_path):
         os.remove(conftest_path)
 
     evaluate_path = model_dir / "evaluate.py"
@@ -295,7 +302,7 @@ def generate_code_for_model(model_name: str) -> list[str]:
                 evaluate_path,
             )
         )
-    elif evaluate_path.exists():
+    elif evaluate_path.exists() and _is_auto_generated(evaluate_path):
         os.remove(evaluate_path)
 
     zoo_root = QAIHM_MODELS_ROOT

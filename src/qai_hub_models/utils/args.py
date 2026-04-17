@@ -41,6 +41,7 @@ from qai_hub_models.utils.inference import OnDeviceModel, compile_model_from_arg
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.qai_hub_helpers import (
     can_access_qualcomm_ai_hub,
+    raise_if_fp_is_unsupported,
 )
 from qai_hub_models.utils.version_helpers import QAIHMVersion
 
@@ -252,7 +253,22 @@ class QAIHMArgumentParser(argparse.ArgumentParser):
         if self.supported_precision_runtimes:
             self.validate_precision_runtime(self.supported_precision_runtimes, parsed)
 
+        # FP16 device-precision validation
+        precision = getattr(parsed, "precision", None)
+        fetch_static_assets = getattr(parsed, "fetch_static_assets", None)
+        if (
+            parsed.device is not None
+            and precision is not None
+            and fetch_static_assets is None
+        ):
+            self._validate_fp16_support(parsed.device, precision)
+
         return parsed
+
+    @staticmethod
+    def _validate_fp16_support(device: hub.Device, precision: Precision) -> None:
+        """Check FP16 support using YAML first, falling back to workbench API."""
+        raise_if_fp_is_unsupported(device, precision)
 
     @staticmethod
     def validate_precision_runtime(

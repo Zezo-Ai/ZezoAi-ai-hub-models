@@ -17,6 +17,7 @@ except (ImportError, ModuleNotFoundError):
     )
 # isort: on
 
+import contextlib
 import functools
 import gc
 import glob
@@ -30,7 +31,7 @@ import warnings
 from abc import ABC, abstractmethod
 from enum import Enum, unique
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NoReturn, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, NoReturn, TypeVar, cast
 
 import numpy as np
 import onnx
@@ -66,12 +67,15 @@ from typing_extensions import Self
 from qai_hub_models.models._shared.llm.common import (
     TORCH_DYNAMIC_SHAPE_MIN_VERSION,
     LLMIOType,
+    cleanup,
 )
 from qai_hub_models.models._shared.llm.sha_dynamic_kvcache import (
     SHADynamicCacheNewValueOnly,
 )
+from qai_hub_models.models._shared.llm.split_onnx_utils.utils import split_onnx
 from qai_hub_models.models.common import SampleInputsType, SourceModelFormat
 from qai_hub_models.utils.aimet.config_loader import get_aimet_config_path
+from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
 from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
 from qai_hub_models.utils.input_spec import InputSpec
@@ -80,6 +84,7 @@ from qai_hub_models.utils.llm_helpers import (
     save_htp_config_for_genie_bundle,
 )
 from qai_hub_models.utils.onnx.helpers import (
+    ONNXBundle,
     generate_wrapper_onnx_file,
     safe_torch_onnx_export,
 )
@@ -260,6 +265,7 @@ def get_onnx_model(
     return_model: bool = False,
     llm_io_type: LLMIOType = LLMIOType.genie_input_ids,
     use_dynamic_shapes: bool = False,
+    quiet: bool = False,
 ) -> onnx.ModelProto | None:
     if use_dynamic_shapes:
         ensure_supported_version("torch", min_version=TORCH_DYNAMIC_SHAPE_MIN_VERSION)
@@ -286,15 +292,16 @@ def get_onnx_model(
         sequence_length=sequence_length,
         llm_io_type=llm_io_type,
     )
-    print()
-    if use_dynamic_shapes:
-        print(
-            f"Exporting ONNX model with dynamic sequence length and dynamic context length (example context length {context_length}). This could take around 10 minutes."
-        )
-    else:
-        print(
-            f"Exporting ONNX model with sequence length {sequence_length} and context length {context_length}. This could take around 10 minutes."
-        )
+    if not quiet:
+        print()
+        if use_dynamic_shapes:
+            print(
+                "Exporting ONNX model with dynamic sequence length and dynamic context length."
+            )
+        else:
+            print(
+                f"Exporting ONNX model with sequence length {sequence_length} and context length {context_length}. This could take around 10 minutes."
+            )
 
     example_input = [
         torch.zeros(
@@ -494,6 +501,547 @@ class LLMMetadata(BaseQAIHMConfig):
     components: dict[str, LLMMetadata.Component] = {}
     precision: Precision
     runtime: TargetRuntime
+
+
+FPModelT = TypeVar("FPModelT", bound="LLMBase")
+
+
+class SingleSlotCacheMixin:
+    """Mixin that maintains a single class-level cached instance keyed by a string key.
+
+    On cache hit (same key), returns the existing instance.
+    On cache miss (different key), evicts and frees the old instance
+    before the caller creates a new one.
+
+    Subclasses must provide a ``free_memory()`` method on instances.
+    """
+
+    _cached_instance: Any = None
+    _cached_key: str | None = None
+
+    @classmethod
+    def cache_lookup(cls, cache_key: str) -> Any:
+        """Return cached instance if key matches, or None on miss.
+
+        On miss with an existing cached instance, the old one is evicted.
+        """
+        if cls._cached_instance is not None and cls._cached_key == cache_key:
+            return cls._cached_instance
+
+        # Different key -- evict old instance
+        if cls._cached_instance is not None:
+            cls._cached_instance.free_memory()
+            cls._cached_instance = None
+            cls._cached_key = None
+
+        return None
+
+    @classmethod
+    def cache_store(cls, instance: Any, cache_key: str) -> None:
+        """Evict any existing cached instance, then store the new one."""
+        if cls._cached_instance is not None and cls._cached_instance is not instance:
+            cls.clear_cache()
+        cls._cached_instance = instance
+        cls._cached_key = cache_key
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Clear cached instance and free memory."""
+        if cls._cached_instance is not None:
+            cls._cached_instance.free_memory()
+            cls._cached_instance = None
+            cls._cached_key = None
+        cleanup()
+
+
+class PreSplitOnnxMixin:
+    """Mixin that manages ONNX splitting for PreSplit models.
+
+    Provides a cached convert_to_onnx_and_split() workflow using
+    the template method pattern. Subclasses implement
+    get_full_onnx_bundle() to supply the full (unsplit) ONNXBundle.
+
+    Class-level configuration (override in subclasses):
+        split_model_name: str  -- basename for split files
+        num_splits: int        -- number of ONNX splits
+        num_layers_per_split: int -- layers per split
+    """
+
+    split_model_name: str = ""
+    num_splits: int = 0
+    num_layers_per_split: int = 0
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.onnx_splits: dict[int, ONNXBundle] = {}
+        self._temp_dir: tempfile.TemporaryDirectory[str] | None = None
+
+    def __del__(self) -> None:
+        """Ensure temp directory is cleaned up on deletion."""
+        if hasattr(self, "_temp_dir") and self._temp_dir is not None:
+            with contextlib.suppress(Exception):
+                self._temp_dir.cleanup()
+
+    def convert_to_onnx_and_split(self, part_id: int = 1) -> ONNXBundle:
+        """Convert to ONNX and split into parts. Results are cached.
+
+        Parameters
+        ----------
+        part_id
+            Part ID (1-indexed) to return.
+
+        Returns
+        -------
+        ONNXBundle
+            The requested split as an ONNXBundle.
+        """
+        if part_id in self.onnx_splits:
+            return self.onnx_splits[part_id]
+
+        if self._temp_dir is None:
+            self._temp_dir = tempfile.TemporaryDirectory()
+        temp_path = Path(self._temp_dir.name)
+
+        full_bundle = self.get_full_onnx_bundle(temp_path)
+
+        split_output_dir = temp_path / "splits_dynamic"
+        split_output_dir.mkdir(parents=True, exist_ok=True)
+
+        split_bundles = split_onnx(
+            onnxfile=full_bundle,
+            modelname=self.split_model_name,
+            num_splits=self.num_splits,
+            num_layers_per_split=self.num_layers_per_split,
+            output_dir=str(split_output_dir),
+            split_embedding=True,
+        )
+
+        for i, bundle in enumerate(split_bundles):
+            self.onnx_splits[i + 1] = bundle
+
+        return self.onnx_splits[part_id]
+
+    def get_full_onnx_bundle(self, temp_path: Path) -> ONNXBundle:
+        """Return the full (unsplit) ONNXBundle.
+
+        Default implementation copies model_dynamic.onnx, model.data, and
+        model.encodings from the checkpoint directory into a temp bundle.
+        This works for quantized PreSplit models whose checkpoint already
+        contains these files (checkpoint must be resolved before calling).
+
+        FP PreSplit models should override this to export from PyTorch
+        via get_onnx_model().
+        """
+        bundle_dir = temp_path / "bundle_dynamic"
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+
+        checkpoint = getattr(self, "checkpoint", None)
+        if checkpoint is None or (
+            isinstance(checkpoint, str) and checkpoint.startswith("DEFAULT")
+        ):
+            raise NotImplementedError(
+                f"{type(self).__name__}: checkpoint must be resolved to a "
+                "local path before calling get_full_onnx_bundle(). "
+                "Got: {checkpoint!r}"
+            )
+        checkpoint_path = Path(checkpoint)
+
+        src_onnx = checkpoint_path / "model_dynamic.onnx"
+        shutil.copy(src_onnx, bundle_dir / "model.onnx")
+
+        src_data = checkpoint_path / "model.data"
+        if src_data.exists():
+            shutil.copy(src_data, bundle_dir / "model.data")
+
+        src_enc = checkpoint_path / "model.encodings"
+        if src_enc.exists():
+            shutil.copy(src_enc, bundle_dir / "model.encodings")
+
+        return ONNXBundle.from_bundle_path(bundle_dir, "model")
+
+    def free_memory(self) -> None:
+        """Free memory by clearing caches and releasing resources."""
+        # Clear torch model (FP path)
+        model = getattr(self, "model", None)
+        if model is not None:
+            model.to("cpu")
+            del model
+            setattr(self, "model", None)  # noqa: B010
+
+        # Clear QuantSim (quantized path)
+        quant_sim = getattr(self, "quant_sim", None)
+        if quant_sim is not None:
+            del quant_sim
+            setattr(self, "quant_sim", None)  # noqa: B010
+
+        # Clear ONNX split cache and temp directory
+        self.onnx_splits.clear()
+        if self._temp_dir is not None:
+            self._temp_dir.cleanup()
+            self._temp_dir = None
+
+        cleanup()
+
+
+class QuantizablePreSplitMixin(
+    SingleSlotCacheMixin, PreSplitOnnxMixin, Generic[FPModelT]
+):
+    """Mixin for quantized PreSplit models with cached from_pretrained.
+
+    Combines SingleSlotCacheMixin (class-level cache) and PreSplitOnnxMixin
+    (ONNX splitting) with generic DEFAULT-checkpoint resolution and
+    save_calibrated_checkpoint for dynamic shapes.
+
+    Must be mixed with a subclass of LLM_AIMETOnnx which provides
+    FPModel, create_onnx_models, save_tokenizer_and_config,
+    from_pretrained, and save_calibrated_checkpoint.
+
+    Subclasses must set these class attributes:
+        model_id: str               -- e.g. "llama_v3_2_1b_instruct2"
+        model_asset_version: int    -- asset store version
+        default_checkpoint: dict[Precision, str]  -- precision -> asset key
+        supported_precisions: list[Precision]
+        default_precision: Precision
+
+    Override ``resolve_default_checkpoint`` to change how DEFAULT
+    checkpoints are fetched. The default downloads a full .zip archive.
+    """
+
+    model_id: str = ""
+    model_asset_version: int = 0
+    default_checkpoint: dict[Precision, str] = {}
+    supported_precisions: list[Precision] = []
+    default_precision: Precision = Precision.w4
+
+    # Declared for type-checking; provided by LLM_AIMETOnnx at runtime.
+    FPModel: type[FPModelT]
+    sequence_length: int
+    context_length: int
+
+    def __init__(
+        self,
+        checkpoint: str | os.PathLike | Path = "DEFAULT",
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, checkpoint=checkpoint, **kwargs)
+        self.precision: Precision = kwargs.get("precision", self.default_precision)
+
+    @classmethod
+    def resolve_default_checkpoint(
+        cls,
+        precision: Precision,
+        sequence_length: int,
+        context_length: int,
+        host_device: torch.device,
+        fp_model: FPModelT | None,
+    ) -> tuple[str, FPModelT | None]:
+        """Resolve a DEFAULT checkpoint string to a local directory path.
+
+        Downloads the checkpoint assets and ensures the checkpoint directory
+        contains the ONNX model, external data, and tokenizer/config files
+        needed by LLM_AIMETOnnx.from_pretrained.
+
+        The default implementation downloads a full .zip archive that
+        contains ONNX + encodings + data. If ``fp_model`` is provided,
+        it additionally exports ONNX models and saves tokenizer/config.
+
+        Override in subclasses for different fetching strategies (e.g.
+        downloading only encodings and exporting ONNX from a torch model).
+
+        Parameters
+        ----------
+        precision
+            Quantization precision (already validated).
+        sequence_length
+            Sequence length for the model.
+        context_length
+            Context length for the model.
+        host_device
+            Device for computation.
+        fp_model
+            Optional FP model passed by the evaluate framework.
+
+        Returns
+        -------
+        tuple[str, FPModelT | None]
+            (resolved_checkpoint_path, fp_model). The fp_model may be
+            the same as input or a newly created one.
+        """
+        precision_checkpoint = cls.default_checkpoint[precision]
+        checkpoint = str(
+            CachedWebModelAsset.from_asset_store(
+                cls.model_id,
+                cls.model_asset_version,
+                precision_checkpoint + ".zip",
+            ).fetch(extract=True)
+        )
+        if fp_model is not None:
+            cls.create_onnx_models(  # type: ignore[attr-defined]
+                checkpoint=checkpoint,
+                fp_model=fp_model,
+                context_length=context_length,
+                export_sequence_lengths=[sequence_length],
+                host_device=host_device,
+                llm_io_type=fp_model.llm_io_type,
+            )
+            cls.save_tokenizer_and_config(  # type: ignore[attr-defined]
+                checkpoint=checkpoint, fp_model=fp_model
+            )
+        return checkpoint, fp_model
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        checkpoint: str | os.PathLike | Path = "DEFAULT",
+        host_device: torch.device | None = None,
+        sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
+        context_length: int = DEFAULT_CONTEXT_LENGTH,
+        precision: Precision | None = None,
+        fp_model: FPModelT | None = None,
+        _skip_quantsim_creation: bool = True,
+    ) -> Self:
+        """
+        Load or return a cached Quantizable PreSplit.
+
+        If a cached instance exists for the same checkpoint, returns it
+        with updated sequence/context lengths (dynamic shapes). If a
+        different checkpoint is requested, the old instance is freed first.
+
+        Parameters
+        ----------
+        checkpoint
+            Path to checkpoint with ONNX + encodings, or ``"DEFAULT"``
+            to fetch from the asset store.
+        host_device
+            Device for computation.
+        sequence_length
+            Sequence length for the model.
+        context_length
+            Context length for the model.
+        precision
+            Quantization precision. Defaults to ``cls.default_precision``.
+        fp_model
+            Optional FP model, passed by the evaluate framework to avoid
+            creating a duplicate. If not provided and checkpoint starts
+            with ``"DEFAULT"``, one is created automatically.
+        _skip_quantsim_creation
+            Skip QuantSim creation (for testing).
+
+        Returns
+        -------
+        Self
+            The cached or newly created instance.
+        """
+        if precision is None:
+            precision = cls.default_precision
+
+        cache_key = str(checkpoint)
+        cached = cls.cache_lookup(cache_key)
+        if cached is not None:
+            cached.sequence_length = sequence_length
+            cached.context_length = context_length
+            return cached
+
+        if host_device is None:
+            host_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        if isinstance(checkpoint, str) and checkpoint.startswith("DEFAULT"):
+            precision = determine_precision_from_checkpoint(checkpoint) or precision
+            if precision not in cls.supported_precisions:
+                available = [str(p) for p in cls.supported_precisions]
+                raise ValueError(
+                    f"This model is not supported for {precision!s} precision. "
+                    f"Models are available in following precisions: {','.join(available)}."
+                )
+            if precision not in cls.default_checkpoint:
+                available = [str(p) for p in cls.default_checkpoint]
+                raise ValueError(
+                    f"No checkpoint is available for this model in {precision!s} precision. "
+                    f"Please generate a local quantized checkpoint. "
+                    f"Checkpoints are available in the following precisions: {','.join(available)}."
+                )
+            checkpoint, fp_model = cls.resolve_default_checkpoint(
+                precision=precision,
+                sequence_length=sequence_length,
+                context_length=context_length,
+                host_device=host_device,
+                fp_model=fp_model,
+            )
+
+        instance = super().from_pretrained(  # type: ignore[misc]
+            checkpoint=checkpoint,
+            host_device=host_device,
+            sequence_length=sequence_length,
+            context_length=context_length,
+            precision=precision,
+            fp_model=fp_model,
+            _skip_quantsim_creation=_skip_quantsim_creation,
+            use_dynamic_shapes=True,
+        )
+
+        # Store precision on instance
+        instance.precision = precision
+
+        cls.cache_store(instance, cache_key)
+        return instance
+
+    def save_calibrated_checkpoint(
+        self,
+        output_checkpoint: str | os.PathLike | Path,
+        fp_model: FPModelT | None = None,
+    ) -> None:
+        """Save calibrated checkpoint with dynamic shapes.
+
+        PreSplit models always use dynamic shapes. If ``fp_model`` is not
+        provided, one is automatically created from ``self.FPModel``.
+        """
+        if fp_model is None:
+            fp_model = self.FPModel.from_pretrained(
+                sequence_length=self.sequence_length,
+                context_length=self.context_length,
+            )
+        super().save_calibrated_checkpoint(  # type: ignore[misc]
+            output_checkpoint, fp_model, use_dynamic_shapes=True
+        )
+
+
+class SplitForwardMixin:
+    """Mixin that overrides forward() to chain inference through split Parts.
+
+    Lazily creates Part instances on first forward call and maps inputs
+    from the full model's input spec to each Part's ONNX input names.
+    Intermediate hidden states flow from one Part to the next.
+
+    Mix in *before* the PreSplit base so that this forward() wins in MRO::
+
+        class MyWrapper(SplitForwardMixin, SomePreSplit): ...
+
+    Subclasses must override ``_get_split_part_classes()`` to return
+    the concrete Part classes.
+    """
+
+    _parts: list | None
+    _input_names_for_parts: list[list] | None
+    _exporting_onnx: bool
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self._parts = None
+        self._input_names_for_parts = None
+        self._exporting_onnx = False
+        super().__init__(*args, **kwargs)
+
+    # -- overridable hooks ------------------------------------------------
+
+    def get_split_part_classes(self) -> list[type]:
+        """Return the Part classes to instantiate, in order.
+
+        Each class must accept ``(presplit, precision=...)`` and provide
+        ``_get_onnx_input_names() -> list[str]``.
+        """
+        raise NotImplementedError("Subclasses must override get_split_part_classes()")
+
+    def get_split_precision(self) -> Precision:
+        """Return the precision to use when creating Parts."""
+        return getattr(self, "precision", Precision.float)
+
+    # -- implementation ---------------------------------------------------
+
+    @staticmethod
+    def _build_input_name_for_parts(
+        parts: list, full_input_names: list[str]
+    ) -> list[list]:
+        """Build input mapping table for split parts.
+
+        For each Part, maps its ONNX input names to positional indices in the
+        full model's args.  Names not found in the full model (intermediate
+        hidden states) are tagged ``"prev"`` and sourced from the previous
+        Part's first output.
+        """
+        name_to_idx = {n: i for i, n in enumerate(full_input_names)}
+        input_names_for_parts: list[list] = []
+        for part in parts:
+            onnx_names = part._get_onnx_input_names()
+            input_names_for_parts.append(
+                [name_to_idx.get(n, "prev") for n in onnx_names]
+            )
+        return input_names_for_parts
+
+    @staticmethod
+    def _split_forward(
+        parts: list, input_names_for_parts: list[list], *args: torch.Tensor
+    ) -> list[torch.Tensor]:
+        """Chain Part1 -> Part2 -> ... with input mapping.
+
+        Works identically for FP and quantized Parts -- each Part's own
+        ``forward()`` handles the FP / quantized branching internally.
+        """
+        prev_output: torch.Tensor | None = None
+        kv_outputs: list[torch.Tensor] = []
+
+        for part, input_names in zip(parts, input_names_for_parts, strict=False):
+            part_args = [args[s] if s != "prev" else prev_output for s in input_names]
+            outputs = part(*part_args)
+            outputs = [outputs] if isinstance(outputs, torch.Tensor) else list(outputs)
+
+            prev_output = outputs[0]  # hidden state or logits
+            kv_outputs.extend(outputs[1:])  # KV cache updates (empty for Part1)
+
+        # prev_output is logits from the final Part
+        assert prev_output is not None
+        return [prev_output, *kv_outputs]
+
+    def _ensure_parts(self) -> None:
+        """Lazily create split Parts on first forward call."""
+        if self._parts is not None:
+            return
+        precision = self.get_split_precision()
+        self._parts = [
+            cls(self, precision=precision) for cls in self.get_split_part_classes()
+        ]
+        full_names = list(
+            self.get_input_spec(  # type: ignore[attr-defined]
+                sequence_length=self.sequence_length,  # type: ignore[attr-defined]
+                context_length=self.context_length,  # type: ignore[attr-defined]
+            ).keys()
+        )
+        self._input_names_for_parts = self._build_input_name_for_parts(
+            self._parts, full_names
+        )
+
+    def convert_to_onnx_and_split(self, part_id: int = 1) -> Any:
+        """Wrap ONNX export so forward() falls back to LLMBase.forward.
+
+        During ``get_full_onnx_bundle`` -> ``get_onnx_model`` ->
+        ``torch.onnx.export(dynamo=True)``, the tracer calls ``forward()``.
+        The flag makes ``forward()`` delegate to the base-class torch forward
+        (``LLMBase.forward``) instead of the ORT-based split forward, which
+        is not traceable and would recursively re-enter this method.
+        """
+        self._exporting_onnx = True
+        try:
+            return super().convert_to_onnx_and_split(part_id=part_id)  # type: ignore[misc]
+        finally:
+            self._exporting_onnx = False
+
+    def forward(
+        self,
+        input_tokens: torch.Tensor,
+        attention_mask: torch.Tensor,
+        *args: torch.Tensor,
+    ) -> list[torch.Tensor]:
+        if self._exporting_onnx or torch.compiler.is_compiling():
+            return super().forward(input_tokens, attention_mask, *args)  # type: ignore[misc]
+        self._ensure_parts()
+        assert self._parts is not None
+        assert self._input_names_for_parts is not None
+        return self._split_forward(
+            self._parts,
+            self._input_names_for_parts,
+            input_tokens,
+            attention_mask,
+            *args,
+        )
 
 
 class LLMBase(BaseModel, LLMConfigEditor, ABC):
@@ -1180,16 +1728,17 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
     def _use_zip_file(self) -> bool:
         return False
 
-    @classmethod
-    def create_quantsim(
-        cls,
+    @staticmethod
+    def _build_quantsim(
         onnx_model: onnx.ModelProto,
-        host_device: torch.device,
-        precision: Precision,
+        providers: list[str | tuple[str, dict]],
     ) -> QuantizationSimModel:
-        """
-        onnx_model: ONNX Model to create QuantSim model.
-        host_device: Device that the QuantSim model must be placed on.
+        """Create a QuantizationSimModel with standard LLM parameters.
+
+        Sets module-level AIMET globals and constructs the QuantSim with
+        int4 weights / int16 activations. No precision-specific configuration
+        is applied -- call ``_apply_precision_activations`` or
+        ``_configure_quant_sim`` afterwards.
         """
         if not AIMET_ONNX_INSTALLED:
             raise ImportError(
@@ -1197,6 +1746,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
                 "Install qai-hub-models on a Linux machine to use quantized models."
             )
 
+        AimetLogger.set_level_for_all_areas(logging.WARNING)
         default_config = get_aimet_config_path("default_config_llama")
         # Tie Quantizers for Concat Op
         quantsim.op_types_to_tie_qtzrs = ["Concat"]
@@ -1212,8 +1762,39 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             activation_type="int16",
             quant_scheme=QuantScheme.min_max,
             config_file=default_config,
-            providers=cls.get_ort_providers(host_device),
+            providers=providers,
         )
+        print(f"QuantSim session providers: {quant_sim.session.get_providers()}")
+        return quant_sim
+
+    @staticmethod
+    def _apply_precision_activations(
+        quant_sim: QuantizationSimModel, precision: Precision
+    ) -> None:
+        """Apply precision-dependent activation quantizer settings.
+
+        Safe for both full models and split models (no structural
+        heuristics). For w4: sets all activation quantizers to float16.
+        """
+        if precision == Precision.w4:
+            for op_name, qc_op in quant_sim.qc_quantize_op_dict.items():
+                if op_name in quant_sim.activation_names:
+                    qc_op.reset_encoding_stats()
+                    qc_op.data_type = QuantizationDataType.float
+                    qc_op.bitwidth = 16
+
+    @classmethod
+    def create_quantsim(
+        cls,
+        onnx_model: onnx.ModelProto,
+        host_device: torch.device,
+        precision: Precision,
+    ) -> QuantizationSimModel:
+        """
+        onnx_model: ONNX Model to create QuantSim model.
+        host_device: Device that the QuantSim model must be placed on.
+        """
+        quant_sim = cls._build_quantsim(onnx_model, cls.get_ort_providers(host_device))
         return cls._configure_quant_sim(quant_sim, precision)
 
     @classmethod
@@ -1225,13 +1806,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             quant_sim = _apply_int8_kv_cache_tying_and_lm_head(quant_sim, kv_io_map)
         elif precision == Precision.w4:
             _set_lm_head_to_8b(quant_sim)
-
-            # Set all activation quantizers to float16
-            for op_name, qc_op in quant_sim.qc_quantize_op_dict.items():
-                if op_name in quant_sim.activation_names:
-                    qc_op.reset_encoding_stats()
-                    qc_op.data_type = QuantizationDataType.float
-                    qc_op.bitwidth = 16
+            cls._apply_precision_activations(quant_sim, precision)
         return quant_sim
 
     def save_calibrated_checkpoint(
@@ -1274,7 +1849,18 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         # Export the QuantSim model (produces model.onnx + model.data + model.encodings).
         # If the input ONNX had dynamic shapes, QuantSim preserves them.
         assert self.quant_sim is not None
-        self.quant_sim.export(str(output_checkpoint), "model")
+        # Export encodings only first, then save model with external weights
+        # to avoid ByteSize() EncodeError when model exceeds protobuf 2GB limit.
+        self.quant_sim.export(str(output_checkpoint), "model", export_model=False)
+        from aimet_onnx.utils import save_model_with_external_weights
+
+        with self.quant_sim._remove_quantization_nodes():
+            save_model_with_external_weights(
+                self.quant_sim.model.model,
+                os.path.join(str(output_checkpoint), "model.onnx"),
+                location="model.data",
+                all_tensors_to_one_file=True,
+            )
         del self.quant_sim
 
         onnx_path = os.path.join(output_checkpoint, "model.onnx")

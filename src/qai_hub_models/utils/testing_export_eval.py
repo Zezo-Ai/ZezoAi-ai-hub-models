@@ -53,7 +53,12 @@ from qai_hub_models.utils.aws import (
     s3_multipart_upload,
 )
 from qai_hub_models.utils.base_app import PretrainedCollectionModel
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import (
+    BaseModel,
+    CollectionModel,
+    MultiGraphBaseModel,
+    MultiGraphPretrainedCollectionModel,
+)
 from qai_hub_models.utils.evaluate import (
     DEFAULT_NUM_EVAL_SAMPLES,
     evaluate_on_dataset,
@@ -439,8 +444,40 @@ def patch_hub_with_cached_jobs(
     )
 
 
+def _normalize_compile_output(
+    compile_output: hub.Job
+    | Mapping[str, hub.Job]
+    | Mapping[str, Mapping[str, hub.Job]],
+) -> dict[tuple[str | None, str | None], hub.Job]:
+    """Normalize compile_model output to a flat dict.
+
+    Keys are ``(component, graph_name)`` tuples. ``graph_name`` is
+    ``None`` for single-graph components and non-collection models.
+
+    Handles three shapes:
+    - ``dict[str, dict[str, Job]]``: multi-graph collection.
+    - ``dict[str, Job]``: single-graph collection.
+    - ``Job``: single non-collection model.
+    """
+    if isinstance(compile_output, dict):
+        compile_jobs: dict[tuple[str | None, str | None], hub.Job] = {}
+        for component_name, job_or_jobs in compile_output.items():
+            if isinstance(job_or_jobs, dict):
+                for gn, job in job_or_jobs.items():
+                    compile_jobs[(component_name, gn)] = cast(hub.Job, job)
+            else:
+                compile_jobs[(component_name, None)] = cast(hub.Job, job_or_jobs)
+        return compile_jobs
+    return {(None, None): cast(hub.Job, compile_output)}
+
+
 def pre_quantize_compile_via_export(
-    compile_model: Callable[..., hub.CompileJob | dict[str, hub.CompileJob]],
+    compile_model: Callable[
+        ...,
+        hub.CompileJob
+        | dict[str, hub.CompileJob]
+        | dict[str, dict[str, hub.CompileJob]],
+    ],
     model_id: str,
     model: CollectionModel | BaseModel,
     device: ScorecardDevice,
@@ -477,14 +514,10 @@ def pre_quantize_compile_via_export(
         Precision.float,
     )
     assert compile_output is not None
-    compile_jobs = (
-        cast(dict[str | None, hub.Job], compile_output)
-        if isinstance(compile_output, dict)
-        else {None: compile_output}
-    )
+    compile_jobs = _normalize_compile_output(compile_output)
 
     # Verify success or cache job IDs to a file.
-    for component, job in compile_jobs.items():
+    for (component, graph_name), job in compile_jobs.items():
         assert_success_or_cache_job(
             model_id,
             job,
@@ -492,6 +525,7 @@ def pre_quantize_compile_via_export(
             ScorecardCompilePath.ONNX_FOR_QUANTIZATION,
             device,
             component,
+            graph_name,
         )
 
 
@@ -580,7 +614,12 @@ def quantize_via_export(
 
 
 def compile_via_export(
-    compile_model: Callable[..., hub.CompileJob | dict[str, hub.CompileJob]],
+    compile_model: Callable[
+        ...,
+        hub.CompileJob
+        | dict[str, hub.CompileJob]
+        | dict[str, dict[str, hub.CompileJob]],
+    ],
     model_id: str,
     model: CollectionModel | BaseModel,
     precision: Precision,
@@ -672,16 +711,12 @@ def compile_via_export(
             extra_options=scorecard_path.get_compile_options(),
         )
 
-    compile_jobs = (
-        cast(dict[str | None, hub.Job], compile_output)
-        if isinstance(compile_output, dict)
-        else {None: compile_output}
-    )
+    compile_jobs = _normalize_compile_output(compile_output)
 
     # Verify success or cache job IDs to a file.
-    for component, job in compile_jobs.items():
+    for (component, graph_name), job in compile_jobs.items():
         assert_success_or_cache_job(
-            model_id, job, precision, scorecard_path, device, component
+            model_id, job, precision, scorecard_path, device, component, graph_name
         )
 
 
@@ -723,6 +758,18 @@ def link_via_export(
     """
     has_components = isinstance(model, CollectionModel)
 
+    # Build component_names with graph_name support for multi-graph models
+    component_names: list[str] | dict[str, list[str] | None] | None
+    if isinstance(model, MultiGraphPretrainedCollectionModel):
+        component_names = {
+            comp_name: list(graph_dict.keys())
+            for comp_name, graph_dict in model.get_input_spec().items()
+        }
+    elif isinstance(model, CollectionModel):
+        component_names = model.component_class_names
+    else:
+        component_names = None
+
     # Fetch compile jobs from cache
     compile_jobs = fetch_async_test_jobs(
         hub.JobType.COMPILE,
@@ -730,7 +777,7 @@ def link_via_export(
         precision,
         scorecard_path,
         device,
-        model.component_class_names if isinstance(model, CollectionModel) else None,
+        component_names,
         raise_if_not_successful=True,
     )
     if compile_jobs is None:
@@ -748,9 +795,30 @@ def link_via_export(
     compiled_models_map = assert_success_and_get_target_models(
         cast(Mapping[str | None, hub.CompileJob], compile_jobs)
     )
-    compiled_models: hub.Model | dict[str | None, hub.Model] = (
-        compiled_models_map if has_components else compiled_models_map[None]
-    )
+
+    # For MultiGraph models, link_model expects dict[str, dict[str, hub.Model]]
+    # (collection) or dict[str, hub.Model] (single). Restructure the flat map.
+    if isinstance(model, MultiGraphPretrainedCollectionModel):
+        nested_models: dict[str, dict[str, hub.Model]] = {}
+        for comp_name, component in model.components.items():
+            if isinstance(component, MultiGraphBaseModel):
+                graph_names_for_comp = list(component.get_input_spec().keys())
+            else:
+                graph_names_for_comp = [comp_name]
+            nested_models[comp_name] = {}
+            for gn in graph_names_for_comp:
+                flat_key = f"{comp_name}_{gn}"
+                nested_models[comp_name][gn] = compiled_models_map[flat_key]
+        compiled_models: Any = nested_models
+    elif isinstance(model, MultiGraphBaseModel):
+        compiled_models = {
+            gn: compiled_models_map.get(gn, compiled_models_map.get(None))
+            for gn in model.get_input_spec()
+        }
+    elif has_components:
+        compiled_models = compiled_models_map
+    else:
+        compiled_models = compiled_models_map[None]
 
     # Call link_model from export script
     link_output = link_model(
@@ -769,9 +837,9 @@ def link_via_export(
     )
 
     # Verify success or cache job IDs to a file.
-    for component, job in link_jobs.items():
+    for comp_key, job in link_jobs.items():
         assert_success_or_cache_job(
-            model_id, job, precision, scorecard_path, device, component
+            model_id, job, precision, scorecard_path, device, comp_key
         )
 
 
@@ -1030,7 +1098,12 @@ def fetch_compile_or_link_jobs(
 
 
 def profile_via_export(
-    profile_model: Callable[..., hub.ProfileJob | dict[str, hub.ProfileJob]],
+    profile_model: Callable[
+        ...,
+        hub.ProfileJob
+        | dict[str, hub.ProfileJob]
+        | dict[str, dict[str, hub.ProfileJob]],
+    ],
     model_id: str,
     model: CollectionModel | BaseModel,
     precision: Precision,
@@ -1067,7 +1140,7 @@ def profile_via_export(
     device
         Scorecard device.
     """
-    if profile_jobs := fetch_cached_jobs_if_compile_jobs_are_identical(
+    if cached_profile_jobs := fetch_cached_jobs_if_compile_jobs_are_identical(
         hub.JobType.PROFILE,
         model_id,
         precision,
@@ -1076,13 +1149,16 @@ def profile_via_export(
     ):
         print(
             str_with_async_test_metadata(
-                f"The compiled assets from the previous scorecard are identical. Copying over profile job(s): {' '.join([job.job_id for job in profile_jobs.values()])}",
+                f"The compiled assets from the previous scorecard are identical. Copying over profile job(s): {' '.join([job.job_id for job in cached_profile_jobs.values()])}",
                 model_id,
                 precision,
                 scorecard_path,
                 device,
             )
         )
+        profile_jobs: dict[tuple[str | None, str | None], hub.Job] = {
+            (comp, None): job for comp, job in cached_profile_jobs.items()
+        }
     else:
         # If there are no cached profile jobs, use the export script to create a new profile job
         has_components = isinstance(model, CollectionModel)
@@ -1105,22 +1181,20 @@ def profile_via_export(
             assert target_model_single, f"Job failed: {job}"
             target_models = target_model_single
 
+        profile_options = model.get_hub_profile_options(
+            scorecard_path.runtime, scorecard_path.get_profile_options()
+        )
+
         profile_output = profile_model(
             model_id,
             device.execution_device,
-            model.get_hub_profile_options(
-                scorecard_path.runtime, scorecard_path.get_profile_options()
-            ),
+            profile_options,
             target_models,
         )
-        profile_jobs = (
-            cast(dict[str | None, hub.Job], profile_output)
-            if isinstance(profile_output, dict)
-            else {None: profile_output}
-        )
+        profile_jobs = _normalize_compile_output(profile_output)
 
     # Verify success or cache job IDs to a file.
-    for component, profile_job in profile_jobs.items():
+    for (component, graph_name), profile_job in profile_jobs.items():
         assert_success_or_cache_job(
             model_id,
             profile_job,
@@ -1128,11 +1202,17 @@ def profile_via_export(
             scorecard_path,
             device,
             component,
+            graph_name,
         )
 
 
 def inference_via_export(
-    inference_model: Callable[..., hub.InferenceJob | dict[str, hub.InferenceJob]],
+    inference_model: Callable[
+        ...,
+        hub.InferenceJob
+        | dict[str, hub.InferenceJob]
+        | dict[str, dict[str, hub.InferenceJob]],
+    ],
     model_id: str,
     model: CollectionModel | BaseModel,
     precision: Precision,
@@ -1191,22 +1271,23 @@ def inference_via_export(
         target_models = target_model_single
 
     runtime = scorecard_path.runtime
+    profile_options_str = scorecard_path.get_profile_options()
+
+    inference_inputs = model.sample_inputs(
+        use_channel_last_format=runtime.channel_last_native_execution
+    )
+    inference_options = model.get_hub_profile_options(runtime, profile_options_str)
+
     inference_output = inference_model(
-        model.sample_inputs(
-            use_channel_last_format=runtime.channel_last_native_execution
-        ),
+        inference_inputs,
         model_id,
         device.execution_device,
-        model.get_hub_profile_options(runtime, scorecard_path.get_profile_options()),
+        inference_options,
         target_models,
     )
-    inference_jobs: dict[str | None, hub.Job] = (
-        cast(dict[str | None, hub.Job], inference_output)
-        if isinstance(inference_output, dict)
-        else {None: inference_output}
-    )
+    inference_jobs = _normalize_compile_output(inference_output)
     # Verify success or cache job IDs to a file.
-    for component, inference_job in inference_jobs.items():
+    for (component, graph_name), inference_job in inference_jobs.items():
         assert_success_or_cache_job(
             model_id,
             inference_job,
@@ -1214,6 +1295,7 @@ def inference_via_export(
             scorecard_path,
             device,
             component,
+            graph_name,
         )
 
 
@@ -1303,7 +1385,9 @@ def export_test_e2e(
             mock.MagicMock(return_value=None),
         )
     )
-    if issubclass(model_cls, PretrainedCollectionModel):
+    if issubclass(
+        model_cls, (PretrainedCollectionModel, MultiGraphPretrainedCollectionModel)
+    ):
         mocks.extend(
             mock.patch.object(
                 component_cls,

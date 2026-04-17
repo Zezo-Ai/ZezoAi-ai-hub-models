@@ -473,6 +473,11 @@ class ScorecardDevice:
                 )
                 supports_qnn = supports_qnn or fw_name == InferenceEngine.QNN.value
 
+        # GENIE is built on top of QAIRT/QNN (compiles to --target_runtime qnn_dlc),
+        # so any device with QNN support can run GENIE.
+        if supports_qnn and TargetRuntime.GENIE not in runtimes:
+            runtimes.append(TargetRuntime.GENIE)
+
         if not supports_qnn:
             # No QNN support == QAIRT converters can't be used
             runtimes = [
@@ -511,7 +516,11 @@ class ScorecardDevice:
         ):
             inference_engines_to_test = [InferenceEngine.QNN, InferenceEngine.TFLITE]
         elif self.form_factor == ScorecardDevice.FormFactor.COMPUTE:
-            inference_engines_to_test = [InferenceEngine.QNN, InferenceEngine.ONNX]
+            inference_engines_to_test = [
+                InferenceEngine.QNN,
+                InferenceEngine.ONNX,
+                InferenceEngine.GENIE,
+            ]
         else:
             assert_never(self.form_factor)
 

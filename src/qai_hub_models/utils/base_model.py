@@ -262,7 +262,11 @@ class HubModel(HubModelProtocol):
     def __init__(self) -> None:
         # If a child class implements _get_input_spec_for_instance(),
         # then calling `get_input_spec` on the instance will redirect to it.
-        if self._get_input_spec_for_instance.__module__ != __name__:
+        # Skip for MultiGraphBaseModel subclasses: their get_input_spec
+        # returns dict[str, InputSpec] and wraps _get_input_spec_for_instance.
+        if self._get_input_spec_for_instance.__module__ != __name__ and not isinstance(
+            self, MultiGraphBaseModel
+        ):
             self.get_input_spec = self._get_input_spec_for_instance
         if self._get_output_names_for_instance.__module__ != __name__:
             self.get_output_names = self._get_output_names_for_instance
@@ -691,6 +695,141 @@ class BaseModel(
             )
 
 
+class MultiGraphBaseModel(BaseModel):
+    """A BaseModel whose get_input_spec returns ``dict[str, InputSpec]``.
+
+    Each key is a context-graph name.  The companion methods
+    ``get_hub_compile_options`` and ``get_hub_profile_options`` similarly
+    return dicts keyed by graph name so that callers never need to
+    re-derive the graph/spec mapping.
+    """
+
+    def get_input_spec(self, *args: Any, **kwargs: Any) -> dict[str, InputSpec]:
+        """Return input specifications keyed by graph name.
+
+        Parameters
+        ----------
+        *args
+            Positional arguments (subclass-defined).
+        **kwargs
+            Keyword arguments (subclass-defined).
+
+        Returns
+        -------
+        dict[str, InputSpec]
+            Mapping from context-graph name (e.g. ``"token_ar1_cl4096_1_of_3"``)
+            to the ``InputSpec`` for that graph.
+        """
+        raise NotImplementedError
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+    ) -> dict[str, str]:
+        """Return compile-option strings keyed by graph name.
+
+        Iterates ``get_input_spec()`` and delegates to
+        ``BaseModel.get_hub_compile_options`` once per graph, passing the
+        graph name as ``context_graph_name``.
+
+        Parameters
+        ----------
+        target_runtime
+            Target on-device runtime.
+        precision
+            Model precision.
+        other_compile_options
+            Additional compile options string.
+        device
+            Target device, or None.
+
+        Returns
+        -------
+        dict[str, str]
+            Mapping from context-graph name to the compile-options string
+            for that graph.
+        """
+        out: dict[str, str] = {}
+        for graph_name in self.get_input_spec():
+            out[graph_name] = super().get_hub_compile_options(
+                target_runtime,
+                precision,
+                other_compile_options,
+                device,
+                context_graph_name=graph_name,
+            )
+        return out
+
+    def get_hub_profile_options(
+        self,
+        target_runtime: TargetRuntime,
+        other_profile_options: str = "",
+    ) -> dict[str, str]:
+        """Return profile-option strings keyed by graph name.
+
+        Iterates ``get_input_spec()`` and delegates to
+        ``BaseModel.get_hub_profile_options`` once per graph, passing the
+        graph name as ``context_graph_name``.
+
+        Parameters
+        ----------
+        target_runtime
+            Target on-device runtime.
+        other_profile_options
+            Additional profile options string.
+
+        Returns
+        -------
+        dict[str, str]
+            Mapping from context-graph name to the profile-options string
+            for that graph.
+        """
+        out: dict[str, str] = {}
+        for graph_name in self.get_input_spec():
+            out[graph_name] = super().get_hub_profile_options(
+                target_runtime,
+                other_profile_options,
+                context_graph_name=graph_name,
+            )
+        return out
+
+    def sample_inputs(
+        self,
+        input_spec: InputSpec | None = None,
+        use_channel_last_format: bool = True,
+        **kwargs: Any,
+    ) -> dict[str, SampleInputsType]:
+        """Return sample inputs keyed by graph name.
+
+        Iterates ``get_input_spec()`` and delegates to
+        ``BaseModel.sample_inputs`` once per graph.
+
+        Parameters
+        ----------
+        input_spec
+            Ignored; specs are read from ``get_input_spec()``.
+        use_channel_last_format
+            Whether to transpose inputs to channel-last layout.
+        **kwargs
+            Forwarded to ``BaseModel.sample_inputs``.
+
+        Returns
+        -------
+        dict[str, SampleInputsType]
+            Mapping from context-graph name to sample input tensors
+            for that graph.
+        """
+        out: dict[str, SampleInputsType] = {}
+        for graph_name, spec in self.get_input_spec().items():
+            out[graph_name] = super().sample_inputs(
+                spec, use_channel_last_format, **kwargs
+            )
+        return out
+
+
 class BasePrecompiledModel(HubModel, FromPrecompiledProtocol):
     """
     A pre-compiled hub model.
@@ -740,6 +879,161 @@ class BasePrecompiledModel(HubModel, FromPrecompiledProtocol):
 
 class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtocol):
     pass
+
+
+class MultiGraphPretrainedCollectionModel(
+    CollectionModel[BaseModel | MultiGraphBaseModel], FromPretrainedProtocol
+):
+    """Collection model where some or all components have multiple graphs."""
+
+    def get_input_spec(
+        self,
+    ) -> dict[str, dict[str, InputSpec]]:
+        """Return input specifications for every component and graph.
+
+        For ``MultiGraphBaseModel`` components the inner dict is the
+        component's own ``get_input_spec()`` (graph_name -> InputSpec).
+        For plain ``BaseModel`` components, a single-entry dict is
+        synthesized using the component name as the graph key.
+
+        Returns
+        -------
+        dict[str, dict[str, InputSpec]]
+            Outer key: component name (e.g. ``"llama3_2_1b_part1_of_3"``).
+            Inner key: context-graph name (e.g.
+            ``"token_ar1_cl4096_1_of_3"``).
+            Value: the ``InputSpec`` for that graph.
+        """
+        out: dict[str, dict[str, InputSpec]] = {}
+        for comp_name, component in self.components.items():
+            if isinstance(component, MultiGraphBaseModel):
+                out[comp_name] = component.get_input_spec()
+            else:
+                out[comp_name] = {comp_name: component.get_input_spec()}
+        return out
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+    ) -> dict[str, dict[str, str]]:
+        """Return compile-option strings for every component and graph.
+
+        Delegates to each component's ``get_hub_compile_options``.
+
+        Parameters
+        ----------
+        target_runtime
+            Target on-device runtime.
+        precision
+            Model precision.
+        other_compile_options
+            Additional compile options string.
+        device
+            Target device, or None.
+
+        Returns
+        -------
+        dict[str, dict[str, str]]
+            Outer key: component name.
+            Inner key: context-graph name.
+            Value: compile-options string for that graph.
+        """
+        out: dict[str, dict[str, str]] = {}
+        for comp_name, component in self.components.items():
+            if isinstance(component, MultiGraphBaseModel):
+                out[comp_name] = component.get_hub_compile_options(
+                    target_runtime, precision, other_compile_options, device
+                )
+            else:
+                out[comp_name] = {
+                    comp_name: component.get_hub_compile_options(
+                        target_runtime,
+                        precision,
+                        other_compile_options,
+                        device,
+                        context_graph_name=comp_name,
+                    )
+                }
+        return out
+
+    def get_hub_profile_options(
+        self,
+        target_runtime: TargetRuntime,
+        other_profile_options: str = "",
+    ) -> dict[str, dict[str, str]]:
+        """Return profile-option strings for every component and graph.
+
+        Delegates to each component's ``get_hub_profile_options``.
+
+        Parameters
+        ----------
+        target_runtime
+            Target on-device runtime.
+        other_profile_options
+            Additional profile options string.
+
+        Returns
+        -------
+        dict[str, dict[str, str]]
+            Outer key: component name.
+            Inner key: context-graph name.
+            Value: profile-options string for that graph.
+        """
+        out: dict[str, dict[str, str]] = {}
+        for comp_name, component in self.components.items():
+            if isinstance(component, MultiGraphBaseModel):
+                out[comp_name] = component.get_hub_profile_options(
+                    target_runtime, other_profile_options
+                )
+            else:
+                out[comp_name] = {
+                    comp_name: component.get_hub_profile_options(
+                        target_runtime,
+                        other_profile_options,
+                        context_graph_name=comp_name,
+                    )
+                }
+        return out
+
+    def sample_inputs(
+        self,
+        use_channel_last_format: bool = True,
+        **kwargs: Any,
+    ) -> dict[str, dict[str, SampleInputsType]]:
+        """Return sample inputs for every component and graph.
+
+        Delegates to each component's ``sample_inputs()``.
+
+        Parameters
+        ----------
+        use_channel_last_format
+            Whether to transpose inputs to channel-last layout.
+        **kwargs
+            Forwarded to each component's ``sample_inputs``.
+
+        Returns
+        -------
+        dict[str, dict[str, SampleInputsType]]
+            Outer key: component name.
+            Inner key: context-graph name.
+            Value: sample input tensors for that graph.
+        """
+        out: dict[str, dict[str, SampleInputsType]] = {}
+        for comp_name, component in self.components.items():
+            if isinstance(component, MultiGraphBaseModel):
+                out[comp_name] = component.sample_inputs(
+                    use_channel_last_format=use_channel_last_format, **kwargs
+                )
+            else:
+                out[comp_name] = {
+                    comp_name: component.sample_inputs(
+                        use_channel_last_format=use_channel_last_format, **kwargs
+                    )
+                }
+        return out
 
 
 class PrecompiledCollectionModel(

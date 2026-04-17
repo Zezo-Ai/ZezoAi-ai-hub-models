@@ -197,6 +197,7 @@ class ScorecardJobYaml(
         device: ScorecardDevice,
         precision: Precision = Precision.float,
         component: str | None = None,
+        graph_name: str | None = None,
     ) -> None:
         """
         Set the key for this job in the YAML that stores asyncronously-ran scorecard jobs.
@@ -215,9 +216,13 @@ class ScorecardJobYaml(
             The precision in which this model is running
         component
             The name of the model component being tested, if applicable
+        graph_name
+            The name of the graph being executed (for multi-graph models)
         """
         self.job_id_mapping[
-            get_async_job_cache_name(path, model_id, device, precision, component)
+            get_async_job_cache_name(
+                path, model_id, device, precision, component, graph_name
+            )
         ] = job_id
 
     def update(self, other: ScorecardJobYaml) -> None:
@@ -235,6 +240,7 @@ class ScorecardJobYaml(
         device: ScorecardDevice,
         precision: Precision = Precision.float,
         component: str | None = None,
+        graph_name: str | None = None,
         wait_for_job: bool = True,
         wait_for_max_job_duration: int | None = None,
     ) -> ScorecardJobTypeVar:
@@ -253,6 +259,8 @@ class ScorecardJobYaml(
             The precision in which this model is running
         component
             The name of the model component being tested, if applicable
+        graph_name
+            The name of the graph being executed (for multi-graph models)
         wait_for_job
             If false, running jobs are treated like they were "skipped"
         wait_for_max_job_duration
@@ -270,8 +278,9 @@ class ScorecardJobYaml(
             precision,
             component,
         )
+        jn = component or model_id
         return self.scorecard_job_type(
-            component or model_id,
+            f"{jn}_{graph_name}" if graph_name else jn,
             precision,
             job_id,
             device,
@@ -322,9 +331,12 @@ class QuantizeScorecardJobYaml(
         device: ScorecardDevice,
         precision: Precision = Precision.float,
         component: str | None = None,
+        graph_name: str | None = None,
     ) -> str | None:
         return self.job_id_mapping.get(
-            get_async_job_cache_name(None, model_id, cs_universal, precision, component)
+            get_async_job_cache_name(
+                None, model_id, cs_universal, precision, component, graph_name
+            )
         )
 
     def set_job_id(
@@ -335,9 +347,12 @@ class QuantizeScorecardJobYaml(
         device: ScorecardDevice,
         precision: Precision = Precision.float,
         component: str | None = None,
+        graph_name: str | None = None,
     ) -> None:
         self.job_id_mapping[
-            get_async_job_cache_name(None, model_id, cs_universal, precision, component)
+            get_async_job_cache_name(
+                None, model_id, cs_universal, precision, component, graph_name
+            )
         ] = job_id
 
     def get_all_jobs(

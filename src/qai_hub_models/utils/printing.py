@@ -81,6 +81,12 @@ def print_inference_metrics(
 ) -> None:
     if output_names is None:
         output_names = list(inference_result.keys())
+    missing = [n for n in output_names if n not in inference_result]
+    if missing:
+        raise KeyError(
+            f"Output names {missing} not found in inference_result. "
+            f"Available keys: {list(inference_result.keys())}"
+        )
     inference_data = [
         np.concatenate(inference_result[out_name], axis=0) for out_name in output_names
     ]
