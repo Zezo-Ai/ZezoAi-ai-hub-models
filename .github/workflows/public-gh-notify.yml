@@ -10,15 +10,6 @@ on:
     branches:
       - main
 
-env:
-  ISSUE_EMOJI: ":ladybug:"
-  PR_EMOJI: ":male-technologist:"
-  MSG_TITLE: "[Public GitHub]"
-  # Escape &, <, > in user-supplied text for Slack mrkdwn.
-  # Without this, a crafted title could inject links or @mentions.
-  SLACK_ESCAPE: 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
-  CHANNEL: ${{ secrets.SLACK_CHANNEL_ID }}
-
 jobs:
   notify_new_issue:
     if: >-
@@ -28,21 +19,17 @@ jobs:
     name: Notify Slack - New Issue
     runs-on: ubuntu-latest
     steps:
-    - name: Build payload
-      env:
-        RAW_TITLE: ${{ github.event.issue.title }}
-        URL: ${{ github.event.issue.html_url }}
-        LABEL: "New issue created"
-      run: |
-        slack_title=$(printf '%s' "$RAW_TITLE" | sed "$SLACK_ESCAPE")
-        jq -n --arg channel "$CHANNEL" \
-              --arg text "$ISSUE_EMOJI $MSG_TITLE $LABEL: <$URL|$slack_title>" \
-              '{channel: $channel, text: $text}' > /tmp/slack_api_payload.json
-    - uses: slackapi/slack-github-action@v3
+    - uses: actions/checkout@v4
       with:
-        method: chat.postMessage
+        sparse-checkout: .github/actions/slack-notify-public-github
+    - uses: ./.github/actions/slack-notify-public-github
+      with:
+        emoji: ":ladybug:"
+        message: "New issue created"
+        github-user-content-title: ${{ github.event.issue.title }}
+        github-user-content-url: ${{ github.event.issue.html_url }}
+        channel: ${{ secrets.SLACK_CHANNEL_ID }}
         token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
-        payload-file-path: /tmp/slack_api_payload.json
 
   notify_new_issue_comment:
     if: >-
@@ -53,21 +40,17 @@ jobs:
     name: Notify Slack - New Issue Comment
     runs-on: ubuntu-latest
     steps:
-    - name: Build payload
-      env:
-        RAW_TITLE: ${{ github.event.issue.title }}
-        URL: ${{ github.event.issue.html_url }}
-        LABEL: "New issue comment"
-      run: |
-        slack_title=$(printf '%s' "$RAW_TITLE" | sed "$SLACK_ESCAPE")
-        jq -n --arg channel "$CHANNEL" \
-              --arg text "$ISSUE_EMOJI $MSG_TITLE $LABEL: <$URL|$slack_title>" \
-              '{channel: $channel, text: $text}' > /tmp/slack_api_payload.json
-    - uses: slackapi/slack-github-action@v3
+    - uses: actions/checkout@v4
       with:
-        method: chat.postMessage
+        sparse-checkout: .github/actions/slack-notify-public-github
+    - uses: ./.github/actions/slack-notify-public-github
+      with:
+        emoji: ":ladybug:"
+        message: "New issue comment"
+        github-user-content-title: ${{ github.event.issue.title }}
+        github-user-content-url: ${{ github.event.issue.html_url }}
+        channel: ${{ secrets.SLACK_CHANNEL_ID }}
         token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
-        payload-file-path: /tmp/slack_api_payload.json
 
   notify_stale_issues:
     if: >-
@@ -78,21 +61,17 @@ jobs:
     name: Notify Slack - Issue became Stale
     runs-on: ubuntu-latest
     steps:
-    - name: Build payload
-      env:
-        RAW_TITLE: ${{ github.event.issue.title }}
-        URL: ${{ github.event.issue.html_url }}
-        LABEL: "An issue became stale"
-      run: |
-        slack_title=$(printf '%s' "$RAW_TITLE" | sed "$SLACK_ESCAPE")
-        jq -n --arg channel "$CHANNEL" \
-              --arg text "$ISSUE_EMOJI $MSG_TITLE $LABEL: <$URL|$slack_title>" \
-              '{channel: $channel, text: $text}' > /tmp/slack_api_payload.json
-    - uses: slackapi/slack-github-action@v3
+    - uses: actions/checkout@v4
       with:
-        method: chat.postMessage
+        sparse-checkout: .github/actions/slack-notify-public-github
+    - uses: ./.github/actions/slack-notify-public-github
+      with:
+        emoji: ":ladybug:"
+        message: "An issue became stale"
+        github-user-content-title: ${{ github.event.issue.title }}
+        github-user-content-url: ${{ github.event.issue.html_url }}
+        channel: ${{ secrets.SLACK_CHANNEL_ID }}
         token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
-        payload-file-path: /tmp/slack_api_payload.json
 
   notify_new_pr:
     if: >-
@@ -102,21 +81,17 @@ jobs:
     name: Notify Slack - New PR Created
     runs-on: ubuntu-latest
     steps:
-    - name: Build payload
-      env:
-        RAW_TITLE: ${{ github.event.pull_request.title }}
-        URL: ${{ github.event.pull_request.html_url }}
-        LABEL: "New PR"
-      run: |
-        slack_title=$(printf '%s' "$RAW_TITLE" | sed "$SLACK_ESCAPE")
-        jq -n --arg channel "$CHANNEL" \
-              --arg text "$PR_EMOJI $MSG_TITLE $LABEL: <$URL|$slack_title>" \
-              '{channel: $channel, text: $text}' > /tmp/slack_api_payload.json
-    - uses: slackapi/slack-github-action@v3
+    - uses: actions/checkout@v4
       with:
-        method: chat.postMessage
+        sparse-checkout: .github/actions/slack-notify-public-github
+    - uses: ./.github/actions/slack-notify-public-github
+      with:
+        emoji: ":male-technologist:"
+        message: "New PR"
+        github-user-content-title: ${{ github.event.pull_request.title }}
+        github-user-content-url: ${{ github.event.pull_request.html_url }}
+        channel: ${{ secrets.SLACK_CHANNEL_ID }}
         token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
-        payload-file-path: /tmp/slack_api_payload.json
 
   notify_new_pr_comment:
     if: >-
@@ -127,18 +102,14 @@ jobs:
     name: Notify Slack - New PR Comment
     runs-on: ubuntu-latest
     steps:
-    - name: Build payload
-      env:
-        RAW_TITLE: ${{ github.event.issue.title }}
-        URL: ${{ github.event.issue.pull_request.html_url }}
-        LABEL: "New PR Comment"
-      run: |
-        slack_title=$(printf '%s' "$RAW_TITLE" | sed "$SLACK_ESCAPE")
-        jq -n --arg channel "$CHANNEL" \
-              --arg text "$PR_EMOJI $MSG_TITLE $LABEL: <$URL|$slack_title>" \
-              '{channel: $channel, text: $text}' > /tmp/slack_api_payload.json
-    - uses: slackapi/slack-github-action@v3
+    - uses: actions/checkout@v4
       with:
-        method: chat.postMessage
+        sparse-checkout: .github/actions/slack-notify-public-github
+    - uses: ./.github/actions/slack-notify-public-github
+      with:
+        emoji: ":male-technologist:"
+        message: "New PR Comment"
+        github-user-content-title: ${{ github.event.issue.title }}
+        github-user-content-url: ${{ github.event.issue.pull_request.html_url }}
+        channel: ${{ secrets.SLACK_CHANNEL_ID }}
         token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
-        payload-file-path: /tmp/slack_api_payload.json
