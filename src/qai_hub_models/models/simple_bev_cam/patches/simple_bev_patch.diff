@@ -193,10 +193,20 @@ index 8842e3f..48e5180 100644
      grid_z, grid_y, grid_x = meshgrid3d(B, Z, Y, X, norm=norm, device=device)
      x = torch.reshape(grid_x, [B, -1])
 diff --git a/utils/vox.py b/utils/vox.py
-index 82af002..b328fe7 100644
+index 82af002..88a6153 100644
 --- a/utils/vox.py
 +++ b/utils/vox.py
-@@ -288,7 +288,8 @@ class Vox_util(object):
+@@ -10,8 +10,7 @@ class Vox_util(object):
+         B, D = list(scene_centroid.shape)
+         self.Z, self.Y, self.X = Z, Y, X
+ 
+-        scene_centroid = scene_centroid.detach().cpu().numpy()
+-        x_centroid, y_centroid, z_centroid = scene_centroid[0]
++        x_centroid, y_centroid, z_centroid = [v.item() for v in scene_centroid[0].detach().cpu()]
+         self.XMIN += x_centroid
+         self.XMAX += x_centroid
+         self.YMIN += y_centroid
+@@ -288,7 +287,8 @@ class Vox_util(object):
          # B x C x Z x Y x X
          return feat_voxels
  
@@ -206,7 +216,7 @@ index 82af002..b328fe7 100644
          # rgb_camB is B x C x H x W
          # pixB_T_camA is B x 4 x 4
  
-@@ -298,15 +299,15 @@ class Vox_util(object):
+@@ -298,15 +298,15 @@ class Vox_util(object):
          # this puts each C-dim pixel in the rgb_camB
          # along a ray in the voxelgrid
          B, C, H, W = list(rgb_camB.shape)
@@ -224,7 +234,7 @@ index 82af002..b328fe7 100644
          normalizer = torch.unsqueeze(xyz_pixB[:,:,2], 2)
          EPS=1e-6
          # z = xyz_pixB[:,:,2]
-@@ -320,26 +321,36 @@ class Vox_util(object):
+@@ -320,26 +320,36 @@ class Vox_util(object):
          y_valid = (y>-0.5).bool() & (y<float(H-0.5)).bool()
          z_valid = (z>0.0).bool()
          valid_mem = (x_valid & y_valid & z_valid).reshape(B, 1, Z, Y, X).float()

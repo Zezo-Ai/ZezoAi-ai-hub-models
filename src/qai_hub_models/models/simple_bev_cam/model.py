@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import os
 
-import numpy as np
 import torch
 from torch import nn
 from typing_extensions import Self
@@ -24,7 +23,7 @@ SIMPLEBEV_SOURCE_PATCHES = [
     )
 ]
 MODEL_ID = __name__.split(".")[-2]
-MODEL_ASSET_VERSION = 1
+MODEL_ASSET_VERSION = 2
 DEFAULT_WEIGHTS = "model-000025000.pth"
 
 with SourceAsRoot(
@@ -67,14 +66,16 @@ class SimpleBev(BaseModel):
         self.ymin, self.ymax = ymin, ymax
         self.bounds = (self.xmin, self.xmax, self.ymin, self.ymax, self.zmin, self.zmax)
         self.Z, self.Y, self.X = Z, Y, X
-        self.scene_centroid_py = np.array(
+        self.scene_centroid = torch.tensor(
             [
-                self.scene_centroid_x,
-                self.scene_centroid_y,
-                self.scene_centroid_z,
-            ]
-        ).reshape([1, 3])
-        self.scene_centroid = torch.from_numpy(self.scene_centroid_py).float()
+                [
+                    self.scene_centroid_x,
+                    self.scene_centroid_y,
+                    self.scene_centroid_z,
+                ]
+            ],
+            dtype=torch.float32,
+        )
         self.vox_util_ = utils.vox.Vox_util(
             self.Z,
             self.Y,
@@ -196,10 +197,10 @@ def _load_model_from_weight(
     device: str,
 ) -> nn.Module:
     bounds = (xmin, xmax, ymin, ymax, zmin, zmax)
-    scene_centroid_py = np.array(
-        [scene_centroid_x, scene_centroid_y, scene_centroid_z]
-    ).reshape([1, 3])
-    scene_centroid = torch.from_numpy(scene_centroid_py).float()
+    scene_centroid = torch.tensor(
+        [[scene_centroid_x, scene_centroid_y, scene_centroid_z]],
+        dtype=torch.float32,
+    )
     scene_centroid = scene_centroid.to("cpu")
     vox_util = utils.vox.Vox_util(
         Z, Y, X, scene_centroid, bounds, None, assert_cube=False
