@@ -19,9 +19,11 @@ jobs:
     name: Notify Slack - New Issue
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         sparse-checkout: .github/actions/slack-notify-public-github
+        filter: blob:none
+        fetch-depth: 1
     - uses: ./.github/actions/slack-notify-public-github
       with:
         emoji: ":ladybug:"
@@ -40,9 +42,11 @@ jobs:
     name: Notify Slack - New Issue Comment
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         sparse-checkout: .github/actions/slack-notify-public-github
+        filter: blob:none
+        fetch-depth: 1
     - uses: ./.github/actions/slack-notify-public-github
       with:
         emoji: ":ladybug:"
@@ -61,9 +65,11 @@ jobs:
     name: Notify Slack - Issue became Stale
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         sparse-checkout: .github/actions/slack-notify-public-github
+        filter: blob:none
+        fetch-depth: 1
     - uses: ./.github/actions/slack-notify-public-github
       with:
         emoji: ":ladybug:"
@@ -81,9 +87,11 @@ jobs:
     name: Notify Slack - New PR Created
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         sparse-checkout: .github/actions/slack-notify-public-github
+        filter: blob:none
+        fetch-depth: 1
     - uses: ./.github/actions/slack-notify-public-github
       with:
         emoji: ":male-technologist:"
@@ -102,9 +110,11 @@ jobs:
     name: Notify Slack - New PR Comment
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         sparse-checkout: .github/actions/slack-notify-public-github
+        filter: blob:none
+        fetch-depth: 1
     - uses: ./.github/actions/slack-notify-public-github
       with:
         emoji: ":male-technologist:"
