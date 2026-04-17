@@ -101,6 +101,7 @@ def link_model(
     model_name: str,
     model: MultiGraphPretrainedCollectionModel,
     target_runtime: TargetRuntime,
+    extra_options: str = "",
 ) -> dict[str, hub.client.LinkJob]:
     """Link compiled DLCs to context binary for AOT."""
     assert target_runtime.is_aot_compiled, (
@@ -110,7 +111,7 @@ def link_model(
     for component_name, model_dict in compiled_models.items():
         component = model.components[component_name]
 
-        link_options = component.get_hub_link_options(target_runtime)
+        link_options = component.get_hub_link_options(target_runtime, extra_options)
         print(f"Linking {component_name} to context binary")
         link_jobs[component_name] = hub.submit_link_job(
             list(model_dict.values()),
