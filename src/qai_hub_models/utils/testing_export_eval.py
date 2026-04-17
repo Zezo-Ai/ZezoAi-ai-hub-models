@@ -1553,7 +1553,11 @@ def torch_inference_for_accuracy_validation(
         for i, output in enumerate(model_outputs):
             outputs[i].append(output.numpy())
     hub_entries = dict(zip(output_names, outputs, strict=False))
-    cache_dataset(model_id, "torch_val", hub.upload_dataset(hub_entries))
+    cache_dataset(
+        model_id,
+        "torch_val",
+        hub.upload_dataset(hub_entries),
+    )
 
 
 def _pad_and_concatenate(tensor_list: list[np.ndarray]) -> np.ndarray:

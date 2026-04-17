@@ -50,7 +50,7 @@ ASSET_BASES_DEFAULT_PATH = os.path.join(
 
 QAIHM_STORE_ROOT = os.environ.get("QAIHM_STORE_ROOT", os.path.expanduser("~"))
 LOCAL_STORE_DEFAULT_PATH = os.path.join(QAIHM_STORE_ROOT, ".qaihm")
-EXECUTING_IN_CI_ENVIRONMENT = os.getenv("QAIHM_CI", "0") == "1"
+EXECUTING_IN_CI_ENVIRONMENT = IsOnCIEnvvar.get()
 SOURCE_AS_ROOT_LOCK = threading.Lock()
 
 PathLike = os.PathLike | str
