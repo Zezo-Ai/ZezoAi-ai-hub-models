@@ -660,7 +660,7 @@ class TargetRuntime(Enum):
         THIS MIGHT BE DIFFERENT THAN AI HUB's DEFAULT VERSION.
         """
         if self == TargetRuntime.GENIE:
-            return QAIRTVersion("2.42")
+            return QAIRTVersion("2.45")
         return self.inference_engine.default_qairt_version
 
     @property

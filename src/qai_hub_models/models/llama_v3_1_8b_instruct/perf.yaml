@@ -12,6 +12,7 @@ supported_chipsets:
 - qualcomm-snapdragon-x2-elite
 - qualcomm-snapdragon-x-elite
 - qualcomm-qcs9075
+- qualcomm-snapdragon-8-elite-for-galaxy
 precisions:
   w4a16:
     components:
@@ -21,10 +22,10 @@ precisions:
             genie:
               llm_metrics:
               - context_length: 4096
-                tokens_per_second: 16.17
+                tokens_per_second: 16.14323139190674
                 time_to_first_token_range_milliseconds:
-                  min: 111.043
-                  max: 3553.376
+                  min: 110.3389
+                  max: 3530.8448
           Snapdragon 8 Elite QRD:
             genie:
               llm_metrics:
@@ -45,15 +46,23 @@ precisions:
             genie:
               llm_metrics:
               - context_length: 4096
-                tokens_per_second: 21.0
+                tokens_per_second: 20.66337661743164
                 time_to_first_token_range_milliseconds:
-                  min: 129.952
-                  max: 4158.464
+                  min: 152.0971
+                  max: 4867.1072
           Dragonwing IQ-9075 EVK:
             genie:
               llm_metrics:
               - context_length: 4096
-                tokens_per_second: 9.997358322143555
+                tokens_per_second: 9.991623401641846
                 time_to_first_token_range_milliseconds:
-                  min: 184.58339999999998
-                  max: 5906.6687999999995
+                  min: 186.7094
+                  max: 5974.7008
+          Samsung Galaxy S25:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 14.541342163085938
+                time_to_first_token_range_milliseconds:
+                  min: 147.983
+                  max: 4735.456

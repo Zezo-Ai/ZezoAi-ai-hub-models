@@ -700,6 +700,7 @@ class CollectLLMPerfTask(CompositeTask):
                 model_name
                 for model_name in get_all_models()
                 if _model_has_llm_perf_tests(model_name)
+                and is_quantized_llm_model(model_name)
             ]
         else:
             models_to_test = [m.strip() for m in models_env.split(",") if m.strip()]

@@ -296,7 +296,7 @@ class GenieQDCJobs(QDCJobs):
         qdc_device: QDCDevice,
         genie_bundle_path: str,
         qairt_sdk_path: str | None = None,
-        qairt_version: str = "2.42.0.251225",
+        qairt_version: str = "2.45.40.260406",
     ) -> tuple[list[str], str | None]:
         """Prepare and upload Genie artifacts for the job submission.
 
@@ -309,7 +309,7 @@ class GenieQDCJobs(QDCJobs):
         qairt_sdk_path
             Path to the QAIRT SDK zip file. Required for auto devices.
         qairt_version
-            QAIRT SDK version to download on-device (e.g. ``"2.42.0.251225"``).
+            QAIRT SDK version to download on-device (e.g. ``"2.45.40.260406"``).
 
         Returns
         -------
@@ -433,7 +433,7 @@ def submit_genie_bundle_to_qdc_device(
     genie_bundle_path: str,
     job_name: str = "LLM Genie",
     qairt_sdk_path: str | None = None,
-    qairt_version: str = "2.42.0.251225",
+    qairt_version: str = "2.45.40.260406",
 ) -> tuple[float | None, float | None]:
     """
     Submit a Genie bundle to QDC for execution on the specified device.
@@ -451,7 +451,7 @@ def submit_genie_bundle_to_qdc_device(
     qairt_sdk_path
         Path to the QAIRT SDK zip file. Required for auto devices.
     qairt_version
-        QAIRT SDK version to download on-device (e.g. ``"2.42.0.251225"``).
+        QAIRT SDK version to download on-device (e.g. ``"2.45.40.260406"``).
 
     Returns
     -------
@@ -528,8 +528,8 @@ if __name__ == "__main__":
         "--qairt-version",
         type=str,
         required=False,
-        default="2.42.0.251225",
-        help="QAIRT SDK version to download on-device (e.g. 2.42.0.251225).",
+        default="2.45.40.260406",
+        help="QAIRT SDK version to download on-device (e.g. 2.45.40.260406).",
     )
 
     args = parser.parse_args()

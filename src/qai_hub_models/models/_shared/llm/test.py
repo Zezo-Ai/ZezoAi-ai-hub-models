@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from inspect import signature
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 from unittest.mock import MagicMock, Mock, _patch, patch
 
@@ -706,16 +706,28 @@ def setup_test_quantization(
 
 
 @dataclass
-class CachedCompileJobs:
-    """Compile jobs captured from a first export run, reused across devices.
+class CachedExportData:
+    """Data captured from the first export run, reused across devices.
 
     DLC compilation (ONNX → QNN) is expensive and device-agnostic.
-    Caching the resulting CompileJob objects lets subsequent devices skip
-    straight to the fast device-specific link step.
+    The genie bundle metadata (llm_config, input/output specs, encodings,
+    checkpoint path) is also invariant across devices.
+
+    Caching all of this lets subsequent devices skip model loading, ONNX
+    export, and compilation entirely — only the fast device-specific link
+    step and bundle assembly need to rerun.
     """
 
-    compile_jobs: list[hub.CompileJob]
-    source_device: ScorecardDevice
+    model_name: str
+    model_display_name: str
+    link_options: str
+    checkpoint: str | os.PathLike | Path
+    llm_config: Any
+    input_specs: dict[str, Any]
+    output_specs: dict[str, Any]
+    input_encodings_path: str
+    context_lengths: list[int]
+    compile_jobs_to_link: dict[str, list[hub.CompileJob]]
 
 
 class CompileJobCache:
@@ -726,15 +738,85 @@ class CompileJobCache:
     """
 
     def __init__(self) -> None:
-        self._cache: dict[tuple[str, Precision], CachedCompileJobs] = {}
+        self._cache: dict[tuple[str, Precision], CachedExportData] = {}
 
-    def get(self, model_id: str, precision: Precision) -> CachedCompileJobs | None:
+    def get(self, model_id: str, precision: Precision) -> CachedExportData | None:
         return self._cache.get((model_id, precision))
 
     def set(
-        self, model_id: str, precision: Precision, cached_jobs: CachedCompileJobs
+        self, model_id: str, precision: Precision, cached: CachedExportData
     ) -> None:
-        self._cache[(model_id, precision)] = cached_jobs
+        self._cache[(model_id, precision)] = cached
+
+
+def _link_download_and_prepare_bundle(
+    cached: CachedExportData,
+    model_id: str,
+    model_cls: type[LLM_AIMETOnnx],
+    device: ScorecardDevice,
+    precision: Precision,
+    output_dir: Path,
+) -> None:
+    """Link cached compile jobs for a new device, download DLCs, prepare genie bundle.
+
+    This is the fast path for device 2+: no model loading, no ONNX export,
+    no compilation. Only the device-specific link step and bundle assembly run.
+    """
+    hub_device = hub.get_devices(name=device.execution_device.name)[-1]
+    chipset_attr = next(
+        (attr for attr in hub_device.attributes if "chipset" in attr), None
+    )
+    chipset = chipset_attr.split(":")[-1] if chipset_attr else None
+    target_runtime = TargetRuntime.GENIE
+
+    link_jobs: dict[str, hub.client.LinkJob] = {}
+    for component_name, cjobs in cached.compile_jobs_to_link.items():
+        models: list[hub.Model | str | Path | None] = [
+            cast(hub.Model, cjob.get_target_model()) for cjob in cjobs
+        ]
+        full_name = f"{cached.model_name}_{component_name}"
+        link_job = hub.submit_link_job(
+            models,
+            name=full_name,
+            options=cached.link_options,
+            device=hub_device,
+        )
+        link_jobs[component_name] = link_job
+
+    target_model_list: list[str] = []
+    output_path = output_dir / ASSET_CONFIG.get_release_asset_name(
+        cached.model_name, target_runtime, precision, chipset
+    )
+    output_path.mkdir(parents=True, exist_ok=True)
+    for component_name, link_job in link_jobs.items():
+        if not link_job.wait().success:
+            raise RuntimeError(
+                f"Link job {link_job.job_id} failed. See: {link_job.url}"
+            )
+        target_model = link_job.get_target_model()
+        assert target_model is not None
+        target_model_filename = f"{cached.model_name}_{component_name}.bin"
+        target_model_list.append(target_model_filename)
+        target_model.download(str(output_path / target_model_filename))
+
+    first_link_job = next(iter(link_jobs.values()))
+    tool_versions = ToolVersions.from_job(first_link_job)
+    tool_versions.to_yaml(output_path / "tool-versions.yaml")
+
+    model_cls.prepare_genie_assets(
+        hub_device=hub_device,
+        checkpoint=cached.checkpoint,
+        llm_config=cached.llm_config,
+        context_length=max(cached.context_lengths),
+        model_list=target_model_list,
+        output_path=output_path,
+        precision=precision,
+        encodings_path=cached.input_encodings_path,
+        input_specs=cached.input_specs,
+        output_specs=cached.output_specs,
+        model_id=model_id,
+        model_name=cached.model_display_name,
+    )
 
 
 def run_llm_perf_test(
@@ -744,7 +826,7 @@ def run_llm_perf_test(
     precision: Precision,
     compile_job_cache: CompileJobCache,
     output_dir: Path | str,
-    model_cls: type,
+    model_cls: type[LLM_AIMETOnnx],
     model_asset_version: int | str,
     num_splits: int,
     export_context_lengths: list[int] | None = None,
@@ -760,8 +842,9 @@ def run_llm_perf_test(
     All context/sequence lengths are compiled into a single Genie bundle;
     perf.yaml is updated for each context length individually.
 
-    DLC compilation is skipped for device 2..N by replaying cached CompileJob
-    objects via mock — only the fast device-specific link step reruns.
+    For device 2..N, model loading, ONNX export, and compilation are skipped
+    entirely. Only the fast device-specific link step, bundle assembly, and
+    QDC run execute.
 
     Returns (tokens_per_second, time_to_first_token_ms).
     """
@@ -776,63 +859,116 @@ def run_llm_perf_test(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build export kwargs — model-specific values passed in directly
-    export_kwargs: dict[str, Any] = dict(
-        checkpoint=f"DEFAULT_{str(precision).upper()}",
-        sequence_length=export_sequence_lengths,
-        context_length=export_context_lengths,
-        _skip_quantsim_creation=True,
-        model_cls=model_cls,
-        model_name=model_id,
-        model_asset_version=model_asset_version,
-        num_splits=num_splits,
-        output_dir=str(output_dir),
-    )
-    if num_layers_per_split is not None:
-        export_kwargs["num_layers_per_split"] = num_layers_per_split
-    if fp_model_cls is not None:
-        export_kwargs["fp_model"] = fp_model_cls.from_pretrained(
-            sequence_length=max(export_sequence_lengths),
-            context_length=max(export_context_lengths),
-        )
-    if position_processor_cls is not None:
-        export_kwargs["position_processor_cls"] = position_processor_cls
-
-    common_export_flags = dict(
-        device=device.execution_device,
-        precision=precision,
-        skip_downloading=False,
-        skip_profiling=True,
-        skip_inferencing=True,
-        skip_summary=True,
-        target_runtime=TargetRuntime.GENIE,
-    )
-
-    # Compile — reuse cached DLC for device 2..N
     cached = compile_job_cache.get(model_id, precision)
     if cached is not None:
-        job_iter = iter(cached.compile_jobs)
-        with mock.patch(
-            "qai_hub.submit_compile_job",
-            side_effect=lambda *a, **kw: next(job_iter),
-        ):
-            export_model_func(**common_export_flags, **export_kwargs)
+        # Fast path: skip model loading, ONNX export, and compilation.
+        _link_download_and_prepare_bundle(
+            cached, model_id, model_cls, device, precision, output_dir
+        )
+        model_name = cached.model_name
     else:
-        captured: list[hub.CompileJob] = []
-        original = hub.submit_compile_job
+        # First device: full export, capture compile jobs + metadata.
+        export_kwargs: dict[str, Any] = dict(
+            checkpoint=f"DEFAULT_{str(precision).upper()}",
+            sequence_length=export_sequence_lengths,
+            context_length=export_context_lengths,
+            _skip_quantsim_creation=True,
+            model_cls=model_cls,
+            model_id=model_id,
+            model_asset_version=model_asset_version,
+            num_splits=num_splits,
+            output_dir=str(output_dir),
+        )
+        if num_layers_per_split is not None:
+            export_kwargs["num_layers_per_split"] = num_layers_per_split
+        if fp_model_cls is not None:
+            export_kwargs["fp_model"] = fp_model_cls.from_pretrained(
+                sequence_length=max(export_sequence_lengths),
+                context_length=max(export_context_lengths),
+            )
+        if position_processor_cls is not None:
+            export_kwargs["position_processor_cls"] = position_processor_cls
 
-        def _capture(*args: Any, **kwargs: Any) -> hub.CompileJob:
-            job = original(*args, **kwargs)
-            captured.append(job)
+        common_export_flags = dict(
+            device=device.execution_device,
+            precision=precision,
+            skip_downloading=False,
+            skip_profiling=True,
+            skip_inferencing=True,
+            skip_summary=True,
+            target_runtime=TargetRuntime.GENIE,
+        )
+
+        captured_compile_jobs_to_link: dict[str, list[hub.CompileJob]] = {}
+        original_compile = hub.submit_compile_job
+        original_link = hub.submit_link_job
+
+        def _capture_compile(*args: Any, **kwargs: Any) -> hub.CompileJob:
+            job = original_compile(*args, **kwargs)
+            name = kwargs.get("name", "")
+            for part_idx in range(num_splits):
+                suffix = f"_{part_idx + 1}_of_{num_splits}"
+                component_name = f"part{suffix}"
+                if name.endswith(suffix):
+                    captured_compile_jobs_to_link.setdefault(component_name, []).append(
+                        job
+                    )
+                    break
             return job
 
-        with mock.patch("qai_hub.submit_compile_job", side_effect=_capture):
+        captured_link_options: list[str] = []
+
+        def _capture_link(*args: Any, **kwargs: Any) -> hub.client.LinkJob:
+            if "options" in kwargs:
+                captured_link_options.append(kwargs["options"])
+            return original_link(*args, **kwargs)
+
+        captured_metadata: dict[str, Any] = {}
+        original_prepare = model_cls.prepare_genie_assets
+
+        def _capture_prepare(*args: Any, **kwargs: Any) -> None:
+            captured_metadata["checkpoint"] = kwargs.get("checkpoint")
+            captured_metadata["llm_config"] = kwargs.get("llm_config")
+            captured_metadata["input_specs"] = kwargs.get("input_specs")
+            captured_metadata["output_specs"] = kwargs.get("output_specs")
+            captured_metadata["encodings_path"] = kwargs.get("encodings_path")
+            captured_metadata["model_display_name"] = kwargs.get("model_name")
+            return original_prepare(*args, **kwargs)
+
+        with (
+            mock.patch("qai_hub.submit_compile_job", side_effect=_capture_compile),
+            mock.patch("qai_hub.submit_link_job", side_effect=_capture_link),
+            mock.patch.object(
+                model_cls, "prepare_genie_assets", side_effect=_capture_prepare
+            ),
+        ):
             export_model_func(**common_export_flags, **export_kwargs)
 
-        compile_job_cache.set(model_id, precision, CachedCompileJobs(captured, device))
+        from qai_hub_models.utils.args import get_export_model_name
+
+        model_name = get_export_model_name(
+            model_cls, model_id, precision, export_kwargs
+        )
+
+        compile_job_cache.set(
+            model_id,
+            precision,
+            CachedExportData(
+                model_name=model_name,
+                model_display_name=captured_metadata.get("model_display_name", ""),
+                link_options=captured_link_options[0] if captured_link_options else "",
+                checkpoint=captured_metadata.get("checkpoint", ""),
+                llm_config=captured_metadata.get("llm_config"),
+                input_specs=captured_metadata.get("input_specs", {}),
+                output_specs=captured_metadata.get("output_specs", {}),
+                input_encodings_path=captured_metadata.get("encodings_path", ""),
+                context_lengths=export_context_lengths,
+                compile_jobs_to_link=captured_compile_jobs_to_link,
+            ),
+        )
 
     genie_bundle_path = output_dir / ASSET_CONFIG.get_release_asset_name(
-        model_id, TargetRuntime.GENIE, precision, device.chipset
+        model_name, TargetRuntime.GENIE, precision, device.chipset
     )
 
     # QDC run
@@ -859,79 +995,5 @@ def run_llm_perf_test(
                 tps,
                 ttft,
             )
-
-    return tps, ttft
-
-
-def run_llm_perf_test_from_s3(
-    model_id: str,
-    model_asset_version: int | str,
-    device: ScorecardDevice,
-    precision: Precision,
-    context_length: int,
-    output_dir: Path | str,
-    qairt_sdk_path: str | None = None,
-    skip_perf_update: bool = False,
-) -> tuple[float | None, float | None]:
-    """Download pre-built genie bundle from S3 and run on a QDC device.
-
-    Skips model compilation entirely. Bundle is identified by
-    (model_id, model_asset_version, precision, device.chipset).
-
-    Returns (tokens_per_second, time_to_first_token_ms).
-    """
-    import zipfile
-
-    import requests
-
-    from qai_hub_models.models._shared.llm.perf_collection import update_perf_yaml
-    from qai_hub_models.utils.qdc.genie_jobs import submit_genie_bundle_to_qdc_device
-
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    bundle_name = ASSET_CONFIG.get_release_asset_name(
-        model_id, TargetRuntime.GENIE, precision, device.chipset
-    )
-    bundle_zip_path = output_dir / f"{bundle_name}.zip"
-    bundle_dir = output_dir / bundle_name
-
-    if not bundle_dir.exists():
-        url = ASSET_CONFIG.get_release_asset_url(
-            model_id,
-            str(model_asset_version),
-            TargetRuntime.GENIE,
-            precision,
-            device.chipset,
-        )
-        print(f"Downloading genie bundle from {url}")
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-        with open(bundle_zip_path, "wb") as f:
-            f.writelines(response.iter_content(chunk_size=8192))
-        with zipfile.ZipFile(bundle_zip_path, "r") as zf:
-            zf.extractall(output_dir)
-
-    api_token = os.environ.get("QDC_API_TOKEN")
-    if not api_token:
-        raise ValueError("QDC_API_TOKEN environment variable is not set")
-
-    tps, ttft = submit_genie_bundle_to_qdc_device(
-        api_token,
-        device.reference_device.name,
-        str(bundle_dir),
-        job_name=f"Genie {model_id} {precision}",
-        qairt_sdk_path=qairt_sdk_path,
-    )
-
-    if not skip_perf_update and tps is not None and ttft is not None:
-        update_perf_yaml(
-            model_id,
-            device.reference_device_name,
-            precision,
-            context_length,
-            tps,
-            ttft,
-        )
 
     return tps, ttft

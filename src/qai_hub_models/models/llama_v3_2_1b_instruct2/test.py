@@ -17,15 +17,8 @@ from transformers import AutoConfig
 from qai_hub_models.models._shared.llm import test
 from qai_hub_models.models._shared.llm.evaluate import evaluate
 from qai_hub_models.models._shared.llm.model import (
-    DEFAULT_EXPORT_CONTEXT_LENGTHS,
-    DEFAULT_EXPORT_SEQUENCE_LENGTHS,
     LLM_QNN,
 )
-from qai_hub_models.models._shared.llm.perf_collection import (
-    LLMPerfConfig,
-    get_llm_perf_parametrization,
-)
-from qai_hub_models.models._shared.llm.test import CompileJobCache
 from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.models.llama_v3_2_1b_instruct2 import (
     MODEL_ID,
@@ -38,8 +31,6 @@ from qai_hub_models.models.llama_v3_2_1b_instruct2.export import (
 from qai_hub_models.models.llama_v3_2_1b_instruct2.model import (
     DEFAULT_CONTEXT_LENGTH,
     HF_REPO_NAME,
-    MODEL_ASSET_VERSION,
-    NUM_SPLITS,
     FPSplitModelWrapper,
     Llama3_2_1B_PreSplit,
     Llama3_2_1B_QuantizablePreSplit,
@@ -366,51 +357,3 @@ def test_qdc(
     else:
         assert tps > 8.00
         assert min_ttft < 135000.0
-
-
-def _get_llm_perf_params() -> list[tuple[Precision, ScorecardDevice]]:
-    params = get_llm_perf_parametrization(
-        MODEL_ID,
-        default_devices=[cs_8_elite],
-        default_precisions=[Precision.w4],
-    )
-    return params if params else [(Precision.w4, cs_8_elite)]
-
-
-@pytest.mark.llm_perf
-@pytest.mark.skipif(
-    not torch.cuda.is_available()
-    or not importlib.util.find_spec("qdc_public_api_client"),
-    reason="This test requires GPU and the qdc_public_api_client package.",
-)
-@pytest.mark.parametrize(("precision", "device"), _get_llm_perf_params())
-def test_llm_perf(
-    precision: Precision,
-    device: ScorecardDevice,
-    compile_job_cache: CompileJobCache,
-    llm_perf_config: LLMPerfConfig,
-) -> None:
-    tps, ttft = test.run_llm_perf_test(
-        model_id=MODEL_ID,
-        export_model_func=export_model,
-        device=device,
-        precision=precision,
-        compile_job_cache=compile_job_cache,
-        output_dir=test.GENIE_BUNDLES_ROOT,
-        model_cls=Model,
-        model_asset_version=MODEL_ASSET_VERSION,
-        num_splits=NUM_SPLITS,
-        export_context_lengths=llm_perf_config.export_context_lengths
-        or DEFAULT_EXPORT_CONTEXT_LENGTHS,
-        export_sequence_lengths=llm_perf_config.export_sequence_lengths
-        or DEFAULT_EXPORT_SEQUENCE_LENGTHS,
-        fp_model_cls=None,
-        position_processor_cls=None,
-    )
-    log_perf_on_device_result(
-        model_name=MODEL_ID,
-        precision=str(precision),
-        device=device.name,
-        tps=tps,
-        ttft_ms=ttft,
-    )
