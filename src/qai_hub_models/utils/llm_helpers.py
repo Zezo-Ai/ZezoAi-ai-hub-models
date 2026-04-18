@@ -106,60 +106,60 @@ def create_genie_config(
     llm_config: PretrainedConfig,
     embedding_type: str,
     model_list: list[str],
+    top_level_key: str = "dialog",
 ) -> dict[str, Any]:
     kv_dim = getattr(
         llm_config, "head_dim", llm_config.hidden_size // llm_config.num_attention_heads
     )
-    genie_config: dict[str, Any] = {
-        "dialog": {
+    inner: dict[str, Any] = {
+        "version": 1,
+        "type": "basic",
+        "context": {
             "version": 1,
-            "type": "basic",
-            "context": {
+            "size": context_length,
+            "n-vocab": llm_config.vocab_size,
+            "bos-token": llm_config.bos_token_id,
+            "eos-token": llm_config.eos_token_id,
+        },
+        "sampler": {
+            "version": 1,
+            "seed": 42,
+            "temp": 0.8,
+            "top-k": 40,
+            "top-p": 0.95,
+        },
+        "tokenizer": {"version": 1, "path": "tokenizer.json"},
+        "engine": {
+            "version": 1,
+            "n-threads": 3,
+            "backend": {
                 "version": 1,
-                "size": context_length,
-                "n-vocab": llm_config.vocab_size,
-                "bos-token": llm_config.bos_token_id,
-                "eos-token": llm_config.eos_token_id,
-            },
-            "sampler": {
-                "version": 1,
-                "seed": 42,
-                "temp": 0.8,
-                "top-k": 40,
-                "top-p": 0.95,
-            },
-            "tokenizer": {"version": 1, "path": "tokenizer.json"},
-            "engine": {
-                "version": 1,
-                "n-threads": 3,
-                "backend": {
+                "type": "QnnHtp",
+                "QnnHtp": {
                     "version": 1,
-                    "type": "QnnHtp",
-                    "QnnHtp": {
-                        "version": 1,
-                        "use-mmap": True,
-                        "spill-fill-bufsize": 0,
-                        "mmap-budget": 0,
-                        "poll": True,
-                        "cpu-mask": "0xe0",
-                        "kv-dim": kv_dim,
-                        "pos-id-dim": kv_dim // 2,
-                        "allow-async-init": False,
-                        "rope-theta": int(llm_config.rope_theta),
-                    },
-                    "extensions": "htp_backend_ext_config.json",
+                    "use-mmap": True,
+                    "spill-fill-bufsize": 0,
+                    "mmap-budget": 0,
+                    "poll": True,
+                    "cpu-mask": "0xe0",
+                    "kv-dim": kv_dim,
+                    "pos-id-dim": kv_dim // 2,
+                    "allow-async-init": False,
+                    "rope-theta": int(llm_config.rope_theta),
                 },
-                "model": {
+                "extensions": "htp_backend_ext_config.json",
+            },
+            "model": {
+                "version": 1,
+                "type": "binary",
+                "binary": {
                     "version": 1,
-                    "type": "binary",
-                    "binary": {
-                        "version": 1,
-                        "ctx-bins": model_list,
-                    },
+                    "ctx-bins": model_list,
                 },
             },
-        }
+        },
     }
+    genie_config: dict[str, Any] = {top_level_key: inner}
     if hasattr(llm_config, "rope_scaling") and llm_config.rope_scaling is not None:
         positional_encodings = {
             "type": embedding_type,
@@ -175,13 +175,61 @@ def create_genie_config(
                 ],
             },
         }
-        del genie_config["dialog"]["engine"]["backend"]["QnnHtp"]["pos-id-dim"]
-        genie_config["dialog"]["engine"]["model"]["positional-encoding"] = (
-            positional_encodings
-        )
-        del genie_config["dialog"]["engine"]["backend"]["QnnHtp"]["rope-theta"]
+        del inner["engine"]["backend"]["QnnHtp"]["pos-id-dim"]
+        inner["engine"]["model"]["positional-encoding"] = positional_encodings
+        del inner["engine"]["backend"]["QnnHtp"]["rope-theta"]
 
     return genie_config
+
+
+def generate_genie_app_script(
+    nodes: dict[str, str],
+    connections: list,
+    sample_inputs: list,
+) -> str:
+    """Generate genie-app-script.txt from pipeline topology data."""
+    config_names = {name: f"{name}Config" for name in nodes}
+
+    lines: list[str] = []
+    lines.append("version")
+    lines.append("pipeline config create pipelineConfig")
+    lines.append("pipeline create GeniePipeline pipelineConfig")
+    lines.append("")
+
+    for node_name, config_file in nodes.items():
+        lines.append(f"node config create {config_names[node_name]} {config_file}")
+        lines.append(f"node create {node_name} {config_names[node_name]}")
+        if "textGenerator" in node_name:
+            lines.append(
+                f"node set textCallback {node_name}"
+                f" GENIE_NODE_TEXT_GENERATOR_TEXT_OUTPUT"
+            )
+        lines.append("")
+
+    lines.append("#Pipeline add and connect calls")
+    lines.extend(f"pipeline add GeniePipeline {node_name}" for node_name in nodes)
+    lines.append("")
+
+    lines.extend(
+        f"pipeline connect GeniePipeline {conn.producer_node}"
+        f" {conn.producer_node_io}"
+        f" {conn.consumer_node} {conn.consumer_node_io}"
+        for conn in connections
+    )
+    if connections:
+        lines.append("")
+
+    lines.extend(
+        f"node set textFile {si.node} {si.node_io} {si.file}" for si in sample_inputs
+    )
+    lines.append("")
+
+    lines.append("pipeline execute GeniePipeline")
+    lines.append("")
+    lines.extend(f"node free {node_name}" for node_name in nodes)
+    lines.append("pipeline free GeniePipeline")
+
+    return "\n".join(lines) + "\n"
 
 
 # The folder is not always the ABI name (may include toolchain as well)

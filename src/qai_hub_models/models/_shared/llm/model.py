@@ -43,6 +43,18 @@ from qai_hub.client import DatasetEntries, Device
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from qai_hub_models.configs.model_metadata import (
+    GenieChatTemplate,
+    GenieMetadata,
+    GeniePipeline,
+    GenieSampleInput,
+    ModelFileMetadata,
+    ModelMetadata,
+)
+from qai_hub_models.configs.tensor_spec import (
+    QuantizationParameters,
+    TensorSpec,
+)
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.utils.onnx.torch_wrapper import (
     OnnxModelTorchWrapper,
@@ -76,7 +88,6 @@ from qai_hub_models.models._shared.llm.split_onnx_utils.utils import split_onnx
 from qai_hub_models.models.common import SampleInputsType, SourceModelFormat
 from qai_hub_models.utils.aimet.config_loader import get_aimet_config_path
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.base_config import BaseQAIHMConfig
 from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.llm_helpers import (
@@ -475,32 +486,6 @@ class PositionProcessorBase(torch.nn.Module):
 class LLMConfigEditor:
     def edit_llm_config(self, llm_config: PretrainedConfig) -> PretrainedConfig:
         return llm_config  # no change by default
-
-
-class LLMMetadata(BaseQAIHMConfig):
-    """
-    Used to represent overall LLM metadata. Primarily IO shapes, types, and
-    quantization parameters.
-    """
-
-    class QuantizationParameters(BaseQAIHMConfig):
-        scale: float
-        offset: int
-
-    class IOEntry(BaseQAIHMConfig):
-        shape: tuple[int, ...]
-        dtype: str
-        quantization_parameters: LLMMetadata.QuantizationParameters | None = None
-
-    class Component(BaseQAIHMConfig):
-        inputs: dict[str, LLMMetadata.IOEntry] = {}
-        outputs: dict[str, LLMMetadata.IOEntry] = {}
-
-    model_id: str
-    model_name: str
-    components: dict[str, LLMMetadata.Component] = {}
-    precision: Precision
-    runtime: TargetRuntime
 
 
 FPModelT = TypeVar("FPModelT", bound="LLMBase")
@@ -1062,6 +1047,16 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
     default_system_prompt: str = "You are a helpful AI assistant"
 
     @classmethod
+    def get_chat_template(cls) -> dict[str, str]:
+        """Return chat template tokens as a dict suitable for GenieChatTemplate(**d).
+
+        Subclasses that define explicit chat template tokens should override
+        this.  The base implementation returns an empty dict (template is only
+        known to the HuggingFace tokenizer).
+        """
+        return {}
+
+    @classmethod
     def get_input_prompt_with_tags(
         cls,
         user_input_prompt: str | None = None,
@@ -1467,6 +1462,12 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
 
     # PyTorch equivalent of this class
     FPModel: type[LLMBase] | None = None
+
+    @classmethod
+    def get_chat_template(cls) -> dict[str, str]:
+        """Delegate to FPModel's get_chat_template."""
+        assert cls.FPModel is not None
+        return cls.FPModel.get_chat_template()
 
     @classmethod
     def get_input_prompt_with_tags(cls, **kwargs: Any) -> str:
@@ -2127,7 +2128,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         hub_device: hub.Device,
         checkpoint: str | os.PathLike | Path,
         llm_config: PretrainedConfig,
-        context_length: int,
+        context_lengths: list[int],
         model_list: list[str],
         output_path: Path,
         precision: Precision,
@@ -2138,6 +2139,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         model_name: str,
     ) -> None:
         """Prepare assets to run the model end to end on-device using Genie SDK."""
+        context_length = max(context_lengths)
         # Copy necessary config files
         for name in ["tokenizer.json", "tokenizer_config.json", "config.json"]:
             if (Path(checkpoint) / name).exists():
@@ -2153,7 +2155,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             json.dump(config, f, indent=4)
 
         # Save metadata needed for on-device run (via LLM_QNN)
-        llm_metadata = cls._create_llm_metadata(
+        metadata = cls._create_model_metadata(
             model_id,
             model_name,
             precision,
@@ -2162,10 +2164,73 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             input_specs,
             output_specs,
         )
-        llm_metadata.to_json(output_path / "metadata.json")
+
+        # --- Genie supplementary files ---
+        # text-generator.json: same as genie_config but with "text-generator" key
+        text_gen_config = create_genie_config(
+            context_length,
+            llm_config,
+            "rope",
+            model_list,
+            top_level_key="text-generator",
+        )
+        with open(output_path / "text-generator.json", "w") as f:
+            json.dump(text_gen_config, f, indent=4)
+
+        # sample_prompt.txt
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(str(checkpoint))
+        sample_prompt = cls.get_input_prompt_with_tags(tokenizer=tokenizer)
+        with open(output_path / "sample_prompt.txt", "w") as f:
+            f.write(sample_prompt)
+
+        # Populate supplementary_files
+        metadata.supplementary_files = {
+            "tokenizer.json": "Model tokenizer.json from checkpoint.",
+            "tokenizer_config.json": "Model tokenizer_config.json from checkpoint.",
+            "config.json": "Model config.json from checkpoint.",
+            "htp_backend_ext_config.json": "HTP backend extension config for Genie.",
+            "text-generator.json": "Genie SDK config for text generator.",
+            "genie_config.json": "Config for use in genie-t2t-run.",
+            "genie-app-script.txt": "Genie-app pipeline script for LLM inference.",
+        }
+
+        # Populate genie metadata
+        chat_spec = cls.get_chat_template()
+        pipeline_nodes = {"textGenerator": "text-generator.json"}
+        sample_inputs = [
+            GenieSampleInput(
+                node="textGenerator",
+                node_io="GENIE_NODE_TEXT_GENERATOR_TEXT_INPUT",
+                file="sample_prompt.txt",
+            ),
+        ]
+        metadata.genie = GenieMetadata(
+            chat_template=GenieChatTemplate(**chat_spec)
+            if chat_spec
+            else GenieChatTemplate(),
+            context_lengths=context_lengths,
+            supports_streaming=True,
+            supports_vision=False,
+            pipeline=GeniePipeline(
+                nodes=pipeline_nodes,
+                connections=[],
+            ),
+            sample_inputs=sample_inputs,
+        )
+
+        # genie-app-script.txt
+        from qai_hub_models.utils.llm_helpers import generate_genie_app_script
+
+        genie_script = generate_genie_app_script(pipeline_nodes, [], sample_inputs)
+        with open(output_path / "genie-app-script.txt", "w") as f:
+            f.write(genie_script)
+
+        metadata.to_json(output_path / "metadata.json")
 
     @staticmethod
-    def _create_llm_metadata(
+    def _create_model_metadata(
         model_id: str,
         model_name: str,
         precision: Precision,
@@ -2173,10 +2238,10 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         input_encodings_path: str | os.PathLike | Path,
         input_specs: dict[str, Any],
         output_specs: dict[str, Any],
-    ) -> LLMMetadata:
+    ) -> ModelMetadata:
         def make_io_metadata(
             specs: dict[str, Any], encodings: dict[str, Any]
-        ) -> dict[str, LLMMetadata.IOEntry]:
+        ) -> dict[str, TensorSpec]:
             uses_lists = Version(encodings["version"]) >= Version("1.0.0")
             if uses_lists:
                 all_encodings = {
@@ -2185,9 +2250,9 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             else:
                 all_encodings = encodings["activation_encodings"]
 
-            entries: dict[str, LLMMetadata.IOEntry] = {}
+            entries: dict[str, TensorSpec] = {}
             for name, (shape, dtype_str) in specs.items():
-                entry = LLMMetadata.IOEntry(shape=tuple(shape), dtype=dtype_str)
+                entry = TensorSpec(shape=tuple(shape), dtype=dtype_str)
 
                 fixed_name = name
                 if name == "logits":
@@ -2204,20 +2269,16 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
                         offset = node_encodings[0].get("offset")
 
                         if scale is not None and offset is not None:
-                            entry.quantization_parameters = (
-                                LLMMetadata.QuantizationParameters(
-                                    scale=scale, offset=offset
-                                )
+                            entry.quantization_parameters = QuantizationParameters(
+                                scale=scale, zero_point=-offset
                             )
                     else:
                         scale = node_encodings.get("scale")
                         offset = node_encodings.get("offset")
 
                         if scale is not None and offset is not None:
-                            entry.quantization_parameters = (
-                                LLMMetadata.QuantizationParameters(
-                                    scale=scale[0], offset=offset[0]
-                                )
+                            entry.quantization_parameters = QuantizationParameters(
+                                scale=scale[0], zero_point=-offset[0]
                             )
 
                 entries[name] = entry
@@ -2233,18 +2294,18 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             k: make_io_metadata(v, encodings) for k, v in output_specs.items()
         }
 
-        llm_metadata = LLMMetadata(
+        model_files: dict[str, ModelFileMetadata] = {}
+        for k, v in input_metadata.items():
+            model_files[k] = ModelFileMetadata(inputs=v, outputs=output_metadata[k])
+
+        return ModelMetadata(
             model_id=model_id,
             model_name=model_name,
             precision=precision,
             runtime=target_runtime,
+            tool_versions=ToolVersions(),
+            model_files=model_files,
         )
-        for k, v in input_metadata.items():
-            llm_metadata.components[k] = LLMMetadata.Component(
-                inputs=v, outputs=output_metadata[k]
-            )
-
-        return llm_metadata
 
     @functools.cache
     def _get_embedding_table(self) -> torch.nn.Embedding:
@@ -2289,7 +2350,7 @@ class LLM_QNN(LLMConfigEditor, BaseModel, ABC):
         self,
         part_models: dict[tuple[str, int], OnnxModelTorchWrapper],
         checkpoint: str | os.PathLike | Path | None,
-        metadata: LLMMetadata,
+        metadata: ModelMetadata,
         sequence_length: int,
         context_length: int,
         precision: Precision,
@@ -2407,7 +2468,7 @@ class LLM_QNN(LLMConfigEditor, BaseModel, ABC):
         # Construct ONNX model wrapping the context binaries
         context_bin_paths = sorted(checkpoint_path.glob("*.bin"))
 
-        metadata = LLMMetadata.from_json(checkpoint_path / "metadata.json")
+        metadata = ModelMetadata.from_json(checkpoint_path / "metadata.json")
 
         tool_versions = ToolVersions.from_yaml(checkpoint_path / "tool-versions.yaml")
         assert tool_versions.qairt is not None
@@ -2426,10 +2487,10 @@ class LLM_QNN(LLMConfigEditor, BaseModel, ABC):
                 + f"_{inst}.onnx"
             )
 
-            io_metadata = metadata.components[f"{inst}_{part_i + 1}_of_{num_splits}"]
+            io_metadata = metadata.model_files[f"{inst}_{part_i + 1}_of_{num_splits}"]
 
             def _io_metadata_to_specs(
-                entries: dict[str, LLMMetadata.IOEntry],
+                entries: dict[str, TensorSpec],
             ) -> dict[str, ModelIODetails]:
                 onnx_specs: dict[str, Any] = {}
                 for k, v in entries.items():
@@ -2437,7 +2498,7 @@ class LLM_QNN(LLMConfigEditor, BaseModel, ABC):
                     if v.quantization_parameters is not None:
                         qdq_params = ModelIODetails.QDQParams(
                             scale=v.quantization_parameters.scale,
-                            zero_point=-v.quantization_parameters.offset,
+                            zero_point=v.quantization_parameters.zero_point,
                         )
 
                     onnx_specs[k] = ModelIODetails(

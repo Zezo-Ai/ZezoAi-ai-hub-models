@@ -115,6 +115,69 @@ class ModelFileMetadata(BaseQAIHMConfig):
         )
 
 
+class GenieChatTemplate(BaseQAIHMConfig):
+    """Chat template tokens and defaults for Genie SDK."""
+
+    global_prefix: str = ""
+    system_prefix: str = ""
+    system_suffix: str = ""
+    user_prefix: str = ""
+    user_suffix: str = ""
+    assistant_prefix: str = ""
+    assistant_suffix: str = ""
+    vision_start: str = ""
+    vision_end: str = ""
+    default_system_prompt: str = ""
+
+
+class GeniePipelineConnection(BaseQAIHMConfig):
+    """A connection between two nodes in a Genie pipeline."""
+
+    producer_node: str
+    producer_node_io: str
+    consumer_node: str
+    consumer_node_io: str
+
+
+class GenieSampleInput(BaseQAIHMConfig):
+    """A sample input binding for a Genie pipeline node."""
+
+    node: str
+    node_io: str
+    file: str
+
+
+class GeniePipeline(BaseQAIHMConfig):
+    """Pipeline topology for Genie SDK."""
+
+    nodes: dict[str, str]
+    connections: list[GeniePipelineConnection]
+
+
+class GenieVisionPreprocessing(BaseQAIHMConfig):
+    """Vision encoder preprocessing parameters for Genie SDK."""
+
+    image_width: int
+    image_height: int
+    patch_size: int
+    temporal_patch_size: int
+    spatial_merge_size: int
+    normalize_mean: list[float]
+    normalize_std: list[float]
+
+
+class GenieMetadata(BaseQAIHMConfig):
+    """Genie SDK metadata for on-device deployment."""
+
+    chat_template: GenieChatTemplate
+    context_lengths: list[int]
+    supports_streaming: bool = True
+    supports_vision: bool = False
+    pipeline: GeniePipeline | None = None
+    sample_inputs: list[GenieSampleInput] | None = None
+    vision_preprocessing: GenieVisionPreprocessing | None = None
+
+
 class ModelMetadata(BaseQAIHMConfig):
     """
     Metadata for a model that may have multiple model files.
@@ -149,6 +212,8 @@ class ModelMetadata(BaseQAIHMConfig):
             value: description of the file's contents and purpose
         This can be populated by the model's write_supplementary_files method to document any
         additional files included in the export that are not model files (e.g., labels, config files).
+    genie
+        Optional Genie SDK metadata for on-device deployment (chat template, pipeline topology, etc.).
     """
 
     model_id: str = ""
@@ -158,6 +223,7 @@ class ModelMetadata(BaseQAIHMConfig):
     tool_versions: ToolVersions
     model_files: dict[str, ModelFileMetadata]
     supplementary_files: dict[str, str] = {}
+    genie: GenieMetadata | None = None
 
     def to_yaml(
         self,

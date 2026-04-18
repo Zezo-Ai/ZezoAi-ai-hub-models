@@ -79,6 +79,19 @@ class Qwen2Base(LLMBase):
     default_user_prompt = "What is gravity? Keep the answer under ten words."
     default_system_prompt = "You are a helpful AI assistant"
 
+    @classmethod
+    def get_chat_template(cls) -> dict[str, str]:
+        return {
+            "global_prefix": "",
+            "system_prefix": f"{START_HEADER}{SYSTEM_ID}\n",
+            "system_suffix": f"{END_HEADER}\n",
+            "user_prefix": f"{START_HEADER}{USER_ID}\n",
+            "user_suffix": f"{END_HEADER}\n",
+            "assistant_prefix": f"{START_HEADER}{ASSISTANT_ID}\n",
+            "assistant_suffix": f"{END_HEADER}\n",
+            "default_system_prompt": cls.default_system_prompt,
+        }
+
     @staticmethod
     def monkey_patch(
         skip_optimizations: list[str] | None = None,
@@ -230,7 +243,7 @@ class Qwen2Base_AIMETOnnx(LLM_AIMETOnnx):
         hub_device: hub.Device,
         checkpoint: str | os.PathLike | Path,
         llm_config: PretrainedConfig,
-        context_length: int,
+        context_lengths: list[int],
         model_list: list[str],
         output_path: Path,
         precision: Precision,
@@ -240,13 +253,11 @@ class Qwen2Base_AIMETOnnx(LLM_AIMETOnnx):
         model_id: str,
         model_name: str,
     ) -> None:
-        from transformers import AutoTokenizer
-
         super().prepare_genie_assets(
             hub_device,
             checkpoint,
             llm_config,
-            context_length,
+            context_lengths,
             model_list,
             output_path,
             precision,
@@ -256,11 +267,6 @@ class Qwen2Base_AIMETOnnx(LLM_AIMETOnnx):
             model_id=model_id,
             model_name=model_name,
         )
-
-        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-        sample_prompt = cls.get_input_prompt_with_tags(tokenizer=tokenizer)
-        with open(output_path / "sample_prompt.txt", "w") as f:
-            f.write(sample_prompt)
 
     def forward(
         self,

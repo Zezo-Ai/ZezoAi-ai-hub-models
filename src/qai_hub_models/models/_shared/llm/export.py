@@ -688,7 +688,7 @@ def export_model(
                 hub_device=device,
                 checkpoint=model.checkpoint,
                 llm_config=llm_config,
-                context_length=max(context_lengths),
+                context_lengths=context_lengths,
                 model_list=target_model_list,
                 output_path=output_path,
                 precision=precision,
