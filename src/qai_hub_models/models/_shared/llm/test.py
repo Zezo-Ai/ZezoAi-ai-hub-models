@@ -807,7 +807,7 @@ def _link_download_and_prepare_bundle(
         hub_device=hub_device,
         checkpoint=cached.checkpoint,
         llm_config=cached.llm_config,
-        context_length=max(cached.context_lengths),
+        context_lengths=cached.context_lengths,
         model_list=target_model_list,
         output_path=output_path,
         precision=precision,
