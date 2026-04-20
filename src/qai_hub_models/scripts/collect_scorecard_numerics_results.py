@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import os
-import subprocess
 from pathlib import Path
 
 import pandas as pd
@@ -35,7 +34,6 @@ from qai_hub_models.scorecard.results.yaml import ACCURACY_CSV_BASE
 from qai_hub_models.scorecard.static.list_models import (
     validate_and_split_enabled_models,
 )
-from qai_hub_models.scripts.run_codegen import generate_code_for_model
 from qai_hub_models.utils.hub_clients import deployment_is_prod
 from qai_hub_models.utils.numerics_yaml import (
     QAIHMModelNumerics,
@@ -93,7 +91,6 @@ def main() -> None:
         print("No accuracy CSV found. Not updating any numerics files.")
         return
 
-    modified_files: list[str] = []
     accuracy_df = pd.read_csv(args.accuracy_csv_path)
     chipset_registry = get_chipset_registry()
     global_diff = NumericsDiff()
@@ -133,29 +130,21 @@ def main() -> None:
 
                 if args.sync_code_gen and using_prod_hub:
                     # If sync-code-gen is on, then we save the updated failure reasons to disk.
-                    code_gen_path = model_info.code_gen_config.to_model_yaml(model_id)
-                    modified_files.append(str(code_gen_path))
-                    modified_files.extend(generate_code_for_model(model_id))
-                    print(
-                        f"{model_id} | Updated Runtime Failure Reasons in {code_gen_path}"
-                    )
+                    model_info.code_gen_config.to_model_yaml(model_id)
 
                     # Update perf.yaml to remove failing paths
                     perf = remove_perf_failures(
                         perf=QAIHMModelPerf.from_model(model_id, not_exists_ok=True),
                         failure_reason=model_info.code_gen_config.disabled_paths,
                     )
-                    modified_files.append(str(perf.to_model_yaml(model_id)))
+                    perf.to_model_yaml(model_id)
 
                     # Un-publish or re-publish the model if needed by updating info.yaml.
                     if update_model_publish_status(model_info):
-                        info_yaml_path, _ = model_info.to_model_yaml(
-                            write_code_gen=False
-                        )
-                        modified_files.append(str(info_yaml_path))
+                        model_info.to_model_yaml(write_code_gen=False)
 
-            numerics_path = numerics.to_model_yaml(model_id)
-            modified_files.append(str(object=numerics_path))
+            numerics.to_model_yaml(model_id)
+            print(f"{model_id} numerics update complete")
         except Exception as e:
             raise ValueError(
                 f"Failed to collect accuracy results for {model_id}"
@@ -166,11 +155,6 @@ def main() -> None:
     now_str = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     report_path = os.path.join(args.artifacts_dir, f"numerics-summary-{now_str}.txt")
     global_diff.dump_summary(report_path)
-
-    # Run pre-commit on re-generated files
-    if modified_files:
-        os.environ["SKIP"] = "mypy"
-        subprocess.run(["pre-commit", "run", "--files", *modified_files], check=False)
 
     # Write accuracy to intermediates folder
     if args.sync_code_gen and using_prod_hub:

@@ -327,8 +327,7 @@ jobs:
         id: failure-analysis
         if: ${{ !cancelled() && steps.aggregate-results.outcome == 'success' }}
         run: |
-          source ${{ env.VENV_PATH }}/bin/activate
-          python -m qai_hub_models.scripts.analyze_scorecard_failures \
+          source ${{ env.VENV_PATH }}/bin/activate && python -m qai_hub_models.scripts.analyze_scorecard_failures \
             ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/aggregated_scorecard_results.csv \
             --output-file ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/scorecard_failure_analysis.csv
 
@@ -348,8 +347,14 @@ jobs:
           echo '${{ secrets.TETRASERVICE_PASSWORD }}' | sudo -S cp ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/aggregated_scorecard_results.csv ./tableau-scorecard-mountpoint/scorecard-accuracy.csv
           echo '${{ secrets.TETRASERVICE_PASSWORD }}' | sudo -S umount ./tableau-scorecard-mountpoint
 
+      - name: Run codegen and precommit
+        if: ${{ !cancelled() && inputs.create_pr && (steps.create-perf-files.outcome == 'success' || steps.create-numerics-files.outcome == 'success' || steps.create-release-assets-files.outcome == 'success') }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate" && python -m qai_hub_models.scripts.run_codegen -a --no-precommit
+          SKIP=mypy-src,mypy-cli pre-commit run --all-files || true
+
       - name: Commit & Push Changes
-        if: ${{ !cancelled() && inputs.create_pr && steps.create-perf-files.outcome == 'success' || steps.create-numerics-files.outcome == 'success' }}
+        if: ${{ !cancelled() && inputs.create_pr && (steps.create-perf-files.outcome == 'success' || steps.create-numerics-files.outcome == 'success' || steps.create-release-assets-files.outcome == 'success') }}
         run: |
           # Checkout branch
           git checkout -b ${{ env.PR_REF_NAME }}
@@ -380,7 +385,7 @@ jobs:
           if [ "$QAIHM_TEST_MODELS" = "all" ] && [ "$QAIHM_TEST_DEVICES" == "all" ] && [ "QAIHM_TEST_PRECISIONS" == "default" ]; then
             git add src/qai_hub_models/scorecard/intermediates/environment.env
           fi
-          git -c user.name='qaihm-bot_QCOM' -c user.email=qaihm_bot@qti.qualcomm.com commit -m "[Automated] Update Performance Data for ${{ inputs.action_id || inputs.latest_results_branch }}"
+          git -c user.name='qaihm-bot_QCOM' -c user.email=qaihm_bot@qti.qualcomm.com commit -m "[Automated] Update Performance Data for ${{ inputs.action_id || inputs.latest_results_branch }}" -n
           git push --set-upstream origin ${{ env.PR_REF_NAME }} -f
 
       - name: Upload Scorecard CSV

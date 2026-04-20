@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 from pathlib import Path
 
 from qai_hub_models.configs.info_yaml import QAIHMModelInfo
@@ -88,10 +87,6 @@ def main() -> None:
             raise ValueError(
                 f"Failed to collect accuracy results for {model_id}"
             ) from e
-
-    # Run pre-commit on re-generated files
-    if modified_files:
-        subprocess.run(["pre-commit", "run", "--files", *modified_files], check=False)
 
 
 if __name__ == "__main__":

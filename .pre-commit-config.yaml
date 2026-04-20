@@ -90,7 +90,7 @@ repos:
         files: ^cli/
 -   repo: local
     hooks:
-    -   id: mypy
+    -   id: mypy-src
         name: mypy (src)
         files: ^src/qai_hub_models/.*(py|pyi|ipynb)$
         entry: scripts/util/run_mypy.sh src
@@ -101,7 +101,7 @@ repos:
         #
         # This flag makes precommit run mypy once on all files.
         require_serial: true
-    -   id: mypy
+    -   id: mypy-cli
         name: mypy (cli)
         files: ^cli/qai_hub_models_cli/.*(py|pyi|ipynb)$
         entry: scripts/util/run_mypy.sh cli

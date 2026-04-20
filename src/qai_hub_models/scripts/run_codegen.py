@@ -325,6 +325,11 @@ def main() -> None:
         action="store_true",
         help="If set, generates files for all models.",
     )
+    parser.add_argument(
+        "--no-precommit",
+        action="store_true",
+        help="If set, skips running pre-commit on generated files.",
+    )
     args = parser.parse_args()
     models = args.models if args.models else MODEL_IDS
     modified_files = []
@@ -341,8 +346,9 @@ def main() -> None:
         )
     )
 
-    os.environ["SKIP"] = "mypy"
-    subprocess.run(["pre-commit", "run", "--files", *modified_files], check=False)
+    if not args.no_precommit:
+        os.environ["SKIP"] = "mypy-src,mypy-cli"
+        subprocess.run(["pre-commit", "run", "--files", *modified_files], check=False)
 
 
 if __name__ == "__main__":

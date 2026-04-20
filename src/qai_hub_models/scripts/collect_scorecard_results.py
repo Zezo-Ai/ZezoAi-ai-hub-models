@@ -10,7 +10,6 @@ import datetime
 import multiprocessing
 import os
 import shutil
-import subprocess
 from dataclasses import dataclass
 from itertools import cycle
 from pathlib import Path
@@ -72,8 +71,6 @@ from qai_hub_models.scorecard.static.model_config import ScorecardModelConfig
 from qai_hub_models.scorecard.static.model_exec import (
     get_static_model_test_parameterizations,
 )
-from qai_hub_models.scripts.generate_model_readme import generate_and_write_model_readme
-from qai_hub_models.scripts.run_codegen import generate_code_for_model
 from qai_hub_models.utils.collection_model_helpers import get_components
 from qai_hub_models.utils.hub_clients import (
     default_hub_client_as,
@@ -201,7 +198,7 @@ def process_model(
     sync_code_gen: bool,
     gen_perf_summary: bool,
     write_model_card: bool,
-) -> tuple[ResultsSpreadsheet, list[str], QAIHMModelPerf | None, QAIHMModelPerf | None]:
+) -> tuple[ResultsSpreadsheet, QAIHMModelPerf | None, QAIHMModelPerf | None]:
     """
     Process results for a model with an end-to-end pyTorch recipe.
 
@@ -236,9 +233,6 @@ def process_model(
     -------
     spreadsheet : ResultsSpreadsheet
         Model spreadsheet, or empty spreadsheet if not gen_csv.
-    modified_files : list[str]
-        Python files modified if code-gen was changed.
-        Empty list for static models.
     previous_perf : QAIHMModelPerf | None
         Previous (on disk) perf yaml, or None if not gen_perf_summary.
         Always None for static models.
@@ -275,7 +269,7 @@ def process_model(
             )
         else:
             spreadsheet = ResultsSpreadsheet()
-        return (spreadsheet, [], None, None)
+        return (spreadsheet, None, None)
     except Exception as e:
         raise ValueError(f"{model_id} result processing failed.") from e
 
@@ -406,7 +400,7 @@ def process_e2e_recipe_model(
     sync_code_gen: bool,
     gen_perf_summary: bool,
     write_model_card: bool,
-) -> tuple[ResultsSpreadsheet, list[str], QAIHMModelPerf | None, QAIHMModelPerf | None]:
+) -> tuple[ResultsSpreadsheet, QAIHMModelPerf | None, QAIHMModelPerf | None]:
     """
     Process results for a model with an end-to-end pyTorch recipe.
 
@@ -437,8 +431,6 @@ def process_e2e_recipe_model(
     -------
     spreadsheet : ResultsSpreadsheet
         Model spreadsheet, or empty spreadsheet if not gen_csv.
-    modified_files : list[str]
-        Python files modified if code-gen was changed.
     previous_perf : QAIHMModelPerf | None
         Previous (on disk) perf yaml, or None if not gen_perf_summary.
     current_perf : QAIHMModelPerf | None
@@ -454,7 +446,7 @@ def process_e2e_recipe_model(
 
     # Skip certain models
     if cj.is_precompiled or cj.skip_hub_tests_and_scorecard or cj.skip_scorecard:
-        return ResultsSpreadsheet(), [], None, None
+        return ResultsSpreadsheet(), None, None
 
     # Get enabled test paths for this model
     test_params = ModelTestParameterizations.from_recipe_model(model_info)
@@ -512,7 +504,6 @@ def process_e2e_recipe_model(
             inference_summary,
         )
 
-    modified_files = []
     if sync_code_gen and not cj.freeze_perf_yaml:
         # Enable or disable runtimes on this model depending on whether the default device has passing jobs
         update_code_gen_failure_reasons(
@@ -524,14 +515,12 @@ def process_e2e_recipe_model(
             cj,
         )
         code_gen_path = cj.to_model_yaml(model_id)
-        modified_files.append(str(code_gen_path))
-        modified_files.extend(generate_code_for_model(model_id))
         print_with_id(f"Updated Runtime Failure Reasons in {code_gen_path}")
 
         # Update model status & reason, if applicable
         if update_model_publish_status(model_info):
             info_yaml_path, _ = model_info.to_model_yaml(write_code_gen=False)
-            modified_files.append(str(info_yaml_path))
+            print_with_id(pstr=f"Updated publish status at {info_yaml_path}")
 
     model_card = QAIHMModelPerf()
     prev_model_card = QAIHMModelPerf()
@@ -563,12 +552,7 @@ def process_e2e_recipe_model(
             card_path = model_card_without_failures.to_model_yaml(model_id)
             print_with_id(f"Wrote {card_path}")
 
-    if sync_code_gen and not cj.freeze_perf_yaml:
-        # README must be written last to capture all changes to yamls.
-        modified_files.append(str(generate_and_write_model_readme(model_id)))
-        print_with_id("Wrote model README")
-
-    return entries, modified_files, prev_model_card, model_card
+    return entries, prev_model_card, model_card
 
 
 def process_static_file_model(
@@ -801,19 +785,14 @@ if __name__ == "__main__":
                 branch += f" - {precision.value}"
         spreadsheet.set_branch(branch)
 
-    modified_files = []
     for model_id, (
         model_spreadsheet,
-        model_code_gen_files,
         prev_model_card,
         curr_model_card,
     ) in zip(model_list, model_summaries, strict=False):
         # Combine model spreadsheet with group spreadsheet
         if spreadsheet is not None:
             spreadsheet.combine(model_spreadsheet)
-
-        # Update code generated files
-        modified_files.extend(model_code_gen_files)
 
         # Update performance report with model card diff
         if perf_report is not None:
@@ -864,7 +843,3 @@ if __name__ == "__main__":
             print(f"Test envvars written to to {ENVIRONMENT_ENV_BASE}")
         except (shutil.SameFileError, FileNotFoundError):
             pass
-
-    # Run pre-commit on re-generated files
-    if modified_files:
-        subprocess.run(["pre-commit", "run", "--files", *modified_files], check=False)
