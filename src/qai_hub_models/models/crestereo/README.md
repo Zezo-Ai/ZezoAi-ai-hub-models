@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [CREStereo: Cascaded recurrent stereo matching network for high-accuracy disparity estimation](https://aihub.qualcomm.com/models/crestereo)
 
 CREStereo (Cascaded Recurrent Network with Adaptive Correlation) is a CVPR 2022 Oral paper that achieves state-of-the-art stereo matching accuracy.

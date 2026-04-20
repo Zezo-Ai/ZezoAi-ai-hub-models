@@ -173,6 +173,10 @@ and many more.
 | [Sequencer2D](https://aihub.qualcomm.com/models/sequencer2d) | [qai_hub_models.models.sequencer2d](src/qai_hub_models/models/sequencer2d/README.md) |
 | [Shufflenet-v2](https://aihub.qualcomm.com/models/shufflenet_v2) | [qai_hub_models.models.shufflenet_v2](src/qai_hub_models/models/shufflenet_v2/README.md) |
 | [SqueezeNet-1.1](https://aihub.qualcomm.com/models/squeezenet1_1) | [qai_hub_models.models.squeezenet1_1](src/qai_hub_models/models/squeezenet1_1/README.md) |
+| [Swin-Base](https://aihub.qualcomm.com/models/swin_base) | [qai_hub_models.models.swin_base](src/qai_hub_models/models/swin_base/README.md) |
+| [Swin-Small](https://aihub.qualcomm.com/models/swin_small) | [qai_hub_models.models.swin_small](src/qai_hub_models/models/swin_small/README.md) |
+| [Swin-Tiny](https://aihub.qualcomm.com/models/swin_tiny) | [qai_hub_models.models.swin_tiny](src/qai_hub_models/models/swin_tiny/README.md) |
+| [SwinV2-Base](https://aihub.qualcomm.com/models/swinv2_base) | [qai_hub_models.models.swinv2_base](src/qai_hub_models/models/swinv2_base/README.md) |
 | [VIT](https://aihub.qualcomm.com/models/vit) | [qai_hub_models.models.vit](src/qai_hub_models/models/vit/README.md) |
 | [WideResNet50](https://aihub.qualcomm.com/models/wideresnet50) | [qai_hub_models.models.wideresnet50](src/qai_hub_models/models/wideresnet50/README.md) |
 | | |
@@ -206,6 +210,7 @@ and many more.
 | [FastSam-S](https://aihub.qualcomm.com/models/fastsam_s) | [qai_hub_models.models.fastsam_s](src/qai_hub_models/models/fastsam_s/README.md) |
 | [FastSam-X](https://aihub.qualcomm.com/models/fastsam_x) | [qai_hub_models.models.fastsam_x](src/qai_hub_models/models/fastsam_x/README.md) |
 | [HRNet-W48-OCR](https://aihub.qualcomm.com/models/hrnet_w48_ocr) | [qai_hub_models.models.hrnet_w48_ocr](src/qai_hub_models/models/hrnet_w48_ocr/README.md) |
+| [Mask2Former](https://aihub.qualcomm.com/models/mask2former) | [qai_hub_models.models.mask2former](src/qai_hub_models/models/mask2former/README.md) |
 | [MaskRCNN](https://aihub.qualcomm.com/models/maskrcnn) | [qai_hub_models.models.maskrcnn](src/qai_hub_models/models/maskrcnn/README.md) |
 | [MediaPipe-Selfie-Segmentation](https://aihub.qualcomm.com/models/mediapipe_selfie) | [qai_hub_models.models.mediapipe_selfie](src/qai_hub_models/models/mediapipe_selfie/README.md) |
 | [MobileSam](https://aihub.qualcomm.com/models/mobilesam) | [qai_hub_models.models.mobilesam](src/qai_hub_models/models/mobilesam/README.md) |
@@ -251,11 +256,13 @@ and many more.
 | [MediaPipe-Hand-Gesture-Recognition](https://aihub.qualcomm.com/models/mediapipe_hand_gesture) | [qai_hub_models.models.mediapipe_hand_gesture](src/qai_hub_models/models/mediapipe_hand_gesture/README.md) |
 | [PPE-Detection](https://aihub.qualcomm.com/models/gear_guard_net) | [qai_hub_models.models.gear_guard_net](src/qai_hub_models/models/gear_guard_net/README.md) |
 | [Person-Foot-Detection](https://aihub.qualcomm.com/models/foot_track_net) | [qai_hub_models.models.foot_track_net](src/qai_hub_models/models/foot_track_net/README.md) |
+| [RF-DETR](https://aihub.qualcomm.com/models/rf_detr) | [qai_hub_models.models.rf_detr](src/qai_hub_models/models/rf_detr/README.md) |
 | [RTMDet](https://aihub.qualcomm.com/models/rtmdet) | [qai_hub_models.models.rtmdet](src/qai_hub_models/models/rtmdet/README.md) |
 | [YOLO26-Detection](https://aihub.qualcomm.com/models/yolo26_det) | [qai_hub_models.models.yolo26_det](src/qai_hub_models/models/yolo26_det/README.md) |
 | [YOLOv10-Detection](https://aihub.qualcomm.com/models/yolov10_det) | [qai_hub_models.models.yolov10_det](src/qai_hub_models/models/yolov10_det/README.md) |
 | [YOLOv11-Detection](https://aihub.qualcomm.com/models/yolov11_det) | [qai_hub_models.models.yolov11_det](src/qai_hub_models/models/yolov11_det/README.md) |
 | [YOLOv8-Detection](https://aihub.qualcomm.com/models/yolov8_det) | [qai_hub_models.models.yolov8_det](src/qai_hub_models/models/yolov8_det/README.md) |
+| [YOLOv9-Detection](https://aihub.qualcomm.com/models/yolov9_det) | [qai_hub_models.models.yolov9_det](src/qai_hub_models/models/yolov9_det/README.md) |
 | [Yolo-R](https://aihub.qualcomm.com/models/yolor) | [qai_hub_models.models.yolor](src/qai_hub_models/models/yolor/README.md) |
 | [Yolo-X](https://aihub.qualcomm.com/models/yolox) | [qai_hub_models.models.yolox](src/qai_hub_models/models/yolox/README.md) |
 | [Yolo-v3](https://aihub.qualcomm.com/models/yolov3) | [qai_hub_models.models.yolov3](src/qai_hub_models/models/yolov3/README.md) |
@@ -276,6 +283,7 @@ and many more.
 | [EyeGaze](https://aihub.qualcomm.com/models/eyegaze) | [qai_hub_models.models.eyegaze](src/qai_hub_models/models/eyegaze/README.md) |
 | | |
 | **Depth Estimation**
+| [CREStereo](https://aihub.qualcomm.com/models/crestereo) | [qai_hub_models.models.crestereo](src/qai_hub_models/models/crestereo/README.md) |
 | [Depth-Anything](https://aihub.qualcomm.com/models/depth_anything) | [qai_hub_models.models.depth_anything](src/qai_hub_models/models/depth_anything/README.md) |
 | [Depth-Anything-V2](https://aihub.qualcomm.com/models/depth_anything_v2) | [qai_hub_models.models.depth_anything_v2](src/qai_hub_models/models/depth_anything_v2/README.md) |
 | [Depth-Anything-V3](https://aihub.qualcomm.com/models/depth_anything_v3) | [qai_hub_models.models.depth_anything_v3](src/qai_hub_models/models/depth_anything_v3/README.md) |

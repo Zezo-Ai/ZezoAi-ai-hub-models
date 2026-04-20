@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [Mask2Former: Real-time object segmentation](https://aihub.qualcomm.com/models/mask2former)
 
 Mask2Former is a machine learning model that predicts masks and classes of objects in an image.

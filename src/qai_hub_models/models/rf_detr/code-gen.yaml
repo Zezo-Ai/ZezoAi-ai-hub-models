@@ -2,11 +2,9 @@ has_on_target_demo: true
 disabled_paths:
   float:
     tflite:
-      scorecard_failure: 'Compilation Failure(s): j5mwonm7p'
-    qnn_dlc:
-      scorecard_failure: 'Profiling Failure(s): jpr4owo9g'
+      scorecard_accuracy_failure: Torch and On-device accuracy diff (-46.640 mAP@0.5:0.95) above threshold (10.0 mAP@0.5:0.95)
     onnx:
-      scorecard_accuracy_failure: Torch and On-device accuracy diff (-44.330 mAP@0.5:0.95) above threshold (10.0 mAP@0.5:0.95)
+      scorecard_accuracy_failure: Torch and On-device accuracy diff (-11.100 mAP@0.5:0.95) above threshold (10.0 mAP@0.5:0.95)
 check_trace: false
 outputs_to_skip_validation:
   '2': Boxes with low confidence disagree on class index between torch and on-device

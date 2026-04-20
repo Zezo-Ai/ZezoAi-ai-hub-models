@@ -6,14 +6,16 @@ has_on_target_demo: true
 disabled_paths:
   w8a16:
     qnn_dlc:
-      scorecard_failure: 'Compilation Failure(s): jpy4qz04p'
+      scorecard_failure: 'Profiling Failure(s): jp4x62oq5'
+    onnx:
+      scorecard_accuracy_failure: 'Device accuracy (141.0 ) deviates from benchmark (38.3 ) by 102.700 , threshold: 10.0 '
   w8a8:
+    tflite:
+      scorecard_accuracy_failure: 'Device accuracy (74.4 ) deviates from benchmark (38.3 ) by 36.100 , threshold: 10.0 '
+    onnx:
+      scorecard_accuracy_failure: 'Device accuracy (145.0 ) deviates from benchmark (38.3 ) by 106.700 , threshold: 10.0 '
     qnn_dlc:
-      scorecard_failure: 'Compilation Failure(s): jp1d72llp'
+      scorecard_accuracy_failure: 'Device accuracy (146.0 ) deviates from benchmark (38.3 ) by 107.700 , threshold: 10.0 '
   float:
     onnx:
-      scorecard_accuracy_failure: 'Device accuracy (9.34 ) deviates from benchmark (38.3 ) by -28.960 , threshold: 10.0 '
-    qnn_dlc:
-      scorecard_accuracy_failure: 'Device accuracy (9.41 ) deviates from benchmark (38.3 ) by -28.890 , threshold: 10.0 '
-    tflite:
-      scorecard_accuracy_failure: 'Device accuracy (9.27 ) deviates from benchmark (38.3 ) by -29.030 , threshold: 10.0 '
+      scorecard_accuracy_failure: 'Device accuracy (60.8 ) deviates from benchmark (38.3 ) by 22.500 , threshold: 10.0 '

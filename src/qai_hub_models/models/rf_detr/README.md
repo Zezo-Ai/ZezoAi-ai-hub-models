@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [RF-DETR: Transformer based object detection model architecture developed by Roboflow](https://aihub.qualcomm.com/models/rf_detr)
 
 DETR is a machine learning model that can detect objects (trained on COCO dataset).

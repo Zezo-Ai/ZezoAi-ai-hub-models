@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [YOLOv9-Detection: Real-time object detection optimized for mobile and edge by Ultralytics](https://aihub.qualcomm.com/models/yolov9_det)
 
 Ultralytics YOLOv9 is a machine learning model that predicts bounding boxes and classes of objects in an image.
