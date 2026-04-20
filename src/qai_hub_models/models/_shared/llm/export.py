@@ -634,7 +634,7 @@ def export_model(
     # 5. Download the model assets to a local file
     target_model_list = []
     output_path = output_path / ASSET_CONFIG.get_release_asset_name(
-        model_name, target_runtime, precision, chipset
+        model_id, target_runtime, precision, chipset
     )
     if not skip_downloading:
         output_path.mkdir(parents=True, exist_ok=True)
