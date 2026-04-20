@@ -612,11 +612,10 @@ def fetch_async_test_jobs(
             raise_if_not_successful,
         )
 
+    component_jobs: dict[str | None, hub.Job | None] = {}
     if len(component_gn_pairs) == 1:
-        component_jobs: dict[str | None, hub.Job | None] = dict(
-            [_fetch(component_gn_pairs[0])]
-        )
-    else:
+        component_jobs = dict([_fetch(component_gn_pairs[0])])
+    elif component_gn_pairs:
         with ThreadPoolExecutor(max_workers=len(component_gn_pairs)) as pool:
             component_jobs = dict(pool.map(_fetch, component_gn_pairs))
 
