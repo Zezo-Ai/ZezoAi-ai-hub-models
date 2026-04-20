@@ -59,7 +59,7 @@ def test_compile(
             context_length=DEFAULT_EXPORT_CONTEXT_LENGTHS,
             _skip_quantsim_creation=True,
             model_cls=Model,
-            model_name=MODEL_ID,
+            model_id=MODEL_ID,
             model_asset_version=MODEL_ASSET_VERSION,
             num_splits=NUM_SPLITS,
             num_layers_per_split=NUM_LAYERS_PER_SPLIT,

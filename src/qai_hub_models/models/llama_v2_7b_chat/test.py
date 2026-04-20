@@ -230,7 +230,7 @@ def test_compile(
         extra_model_arguments=dict(
             checkpoint="DEFAULT",
             model_cls=Model,
-            model_name=MODEL_ID,
+            model_id=MODEL_ID,
             model_asset_version=MODEL_ASSET_VERSION,
             components=ALL_COMPONENTS,
             output_dir="output_dir",

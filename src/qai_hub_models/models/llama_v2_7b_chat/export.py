@@ -70,7 +70,7 @@ BASE_NAME = "llama_v2_7b_chat"
 
 def export_model(
     device: hub.Device,
-    model_name: str = MODEL_ID,
+    model_id: str = MODEL_ID,
     model_asset_version: int = MODEL_ASSET_VERSION,
     components: list[str] | None = None,
     skip_profiling: bool = False,
@@ -102,8 +102,8 @@ def export_model(
     device
         Device for which to export the model (e.g. hub.Device("Samsung Galaxy S25")).
         Full list of available devices can be found by running `hub.get_devices()`.
-    model_name
-        Model name.
+    model_id
+        Model identifier.
     model_asset_version
         Identifier used as a cache key to store the model asset.
     components
@@ -391,7 +391,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
     export_model(
-        model_name=MODEL_ID, model_asset_version=MODEL_ASSET_VERSION, **vars(args)
+        model_id=MODEL_ID, model_asset_version=MODEL_ASSET_VERSION, **vars(args)
     )
 
 

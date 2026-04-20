@@ -481,9 +481,8 @@ def _get_llm_perf_params() -> list[tuple[Precision, ScorecardDevice]]:
 
 @pytest.mark.llm_perf
 @pytest.mark.skipif(
-    not torch.cuda.is_available()
-    or not importlib.util.find_spec("qualcomm_device_cloud_sdk"),
-    reason="This test requires GPU and the qualcomm_device_cloud_sdk package.",
+    not importlib.util.find_spec("qualcomm_device_cloud_sdk"),
+    reason="This test requires the qualcomm_device_cloud_sdk package.",
 )
 @pytest.mark.parametrize(("precision", "device"), _get_llm_perf_params())
 def test_llm_perf(

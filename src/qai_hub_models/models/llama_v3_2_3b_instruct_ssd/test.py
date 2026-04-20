@@ -326,7 +326,7 @@ def test_compile(
             context_length=DEFAULT_EXPORT_CONTEXT_LENGTHS,
             _skip_quantsim_creation=True,
             model_cls=Model,
-            model_name=MODEL_ID,
+            model_id=MODEL_ID,
             model_asset_version=MODEL_ASSET_VERSION,
             num_splits=NUM_SPLITS,
             num_layers_per_split=NUM_LAYERS_PER_SPLIT,
@@ -356,7 +356,7 @@ def test_compile(
 )
 @pytest.mark.skipif(
     not torch.cuda.is_available()
-    or not importlib.util.find_spec("qdc_public_api_client"),
+    or not importlib.util.find_spec("qualcomm_device_cloud_sdk"),
     reason="This test can be run on GPU only. Also needs QDC package to run.",
 )
 @pytest.mark.parametrize(
@@ -414,9 +414,8 @@ def _get_llm_perf_params() -> list[tuple[Precision, ScorecardDevice]]:
 
 @pytest.mark.llm_perf
 @pytest.mark.skipif(
-    not torch.cuda.is_available()
-    or not importlib.util.find_spec("qdc_public_api_client"),
-    reason="This test requires GPU and the qdc_public_api_client package.",
+    not importlib.util.find_spec("qualcomm_device_cloud_sdk"),
+    reason="This test requires the qualcomm_device_cloud_sdk package.",
 )
 @pytest.mark.parametrize(("precision", "device"), _get_llm_perf_params())
 def test_llm_perf(
