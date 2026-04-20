@@ -19,7 +19,7 @@ from qai_hub_models.models._shared.bert_hf.model import BaseBertModel
 from qai_hub_models.models._shared.bert_hf.model_patches import (
     patch_get_extended_attention_mask,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -80,8 +80,16 @@ class ElectraBertBaseDiscrimGoogle(BaseBertModel):
         sample_length: int = 384,
     ) -> InputSpec:
         return {
-            "input_tokens": ((batch_size, sample_length), "int32"),
-            "attention_masks": ((batch_size, sample_length), "float32"),
+            "input_tokens": TensorSpec(
+                shape=(batch_size, sample_length),
+                dtype="int32",
+                io_type=IoType.TENSOR,
+            ),
+            "attention_masks": TensorSpec(
+                shape=(batch_size, sample_length),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod

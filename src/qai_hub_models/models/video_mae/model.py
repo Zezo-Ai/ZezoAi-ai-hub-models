@@ -21,7 +21,7 @@ from qai_hub_models.models._shared.video_classifier.utils import (
 )
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -70,10 +70,11 @@ class VideoMAE(KineticsClassifier):
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "video": (
-                (1, 3, num_frames, 224, 224),
-                "float32",
-            )
+            "video": TensorSpec(
+                shape=(1, 3, num_frames, 224, 224),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     def _sample_inputs_impl(

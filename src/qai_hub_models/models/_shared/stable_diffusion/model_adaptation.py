@@ -6,11 +6,10 @@
 import math
 import types
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 import torch
 import torch.nn.functional as F
-from diffusers import UNet2DConditionModel
 from diffusers.models import attention_processor
 from diffusers.models.activations import GEGLU, GELU, ApproximateGELU
 from diffusers.models.attention import BasicTransformerBlock, FeedForward
@@ -290,10 +289,13 @@ class PermuteLayerNorm(nn.Module):
         return norm_output
 
 
+_T = TypeVar("_T", bound=nn.Module)
+
+
 def traverse_and_replace(
     model: nn.Module,
-    target_type: type[torch.nn.Module],
-    replacement_fn: Callable[[torch.nn.Module], torch.nn.Module],
+    target_type: type[_T],
+    replacement_fn: Callable[[_T], nn.Module],
 ) -> None:
     """
     Recursively traverses the model to find and replace modules of a specified type.
@@ -572,7 +574,7 @@ def replace_layer_norm_modules(model: nn.Module) -> None:
             block.norm3 = PermuteLayerNorm(block.norm3)  # type: ignore[assignment]
         return block
 
-    traverse_and_replace(model, BasicTransformerBlock, replace_layer_norm)  # type: ignore[arg-type]
+    traverse_and_replace(model, BasicTransformerBlock, replace_layer_norm)
 
 
 def replace_transformer2d_modules(model: nn.Module) -> None:
@@ -602,7 +604,7 @@ def replace_transformer2d_modules(model: nn.Module) -> None:
             m.proj_out = Conv2dLinear(m.proj_out)
         return m
 
-    traverse_and_replace(model, Transformer2DModel, _replace_transformer2d)  # type: ignore[arg-type]
+    traverse_and_replace(model, Transformer2DModel, _replace_transformer2d)
 
 
 def optimized_operate_on_continuous_inputs(
@@ -679,7 +681,7 @@ def get_timestep_embedding(
     return emb
 
 
-def monkey_patch_model(model: UNet2DConditionModel) -> None:
+def monkey_patch_model(model: nn.Module) -> None:
     """
     Apply monkey patches and module replacements to UNet model.
 
@@ -698,8 +700,8 @@ def monkey_patch_model(model: UNet2DConditionModel) -> None:
     diffusion 1.5
     """
     print("Monkeypatching Unet (replacing MHA with SHA attention etc)")
-    replace_attention_modules(model)  # type: ignore[arg-type]
-    replace_activations_with_conv2d(model)  # type: ignore[arg-type]
-    replace_layer_norm_modules(model)  # type: ignore[arg-type]
-    replace_feedforward_modules(model)  # type: ignore[arg-type]
-    replace_transformer2d_modules(model)  # type: ignore[arg-type]
+    replace_attention_modules(model)
+    replace_activations_with_conv2d(model)
+    replace_layer_norm_modules(model)
+    replace_feedforward_modules(model)
+    replace_transformer2d_modules(model)

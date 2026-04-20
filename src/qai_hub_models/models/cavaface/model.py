@@ -10,7 +10,13 @@ from typing_extensions import Self
 
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 SOURCE_REPO = "https://github.com/cavalleria/cavaface"
 COMMIT_HASH = "822651f0e6d4d08df5441922acead39dc5375103"
@@ -64,7 +70,17 @@ class CavaFace(BaseModel):
         height: int = 112,
         width: int = 112,
     ) -> InputSpec:
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

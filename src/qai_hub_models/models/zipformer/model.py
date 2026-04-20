@@ -23,7 +23,7 @@ from qai_hub_models.utils.base_model import (
     PretrainedCollectionModel,
     TargetRuntime,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 if TYPE_CHECKING:
     import Decoder
@@ -70,42 +70,112 @@ class ZipformerEncoder(BaseModel):
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "x": ((1, 71, 80), "float32"),
-            "cached_len_0": ((2, 1), "int32"),
-            "cached_len_1": ((4, 1), "int32"),
-            "cached_len_2": ((3, 1), "int32"),
-            "cached_len_3": ((2, 1), "int32"),
-            "cached_len_4": ((4, 1), "int32"),
-            "cached_avg_0": ((2, 1, 384), "float32"),
-            "cached_avg_1": ((4, 1, 384), "float32"),
-            "cached_avg_2": ((3, 1, 384), "float32"),
-            "cached_avg_3": ((2, 1, 384), "float32"),
-            "cached_avg_4": ((4, 1, 384), "float32"),
-            "cached_key_0": ((2, 128, 1, 192), "float32"),
-            "cached_key_1": ((4, 64, 1, 192), "float32"),
-            "cached_key_2": ((3, 32, 1, 192), "float32"),
-            "cached_key_3": ((2, 16, 1, 192), "float32"),
-            "cached_key_4": ((4, 64, 1, 192), "float32"),
-            "cached_val_0": ((2, 128, 1, 96), "float32"),
-            "cached_val_1": ((4, 64, 1, 96), "float32"),
-            "cached_val_2": ((3, 32, 1, 96), "float32"),
-            "cached_val_3": ((2, 16, 1, 96), "float32"),
-            "cached_val_4": ((4, 64, 1, 96), "float32"),
-            "cached_val2_0": ((2, 128, 1, 96), "float32"),
-            "cached_val2_1": ((4, 64, 1, 96), "float32"),
-            "cached_val2_2": ((3, 32, 1, 96), "float32"),
-            "cached_val2_3": ((2, 16, 1, 96), "float32"),
-            "cached_val2_4": ((4, 64, 1, 96), "float32"),
-            "cached_conv1_0": ((2, 1, 384, 30), "float32"),
-            "cached_conv1_1": ((4, 1, 384, 30), "float32"),
-            "cached_conv1_2": ((3, 1, 384, 30), "float32"),
-            "cached_conv1_3": ((2, 1, 384, 30), "float32"),
-            "cached_conv1_4": ((4, 1, 384, 30), "float32"),
-            "cached_conv2_0": ((2, 1, 384, 30), "float32"),
-            "cached_conv2_1": ((4, 1, 384, 30), "float32"),
-            "cached_conv2_2": ((3, 1, 384, 30), "float32"),
-            "cached_conv2_3": ((2, 1, 384, 30), "float32"),
-            "cached_conv2_4": ((4, 1, 384, 30), "float32"),
+            "x": TensorSpec(shape=(1, 71, 80), dtype="float32", io_type=IoType.TENSOR),
+            "cached_len_0": TensorSpec(
+                shape=(2, 1), dtype="int32", io_type=IoType.TENSOR
+            ),
+            "cached_len_1": TensorSpec(
+                shape=(4, 1), dtype="int32", io_type=IoType.TENSOR
+            ),
+            "cached_len_2": TensorSpec(
+                shape=(3, 1), dtype="int32", io_type=IoType.TENSOR
+            ),
+            "cached_len_3": TensorSpec(
+                shape=(2, 1), dtype="int32", io_type=IoType.TENSOR
+            ),
+            "cached_len_4": TensorSpec(
+                shape=(4, 1), dtype="int32", io_type=IoType.TENSOR
+            ),
+            "cached_avg_0": TensorSpec(
+                shape=(2, 1, 384), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_avg_1": TensorSpec(
+                shape=(4, 1, 384), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_avg_2": TensorSpec(
+                shape=(3, 1, 384), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_avg_3": TensorSpec(
+                shape=(2, 1, 384), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_avg_4": TensorSpec(
+                shape=(4, 1, 384), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_key_0": TensorSpec(
+                shape=(2, 128, 1, 192), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_key_1": TensorSpec(
+                shape=(4, 64, 1, 192), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_key_2": TensorSpec(
+                shape=(3, 32, 1, 192), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_key_3": TensorSpec(
+                shape=(2, 16, 1, 192), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_key_4": TensorSpec(
+                shape=(4, 64, 1, 192), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_val_0": TensorSpec(
+                shape=(2, 128, 1, 96), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_val_1": TensorSpec(
+                shape=(4, 64, 1, 96), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_val_2": TensorSpec(
+                shape=(3, 32, 1, 96), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_val_3": TensorSpec(
+                shape=(2, 16, 1, 96), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_val_4": TensorSpec(
+                shape=(4, 64, 1, 96), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_val2_0": TensorSpec(
+                shape=(2, 128, 1, 96), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_val2_1": TensorSpec(
+                shape=(4, 64, 1, 96), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_val2_2": TensorSpec(
+                shape=(3, 32, 1, 96), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_val2_3": TensorSpec(
+                shape=(2, 16, 1, 96), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_val2_4": TensorSpec(
+                shape=(4, 64, 1, 96), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_conv1_0": TensorSpec(
+                shape=(2, 1, 384, 30), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_conv1_1": TensorSpec(
+                shape=(4, 1, 384, 30), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_conv1_2": TensorSpec(
+                shape=(3, 1, 384, 30), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_conv1_3": TensorSpec(
+                shape=(2, 1, 384, 30), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_conv1_4": TensorSpec(
+                shape=(4, 1, 384, 30), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_conv2_0": TensorSpec(
+                shape=(2, 1, 384, 30), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_conv2_1": TensorSpec(
+                shape=(4, 1, 384, 30), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_conv2_2": TensorSpec(
+                shape=(3, 1, 384, 30), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_conv2_3": TensorSpec(
+                shape=(2, 1, 384, 30), dtype="float32", io_type=IoType.TENSOR
+            ),
+            "cached_conv2_4": TensorSpec(
+                shape=(4, 1, 384, 30), dtype="float32", io_type=IoType.TENSOR
+            ),
         }
 
     @staticmethod
@@ -202,7 +272,7 @@ class ZipformerDecoder(BaseModel):
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return dict(
-            y=((1, 2), "int32"),
+            y=TensorSpec(shape=(1, 2), dtype="int32", io_type=IoType.TENSOR),
         )
 
     @staticmethod
@@ -272,7 +342,12 @@ class ZipformerJoiner(BaseModel):
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return dict(
-            encoder_out=((1, 512), "float32"), decoder_out=((1, 512), "float32")
+            encoder_out=TensorSpec(
+                shape=(1, 512), dtype="float32", io_type=IoType.TENSOR
+            ),
+            decoder_out=TensorSpec(
+                shape=(1, 512), dtype="float32", io_type=IoType.TENSOR
+            ),
         )
 
     @staticmethod

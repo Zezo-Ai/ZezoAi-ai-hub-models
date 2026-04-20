@@ -23,7 +23,13 @@ from qai_hub_models.utils.base_model import (
     TargetRuntime,
 )
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -141,7 +147,17 @@ class MaskRCNNProposalGenerator(BaseModel):
         Returns the input specification (name -> (shape, type). This can be
         used to submit profiling job on Qualcomm AI Hub.
         """
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -317,11 +333,31 @@ class MaskRCNNROIHead(BaseModel):
         used to submit profiling job on Qualcomm AI Hub.
         """
         return {
-            "features_0": ((1, 256, height, width), "float32"),
-            "features_1": ((1, 256, height // 2, width // 2), "float32"),
-            "features_2": ((1, 256, height // 4, width // 4), "float32"),
-            "features_3": ((1, 256, height // 8, width // 8), "float32"),
-            "proposals_boxes": ((1, num_boxes, 4), "float32"),
+            "features_0": TensorSpec(
+                shape=(1, 256, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "features_1": TensorSpec(
+                shape=(1, 256, height // 2, width // 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "features_2": TensorSpec(
+                shape=(1, 256, height // 4, width // 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "features_3": TensorSpec(
+                shape=(1, 256, height // 8, width // 8),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "proposals_boxes": TensorSpec(
+                shape=(1, num_boxes, 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod

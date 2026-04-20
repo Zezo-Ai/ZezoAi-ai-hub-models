@@ -25,7 +25,13 @@ from qai_hub_models.utils.base_model import (
     CollectionModel,
     PretrainedCollectionModel,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 # ------------------------------------------------------------------------------------
 # Constants & simple assets
@@ -747,7 +753,17 @@ class HandLandmarkDetector(BaseModel):
         Returns the input specification (name -> (shape, type) of the hand landmark detector.
         This can be used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        return {"image": ((batch_size, 3, 224, 224), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, 224, 224),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -1007,8 +1023,16 @@ class CannedGestureClassifier(BaseModel):
         This can be used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "hand": ((batch_size, 64), "float32"),
-            "mirrored_hand": ((batch_size, 64), "float32"),
+            "hand": TensorSpec(
+                shape=(batch_size, 64),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "mirrored_hand": TensorSpec(
+                shape=(batch_size, 64),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod

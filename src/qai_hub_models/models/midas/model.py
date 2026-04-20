@@ -20,7 +20,13 @@ from qai_hub_models.utils.asset_loaders import (
     wipe_sys_modules,
 )
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 3
@@ -124,7 +130,17 @@ class Midas(DepthEstimationModel):
     def get_input_spec(
         batch_size: int = 1, height: int = DEFAULT_HEIGHT, width: int = DEFAULT_WIDTH
     ) -> InputSpec:
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         """

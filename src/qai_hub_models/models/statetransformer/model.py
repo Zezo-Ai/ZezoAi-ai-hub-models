@@ -23,7 +23,7 @@ from qai_hub_models.utils.asset_loaders import (
     find_replace_in_repo,
 )
 from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 # Repository and model configuration
 STR_SOURCE_REPOSITORY = "https://github.com/Tsinghua-MARS-Lab/StateTransformer.git"
@@ -201,9 +201,21 @@ class StateTransformer(BaseModel):
             A dictionary mapping input names to a tuple of (shape, dtype).
         """
         return {
-            "high_res_raster": ((batch_size, 224, 224, 58), "float32"),
-            "low_res_raster": ((batch_size, 224, 224, 58), "float32"),
-            "context_actions": ((batch_size, 4, 7), "float32"),
+            "high_res_raster": TensorSpec(
+                shape=(batch_size, 224, 224, 58),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "low_res_raster": TensorSpec(
+                shape=(batch_size, 224, 224, 58),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "context_actions": TensorSpec(
+                shape=(batch_size, 4, 7),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     def get_hub_compile_options(

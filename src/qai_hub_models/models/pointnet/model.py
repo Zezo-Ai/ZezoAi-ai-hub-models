@@ -19,7 +19,7 @@ from qai_hub_models.utils.asset_loaders import (
     load_torch,
 )
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 SOURCE_REPO = "https://github.com/nikitakaraevv/pointnet"
 COMMIT_HASH = "256437e9ab27b197347464cecff87121c5c824ff"
@@ -85,7 +85,13 @@ class Pointnet(BaseModel):
     def get_input_spec(
         num_points: int = 1024,
     ) -> InputSpec:
-        return {"image": ((1, 3, num_points), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(1, 3, num_points),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

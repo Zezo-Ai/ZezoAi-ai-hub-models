@@ -19,7 +19,14 @@ from qai_hub_models.utils.asset_loaders import (
 )
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.input_spec import InputSpec, SampleInputsType
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    SampleInputsType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 DEFAULT_WEIGHTS = "resnet_wd2_weak_score_1202_3ch.pth.tar"
@@ -73,7 +80,17 @@ class FaceMap_3DMM(BaseModel):
         height: int = 128,
         width: int = 128,
     ) -> InputSpec:
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

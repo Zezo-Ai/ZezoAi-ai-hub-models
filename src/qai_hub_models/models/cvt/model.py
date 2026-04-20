@@ -24,7 +24,7 @@ from qai_hub_models.utils.asset_loaders import (
     load_torch,
 )
 from qai_hub_models.utils.base_model import BaseModel, TargetRuntime
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 SOURCE_REPO = "https://github.com/bradyz/cross_view_transformers"
@@ -150,7 +150,19 @@ class CVT(BaseModel):
         width: int = 480,
     ) -> InputSpec:
         return {
-            "image": ((1, num_frames, 3, height, width), "float32"),
-            "intrinsics": ((1, num_frames, 3, 3), "float32"),
-            "extrinsics": ((1, num_frames, 4, 4), "float32"),
+            "image": TensorSpec(
+                shape=(1, num_frames, 3, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "intrinsics": TensorSpec(
+                shape=(1, num_frames, 3, 3),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "extrinsics": TensorSpec(
+                shape=(1, num_frames, 4, 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }

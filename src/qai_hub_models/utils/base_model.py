@@ -18,7 +18,7 @@ import torch
 from qai_hub.client import Device
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import ModelMetadata
+from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.models.common import (
     Precision,
@@ -423,6 +423,16 @@ class HubModel(HubModelProtocol):
             for the on-device model in order to improve performance.
         """
         return []
+
+    @staticmethod
+    def get_output_spec() -> OutputSpec:
+        """
+        Returns a map from `{output_name -> TensorSpec}` with semantic metadata
+        for each output tensor (e.g. io_type, bbox format, description).
+
+        Override in subclasses to provide output metadata for the model.
+        """
+        return {}
 
     @staticmethod
     def component_precision() -> Precision:

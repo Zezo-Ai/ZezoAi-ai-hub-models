@@ -32,7 +32,13 @@ from qai_hub_models.models._shared.sam2.model_patches import (
 )
 from qai_hub_models.models.common import Precision
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 from qai_hub_models.utils.window_partitioning import (
     window_partition_5d,
     window_unpartition_5d,
@@ -145,12 +151,23 @@ class SAM2Encoder(BaseModel, ABC):
         # This can be used with the qai_hub python API to declare
         # the model input specification upon submitting a profile job.
         return {
-            "image": (
-                (batch_size, 3, encoder_img_height, encoder_img_width),
-                "float32",
+            "image": TensorSpec(
+                shape=(batch_size, 3, encoder_img_height, encoder_img_width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
             ),
-            "unnorm_coords": ((1, num_points, 2), "float32"),
-            "labels": ((1, num_points), "float32"),
+            "unnorm_coords": TensorSpec(
+                shape=(1, num_points, 2),
+                dtype="float32",
+            ),
+            "labels": TensorSpec(
+                shape=(1, num_points),
+                dtype="float32",
+            ),
         }
 
     def _get_input_spec_for_instance(
@@ -285,16 +302,22 @@ class SAM2Decoder(BaseModel, ABC):
         # the model input specification upon submitting a profile job.
 
         input_spec: InputSpec = {
-            "image_embeddings": ((1, embed_dim, *image_embedding), "float32"),
-            "high_res_features1": (
-                (1, high_res_features1_dim, *high_res_features1),
-                "float32",
+            "image_embeddings": TensorSpec(
+                shape=(1, embed_dim, *image_embedding),
+                dtype="float32",
             ),
-            "high_res_features2": (
-                (1, high_res_features2_dim, *high_res_features2),
-                "float32",
+            "high_res_features1": TensorSpec(
+                shape=(1, high_res_features1_dim, *high_res_features1),
+                dtype="float32",
             ),
-            "sparse_embedding": ((1, num_points + 1, embed_dim), "float32"),
+            "high_res_features2": TensorSpec(
+                shape=(1, high_res_features2_dim, *high_res_features2),
+                dtype="float32",
+            ),
+            "sparse_embedding": TensorSpec(
+                shape=(1, num_points + 1, embed_dim),
+                dtype="float32",
+            ),
         }
         return input_spec
 

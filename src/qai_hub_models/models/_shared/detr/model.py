@@ -20,6 +20,8 @@ from qai_hub_models.utils.image_processing import (
     normalize_image_torchvision,
 )
 from qai_hub_models.utils.input_spec import (
+    BboxFormat,
+    BboxMetadata,
     ColorFormat,
     ImageMetadata,
     InputSpec,
@@ -156,7 +158,18 @@ class DETR(BaseModel):
 
     @staticmethod
     def get_output_names() -> list[str]:
-        return ["boxes", "logits", "classes"]
+        return list(DETR.get_output_spec().keys())
+
+    @staticmethod
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "boxes": TensorSpec(
+                io_type=IoType.BBOX,
+                bbox_metadata=BboxMetadata(bbox_format=BboxFormat.XYXY),
+            ),
+            "logits": TensorSpec(io_type=IoType.TENSOR),
+            "classes": TensorSpec(io_type=IoType.TENSOR),
+        }
 
     @staticmethod
     def get_channel_last_inputs() -> list[str]:

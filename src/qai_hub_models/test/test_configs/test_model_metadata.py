@@ -11,8 +11,11 @@ from qai_hub_models.configs.model_metadata import (
     ModelFileMetadata,
     ModelMetadata,
     merge_input_metadata,
+    merge_output_metadata,
 )
 from qai_hub_models.configs.tensor_spec import (
+    BboxFormat,
+    BboxMetadata,
     ColorFormat,
     ImageMetadata,
     IoType,
@@ -21,7 +24,7 @@ from qai_hub_models.configs.tensor_spec import (
 )
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.common import Precision, TargetRuntime
-from qai_hub_models.utils.asset_loaders import load_json
+from qai_hub_models.utils.asset_loaders import load_json, load_yaml
 from qai_hub_models.utils.input_spec import InputSpec
 
 # Default values for required ModelMetadata fields in tests
@@ -529,3 +532,178 @@ def test_merge_input_metadata_json_roundtrip() -> None:
         assert input_spec_loaded["io_type"] == "image"
         assert input_spec_loaded["image_metadata"]["color_format"] == "bgr"
         assert input_spec_loaded["image_metadata"]["value_range"] == [0.0, 255.0]
+
+
+def test_merge_input_metadata_tensor_io_type_in_yaml() -> None:
+    """Test that io_type: tensor appears in YAML even though TENSOR is the default.
+
+    This is critical for human readability — every input should have an explicit
+    io_type in metadata.yaml so consumers know the semantic type.
+    """
+    file_metadata = ModelFileMetadata(
+        inputs={"audio": TensorSpec(shape=(1, 1, 96, 64), dtype="float32")},
+        outputs={"scores": TensorSpec(shape=(1, 521), dtype="float32")},
+    )
+
+    input_spec: InputSpec = {
+        "audio": TensorSpec(
+            shape=(1, 1, 96, 64),
+            dtype="float32",
+            io_type=IoType.TENSOR,
+        ),
+    }
+
+    merge_input_metadata(file_metadata, input_spec)
+
+    model_metadata = ModelMetadata(
+        runtime=DEFAULT_RUNTIME,
+        precision=DEFAULT_PRECISION,
+        tool_versions=DEFAULT_TOOL_VERSIONS,
+        model_files={"yamnet.tflite": file_metadata},
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yaml_path = Path(tmpdir) / "metadata.yaml"
+        model_metadata.to_yaml(yaml_path)
+
+        # io_type: tensor must appear even though TENSOR is the default
+        content = yaml_path.read_text()
+        assert "io_type: tensor" in content
+
+        loaded_dict = load_yaml(yaml_path)
+        audio_spec = loaded_dict["model_files"]["yamnet.tflite"]["inputs"]["audio"]
+        assert audio_spec["io_type"] == "tensor"
+
+
+def test_merge_input_metadata_grayscale_image() -> None:
+    """Test merging image metadata with GRAYSCALE color format."""
+    file_metadata = ModelFileMetadata(
+        inputs={"input": TensorSpec(shape=(1, 1, 480, 640), dtype="float32")},
+        outputs={"output": TensorSpec(shape=(1, 1, 480, 640), dtype="float32")},
+    )
+
+    input_spec: InputSpec = {
+        "input": TensorSpec(
+            shape=(1, 1, 480, 640),
+            dtype="float32",
+            io_type=IoType.IMAGE,
+            image_metadata=ImageMetadata(
+                color_format=ColorFormat.GRAYSCALE,
+                value_range=(0.0, 1.0),
+            ),
+        ),
+    }
+
+    merge_input_metadata(file_metadata, input_spec)
+
+    spec = file_metadata.inputs["input"]
+    assert spec.io_type == IoType.IMAGE
+    assert spec.image_metadata is not None
+    assert spec.image_metadata.color_format == ColorFormat.GRAYSCALE
+
+
+def test_merge_input_metadata_mixed_image_tensor_yaml_roundtrip() -> None:
+    """Test YAML roundtrip for a model with both IMAGE and TENSOR inputs.
+
+    Verifies that io_type appears for both input types and that
+    image_metadata only appears for IMAGE inputs.
+    """
+    file_metadata = ModelFileMetadata(
+        inputs={
+            "image": TensorSpec(shape=(1, 3, 224, 224), dtype="float32"),
+            "text": TensorSpec(shape=(1, 77), dtype="int32"),
+        },
+        outputs={
+            "logits_per_image": TensorSpec(shape=(1, 1), dtype="float32"),
+        },
+    )
+
+    input_spec: InputSpec = {
+        "image": TensorSpec(
+            shape=(1, 3, 224, 224),
+            dtype="float32",
+            io_type=IoType.IMAGE,
+            image_metadata=ImageMetadata(
+                color_format=ColorFormat.RGB,
+                value_range=(0.0, 1.0),
+            ),
+        ),
+        "text": TensorSpec(
+            shape=(1, 77),
+            dtype="int32",
+            io_type=IoType.TENSOR,
+        ),
+    }
+
+    merge_input_metadata(file_metadata, input_spec)
+
+    model_metadata = ModelMetadata(
+        runtime=DEFAULT_RUNTIME,
+        precision=DEFAULT_PRECISION,
+        tool_versions=DEFAULT_TOOL_VERSIONS,
+        model_files={"clip.tflite": file_metadata},
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yaml_path = Path(tmpdir) / "metadata.yaml"
+        model_metadata.to_yaml(yaml_path)
+
+        loaded_dict = load_yaml(yaml_path)
+        inputs = loaded_dict["model_files"]["clip.tflite"]["inputs"]
+
+        # IMAGE input has io_type and image_metadata
+        assert inputs["image"]["io_type"] == "image"
+        assert "image_metadata" in inputs["image"]
+
+        # TENSOR input has io_type but no image_metadata
+        assert inputs["text"]["io_type"] == "tensor"
+        assert "image_metadata" not in inputs["text"]
+
+
+def test_merge_output_metadata_bbox() -> None:
+    """Test merging bbox output metadata into ModelFileMetadata."""
+    file_metadata = ModelFileMetadata(
+        inputs={"image": TensorSpec(shape=(1, 3, 640, 640), dtype="float32")},
+        outputs={
+            "boxes": TensorSpec(shape=(1, 100, 4), dtype="float32"),
+            "scores": TensorSpec(shape=(1, 100), dtype="float32"),
+            "class_idx": TensorSpec(shape=(1, 100), dtype="uint8"),
+        },
+    )
+
+    output_spec = {
+        "boxes": TensorSpec(
+            io_type=IoType.BBOX,
+            bbox_metadata=BboxMetadata(bbox_format=BboxFormat.XYXY),
+        ),
+        "scores": TensorSpec(io_type=IoType.TENSOR),
+        "class_idx": TensorSpec(io_type=IoType.TENSOR),
+    }
+
+    merge_output_metadata(file_metadata, output_spec)
+
+    assert file_metadata.outputs["boxes"].io_type == IoType.BBOX
+    assert file_metadata.outputs["boxes"].bbox_metadata is not None
+    assert file_metadata.outputs["boxes"].bbox_metadata.bbox_format == BboxFormat.XYXY
+    assert file_metadata.outputs["scores"].io_type == IoType.TENSOR
+    assert file_metadata.outputs["class_idx"].io_type == IoType.TENSOR
+
+    # Verify YAML roundtrip
+    model_metadata = ModelMetadata(
+        runtime=DEFAULT_RUNTIME,
+        precision=DEFAULT_PRECISION,
+        tool_versions=DEFAULT_TOOL_VERSIONS,
+        model_files={"detector.tflite": file_metadata},
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yaml_path = Path(tmpdir) / "metadata.yaml"
+        model_metadata.to_yaml(yaml_path)
+
+        loaded_dict = load_yaml(yaml_path)
+        outputs = loaded_dict["model_files"]["detector.tflite"]["outputs"]
+
+        assert outputs["boxes"]["io_type"] == "bbox"
+        assert outputs["boxes"]["bbox_metadata"]["bbox_format"] == "xyxy"
+        assert outputs["scores"]["io_type"] == "tensor"
+        assert outputs["class_idx"]["io_type"] == "tensor"

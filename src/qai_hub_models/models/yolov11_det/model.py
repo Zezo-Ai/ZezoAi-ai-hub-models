@@ -18,6 +18,7 @@ from qai_hub_models.models._shared.ultralytics.detect_patches import (
 )
 from qai_hub_models.models._shared.yolo.model import Yolo, yolo_detect_postprocess
 from qai_hub_models.models.common import Precision
+from qai_hub_models.utils.input_spec import BboxFormat, BboxMetadata, IoType, TensorSpec
 
 MODEL_ASSET_VERSION = 1
 MODEL_ID = __name__.split(".")[-2]
@@ -115,7 +116,7 @@ class YoloV11Detector(Yolo):
         split_output: bool = False,
     ) -> list[str]:
         if include_postprocessing:
-            return ["boxes", "scores", "class_idx"]
+            return list(YoloV11Detector.get_output_spec().keys())
         if split_output:
             return ["boxes", "scores"]
         return ["detector_output"]
@@ -125,6 +126,17 @@ class YoloV11Detector(Yolo):
             self.include_postprocessing,
             self.split_output,
         )
+
+    @staticmethod
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "boxes": TensorSpec(
+                io_type=IoType.BBOX,
+                bbox_metadata=BboxMetadata(bbox_format=BboxFormat.XYXY),
+            ),
+            "scores": TensorSpec(io_type=IoType.TENSOR),
+            "class_idx": TensorSpec(io_type=IoType.TENSOR),
+        }
 
     def get_hub_quantize_options(
         self, precision: Precision, other_options: str | None = None

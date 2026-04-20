@@ -29,7 +29,7 @@ from qai_hub_models.utils.asset_loaders import (
     load_torch,
 )
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -168,11 +168,31 @@ class GKT(BaseModel):
         width: int = 480,
     ) -> InputSpec:
         return {
-            "image": ((batch_size, num_cams, 3, height, width), "float32"),
-            "intrinsics": ((batch_size, num_cams, 3, 3), "float32"),
-            "extrinsics": ((batch_size, num_cams, 4, 4), "float32"),
-            "inv_intrinsics": ((batch_size, num_cams, 3, 3), "float32"),
-            "inv_extrinsics": ((batch_size, num_cams, 4, 4), "float32"),
+            "image": TensorSpec(
+                shape=(batch_size, num_cams, 3, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "intrinsics": TensorSpec(
+                shape=(batch_size, num_cams, 3, 3),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "extrinsics": TensorSpec(
+                shape=(batch_size, num_cams, 4, 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "inv_intrinsics": TensorSpec(
+                shape=(batch_size, num_cams, 3, 3),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "inv_extrinsics": TensorSpec(
+                shape=(batch_size, num_cams, 4, 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod

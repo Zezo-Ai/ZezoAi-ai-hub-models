@@ -17,7 +17,13 @@ from qai_hub_models.utils.asset_loaders import (
     SourceAsRoot,
 )
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 2
@@ -125,11 +131,35 @@ class CREStereo(BaseModel):
     ) -> InputSpec:
         shape = (batch_size, 3, height, width)
         shape_dw2 = (batch_size, 3, height // 2, width // 2)
+        bgr_metadata = ImageMetadata(
+            color_format=ColorFormat.BGR,
+            value_range=(0.0, 1.0),
+        )
         return {
-            "left_image": (shape, "float32"),
-            "right_image": (shape, "float32"),
-            "left_image_dw2": (shape_dw2, "float32"),
-            "right_image_dw2": (shape_dw2, "float32"),
+            "left_image": TensorSpec(
+                shape=shape,
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=bgr_metadata,
+            ),
+            "right_image": TensorSpec(
+                shape=shape,
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=bgr_metadata,
+            ),
+            "left_image_dw2": TensorSpec(
+                shape=shape_dw2,
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=bgr_metadata,
+            ),
+            "right_image_dw2": TensorSpec(
+                shape=shape_dw2,
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=bgr_metadata,
+            ),
         }
 
     @staticmethod

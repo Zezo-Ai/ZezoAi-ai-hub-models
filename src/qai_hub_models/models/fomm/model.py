@@ -26,7 +26,13 @@ from qai_hub_models.utils.base_model import (
     CollectionModel,
     PretrainedCollectionModel,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 FOMM_SOURCE_REPOSITORY = "https://github.com/AliaksandrSiarohin/first-order-model/"
 FOMM_SOURCE_REPO_COMMIT = "f4ff6da1ef5c0e6bcf6ec80324fab37c92193e84"
@@ -97,7 +103,15 @@ class FOMMDetector(BaseModel):
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "image": ((batch_size, 3, height, width), "float32"),
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
         }
 
     @staticmethod
@@ -178,11 +192,35 @@ class FOMMGenerator(BaseModel):
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "image": ((batch_size, 3, height, width), "float32"),
-            "source_keypoint_values": ((batch_size, 10, 2), "float32"),
-            "source_keypoint_jacobians": ((batch_size, 10, 2, 2), "float32"),
-            "kp_norm_values": ((batch_size, 10, 2), "float32"),
-            "kp_norm_jacobians": ((batch_size, 10, 2, 2), "float32"),
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+            "source_keypoint_values": TensorSpec(
+                shape=(batch_size, 10, 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "source_keypoint_jacobians": TensorSpec(
+                shape=(batch_size, 10, 2, 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "kp_norm_values": TensorSpec(
+                shape=(batch_size, 10, 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "kp_norm_jacobians": TensorSpec(
+                shape=(batch_size, 10, 2, 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod

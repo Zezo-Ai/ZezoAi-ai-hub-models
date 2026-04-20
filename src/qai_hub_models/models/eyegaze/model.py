@@ -18,7 +18,7 @@ from qai_hub_models.utils.asset_loaders import (
     load_torch,
 )
 from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 SOURCE_REPO = "https://github.com/david-wb/gaze-estimation"
 COMMIT_HASH = "249691893a37944a03e4ad4a3448083b6f63af10"
@@ -106,4 +106,10 @@ class EyeGaze(BaseModel):
         height: int = 96,
         width: int = 160,
     ) -> InputSpec:
-        return {"image": ((1, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(1, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+        }

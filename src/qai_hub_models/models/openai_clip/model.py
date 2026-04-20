@@ -19,7 +19,13 @@ from typing_extensions import Self
 
 from qai_hub_models.utils.asset_loaders import callback_with_retry
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 PRETRAINED_WEIGHTS = "ViT-B/16"
 MODEL_ID = __name__.split(".")[-2]
@@ -92,8 +98,20 @@ class OpenAIClip(BaseModel):
         # This can be used with the qai_hub python API to declare
         # the model input specification upon submitting a profile job.
         return {
-            "image": ((image_batch_size, 3, image_height, image_width), "float32"),
-            "text": ((text_batch_size, text_length), "int32"),
+            "image": TensorSpec(
+                shape=(image_batch_size, 3, image_height, image_width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+            "text": TensorSpec(
+                shape=(text_batch_size, text_length),
+                dtype="int32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod

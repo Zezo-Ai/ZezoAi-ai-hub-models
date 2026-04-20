@@ -24,7 +24,7 @@ from qai_hub_models.utils.base_model import (
     BaseModel,
     PretrainedCollectionModel,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 MODEL_ID = "opus_mt_shared"
 MODEL_ASSET_VERSION = 1
@@ -79,8 +79,14 @@ class OpusMTEncoder(BaseModel):
         used to submit profiling job on Qualcomm AI Hub.
         """
         return {
-            "input_ids": ((1, MAX_SEQ_LEN_ENC), "int32"),
-            "encoder_attention_mask": ((1, MAX_SEQ_LEN_ENC), "int32"),
+            "input_ids": TensorSpec(
+                shape=(1, MAX_SEQ_LEN_ENC),
+                dtype="int32",
+            ),
+            "encoder_attention_mask": TensorSpec(
+                shape=(1, MAX_SEQ_LEN_ENC),
+                dtype="int32",
+            ),
         }
 
     @staticmethod
@@ -152,29 +158,30 @@ class OpusMTDecoder(BaseModel):
         head_dim = attention_dim // num_heads
 
         specs: InputSpec = {
-            "input_ids": ((1, 1), "int32"),
-            "encoder_attention_mask": ((1, MAX_SEQ_LEN_ENC), "int32"),
-            "position": ((1,), "int32"),
+            "input_ids": TensorSpec(shape=(1, 1), dtype="int32"),
+            "encoder_attention_mask": TensorSpec(
+                shape=(1, MAX_SEQ_LEN_ENC),
+                dtype="int32",
+            ),
+            "position": TensorSpec(shape=(1,), dtype="int32"),
         }
 
-        # Add past key-value states for each layer
-        # Using transpose_key=False format (consistent with original notebook)
         for i in range(num_layers):
-            specs[f"block_{i}_past_self_key_states"] = (
-                (1, num_heads, MAX_SEQ_LEN_DEC - 1, head_dim),
-                "float32",
+            specs[f"block_{i}_past_self_key_states"] = TensorSpec(
+                shape=(1, num_heads, MAX_SEQ_LEN_DEC - 1, head_dim),
+                dtype="float32",
             )
-            specs[f"block_{i}_past_self_value_states"] = (
-                (1, num_heads, MAX_SEQ_LEN_DEC - 1, head_dim),
-                "float32",
+            specs[f"block_{i}_past_self_value_states"] = TensorSpec(
+                shape=(1, num_heads, MAX_SEQ_LEN_DEC - 1, head_dim),
+                dtype="float32",
             )
-            specs[f"block_{i}_cross_key_states"] = (
-                (1, num_heads, MAX_SEQ_LEN_ENC, head_dim),
-                "float32",
+            specs[f"block_{i}_cross_key_states"] = TensorSpec(
+                shape=(1, num_heads, MAX_SEQ_LEN_ENC, head_dim),
+                dtype="float32",
             )
-            specs[f"block_{i}_cross_value_states"] = (
-                (1, num_heads, MAX_SEQ_LEN_ENC, head_dim),
-                "float32",
+            specs[f"block_{i}_cross_value_states"] = TensorSpec(
+                shape=(1, num_heads, MAX_SEQ_LEN_ENC, head_dim),
+                dtype="float32",
             )
 
         return specs

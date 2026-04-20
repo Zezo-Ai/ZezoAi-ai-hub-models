@@ -18,7 +18,15 @@ from qai_hub_models.utils.base_model import (
     PretrainedCollectionModel,
     TargetRuntime,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    BboxFormat,
+    BboxMetadata,
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -91,7 +99,17 @@ class Detectron2ProposalGenerator(Detectron2):
         Returns the input specification (name -> (shape, type). This can be
         used to submit profiling job on Qualcomm AI Hub.
         """
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -175,13 +193,32 @@ class Detectron2ROIHead(Detectron2):
         used to submit profiling job on Qualcomm AI Hub.
         """
         return {
-            "features": ((1, 1024, height, width), "float32"),
-            "proposals_boxes": ((1, num_boxes, 4), "float32"),
+            "features": TensorSpec(
+                shape=(1, 1024, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "proposals_boxes": TensorSpec(
+                shape=(1, num_boxes, 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod
     def get_output_names() -> list[str]:
-        return ["boxes", "scores", "classes"]
+        return list(Detectron2ROIHead.get_output_spec().keys())
+
+    @staticmethod
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "boxes": TensorSpec(
+                io_type=IoType.BBOX,
+                bbox_metadata=BboxMetadata(bbox_format=BboxFormat.XYXY),
+            ),
+            "scores": TensorSpec(io_type=IoType.TENSOR),
+            "classes": TensorSpec(io_type=IoType.TENSOR),
+        }
 
     @staticmethod
     def get_channel_last_inputs() -> list[str]:

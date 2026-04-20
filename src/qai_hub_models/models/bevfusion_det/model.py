@@ -45,7 +45,7 @@ from qai_hub_models.utils.bounding_box_processing_3d import onnx_atan2
 from qai_hub_models.utils.image_processing import (
     normalize_image_torchvision,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 from qai_hub_models.utils.window_partitioning import (
     WindowMSA_forward_optimized,
     window_partition_optimized,
@@ -121,7 +121,13 @@ class BEVFusionEncoder1(BaseModel):
     def get_input_spec(
         batch_size: int = 1, height: int = 256, width: int = 704
     ) -> InputSpec:
-        return {"imgs": ((batch_size, 6 * 3, height, width), "float32")}
+        return {
+            "imgs": TensorSpec(
+                shape=(batch_size, 6 * 3, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -183,11 +189,31 @@ class BEVFusionEncoder2(BaseModel):
         batch_size: int = 1, height: int = 256, width: int = 704
     ) -> InputSpec:
         return {
-            "img": ((batch_size, 6, 256, 32, 88), "float32"),
-            "intrins": ((batch_size, 6, 3, 3), "float32"),
-            "camera2lidars": ((batch_size, 6, 4, 4), "float32"),
-            "inv_post_rots": ((batch_size, 6, 3, 3), "float32"),
-            "post_trans": ((batch_size, 6, 1, 3), "float32"),
+            "img": TensorSpec(
+                shape=(batch_size, 6, 256, 32, 88),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "intrins": TensorSpec(
+                shape=(batch_size, 6, 3, 3),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "camera2lidars": TensorSpec(
+                shape=(batch_size, 6, 4, 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "inv_post_rots": TensorSpec(
+                shape=(batch_size, 6, 3, 3),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "post_trans": TensorSpec(
+                shape=(batch_size, 6, 1, 3),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod
@@ -263,8 +289,16 @@ class BEVFusionEncoder3(BaseModel):
         batch_size: int = 1, height: int = 256, width: int = 704
     ) -> InputSpec:
         return {
-            "segment": ((1, 59000, 80), "float32"),
-            "geom": ((1, 2, 59000), "int32"),
+            "segment": TensorSpec(
+                shape=(1, 59000, 80),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "geom": TensorSpec(
+                shape=(1, 2, 59000),
+                dtype="int32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod
@@ -334,7 +368,13 @@ class BEVFusionDecoder(BaseModel):
     def get_input_spec(
         batch_size: int = 1, height: int = 128, width: int = 128
     ) -> InputSpec:
-        return {"x": ((batch_size, 80, height, width), "float32")}
+        return {
+            "x": TensorSpec(
+                shape=(batch_size, 80, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

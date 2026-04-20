@@ -22,7 +22,13 @@ from qai_hub_models.utils.base_model import (
     PretrainedCollectionModel,
 )
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 3
@@ -110,7 +116,15 @@ class TrackAnythingEncodeKeyWithShrinkage(TrackAnything):
         width: int = 576,
     ) -> InputSpec:
         return {
-            "image": ((batch_size, 3, height, width), "float32"),
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
         }
 
     @staticmethod
@@ -175,10 +189,30 @@ class TrackAnythingEncodeValue(TrackAnything):
         width: int = 576,
     ) -> InputSpec:
         return {
-            "image": ((batch_size, 3, height, width), "float32"),
-            "mask": ((batch_size, height, width), "float32"),
-            "f16": ((batch_size, 1024, height // 16, width // 16), "float32"),
-            "hidden_state": ((batch_size, 1, 64, height // 16, width // 16), "float32"),
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+            "mask": TensorSpec(
+                shape=(batch_size, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "f16": TensorSpec(
+                shape=(batch_size, 1024, height // 16, width // 16),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "hidden_state": TensorSpec(
+                shape=(batch_size, 1, 64, height // 16, width // 16),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod
@@ -231,7 +265,15 @@ class TrackAnythingEncodeKeyWithoutShrinkage(TrackAnything):
         width: int = 576,
     ) -> InputSpec:
         return {
-            "image": ((batch_size, 3, height, width), "float32"),
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
         }
 
     @staticmethod
@@ -297,14 +339,31 @@ class TrackAnythingSegment(TrackAnything):
         width: int = 576,
     ) -> InputSpec:
         return {
-            "f16": ((batch_size, 1024, height // 16, width // 16), "float32"),
-            "f8": ((batch_size, 512, height // 8, width // 8), "float32"),
-            "f4": ((batch_size, 256, height // 4, width // 4), "float32"),
-            "memory_readout": (
-                (batch_size, 1, 512, height // 16, width // 16),
-                "float32",
+            "f16": TensorSpec(
+                shape=(batch_size, 1024, height // 16, width // 16),
+                dtype="float32",
+                io_type=IoType.TENSOR,
             ),
-            "hidden_state": ((batch_size, 1, 64, height // 16, width // 16), "float32"),
+            "f8": TensorSpec(
+                shape=(batch_size, 512, height // 8, width // 8),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "f4": TensorSpec(
+                shape=(batch_size, 256, height // 4, width // 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "memory_readout": TensorSpec(
+                shape=(batch_size, 1, 512, height // 16, width // 16),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "hidden_state": TensorSpec(
+                shape=(batch_size, 1, 64, height // 16, width // 16),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod

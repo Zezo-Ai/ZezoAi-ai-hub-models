@@ -36,7 +36,13 @@ from qai_hub_models.utils.base_model import (
     CollectionModel,
     PretrainedCollectionModel,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 from qai_hub_models.utils.window_partitioning import (
     window_partition_5d,
     window_unpartition_5d,
@@ -143,12 +149,23 @@ class SAMEncoderPart(BaseModel):
         # the model input specification upon submitting a profile job.
         if include_embedding:
             return {
-                "image": (
-                    (batch_size, 3, encoder_img_height, encoder_img_width),
-                    "float32",
-                )
+                "image": TensorSpec(
+                    shape=(batch_size, 3, encoder_img_height, encoder_img_width),
+                    dtype="float32",
+                    io_type=IoType.IMAGE,
+                    image_metadata=ImageMetadata(
+                        color_format=ColorFormat.RGB,
+                        value_range=(0.0, 1.0),
+                    ),
+                ),
             }
-        return {"x": ((batch_size, 64, 64, embedding_size), "float32")}
+        return {
+            "x": TensorSpec(
+                shape=(batch_size, 64, 64, embedding_size),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+        }
 
     def _get_input_spec_for_instance(
         self,
@@ -317,13 +334,33 @@ class SAMDecoder(BaseModel):
         mask_input_size = tuple([4 * x for x in embed_size])
 
         input_spec: InputSpec = {
-            "image_embeddings": ((1, embed_dim, *embed_size), "float32"),
-            "point_coords": ((1, num_of_points, 2), "float32"),
-            "point_labels": ((1, num_of_points), "float32"),
+            "image_embeddings": TensorSpec(
+                shape=(1, embed_dim, *embed_size),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "point_coords": TensorSpec(
+                shape=(1, num_of_points, 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "point_labels": TensorSpec(
+                shape=(1, num_of_points),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
         if has_mask_input:
-            input_spec["mask_input"] = ((1, 1, *mask_input_size), "float32")
-            input_spec["has_mask_input"] = ((1,), "float32")
+            input_spec["mask_input"] = TensorSpec(
+                shape=(1, 1, *mask_input_size),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            )
+            input_spec["has_mask_input"] = TensorSpec(
+                shape=(1,),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            )
         return input_spec
 
     @staticmethod

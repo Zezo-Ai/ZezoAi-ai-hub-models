@@ -22,7 +22,13 @@ from qai_hub_models.utils.base_model import (
     PretrainedCollectionModel,
 )
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 from qai_hub_models.utils.rnn import UnrolledLSTM
 
 MODEL_ID = __name__.split(".")[-2]
@@ -84,7 +90,17 @@ class EasyOCRDetector(BaseModel):
         height: int = 608,
         width: int = 800,
     ) -> InputSpec:
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -154,9 +170,14 @@ class EasyOCRRecognizer(BaseModel):
         max_detection_width: int = 800,
     ) -> InputSpec:
         return {
-            "image": (
-                (batch_size, 1, max_detection_height, max_detection_width),
-                "float32",
+            "image": TensorSpec(
+                shape=(batch_size, 1, max_detection_height, max_detection_width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.GRAYSCALE,
+                    value_range=(0.0, 1.0),
+                ),
             ),
         }
 

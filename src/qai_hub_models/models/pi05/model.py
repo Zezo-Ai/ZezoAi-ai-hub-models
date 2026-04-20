@@ -30,7 +30,14 @@ from qai_hub_models.utils.base_model import (
     TargetRuntime,
 )
 from qai_hub_models.utils.checkpoint import CheckpointSpec, FromPretrainedMixin
-from qai_hub_models.utils.input_spec import InputSpec, make_torch_inputs
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+    make_torch_inputs,
+)
 from qai_hub_models.utils.qai_hub_helpers import (
     ensure_hexagon_version,
     export_torch_to_onnx_zip,
@@ -195,7 +202,17 @@ class Pi05PaliGemmaVision(LoadPolicyMixin, BaseModel):
     ) -> InputSpec:
         # Expect images already resized to 224x224. Pi05App handles
         # resizing and normalization.
-        return dict(image=((batch_size, 3, 224, 224), "float32"))
+        return dict(
+            image=TensorSpec(
+                shape=(batch_size, 3, 224, 224),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(-1.0, 1.0),
+                ),
+            ),
+        )
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -413,14 +430,26 @@ class Pi05PaliGemmaTokenEmbed(LoadPolicyMixin, BaseModel):
         embed_dim = 2048
 
         spec: InputSpec = {
-            "lang_tokens": ((batch_size, MAX_TOKEN_LENGTH), "int32"),
-            "lang_mask": ((batch_size, MAX_TOKEN_LENGTH), "float32"),
+            "lang_tokens": TensorSpec(
+                shape=(batch_size, MAX_TOKEN_LENGTH),
+                dtype="int32",
+                io_type=IoType.TENSOR,
+            ),
+            "lang_mask": TensorSpec(
+                shape=(batch_size, MAX_TOKEN_LENGTH),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
         # Add img_embed1, img_embed2, ... for NUM_CAMERAS
         for cam_id in range(NUM_CAMERAS):
             key = f"img_embed{cam_id + 1}"
-            spec[key] = ((batch_size, num_patches, embed_dim), "float32")
+            spec[key] = TensorSpec(
+                shape=(batch_size, num_patches, embed_dim),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            )
 
         return spec
 
@@ -1011,29 +1040,45 @@ class Pi05ActionExpert(LoadPolicyMixin, BaseModel):
         ls_len = NUM_ACTION_STEPS
         lt_len = src_len + ls_len
         spec: InputSpec = dict(
-            full_att_4d=((batch_size, 1, ls_len, lt_len), "float32"),
-            rope_emb_sin=(
-                (batch_size, NUM_ACTION_STEPS, 1, head_dim // 2),
-                "float32",
+            full_att_4d=TensorSpec(
+                shape=(batch_size, 1, ls_len, lt_len),
+                dtype="float32",
+                io_type=IoType.TENSOR,
             ),
-            rope_emb_cos=(
-                (batch_size, NUM_ACTION_STEPS, 1, head_dim // 2),
-                "float32",
+            rope_emb_sin=TensorSpec(
+                shape=(batch_size, NUM_ACTION_STEPS, 1, head_dim // 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
             ),
-            x_t=((batch_size, NUM_ACTION_STEPS, state_dim), "float32"),
+            rope_emb_cos=TensorSpec(
+                shape=(batch_size, NUM_ACTION_STEPS, 1, head_dim // 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            x_t=TensorSpec(
+                shape=(batch_size, NUM_ACTION_STEPS, state_dim),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
             # Replace external adarms_cond with scalar time_step in [0, 1].
-            time_step=((batch_size,), "float32"),
+            time_step=TensorSpec(
+                shape=(batch_size,),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         )
         # Add 18 K caches then 18 V caches.
         for i in range(num_layers):
-            spec[f"key_cache_l{i}"] = (
-                (batch_size, src_len, 1, head_dim),
-                "float32",
+            spec[f"key_cache_l{i}"] = TensorSpec(
+                shape=(batch_size, src_len, 1, head_dim),
+                dtype="float32",
+                io_type=IoType.TENSOR,
             )
         for i in range(num_layers):
-            spec[f"value_cache_l{i}"] = (
-                (batch_size, src_len, 1, head_dim),
-                "float32",
+            spec[f"value_cache_l{i}"] = TensorSpec(
+                shape=(batch_size, src_len, 1, head_dim),
+                dtype="float32",
+                io_type=IoType.TENSOR,
             )
         return spec
 
@@ -1234,10 +1279,26 @@ class Pi05PaliGemmaBackboneBase(LoadPolicyMixin, BaseModel):
         hidden_dim = 2048
         head_dim = 256
         return dict(
-            hidden_state=((batch_size, src_len, hidden_dim), "float32"),
-            prefix_att_2d_masks=((batch_size, src_len, src_len), "float32"),
-            rope_emb_sin=((batch_size, src_len, 1, head_dim // 2), "float32"),
-            rope_emb_cos=((batch_size, src_len, 1, head_dim // 2), "float32"),
+            hidden_state=TensorSpec(
+                shape=(batch_size, src_len, hidden_dim),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            prefix_att_2d_masks=TensorSpec(
+                shape=(batch_size, src_len, src_len),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            rope_emb_sin=TensorSpec(
+                shape=(batch_size, src_len, 1, head_dim // 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            rope_emb_cos=TensorSpec(
+                shape=(batch_size, src_len, 1, head_dim // 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         )
 
     def _get_output_names_for_instance(self) -> list[str]:

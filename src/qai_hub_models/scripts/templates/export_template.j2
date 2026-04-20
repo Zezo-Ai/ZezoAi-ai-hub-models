@@ -87,7 +87,7 @@ from qai_hub_models.utils.version_helpers import (
 )
 {%- endif %}
 {% if not is_precompiled %}
-from qai_hub_models.configs.model_metadata import ModelFileMetadata, ModelMetadata, merge_input_metadata
+from qai_hub_models.configs.model_metadata import ModelFileMetadata, ModelMetadata, merge_input_metadata, merge_output_metadata
 {% endif %}
 
 {%- if can_use_quantize_job %}
@@ -571,6 +571,7 @@ def download_model(
         component = model.components[component_name]
         assert isinstance(component, BaseModel)
         merge_input_metadata(model_file_metadata[model_file_name], component.get_input_spec())
+        merge_output_metadata(model_file_metadata[model_file_name], component.get_output_spec())
         {%- endif %}
         {%- endif %}
         {%- endfilter %}
@@ -583,6 +584,7 @@ def download_model(
         file_metadata = ModelFileMetadata.from_hub_model(target_model)
         # Merge semantic metadata from get_input_spec()
         merge_input_metadata(file_metadata, model.get_input_spec())
+        merge_output_metadata(file_metadata, model.get_output_spec())
         model_metadata = ModelMetadata(model_id=MODEL_ID, model_name="{{ model_display_name }}", runtime=runtime, precision=precision, tool_versions=tool_versions, model_files={model_file_name: file_metadata})
         {%- endif %}
 

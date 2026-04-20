@@ -317,9 +317,9 @@ def run_diffusion_steps_on_latents(
 
             time_input = torch.as_tensor([[t]], dtype=torch.float32).to(host_device)
 
-            latent_input = scheduler.scale_model_input(  # type: ignore[attr-defined]
-                latents.to("cpu"), t
-            ).to(host_device)
+            latent_input = scheduler.scale_model_input(latents.to("cpu"), t).to(  # type: ignore[attr-defined]
+                host_device
+            )
             if channel_last_latent:
                 latent_input = _make_channel_last_torch(latent_input).to(host_device)
 
@@ -395,9 +395,9 @@ def run_diffusion_steps_on_latents(
             # Scheduler runs on CPU (its internal tensors are on CPU).
             # Move noise_pred and latents to CPU for the step, then back.
             noise_pred = noise_pred.to("cpu")
-            latents = scheduler.step(  # type: ignore[attr-defined]
-                noise_pred, t, latents.to("cpu")
-            ).prev_sample.to(host_device)
+            latents = scheduler.step(noise_pred, t, latents.to("cpu")).prev_sample.to(  # type: ignore[attr-defined]
+                host_device
+            )
 
         if return_all_steps:
             vae_inputs = {"latent": [latents]}

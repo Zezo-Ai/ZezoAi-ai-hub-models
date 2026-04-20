@@ -14,7 +14,7 @@ from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 YAMNET_PROXY_REPOSITORY = "https://github.com/w-hc/torch_audioset.git"
 YAMNET_PROXY_REPO_COMMIT = "e8852c5"
@@ -62,7 +62,13 @@ class YamNet(BaseModel):
         #
         # This can be used with the qai_hub python API to declare
         # the model input specification upon submitting a profile job.
-        return {"audio": ((1, 1, MELS_AUDIO_LEN, N_MELS), "float32")}
+        return {
+            "audio": TensorSpec(
+                shape=(1, 1, MELS_AUDIO_LEN, N_MELS),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+        }
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

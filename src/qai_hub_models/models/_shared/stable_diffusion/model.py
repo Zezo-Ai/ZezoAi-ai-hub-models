@@ -52,7 +52,7 @@ from qai_hub_models.utils.checkpoint import (
     FromPretrainedMixin,
     hf_repo_exists,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.qai_hub_helpers import ensure_hexagon_version
 
 
@@ -83,7 +83,9 @@ class TextEncoderBase(BaseModel, FromPretrainedMixin):
         cls,
         batch_size: int = 1,
     ) -> InputSpec:
-        return dict(tokens=((batch_size, cls.seq_len), "int32"))
+        return {
+            "tokens": TensorSpec(shape=(batch_size, cls.seq_len), dtype="int32"),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -177,7 +179,7 @@ class UnetBase(BaseModel, FromPretrainedMixin):
         model.get_time_embed = get_timestep_embedding  # type: ignore[attr-defined]
 
         if on_device_opt:
-            monkey_patch_model(model)
+            monkey_patch_model(model)  # type: ignore[arg-type]
 
         class UNet2DConditionModelWrapper(torch.nn.Module):
             """Call with return_dict=false and unpack the output tuple"""
@@ -215,11 +217,13 @@ class UnetBase(BaseModel, FromPretrainedMixin):
         batch_size: int = 1,
         text_emb_dim: int = 1024,
     ) -> InputSpec:
-        return dict(
-            latent=((batch_size, 4, 64, 64), "float32"),
-            timestep=((batch_size, 1), "float32"),
-            text_emb=((batch_size, cls.seq_len, text_emb_dim), "float32"),
-        )
+        return {
+            "latent": TensorSpec(shape=(batch_size, 4, 64, 64), dtype="float32"),
+            "timestep": TensorSpec(shape=(batch_size, 1), dtype="float32"),
+            "text_emb": TensorSpec(
+                shape=(batch_size, cls.seq_len, text_emb_dim), dtype="float32"
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -329,9 +333,9 @@ class VaeDecoderBase(BaseModel, FromPretrainedMixin):
         Returns the input specification (name -> (shape, type). This can be
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        return dict(
-            latent=((batch_size, 4, 64, 64), "float32"),
-        )
+        return {
+            "latent": TensorSpec(shape=(batch_size, 4, 64, 64), dtype="float32"),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

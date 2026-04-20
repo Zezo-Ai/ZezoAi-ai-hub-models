@@ -22,7 +22,13 @@ from qai_hub_models.utils.base_model import (
     CollectionModel,
     PretrainedCollectionModel,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 2
@@ -174,7 +180,17 @@ class HandDetector(BaseModel):
         Returns the input specification (name -> (shape, type) of the hand detector.
         This can be used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        return {"image": ((batch_size, 3, 256, 256), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, 256, 256),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -226,7 +242,17 @@ class HandLandmarkDetector(BaseModel):
         Returns the input specification (name -> (shape, type) of the hand landmark detector.
         This can be used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        return {"image": ((batch_size, 3, 256, 256), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, 256, 256),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

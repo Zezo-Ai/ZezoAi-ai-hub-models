@@ -34,7 +34,13 @@ from qai_hub_models.utils.checkpoint import (
     CheckpointType,
     FromPretrainedMixin,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 DEFAULT_H, DEFAULT_W = 512, 512
 
@@ -57,7 +63,7 @@ class ControlUnetBase(BaseModel, FromPretrainedMixin):
         model.get_time_embed = get_timestep_embedding  # type: ignore[attr-defined]
 
         if on_device_opt:
-            monkey_patch_model(model)
+            monkey_patch_model(model)  # type: ignore[arg-type]
 
         class ControlUNet2DConditionModelWrapper(torch.nn.Module):
             """Call with return_dict=false and unpack the output tuple"""
@@ -171,24 +177,52 @@ class ControlUnetBase(BaseModel, FromPretrainedMixin):
         batch_size: int = 1,
         text_emb_dim: int = 768,
     ) -> InputSpec:
-        return dict(
-            latent=((batch_size, 4, 64, 64), "float32"),
-            timestep=((batch_size, 1), "float32"),
-            text_emb=((batch_size, cls.seq_len, text_emb_dim), "float32"),
-            controlnet_downblock0=((batch_size, 320, 64, 64), "float32"),
-            controlnet_downblock1=((batch_size, 320, 64, 64), "float32"),
-            controlnet_downblock2=((batch_size, 320, 64, 64), "float32"),
-            controlnet_downblock3=((batch_size, 320, 32, 32), "float32"),
-            controlnet_downblock4=((batch_size, 640, 32, 32), "float32"),
-            controlnet_downblock5=((batch_size, 640, 32, 32), "float32"),
-            controlnet_downblock6=((batch_size, 640, 16, 16), "float32"),
-            controlnet_downblock7=((batch_size, 1280, 16, 16), "float32"),
-            controlnet_downblock8=((batch_size, 1280, 16, 16), "float32"),
-            controlnet_downblock9=((batch_size, 1280, 8, 8), "float32"),
-            controlnet_downblock10=((batch_size, 1280, 8, 8), "float32"),
-            controlnet_downblock11=((batch_size, 1280, 8, 8), "float32"),
-            controlnet_midblock=((batch_size, 1280, 8, 8), "float32"),
-        )
+        return {
+            "latent": TensorSpec(shape=(batch_size, 4, 64, 64), dtype="float32"),
+            "timestep": TensorSpec(shape=(batch_size, 1), dtype="float32"),
+            "text_emb": TensorSpec(
+                shape=(batch_size, cls.seq_len, text_emb_dim), dtype="float32"
+            ),
+            "controlnet_downblock0": TensorSpec(
+                shape=(batch_size, 320, 64, 64), dtype="float32"
+            ),
+            "controlnet_downblock1": TensorSpec(
+                shape=(batch_size, 320, 64, 64), dtype="float32"
+            ),
+            "controlnet_downblock2": TensorSpec(
+                shape=(batch_size, 320, 64, 64), dtype="float32"
+            ),
+            "controlnet_downblock3": TensorSpec(
+                shape=(batch_size, 320, 32, 32), dtype="float32"
+            ),
+            "controlnet_downblock4": TensorSpec(
+                shape=(batch_size, 640, 32, 32), dtype="float32"
+            ),
+            "controlnet_downblock5": TensorSpec(
+                shape=(batch_size, 640, 32, 32), dtype="float32"
+            ),
+            "controlnet_downblock6": TensorSpec(
+                shape=(batch_size, 640, 16, 16), dtype="float32"
+            ),
+            "controlnet_downblock7": TensorSpec(
+                shape=(batch_size, 1280, 16, 16), dtype="float32"
+            ),
+            "controlnet_downblock8": TensorSpec(
+                shape=(batch_size, 1280, 16, 16), dtype="float32"
+            ),
+            "controlnet_downblock9": TensorSpec(
+                shape=(batch_size, 1280, 8, 8), dtype="float32"
+            ),
+            "controlnet_downblock10": TensorSpec(
+                shape=(batch_size, 1280, 8, 8), dtype="float32"
+            ),
+            "controlnet_downblock11": TensorSpec(
+                shape=(batch_size, 1280, 8, 8), dtype="float32"
+            ),
+            "controlnet_midblock": TensorSpec(
+                shape=(batch_size, 1280, 8, 8), dtype="float32"
+            ),
+        }
 
 
 class ControlUnetQuantizableBase(AIMETOnnxQuantizableMixin, ControlUnetBase):  # type: ignore[misc]
@@ -305,18 +339,22 @@ class ControlNetBase(BaseModel, FromPretrainedMixin):
         batch_size: int = 1,
         text_emb_dim: int = 768,
     ) -> InputSpec:
-        return dict(
-            latent=((batch_size, 4, 64, 64), "float32"),
-            timestep=(
-                (
-                    batch_size,
-                    1,
-                ),
-                "float32",
+        return {
+            "latent": TensorSpec(shape=(batch_size, 4, 64, 64), dtype="float32"),
+            "timestep": TensorSpec(shape=(batch_size, 1), dtype="float32"),
+            "text_emb": TensorSpec(
+                shape=(batch_size, cls.seq_len, text_emb_dim), dtype="float32"
             ),
-            text_emb=((batch_size, cls.seq_len, text_emb_dim), "float32"),
-            image_cond=((batch_size, 3, DEFAULT_H, DEFAULT_W), "float32"),
-        )
+            "image_cond": TensorSpec(
+                shape=(batch_size, 3, DEFAULT_H, DEFAULT_W),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

@@ -7,9 +7,11 @@ Tensor specification types for model I/O.
 
 This module defines the core types for specifying tensor metadata:
 - TensorSpec: Specification for a tensor (shape, dtype, metadata)
-- IoType: Semantic type of a tensor (image, tensor)
+- IoType: Semantic type of a tensor (image, tensor, bbox)
 - ColorFormat: Color format for image tensors
 - ImageMetadata: Metadata for image tensors
+- BboxFormat: Bounding box coordinate format
+- BboxMetadata: Metadata for bounding box tensors
 
 These types are used both in model.get_input_spec() and in metadata.yaml files.
 
@@ -34,6 +36,7 @@ class IoType(Enum):
 
     TENSOR = "tensor"
     IMAGE = "image"
+    BBOX = "bbox"
 
 
 class ColorFormat(Enum):
@@ -42,6 +45,14 @@ class ColorFormat(Enum):
     RGB = "rgb"
     BGR = "bgr"
     GRAYSCALE = "grayscale"
+
+
+class BboxFormat(Enum):
+    """Bounding box coordinate format."""
+
+    XYXY = "xyxy"  # (x1, y1, x2, y2) - top-left and bottom-right corners
+    XYWH = "xywh"  # (x, y, width, height) - top-left corner and size
+    CXCYWH = "cxcywh"  # (cx, cy, width, height) - center and size
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +68,18 @@ class ImageMetadata(BaseQAIHMConfig):
 
     color_format: ColorFormat = ColorFormat.RGB
     value_range: tuple[float, float] = (0.0, 1.0)
+
+
+class BboxMetadata(BaseQAIHMConfig):
+    """
+    Metadata specific to bounding box tensor outputs.
+
+    This class groups bbox-related metadata fields like coordinate format
+    and value range (pixel space vs normalized).
+    """
+
+    bbox_format: BboxFormat = BboxFormat.XYXY
+    value_range: tuple[float, float] = (0.0, float("inf"))
 
 
 # ---------------------------------------------------------------------------
@@ -102,22 +125,26 @@ class TensorSpec(BaseQAIHMConfig):
     quantization_parameters
         Optional quantization scale/zero_point (populated from compiled model).
     io_type
-        Semantic type: IMAGE for image tensors, TENSOR for generic tensors.
+        Semantic type: IMAGE for image tensors, BBOX for bounding box tensors,
+        TENSOR for generic tensors.
     image_metadata
         Image-specific metadata (color_format, value_range). Only used when
         io_type is IMAGE.
+    bbox_metadata
+        Bbox-specific metadata (bbox_format). Only used when io_type is BBOX.
     value_range
         Value range for generic tensors (not images). Default is (None, None)
         meaning unbounded.
     """
 
-    shape: tuple[int, ...]
-    dtype: str
+    shape: tuple[int, ...] = ()
+    dtype: str = ""
     description: str | None = None
     quantization_parameters: QuantizationParameters | None = None
-    # Semantic metadata fields (populated from get_input_spec() metadata)
+    # Semantic metadata fields (populated from get_input_spec()/get_output_spec() metadata)
     io_type: IoType = IoType.TENSOR
     image_metadata: ImageMetadata | None = None
+    bbox_metadata: BboxMetadata | None = None
     value_range: tuple[float, float] = (float("-inf"), float("inf"))
 
     # -----------------------------------------------------------------------

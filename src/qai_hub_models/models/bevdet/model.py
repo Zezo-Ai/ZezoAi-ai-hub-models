@@ -31,7 +31,7 @@ from qai_hub_models.utils.asset_loaders import (
     load_torch,
 )
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 with patch_mmdet_no_build_deps():
     from mmdet.models.task_modules import BaseBBoxCoder
@@ -281,14 +281,31 @@ class BEVDet(BaseModel):
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "image": (
-                (batch_size, num_cam * 3, height, width),
-                "float32",
+            "image": TensorSpec(
+                shape=(batch_size, num_cam * 3, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
             ),
-            "sensor2keyegos": ((batch_size, num_cam, 4, 4), "float32"),
-            "inv_intrins": ((batch_size, num_cam, 3, 3), "float32"),
-            "inv_post_rots": ((batch_size, num_cam, 3, 3), "float32"),
-            "post_trans": ((batch_size, num_cam, 1, 3), "float32"),
+            "sensor2keyegos": TensorSpec(
+                shape=(batch_size, num_cam, 4, 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "inv_intrins": TensorSpec(
+                shape=(batch_size, num_cam, 3, 3),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "inv_post_rots": TensorSpec(
+                shape=(batch_size, num_cam, 3, 3),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "post_trans": TensorSpec(
+                shape=(batch_size, num_cam, 1, 3),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod

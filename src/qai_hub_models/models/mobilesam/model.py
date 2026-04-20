@@ -28,7 +28,13 @@ from qai_hub_models.utils.base_model import (
     CollectionModel,
     PretrainedCollectionModel,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 SMALL_MODEL_TYPE = "vit_t"
@@ -58,7 +64,15 @@ class MobileSAMEncoder(BaseModel):
         encoder_img_width: int = 1024,  # self.sam.image_encoder.img_size
     ) -> InputSpec:
         return {
-            "image": ((batch_size, 3, encoder_img_height, encoder_img_width), "float32")
+            "image": TensorSpec(
+                shape=(batch_size, 3, encoder_img_height, encoder_img_width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
         }
 
     def _get_input_spec_for_instance(
@@ -200,13 +214,33 @@ class MobileSAMDecoder(BaseModel):
         mask_input_size = tuple([4 * x for x in embed_size])
 
         input_spec: InputSpec = {
-            "image_embeddings": ((1, embed_dim, *embed_size), "float32"),
-            "point_coords": ((1, num_of_points, 2), "float32"),
-            "point_labels": ((1, num_of_points), "float32"),
+            "image_embeddings": TensorSpec(
+                shape=(1, embed_dim, *embed_size),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "point_coords": TensorSpec(
+                shape=(1, num_of_points, 2),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "point_labels": TensorSpec(
+                shape=(1, num_of_points),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
         if has_mask_input:
-            input_spec["mask_input"] = ((1, 1, *mask_input_size), "float32")
-            input_spec["has_mask_input"] = ((1,), "float32")
+            input_spec["mask_input"] = TensorSpec(
+                shape=(1, 1, *mask_input_size),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            )
+            input_spec["has_mask_input"] = TensorSpec(
+                shape=(1,),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            )
         return input_spec
 
     @staticmethod

@@ -28,7 +28,15 @@ from qai_hub_models.utils.image_processing import (
     app_to_net_image_inputs,
     normalize_image_torchvision,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    BboxFormat,
+    BboxMetadata,
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 SOURCE_REPO = "https://github.com/mlcommons/inference.git"
 COMMIT_HASH = "33894a19c4af6207f7cfdda75f84570f04836de5"
@@ -170,7 +178,17 @@ class Resnet34SSD(Yolo):
         InputSpec
             A dictionary describing input shape and data type.
         """
-        return {"image": ((batch_size, 3, 1200, 1200), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, 1200, 1200),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_channel_last_inputs() -> list[str]:
@@ -180,7 +198,18 @@ class Resnet34SSD(Yolo):
     def get_output_names(
         include_postprocessing: bool = True, split_output: bool = False
     ) -> list[str]:
-        return ["boxes", "scores", "labels"]
+        return list(Resnet34SSD.get_output_spec().keys())
+
+    @staticmethod
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "boxes": TensorSpec(
+                io_type=IoType.BBOX,
+                bbox_metadata=BboxMetadata(bbox_format=BboxFormat.XYXY),
+            ),
+            "scores": TensorSpec(io_type=IoType.TENSOR),
+            "labels": TensorSpec(io_type=IoType.TENSOR),
+        }
 
     def get_hub_compile_options(
         self,

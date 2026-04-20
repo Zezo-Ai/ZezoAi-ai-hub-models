@@ -22,7 +22,7 @@ from qai_hub_models.utils.base_model import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 SOURCE_REPO = "https://github.com/tianweiy/CenterPoint"
 COMMIT_HASH = "d3a248fa56db2601860d576d5934d00fee9916eb"
@@ -202,9 +202,21 @@ class CenterPoint(BaseModel):
             - 'num_points': (num_voxels,), float32
         """
         return {
-            "voxels": ((num_voxels, 20, 5), "float32"),
-            "coordinates": ((num_voxels, 4), "float32"),
-            "num_points": ((num_voxels,), "float32"),
+            "voxels": TensorSpec(
+                shape=(num_voxels, 20, 5),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "coordinates": TensorSpec(
+                shape=(num_voxels, 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "num_points": TensorSpec(
+                shape=(num_voxels,),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod

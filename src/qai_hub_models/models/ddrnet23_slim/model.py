@@ -20,7 +20,13 @@ from qai_hub_models.utils.asset_loaders import (
     load_image,
 )
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 DDRNET_SOURCE_REPOSITORY = "https://github.com/chenjun2hao/DDRNet.pytorch"
 DDRNET_SOURCE_REPO_COMMIT = "bc0e193e87ead839dbc715c48e6bfb059cf21b27"
@@ -102,7 +108,17 @@ class DDRNet(CityscapesSegmentor):
         used to submit profiling job on Qualcomm AI Hub Workbench. Default resolution is 2048x1024
         so this expects an image where width is twice the height.
         """
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

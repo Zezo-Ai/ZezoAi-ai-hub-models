@@ -14,7 +14,7 @@ from qai_hub_models.datasets.wikitext_masked import WikiTextMasked
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.evaluators.maskedlm_evaluator import MaskedLMEvaluator
 from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -62,9 +62,18 @@ class BaseBertModel(BaseModel):
         sample_length: int = 384,
     ) -> InputSpec:
         return {
-            "input_tokens": ((batch_size, sample_length), "int32"),
-            "attention_masks": ((batch_size, sample_length), "float32"),
-            "mask_indices": ((batch_size,), "int32"),
+            "input_tokens": TensorSpec(
+                shape=(batch_size, sample_length),
+                dtype="int32",
+            ),
+            "attention_masks": TensorSpec(
+                shape=(batch_size, sample_length),
+                dtype="float32",
+            ),
+            "mask_indices": TensorSpec(
+                shape=(batch_size,),
+                dtype="int32",
+            ),
         }
 
     @staticmethod

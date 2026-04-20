@@ -16,7 +16,13 @@ from qai_hub_models.models._shared.video_classifier.utils import (
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = "video_classifier"
 MODEL_ASSET_VERSION = 1
@@ -91,10 +97,15 @@ class KineticsClassifier(BaseModel):
             Input specification mapping input names to (shape, type) tuples.
         """
         return {
-            "video": (
-                (1, 3, num_frames, 112, 112),
-                "float32",
-            )
+            "video": TensorSpec(
+                shape=(1, 3, num_frames, 112, 112),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
         }
 
     def _sample_inputs_impl(

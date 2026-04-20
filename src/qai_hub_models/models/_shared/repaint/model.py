@@ -11,7 +11,13 @@ from qai_hub_models.models._shared.repaint.utils import preprocess_inputs
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
     "aotgan", 2, "test_images/test_input_image.png"
@@ -33,8 +39,19 @@ class RepaintModel(BaseModel):
         # This can be used with the qai_hub python API to declare
         # the model input specification upon submitting a profile job.
         return {
-            "image": ((batch_size, 3, height, width), "float32"),
-            "mask": ((batch_size, 1, height, width), "float32"),
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+            "mask": TensorSpec(
+                shape=(batch_size, 1, height, width),
+                dtype="float32",
+            ),
         }
 
     @staticmethod

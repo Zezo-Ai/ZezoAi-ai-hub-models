@@ -39,7 +39,7 @@ from qai_hub_models.utils.base_model import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 if TYPE_CHECKING:
     from melo.api import TTS
@@ -120,22 +120,22 @@ class Encoder(BaseModel):
         used to submit compiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "x": ((1, MAX_SEQ_LEN), "int32"),
-            "x_lengths": ((1,), "int32"),
-            "tone": ((1, MAX_SEQ_LEN), "int32"),
-            "sid": ((1,), "int32"),
-            "language": ((1, MAX_SEQ_LEN), "int32"),
-            "bert": (
-                (1, BERT_FEATURE_DIM, MAX_SEQ_LEN),
-                "float32",
+            "x": TensorSpec(shape=(1, MAX_SEQ_LEN), dtype="int32"),
+            "x_lengths": TensorSpec(shape=(1,), dtype="int32"),
+            "tone": TensorSpec(shape=(1, MAX_SEQ_LEN), dtype="int32"),
+            "sid": TensorSpec(shape=(1,), dtype="int32"),
+            "language": TensorSpec(shape=(1, MAX_SEQ_LEN), dtype="int32"),
+            "bert": TensorSpec(
+                shape=(1, BERT_FEATURE_DIM, MAX_SEQ_LEN),
+                dtype="float32",
             ),
-            "ja_bert": (
-                (1, JA_BERT_FEATURE_DIM, MAX_SEQ_LEN),
-                "float32",
+            "ja_bert": TensorSpec(
+                shape=(1, JA_BERT_FEATURE_DIM, MAX_SEQ_LEN),
+                dtype="float32",
             ),
-            "sdp_ratio": ((1,), "float32"),
-            "length_scale": ((1,), "float32"),
-            "noise_scale_w": ((1,), "float32"),
+            "sdp_ratio": TensorSpec(shape=(1,), dtype="float32"),
+            "length_scale": TensorSpec(shape=(1,), dtype="float32"),
+            "noise_scale_w": TensorSpec(shape=(1,), dtype="float32"),
         }
 
     def _sample_inputs_impl(
@@ -391,21 +391,24 @@ class Flow(BaseModel):
         used to submit compiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "m_p": (
-                (1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN),
-                "float32",
+            "m_p": TensorSpec(
+                shape=(1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN),
+                dtype="float32",
             ),
-            "logs_p": (
-                (1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN),
-                "float32",
+            "logs_p": TensorSpec(
+                shape=(1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN),
+                dtype="float32",
             ),
-            "y_mask": ((1, 1, UPSAMPLED_MAX_SEQ_LEN), "float32"),
-            "g": ((1, SPEAKER_EMBED_DIM, 1), "float32"),
-            "attn_squeezed": (
-                (1, UPSAMPLED_MAX_SEQ_LEN, MAX_SEQ_LEN),
-                "float32",
+            "y_mask": TensorSpec(
+                shape=(1, 1, UPSAMPLED_MAX_SEQ_LEN),
+                dtype="float32",
             ),
-            "noise_scale": ((1,), "float32"),
+            "g": TensorSpec(shape=(1, SPEAKER_EMBED_DIM, 1), dtype="float32"),
+            "attn_squeezed": TensorSpec(
+                shape=(1, UPSAMPLED_MAX_SEQ_LEN, MAX_SEQ_LEN),
+                dtype="float32",
+            ),
+            "noise_scale": TensorSpec(shape=(1,), dtype="float32"),
         }
 
     def _sample_inputs_impl(
@@ -486,11 +489,11 @@ class Decoder(BaseModel):
         used to submit compiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "z": (
-                (1, ENCODER_HIDDEN_DIM, DECODER_Z_TIME_DIM),
-                "float32",
+            "z": TensorSpec(
+                shape=(1, ENCODER_HIDDEN_DIM, DECODER_Z_TIME_DIM),
+                dtype="float32",
             ),
-            "g": ((1, SPEAKER_EMBED_DIM, 1), "float32"),
+            "g": TensorSpec(shape=(1, SPEAKER_EMBED_DIM, 1), dtype="float32"),
         }
 
     @staticmethod
@@ -594,8 +597,14 @@ class T5Encoder(BaseModel):
         used to submit compiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "input_ids": ((1, MAX_NUM_INPUT_IDS), "int32"),
-            "encoder_attention_mask": ((1, MAX_NUM_INPUT_IDS), "int32"),
+            "input_ids": TensorSpec(
+                shape=(1, MAX_NUM_INPUT_IDS),
+                dtype="int32",
+            ),
+            "encoder_attention_mask": TensorSpec(
+                shape=(1, MAX_NUM_INPUT_IDS),
+                dtype="int32",
+            ),
         }
 
     @staticmethod
@@ -774,63 +783,29 @@ class T5Decoder(BaseModel):
         n_heads = 6
         q_len = 50
         dim_per_head = 64
-        return {
-            "input_ids": ((1, 1), "int32"),
-            "encoder_attention_mask": ((1, q_len), "int32"),
-            "position": ((1, 1), "int32"),
-            "block_0_past_self_key_states": (
-                (1, n_heads, q_len - 1, dim_per_head),
-                "float32",
-            ),
-            "block_0_past_self_value_states": (
-                (1, n_heads, q_len - 1, dim_per_head),
-                "float32",
-            ),
-            "block_0_cross_key_states": ((1, n_heads, q_len, dim_per_head), "float32"),
-            "block_0_cross_value_states": (
-                (1, n_heads, q_len, dim_per_head),
-                "float32",
-            ),
-            "block_1_past_self_key_states": (
-                (1, n_heads, q_len - 1, dim_per_head),
-                "float32",
-            ),
-            "block_1_past_self_value_states": (
-                (1, n_heads, q_len - 1, dim_per_head),
-                "float32",
-            ),
-            "block_1_cross_key_states": ((1, n_heads, q_len, dim_per_head), "float32"),
-            "block_1_cross_value_states": (
-                (1, n_heads, q_len, dim_per_head),
-                "float32",
-            ),
-            "block_2_past_self_key_states": (
-                (1, n_heads, q_len - 1, dim_per_head),
-                "float32",
-            ),
-            "block_2_past_self_value_states": (
-                (1, n_heads, q_len - 1, dim_per_head),
-                "float32",
-            ),
-            "block_2_cross_key_states": ((1, n_heads, q_len, dim_per_head), "float32"),
-            "block_2_cross_value_states": (
-                (1, n_heads, q_len, dim_per_head),
-                "float32",
-            ),
-            "block_3_past_self_key_states": (
-                (1, n_heads, q_len - 1, dim_per_head),
-                "float32",
-            ),
-            "block_3_past_self_value_states": (
-                (1, n_heads, q_len - 1, dim_per_head),
-                "float32",
-            ),
-            "block_3_cross_key_states": ((1, n_heads, q_len, dim_per_head), "float32"),
-            "block_3_cross_value_states": (
-                (1, n_heads, q_len, dim_per_head),
-                "float32",
-            ),
+        specs: InputSpec = {
+            "input_ids": TensorSpec(shape=(1, 1), dtype="int32"),
+            "encoder_attention_mask": TensorSpec(shape=(1, q_len), dtype="int32"),
+            "position": TensorSpec(shape=(1, 1), dtype="int32"),
         }
+        for i in range(NUM_BLOCKS):
+            specs[f"block_{i}_past_self_key_states"] = TensorSpec(
+                shape=(1, n_heads, q_len - 1, dim_per_head),
+                dtype="float32",
+            )
+            specs[f"block_{i}_past_self_value_states"] = TensorSpec(
+                shape=(1, n_heads, q_len - 1, dim_per_head),
+                dtype="float32",
+            )
+            specs[f"block_{i}_cross_key_states"] = TensorSpec(
+                shape=(1, n_heads, q_len, dim_per_head),
+                dtype="float32",
+            )
+            specs[f"block_{i}_cross_value_states"] = TensorSpec(
+                shape=(1, n_heads, q_len, dim_per_head),
+                dtype="float32",
+            )
+        return specs
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -934,9 +909,9 @@ class BertWrapper(BaseModel):
         used to submit compiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "input_ids": ((1, 200), "int32"),
-            "attention_mask": ((1, 200), "int32"),
-            "token_type_ids": ((1, 200), "int32"),
+            "input_ids": TensorSpec(shape=(1, 200), dtype="int32"),
+            "attention_mask": TensorSpec(shape=(1, 200), dtype="int32"),
+            "token_type_ids": TensorSpec(shape=(1, 200), dtype="int32"),
         }
 
     @staticmethod

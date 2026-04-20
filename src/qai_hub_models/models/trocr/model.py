@@ -23,7 +23,13 @@ from qai_hub_models.utils.base_model import (
     CollectionModel,
     PretrainedCollectionModel,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 HUGGINGFACE_TROCR_MODEL = "microsoft/trocr-small-stage1"
 MODEL_ID = __name__.split(".")[-2]
@@ -99,7 +105,17 @@ class TrOCREncoder(BaseModel):
         #
         # This can be used with the qai_hub python API to declared
         # the model input specification upon submitting a profile job.
-        return {"pixel_values": ((batch_size, 3, 384, 384), "float32")}
+        return {
+            "pixel_values": TensorSpec(
+                shape=(batch_size, 3, 384, 384),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names(
@@ -252,37 +268,53 @@ class TrOCRDecoder(BaseModel):
         Returns the input specification (name -> (shape, type). This can be
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        input_ids_spec = ((1, 1), "int32")
-
-        attn_cache_spec = (
-            (
-                batch_size,
-                decoder_attention_heads,
-                max_decode_len - 1,
-                embeddings_per_head,
-            ),
-            "float32",
+        attn_cache_shape = (
+            batch_size,
+            decoder_attention_heads,
+            max_decode_len - 1,
+            embeddings_per_head,
         )
 
-        cross_attn_cache_spec = (
-            (
-                batch_size,
-                decoder_attention_heads,
-                578,  # TODO: Can we get this programatically?
-                embeddings_per_head,
-            ),
-            "float32",
+        cross_attn_cache_shape = (
+            batch_size,
+            decoder_attention_heads,
+            578,  # TODO: Can we get this programatically?
+            embeddings_per_head,
         )
 
         decoder_input_specs: InputSpec = {
-            "input_ids": input_ids_spec,
-            "index": ((1,), "int32"),
+            "input_ids": TensorSpec(
+                shape=(1, 1),
+                dtype="int32",
+                io_type=IoType.TENSOR,
+            ),
+            "index": TensorSpec(
+                shape=(1,),
+                dtype="int32",
+                io_type=IoType.TENSOR,
+            ),
         }
         for i in range(num_decoder_layers):
-            decoder_input_specs[f"kv_{i}_attn_key"] = attn_cache_spec
-            decoder_input_specs[f"kv_{i}_attn_val"] = attn_cache_spec
-            decoder_input_specs[f"kv_{i}_cross_attn_key"] = cross_attn_cache_spec
-            decoder_input_specs[f"kv_{i}_cross_attn_val"] = cross_attn_cache_spec
+            decoder_input_specs[f"kv_{i}_attn_key"] = TensorSpec(
+                shape=attn_cache_shape,
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            )
+            decoder_input_specs[f"kv_{i}_attn_val"] = TensorSpec(
+                shape=attn_cache_shape,
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            )
+            decoder_input_specs[f"kv_{i}_cross_attn_key"] = TensorSpec(
+                shape=cross_attn_cache_shape,
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            )
+            decoder_input_specs[f"kv_{i}_cross_attn_val"] = TensorSpec(
+                shape=cross_attn_cache_shape,
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            )
 
         return decoder_input_specs
 

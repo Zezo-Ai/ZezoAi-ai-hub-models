@@ -22,6 +22,7 @@ from qai_hub_models.configs.model_metadata import (
     ModelFileMetadata,
     ModelMetadata,
     merge_input_metadata,
+    merge_output_metadata,
 )
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.common import SampleInputsType
@@ -203,6 +204,7 @@ def download_model(
         file_metadata = ModelFileMetadata.from_hub_model(target_model)
         # Merge semantic metadata from get_input_spec()
         merge_input_metadata(file_metadata, model.get_input_spec())
+        merge_output_metadata(file_metadata, model.get_output_spec())
         model_metadata = ModelMetadata(
             model_id=MODEL_ID,
             model_name="Depth-Anything-V3",

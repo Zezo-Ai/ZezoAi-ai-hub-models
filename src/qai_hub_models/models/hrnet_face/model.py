@@ -20,7 +20,13 @@ from qai_hub_models.utils.asset_loaders import (
 )
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 SOURCE_REPO = "https://github.com/HRNet/HRNet-Facial-Landmark-Detection"
 COMMIT_HASH = "f776dbe8eb6fec831774a47209dae5547ae2cda5"
@@ -105,7 +111,17 @@ class HRNetFace(BaseModel):
         Returns the input specification (name -> (shape, type) of the face landmark detector.
         This can be used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        return {"image": ((1, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(1, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_channel_last_inputs() -> list[str]:

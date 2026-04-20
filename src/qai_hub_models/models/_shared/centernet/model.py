@@ -18,7 +18,13 @@ from typing_extensions import Self
 from qai_hub_models.models._shared.centernet.model_patches import custom_dcn_forward
 from qai_hub_models.utils.asset_loaders import SourceAsRoot, find_replace_in_repo
 from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 CenterNetAsRoot = partial(
     SourceAsRoot,
@@ -85,9 +91,14 @@ class CenterNet(BaseModel):
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "image": (
-                (batch_size, 3, height, width),
-                "float32",
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
             ),
         }
 

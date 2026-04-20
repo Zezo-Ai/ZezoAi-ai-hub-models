@@ -17,7 +17,7 @@ from qai_hub_models.evaluators.semantic_kitti_evaluator import SemanticKittiEval
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, SourceAsRoot
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 SALSANEXT_PROXY_REPOSITORY = "https://github.com/TiagoCortinhal/SalsaNext.git"
 SALSANEXT_PROXY_REPO_COMMIT = "7548c124b48f0259cdc40e98dfc3aeeadca6070c"
@@ -118,7 +118,13 @@ class SalsaNext(BaseModel):
         # the model input specification upon submitting a profile job.
         # the model input has fixed channels i.e 5
         channel = 5
-        return {"lidar": ((batch_size, channel, height, width), "float32")}
+        return {
+            "lidar": TensorSpec(
+                shape=(batch_size, channel, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

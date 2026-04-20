@@ -13,7 +13,13 @@ from typing_extensions import Self
 
 from qai_hub_models.models._shared.imagenet_classifier.model import ImagenetClassifier
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 DEFAULT_WEIGHTS = "apple/mobilevit-small"
@@ -49,7 +55,17 @@ class MobileVIT(ImagenetClassifier):
 
     @staticmethod
     def get_input_spec(batch_size: int = 1) -> InputSpec:
-        return {"image_tensor": ((batch_size, 3, 256, 256), "float32")}
+        return {
+            "image_tensor": TensorSpec(
+                shape=(batch_size, 3, 256, 256),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

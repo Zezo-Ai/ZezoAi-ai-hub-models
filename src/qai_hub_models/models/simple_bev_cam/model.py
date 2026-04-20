@@ -13,7 +13,7 @@ from typing_extensions import Self
 
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, SourceAsRoot
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 SIMPLEBEV_SOURCE_REPOSITORY = "https://github.com/aharley/simple_bev"
 SIMPLEBEV_SOURCE_REPO_COMMIT = "be46f0ef71960c233341852f3d9bc3677558ab6d"
@@ -163,9 +163,21 @@ class SimpleBev(BaseModel):
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "rgb_camXs": ((batch_size, 6, 3, height, width), "float32"),
-            "pix_T_cams": ((batch_size, 6, 4, 4), "float32"),
-            "cam0_T_camXs": ((batch_size, 6, 4, 4), "float32"),
+            "rgb_camXs": TensorSpec(
+                shape=(batch_size, 6, 3, height, width),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "pix_T_cams": TensorSpec(
+                shape=(batch_size, 6, 4, 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            "cam0_T_camXs": TensorSpec(
+                shape=(batch_size, 6, 4, 4),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     @staticmethod

@@ -16,8 +16,15 @@ from qai_hub_models.models._shared.yolo.utils import (
     get_most_likely_score,
 )
 from qai_hub_models.models.common import Precision
-from qai_hub_models.utils.base_model import BaseModel, InputSpec
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.bounding_box_processing import box_xywh_to_xyxy
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 DEFAULT_ULTRALYTICS_IMAGE_INPUT_HW = 640
 
@@ -70,7 +77,17 @@ class UltralyticsSingleClassSegmentor(BaseModel):
         height: int = DEFAULT_ULTRALYTICS_IMAGE_INPUT_HW,
         width: int = DEFAULT_ULTRALYTICS_IMAGE_INPUT_HW,
     ) -> InputSpec:
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            )
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -107,7 +124,17 @@ class UltralyticsMulticlassSegmentor(BaseModel):
         height: int = DEFAULT_ULTRALYTICS_IMAGE_INPUT_HW,
         width: int = DEFAULT_ULTRALYTICS_IMAGE_INPUT_HW,
     ) -> InputSpec:
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            )
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

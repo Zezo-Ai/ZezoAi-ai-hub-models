@@ -11,6 +11,8 @@ import numpy as np
 import torch
 
 from qai_hub_models.configs.tensor_spec import (
+    BboxFormat,
+    BboxMetadata,
     ColorFormat,
     ImageMetadata,
     IoType,
@@ -32,6 +34,8 @@ InputSpec = dict[str, tuple[tuple[int, ...], str] | TensorSpec]
 
 # Re-export for backwards compatibility
 __all__ = [
+    "BboxFormat",
+    "BboxMetadata",
     "ColorFormat",
     "ImageMetadata",
     "InputSpec",

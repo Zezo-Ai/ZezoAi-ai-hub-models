@@ -49,6 +49,7 @@ class BaseQAIHMConfig(BaseModel):
         write_if_empty: bool = False,
         delete_if_empty: bool = True,
         flow_lists: bool = False,
+        exclude_defaults: bool = True,
         **kwargs: Any,
     ) -> bool:
         """
@@ -64,6 +65,8 @@ class BaseQAIHMConfig(BaseModel):
             If True, an existing YAML file at the given path will be deleted if the dictionary to be saved is empty.
         flow_lists
             If True, lists will be formatted in flow style (e.g., [1, 2, 3]) instead of block style.
+        exclude_defaults
+            If True, fields set to their default values will be excluded from the YAML output.
         **kwargs
             Additional args (used by overrides).
 
@@ -107,7 +110,7 @@ class BaseQAIHMConfig(BaseModel):
             path,
             self,
             custom_yaml_writer=yaml,
-            exclude_defaults=True,
+            exclude_defaults=exclude_defaults,
             exclude_none=True,
             **kwargs,
         )

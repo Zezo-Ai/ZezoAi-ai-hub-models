@@ -17,7 +17,7 @@ from qai_hub_models.models._shared.stable_diffusion.model import (
     VaeDecoderQuantizableBase,
 )
 from qai_hub_models.utils.base_model import CollectionModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 MODEL_ASSET_VERSION = 1
 MODEL_ID = __name__.split(".")[-2]
@@ -41,7 +41,7 @@ class TextEncoderQuantizable(TextEncoderQuantizableBase):
 
 class UnetQuantizable(UnetQuantizableBase):
     hf_repo_id = HF_REPO
-    hf_model_cls = UNet2DConditionModel  # type: ignore[assignment]
+    hf_model_cls: type = UNet2DConditionModel
     model_id = MODEL_ID
     model_asset_version = MODEL_ASSET_VERSION
     seq_len = SEQ_LEN
@@ -53,15 +53,27 @@ class UnetQuantizable(UnetQuantizableBase):
         text_emb_dim: int = 768,
     ) -> InputSpec:
         return dict(
-            latent=((batch_size, 4, 64, 64), "float32"),
-            timestep=((batch_size, 1), "float32"),
-            text_emb=((batch_size, cls.seq_len, text_emb_dim), "float32"),
+            latent=TensorSpec(
+                shape=(batch_size, 4, 64, 64),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            timestep=TensorSpec(
+                shape=(batch_size, 1),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+            text_emb=TensorSpec(
+                shape=(batch_size, cls.seq_len, text_emb_dim),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
         )
 
 
 class VaeDecoderQuantizable(VaeDecoderQuantizableBase):
     hf_repo_id = HF_REPO
-    hf_model_cls = AutoencoderKL  # type: ignore[assignment]
+    hf_model_cls: type = AutoencoderKL
     model_id = MODEL_ID
     model_asset_version = MODEL_ASSET_VERSION
 

@@ -22,6 +22,7 @@ from qai_hub_models.configs.model_metadata import (
     ModelFileMetadata,
     ModelMetadata,
     merge_input_metadata,
+    merge_output_metadata,
 )
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.bevfusion_det import MODEL_ID, App, Model
@@ -268,6 +269,9 @@ def download_model(
             assert isinstance(component, BaseModel)
             merge_input_metadata(
                 model_file_metadata[model_file_name], component.get_input_spec()
+            )
+            merge_output_metadata(
+                model_file_metadata[model_file_name], component.get_output_spec()
             )
 
         # Extract and save metadata alongside downloaded model

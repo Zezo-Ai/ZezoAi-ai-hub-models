@@ -24,7 +24,13 @@ from qai_hub_models.utils.base_model import (
     CollectionModel,
     PretrainedCollectionModel,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 from qai_hub_models.utils.set_env import set_temp_env
 
 MODEL_ID = __name__.split(".")[-2]
@@ -325,7 +331,17 @@ class FaceDetector(BaseModel):
         Returns the input specification (name -> (shape, type) of the face detector.
         This can be used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        return {"image": ((batch_size, 3, 256, 256), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, 256, 256),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -394,7 +410,17 @@ class FaceLandmarkDetector(BaseModel):
         Returns the input specification (name -> (shape, type) of the face landmark detector.
         This can be used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        return {"image": ((batch_size, 3, 192, 192), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, 192, 192),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

@@ -16,7 +16,13 @@ from qai_hub_models.utils.asset_loaders import (
     find_replace_in_repo,
     load_torch,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 SOURCE_REPO = "https://github.com/LikeLy-Journey/SegmenTron"
 COMMIT_HASH = "4bc605eedde7d680314f63d329277b73f83b1c5f"
@@ -106,4 +112,14 @@ class DeeplabXception(DeepLabV3Model):
         height: int = 480,
         width: int = 520,
     ) -> InputSpec:
-        return {"image": ((1, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(1, 3, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }

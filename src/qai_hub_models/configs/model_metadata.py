@@ -28,6 +28,10 @@ if TYPE_CHECKING:
 
     from qai_hub_models.utils.input_spec import InputSpec
 
+# Output spec: maps output name -> TensorSpec with metadata only (shape/dtype
+# come from the compiled model). Used by model.get_output_spec().
+OutputSpec = dict[str, TensorSpec]
+
 
 class ModelFileMetadata(BaseQAIHMConfig):
     """
@@ -234,16 +238,19 @@ class ModelMetadata(BaseQAIHMConfig):
         **kwargs: Any,
     ) -> bool:
         """
-        Override to_yaml to default flow_lists=True for metadata files.
-
-        This ensures lists (like tensor shapes) are formatted in flow style
-        (e.g., [1, 3, 224, 224]) instead of block style for better readability.
+        Override to_yaml for metadata files:
+        - flow_lists=True for readable shapes (e.g., [1, 3, 224, 224])
+        - exclude_unset=True (instead of exclude_defaults) so that fields
+          explicitly set by merge_input_metadata (like io_type) are preserved
+          even when they match the default value.
         """
         return super().to_yaml(
             path=path,
             write_if_empty=write_if_empty,
             delete_if_empty=delete_if_empty,
             flow_lists=flow_lists,
+            exclude_defaults=False,
+            exclude_unset=True,
             **kwargs,
         )
 
@@ -302,6 +309,52 @@ def merge_input_metadata(
             target_spec.io_type = spec.io_type
         if spec.image_metadata is not None:
             target_spec.image_metadata = spec.image_metadata
+        if spec.description is not None:
+            target_spec.description = spec.description
+        if spec.value_range != (float("-inf"), float("inf")):
+            target_spec.value_range = spec.value_range
+
+
+def merge_output_metadata(
+    model_file_metadata: ModelFileMetadata,
+    output_spec: OutputSpec,
+) -> None:
+    """
+    Merge semantic metadata from get_output_spec() into ModelFileMetadata.
+
+    This function enriches the TensorSpec entries in model_file_metadata.outputs
+    with additional metadata (io_type, bbox_metadata, description) from the
+    model's get_output_spec() return value.
+
+    Parameters
+    ----------
+    model_file_metadata
+        The ModelFileMetadata to enrich (modified in place).
+    output_spec
+        The OutputSpec from model.get_output_spec(). TensorSpec entries with
+        metadata fields will have their metadata merged.
+
+    Raises
+    ------
+    ValueError
+        If an output in output_spec is not found in model_file_metadata.outputs.
+    """
+    if not model_file_metadata.outputs:
+        return
+
+    for output_name, spec in output_spec.items():
+        if output_name not in model_file_metadata.outputs:
+            raise ValueError(
+                f"Output '{output_name}' from get_output_spec() not found in compiled "
+                f"model metadata. Available outputs: {list(model_file_metadata.outputs.keys())}"
+            )
+
+        target_spec = model_file_metadata.outputs[output_name]
+
+        if spec.io_type is not None:
+            target_spec.io_type = spec.io_type
+        if spec.bbox_metadata is not None:
+            target_spec.bbox_metadata = spec.bbox_metadata
         if spec.description is not None:
             target_spec.description = spec.description
         if spec.value_range != (float("-inf"), float("inf")):

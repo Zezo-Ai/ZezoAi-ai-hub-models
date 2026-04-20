@@ -30,7 +30,7 @@ from qai_hub_models.utils.base_model import (
     BaseModel,
     PretrainedCollectionModel,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 MODEL_ID = "hf_whisper_asr_shared"
 MODEL_ASSET_VERSION = 1
@@ -94,7 +94,12 @@ class HfWhisperEncoder(BaseModel):
         Returns the input specification (name -> (shape, type). This can be
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        return dict(input_features=((1, num_mel_bin, MELS_AUDIO_LEN), "float32"))
+        return {
+            "input_features": TensorSpec(
+                shape=(1, num_mel_bin, MELS_AUDIO_LEN),
+                dtype="float32",
+            ),
+        }
 
     def _get_input_spec_for_instance(self) -> InputSpec:
         return self.__class__.get_input_spec(
@@ -254,33 +259,36 @@ class HfWhisperDecoder(BaseModel):
         Returns the input specification (name -> (shape, type). This can be
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        specs: InputSpec = dict(
-            input_ids=((1, 1), "int32"),
-            attention_mask=((1, 1, 1, MEAN_DECODE_LEN), "float32"),
-        )
-        kv_cache_self = {}
+        specs: InputSpec = {
+            "input_ids": TensorSpec(shape=(1, 1), dtype="int32"),
+            "attention_mask": TensorSpec(
+                shape=(1, 1, 1, MEAN_DECODE_LEN),
+                dtype="float32",
+            ),
+        }
+        kv_cache_self: InputSpec = {}
         for i in range(num_blocks):
-            kv_cache_self[f"k_cache_self_{i}_in"] = (
-                (num_heads, 1, attention_dim // num_heads, MEAN_DECODE_LEN - 1),
-                "float32",
+            kv_cache_self[f"k_cache_self_{i}_in"] = TensorSpec(
+                shape=(num_heads, 1, attention_dim // num_heads, MEAN_DECODE_LEN - 1),
+                dtype="float32",
             )
-            kv_cache_self[f"v_cache_self_{i}_in"] = (
-                (num_heads, 1, MEAN_DECODE_LEN - 1, attention_dim // num_heads),
-                "float32",
+            kv_cache_self[f"v_cache_self_{i}_in"] = TensorSpec(
+                shape=(num_heads, 1, MEAN_DECODE_LEN - 1, attention_dim // num_heads),
+                dtype="float32",
             )
-        kv_cache_cross = {}
+        kv_cache_cross: InputSpec = {}
         for i in range(num_blocks):
-            kv_cache_cross[f"k_cache_cross_{i}"] = (
-                (num_heads, 1, attention_dim // num_heads, AUDIO_EMB_LEN),
-                "float32",
+            kv_cache_cross[f"k_cache_cross_{i}"] = TensorSpec(
+                shape=(num_heads, 1, attention_dim // num_heads, AUDIO_EMB_LEN),
+                dtype="float32",
             )
-            kv_cache_cross[f"v_cache_cross_{i}"] = (
-                (num_heads, 1, AUDIO_EMB_LEN, attention_dim // num_heads),
-                "float32",
+            kv_cache_cross[f"v_cache_cross_{i}"] = TensorSpec(
+                shape=(num_heads, 1, AUDIO_EMB_LEN, attention_dim // num_heads),
+                dtype="float32",
             )
         specs.update(kv_cache_self)
         specs.update(kv_cache_cross)
-        specs["position_ids"] = ((1,), "int32")
+        specs["position_ids"] = TensorSpec(shape=(1,), dtype="int32")
 
         return specs
 

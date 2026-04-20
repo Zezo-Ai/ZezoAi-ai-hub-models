@@ -19,7 +19,7 @@ from qai_hub_models.evaluators.libri_speech_evaluator import LibriSpeechEvaluato
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_numpy
 from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 DEFAULT_WEIGHTS = "patrickvonplaten/wavlm-libri-clean-100h-base-plus"
 MODEL_ID = __name__.split(".")[-2]
@@ -78,7 +78,13 @@ class HuggingFaceWavLMBasePlus(BaseModel):
     ) -> InputSpec:
         # This can be used with the qai_hub python API to declare
         # the model input specification upon submitting a profile job.
-        return {"input": ((batch_size, sample_length), "float32")}
+        return {
+            "input": TensorSpec(
+                shape=(batch_size, sample_length),
+                dtype="float32",
+                io_type=IoType.TENSOR,
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

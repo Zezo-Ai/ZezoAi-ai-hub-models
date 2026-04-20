@@ -21,7 +21,13 @@ from qai_hub_models.models.face_det_lite.layers import (
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_torch
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    ColorFormat,
+    ImageMetadata,
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = "face_det_lite"
 MODEL_ASSET_VERSION = "3"
@@ -191,7 +197,17 @@ class FaceDetLite(BaseModel):
         Returns the input specification (name -> (shape, type). This can be
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
-        return {"input": ((batch_size, 1, height, width), "float32")}
+        return {
+            "input": TensorSpec(
+                shape=(batch_size, 1, height, width),
+                dtype="float32",
+                io_type=IoType.IMAGE,
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.GRAYSCALE,
+                    value_range=(0.0, 1.0),
+                ),
+            ),
+        }
 
     @staticmethod
     def get_output_names() -> list[str]:

@@ -24,7 +24,7 @@ from qai_hub_models.evaluators.mteb_classification_evaluator import (
 )
 from qai_hub_models.utils.asset_loaders import PathLike
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -158,8 +158,16 @@ class NomicEmbedText(BaseModel):
         # This can be used with the qai_hub python API to declare
         # the model input specification upon submitting a profile job.
         return {
-            "input_tokens": ((batch_size, sequence_length), "int32"),
-            "attention_masks": ((batch_size, sequence_length), "int32"),
+            "input_tokens": TensorSpec(
+                shape=(batch_size, sequence_length),
+                dtype="int32",
+                io_type=IoType.TENSOR,
+            ),
+            "attention_masks": TensorSpec(
+                shape=(batch_size, sequence_length),
+                dtype="int32",
+                io_type=IoType.TENSOR,
+            ),
         }
 
     def _get_input_spec_for_instance(self, batch_size: int = 1) -> InputSpec:
