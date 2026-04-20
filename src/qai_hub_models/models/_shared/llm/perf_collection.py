@@ -23,6 +23,7 @@ from qai_hub_models.configs.info_yaml import QAIHMModelInfo
 from qai_hub_models.configs.perf_yaml import QAIHMModelPerf
 from qai_hub_models.models.common import Precision
 from qai_hub_models.scorecard import ScorecardDevice
+from qai_hub_models.scorecard.device import sanitize_chipset_name
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
 
 
@@ -133,7 +134,7 @@ def update_perf_yaml(
     if device not in perf.supported_devices:
         perf.supported_devices.append(device)
 
-    chipset = device.chipset
+    chipset = sanitize_chipset_name(device.chipset)
     if chipset not in perf.supported_chipsets:
         perf.supported_chipsets.append(chipset)
 

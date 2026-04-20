@@ -984,16 +984,15 @@ def run_llm_perf_test(
         qairt_sdk_path=qairt_sdk_path,
     )
 
-    # Update perf.yaml for each context length
+    # Update perf.yaml with only the max context length
     if not skip_perf_update and tps is not None and ttft is not None:
-        for cl in export_context_lengths:
-            update_perf_yaml(
-                model_id,
-                device.reference_device_name,
-                precision,
-                cl,
-                tps,
-                ttft,
-            )
+        update_perf_yaml(
+            model_id,
+            device.reference_device_name,
+            precision,
+            max(export_context_lengths),
+            tps,
+            ttft,
+        )
 
     return tps, ttft
