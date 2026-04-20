@@ -87,7 +87,7 @@ jobs:
       QAIHM_TEST_PRECISIONS: ${{ inputs.test_precisions }}
       QAIHM_TEST_QAIRT_VERSION: ${{ inputs.qairt_version }}
       QAIHM_TEST_IGNORE_DEVICE_JOB_CACHE: ${{ inputs.ignore_job_cache }}
-      HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }} # used for llama tests
+      HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
       COMPILE_JOBS_URL: NONE
 
     name: Submit Scorecard Jobs${{ inputs.split_name != '' && format(' ({0})', inputs.split_name) || '' }}

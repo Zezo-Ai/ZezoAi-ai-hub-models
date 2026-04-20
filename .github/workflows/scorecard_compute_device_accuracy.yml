@@ -140,6 +140,7 @@ jobs:
         continue-on-error: true
         env:
           QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/test-results/qaihm-device-accuracy-tests-junit.xml
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
         run: |
             python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
