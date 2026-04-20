@@ -395,23 +395,21 @@ def test_export(
 def cached_torch_trace_for_export() -> Generator[pytest.MonkeyPatch, None, None]:
     with pytest.MonkeyPatch.context() as mp:
         model_cache: dict[str, hub.Model] = {}
-        torch_trace = torch.jit.trace
+        torch_export = torch.export.export
 
-        def _cached_torch_trace(
-            module: torch.nn.Module,
-            inputs: torch.Tensor | tuple[torch.Tensor, ...],
-            check_trace: bool = True,
+        def _cached_torch_export(
+            module: torch.nn.Module, inputs: torch.Tensor | tuple[torch.Tensor, ...]
         ) -> hub.Model:
             model_key = str(module) + str(
                 sorted([f"{x.shape}{x.type()}" for x in inputs])
             )
             model = model_cache.get(model_key)
             if not model:
-                trace = torch_trace(module, inputs, check_trace=check_trace)
-                model = hub.upload_model(trace)
+                export = torch_export(module, inputs)  # type: ignore[arg-type]
+                model = hub.upload_model(export)
                 model_cache[model_key] = model
             assert isinstance(model, hub.Model)
             return model
 
-        mp.setattr(model_export_module.torch.jit, "trace", _cached_torch_trace)
+        mp.setattr(model_export_module.torch.export, "export", _cached_torch_export)
         yield mp

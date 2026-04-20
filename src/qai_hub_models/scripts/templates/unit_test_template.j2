@@ -381,7 +381,7 @@ def cached_torch_trace_for_export() -> Generator[pytest.MonkeyPatch, None, None]
             model = model_cache.get(model_key, None)
             if not model:
                 {%- if enable_pt2 %}
-                {{ serial_name }} = torch_{{ serial_name }}(module, inputs)
+                {{ serial_name }} = torch_{{ serial_name }}(module, inputs) # type: ignore[arg-type]
                 {%- else %}
                 {{ serial_name }} = torch_{{ serial_name }}(module, inputs, check_trace=check_trace)
                 {%- endif %}

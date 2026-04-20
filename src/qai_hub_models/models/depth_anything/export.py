@@ -53,6 +53,11 @@ from qai_hub_models.utils.printing import (
     print_tool_versions,
 )
 from qai_hub_models.utils.qai_hub_helpers import can_access_qualcomm_ai_hub
+from qai_hub_models.utils.version_helpers import (
+    PT2_LESS_THAN_TORCH_VERSION,
+    PT2_MIN_TORCH_VERSION,
+    ensure_supported_version,
+)
 
 
 def quantize_model(
@@ -95,12 +100,18 @@ def compile_model(
     extra_options: str = "",
 ) -> hub.client.CompileJob:
     input_spec = input_spec or model.get_input_spec()
+    model_to_compile: hub.Model | torch.export.ExportedProgram | None
     if source_model:
         model_to_compile = source_model
     else:
-        # Trace the model
-        model_to_compile = torch.jit.trace(
-            model.to("cpu"), make_torch_inputs(input_spec)
+        # Serialize the model
+        ensure_supported_version(
+            "torch",
+            min_version=PT2_MIN_TORCH_VERSION,
+            below_version=PT2_LESS_THAN_TORCH_VERSION,
+        )
+        model_to_compile = torch.export.export(
+            model.to("cpu"), tuple(make_torch_inputs(input_spec))
         )
 
     model_compile_options = model.get_hub_compile_options(
