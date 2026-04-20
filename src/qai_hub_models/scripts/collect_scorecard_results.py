@@ -84,6 +84,7 @@ from qai_hub_models.utils.testing_async_utils import (
     get_compile_job_ids_file,
     get_environment_file,
     get_inference_job_ids_file,
+    get_link_job_ids_file,
     get_profile_job_ids_file,
     get_quantize_job_ids_file,
     get_tool_versions_file,
@@ -154,6 +155,11 @@ def parse_args() -> argparse.Namespace:
         "--compile-ids",
         type=str,
         help="Comma-separated list of paths to additional compile job yamls. Jobs in these YAMLS will be added to or override jobs in the existing compile job intermediates YAML. YAML specified later in the list will override identical jobs in previous YAML.",
+    )
+    parser.add_argument(
+        "--link-ids",
+        type=str,
+        help="Comma-separated list of paths to additional link job yamls. Jobs in these YAMLS will be added to or override jobs in the existing link job intermediates YAML. YAML specified later in the list will override identical jobs in previous YAML.",
     )
     parser.add_argument(
         "--inference-ids",
@@ -660,6 +666,7 @@ if __name__ == "__main__":
     jobs_dir = None
     args.quantize_ids = args.quantize_ids or str(get_quantize_job_ids_file(jobs_dir))
     args.compile_ids = args.compile_ids or str(get_compile_job_ids_file(jobs_dir))
+    args.link_ids = args.link_ids or str(get_link_job_ids_file(jobs_dir))
     args.profile_ids = args.profile_ids or str(get_profile_job_ids_file(jobs_dir))
     args.inference_ids = args.inference_ids or str(get_inference_job_ids_file(jobs_dir))
 
@@ -721,6 +728,8 @@ if __name__ == "__main__":
 
     for compile_yaml_path in args.compile_ids.split(",") if args.compile_ids else []:
         compile_job_yamls.update(CompileScorecardJobYaml.from_file(compile_yaml_path))
+    for link_yaml_path in args.link_ids.split(",") if args.link_ids else []:
+        link_job_yamls.update(LinkScorecardJobYaml.from_file(link_yaml_path))
     for profile_yaml_path in args.profile_ids.split(",") if args.profile_ids else []:
         profile_job_yamls.update(ProfileScorecardJobYaml.from_file(profile_yaml_path))
     for inference_yaml_path in (

@@ -112,7 +112,9 @@ class ResultsSpreadsheet(list):
         # Remove fields that are not applicable
         fields_to_remove: list[str] = []
         if not self.has_compile_jobs:
-            fields_to_remove.extend(["compile_status", "compile_url"])
+            fields_to_remove.extend(
+                ["compile_status", "compile_url", "link_status", "link_url"]
+            )
         if not self.has_profile_jobs:
             fields_to_remove.extend(
                 ["profile_status", "profile_url", "inference_time", "NPU", "GPU", "CPU"]

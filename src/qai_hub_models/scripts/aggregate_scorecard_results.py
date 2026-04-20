@@ -144,6 +144,9 @@ def create_model_status_function(
         failed_compile_rows = group[
             ~group["compile_status"].str.startswith("Passed", na=False)
         ]
+        failed_link_rows = group[
+            ~group["link_status"].str.startswith("Passed", na=False)
+        ]
         failed_profile_rows = group[
             ~group["profile_status"].str.startswith("Passed", na=False)
         ]
@@ -165,6 +168,9 @@ def create_model_status_function(
         elif len(failed_compile_rows) > 0:
             selected_row = failed_compile_rows.iloc[0]
             final_status = "Compile Failed"
+        elif len(failed_link_rows) > 0:
+            selected_row = failed_link_rows.iloc[0]
+            final_status = "Link Failed"
         elif len(failed_profile_rows) > 0:
             selected_row = failed_profile_rows.iloc[0]
             final_status = "Profile Failed"
@@ -177,11 +183,13 @@ def create_model_status_function(
         raw_data = {
             "quantize_status": selected_row.quantize_status,
             "compile_status": selected_row.compile_status,
+            "link_status": selected_row.link_status,
             "profile_status": selected_row.profile_status,
             "inference_status": selected_row.inference_status,
             "final_status": final_status,
             "quantize_url": selected_row.quantize_url,
             "compile_url": selected_row.compile_url,
+            "link_url": selected_row.link_url,
             "profile_url": selected_row.profile_url,
             "inference_url": selected_row.inference_url,
             "tags": selected_row.tags,
@@ -274,12 +282,14 @@ def _populate_tflite_compile_failures(scorecard_df: pd.DataFrame) -> pd.DataFram
     subset_df = merge_df[merge_df["_merge"] == "left_only"][qnn_df.columns]
     subset_df.quantize_url = np.nan
     subset_df.compile_url = np.nan
+    subset_df.link_url = np.nan
     subset_df.inference_url = np.nan
     subset_df.profile_url = np.nan
     subset_df.profile_status = "Skipped"
     subset_df.quantize_status = "Skipped"
     subset_df.inference_status = "Skipped"
     subset_df.compile_status = "Failed (Not Attempted)"
+    subset_df.link_status = "Skipped"
     subset_df.runtime = "tflite"
     _nullify_perf_columns(subset_df)
     for col in get_accuracy_numerics_columns():
