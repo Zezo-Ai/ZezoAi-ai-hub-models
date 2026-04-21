@@ -53,7 +53,6 @@ from qai_hub_models.utils.testing_export_eval import run_llm_compile
 DEFAULT_EVAL_SEQLEN = 2048
 
 
-@pytest.mark.nightly
 @pytest.mark.unmarked
 def test_create_genie_config() -> None:
     context_length = 1024
@@ -142,7 +141,7 @@ def test_load_encodings_to_quantsim(checkpoint: str) -> None:
 @pytest.mark.parametrize(
     ("checkpoint", "task", "expected_metric", "num_samples"),
     [
-        pytest.param("DEFAULT_W4", "wikitext", 16.78, 0, marks=pytest.mark.nightly),
+        ("DEFAULT_W4", "wikitext", 16.78, 0),
         ("DEFAULT_W4", "mmlu", 0.399, 1000),
         pytest.param(
             "DEFAULT_W4",
@@ -153,7 +152,7 @@ def test_load_encodings_to_quantsim(checkpoint: str) -> None:
                 reason="Split-forward quantized inference accuracy regression: actual 0.32 vs expected 0.43"
             ),
         ),
-        pytest.param("DEFAULT_W4A16", "wikitext", 17.43, 0, marks=pytest.mark.nightly),
+        ("DEFAULT_W4A16", "wikitext", 17.43, 0),
         ("DEFAULT_W4A16", "mmlu", 0.403, 1000),
         ("DEFAULT_UNQUANTIZED", "wikitext", 12.18, 0),
         ("DEFAULT_UNQUANTIZED", "mmlu", 0.482, 1000),
@@ -197,7 +196,6 @@ def test_evaluate(
     np.testing.assert_allclose(actual_metric, expected_metric, rtol=0.03, atol=0)
 
 
-@pytest.mark.nightly
 @pytest.mark.demo
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="This test can be run on GPU only."
@@ -230,7 +228,6 @@ def test_quantize_and_demo(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     QuantizedSplitModelWrapper.clear_cache()
 
 
-@pytest.mark.nightly
 @pytest.mark.demo
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="This test can be run on GPU only."
@@ -252,7 +249,6 @@ def test_demo_default(
     assert "Paris" in captured.out
 
 
-@pytest.mark.nightly
 @pytest.mark.skipif(
     not torch.cuda.is_available(),
     reason="This test can be run on GPU only.",
@@ -300,10 +296,9 @@ def test_compile(
     assert (genie_bundle_path / "htp_backend_ext_config.json").exists()
 
 
-@pytest.mark.nightly
 @pytest.mark.skipif(
     not torch.cuda.is_available()
-    or not importlib.util.find_spec("qdc_public_api_client"),
+    or not importlib.util.find_spec("qualcomm_device_cloud_sdk"),
     reason="This test can be run on GPU only. Also needs QDC package to run.",
 )
 @pytest.mark.parametrize(

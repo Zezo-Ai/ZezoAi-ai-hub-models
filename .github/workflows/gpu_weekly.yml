@@ -214,6 +214,7 @@ jobs:
         # Cleanup temporary files
         if [ -n "$HOME" ]; then
           rm -rf "$HOME"/.aws
+          rm -rf "$HOME"/model_envs
         fi
         rm -rf "$GITHUB_WORKSPACE"/qualcomm_device_cloud_sdk-*.whl
         rm -rf "$GITHUB_WORKSPACE"/genie_bundle/*
