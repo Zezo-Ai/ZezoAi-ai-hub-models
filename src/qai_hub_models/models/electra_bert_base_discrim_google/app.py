@@ -71,6 +71,11 @@ class ElectraBertApp:
         input_ids, attention_mask = self.preprocess_text(text)
         predictions = self.model(input_ids, attention_mask)
 
+        assert predictions.dim() == 2 and predictions.shape[0] == 1, (
+            f"Expected shape [1, seq_len], got {tuple(predictions.shape)}"
+        )
+        predictions = predictions[0]
+
         tokens = self.tokenizer.convert_ids_to_tokens(
             input_ids[0].tolist(), skip_special_tokens=True
         )

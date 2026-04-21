@@ -64,11 +64,11 @@ class ElectraBertBaseDiscrimGoogle(BaseBertModel):
         Returns
         -------
         predictions : torch.Tensor
-            Binary predictions for every token position, shape [seq_len]
-            (for batch_size=1). Values: 1 = fake/replaced, 0 = real.
+            Binary predictions for every token position, shape [batch_size, seq_len].
+            Values: 1 = fake/replaced, 0 = real.
         """
         logits = self.model(input_tokens, attention_mask=attention_masks).logits
-        return torch.round((torch.sign(logits[0]) + 1) / 2)
+        return (logits > 0).float()
 
     @classmethod
     def get_dataset_class(cls, tokenizer_name: str) -> type:
