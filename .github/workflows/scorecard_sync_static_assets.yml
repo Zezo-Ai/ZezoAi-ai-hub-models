@@ -1,9 +1,6 @@
 name: Sync Static Scorecard Assets
 
 env:
-  # Versions MUST be quoted, otherwise they will be interpreted as a floats
-  # (and version like 3.10 can be interpreted as 3.1).
-  PYTHON_VERSION: '3.10'
   PYTHONUNBUFFERED: 1
   VENV_PATH: build/ci-envs/qaihm-build
   QAIHM_CI: 1
@@ -79,44 +76,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - id: install_platform_deps
-        env:
-          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
-        run: |
-          bash scripts/ci/install-platform-deps.sh
-
-
-      - id: setup_python
-        uses: actions/setup-python@v6
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create Virtual Env
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
-
-      - name: Configure Hub Credentials
-        run: |
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ env.QAIHM_TEST_DEPLOYMENTS }},prod \
-            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            DEFAULT \
-            ${{ env.VENV_PATH }}
-
-          # Add envvars for "private" client (jobs accessible to AI Hub team)
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ env.QAIHM_TEST_DEPLOYMENTS }},prod \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            PRIVATE
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
+          venv-path: ${{ env.VENV_PATH }}
+          hub-deployments: ${{ env.QAIHM_TEST_DEPLOYMENTS }},prod
+          hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+          hub-user-token-staging: ${{ secrets.HUB_USER_TOKEN_STAGING }}
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+          hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
+          hub-private-user-token-prod: ${{ secrets.HUB_PRIVATE_USER_TOKEN_PROD }}
+          hub-private-user-token-staging: ${{ secrets.HUB_PRIVATE_USER_TOKEN_STAGING }}
+          hub-private-user-token-dev: ${{ secrets.HUB_PRIVATE_USER_TOKEN_DEV }}
 
       - name: Sync Models
         id: sync-models

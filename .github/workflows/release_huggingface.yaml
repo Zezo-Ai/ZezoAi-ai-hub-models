@@ -39,7 +39,6 @@ jobs:
       env:
         QAIHM_CI: "true"
         PYTHONUNBUFFERED: 1
-        PYTHON_VERSION: '3.10'
         VENV_PATH: build/ci-envs/release
 
       steps:
@@ -54,16 +53,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - id: install_platform_deps
-        env:
-          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
-        run: |
-          bash scripts/ci/install-platform-deps.sh
-
-      - id: setup_python
-        uses: actions/setup-python@v6
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
 
       - name: Set Commit Message
         shell: bash

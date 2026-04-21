@@ -43,9 +43,6 @@ on:
           default: ''
 
 env:
-  # Versions MUST be quoted, otherwise they will be interpreted as a floats
-  # (and version like 3.10 can be interpreted as 3.1).
-  PYTHON_VERSION: '3.10'
   PYTHONUNBUFFERED: 1
   VENV_PATH: build/ci-envs/qaihm-build
   QAIHM_CI: 1
@@ -68,24 +65,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-
-      - id: install_platform_deps
-        env:
-          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
-        run: |
-          bash scripts/ci/install-platform-deps.sh
-
-      - id: setup_python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create Virtual Env
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
 
       - name: Download Post-Flaky-Job-Retry Artifacts
         id: download-post-flaky-job-retry-artifacts
@@ -118,34 +97,21 @@ jobs:
         if: ${{ inputs.models }}
         run: echo "QAIHM_TEST_MODELS=${{ inputs.models }}" >> "$GITHUB_ENV"
 
-      - name: Setup AWS Credentials
-        uses: ./.github/actions/configure-multiple-aws-roles
+      - name: CI Setup
+        id: ci_setup
+        uses: ./.github/actions/ci-setup
         with:
-          role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
-          role-duration-seconds: 43200 # 12 hours
-          profile: qaihm
-          aws-region: us-west-2
-
-      - name: Configure Hub Credentials
-        id: set_hub_creds
-        run: |
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
-            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            DEFAULT \
-            ${{ env.VENV_PATH }}
-
-          # Add envvars for "private" client (jobs accessible to AI Hub team)
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            PRIVATE
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
+          venv-path: ${{ env.VENV_PATH }}
+          aws-role-arn: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+          hub-deployments: ${{ env.QAIHM_TEST_DEPLOYMENT }}
+          hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+          hub-user-token-staging: ${{ secrets.HUB_USER_TOKEN_STAGING }}
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+          hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
+          hub-private-user-token-prod: ${{ secrets.HUB_PRIVATE_USER_TOKEN_PROD }}
+          hub-private-user-token-staging: ${{ secrets.HUB_PRIVATE_USER_TOKEN_STAGING }}
+          hub-private-user-token-dev: ${{ secrets.HUB_PRIVATE_USER_TOKEN_DEV }}
 
       - name: Create Test Results Directory
         run: |
@@ -160,7 +126,7 @@ jobs:
         run: |
             python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             test_export_scripts
 
       - name: Upload Cached Asset Locations

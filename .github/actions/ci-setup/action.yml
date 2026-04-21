@@ -1,0 +1,136 @@
+name: CI Setup
+
+description: Install platform deps, setup Python + venv, and optionally configure AWS and Hub credentials
+
+inputs:
+  sudo-password:
+    description: SUDO password for install-platform-deps.sh
+    required: true
+
+  python-version:
+    description: Python version to install
+    required: false
+    default: "3.10"
+  venv-path:
+    description: Path for the virtual environment (empty to skip venv creation)
+    required: false
+    default: ""
+  bnt-venv-install-cmd:
+    description: "build_and_test.py subcommand for venv requirements installation: install_deps or install_global_requirements"
+    required: false
+    default: install_deps
+
+  aws-role-arn:
+    description: AWS role ARN (empty to skip AWS setup)
+    required: false
+    default: ""
+
+  hub-deployments:
+    description: Comma-separated list of deployments to enable; first entry is the default (empty to skip Hub credential setup)
+    required: false
+    default: ""
+  hub-user-token-prod:
+    required: false
+    default: ""
+  hub-user-token-staging:
+    required: false
+    default: ""
+  hub-user-token-dev:
+    required: false
+    default: ""
+  hub-user-token-sandbox:
+    required: false
+    default: ""
+  hub-private-user-token-prod:
+    description: Set to configure PRIVATE client credentials in addition to DEFAULT
+    required: false
+    default: ""
+  hub-private-user-token-staging:
+    required: false
+    default: ""
+  hub-private-user-token-dev:
+    required: false
+    default: ""
+
+outputs:
+  python-path:
+    description: Path to the installed Python binary
+    value: ${{ steps.setup_python.outputs.python-path }}
+  python-version:
+    description: Python version that was installed
+    value: ${{ inputs.python-version }}
+  hub-deployments:
+    description: Resolved QAIHM_TEST_DEPLOYMENT value
+    value: ${{ steps.set_hub_creds.outputs.qaihm_test_deployment }}
+
+runs:
+  using: composite
+  steps:
+    - id: install_platform_deps
+      shell: bash
+      env:
+        SUDO_PASSWORD: ${{ inputs.sudo-password }}
+      run: |
+        bash scripts/ci/install-platform-deps.sh
+
+    - id: setup_python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Create Virtual Env
+      if: inputs.venv-path != ''
+      shell: bash
+      run: |
+        python3 scripts/build_and_test.py \
+          --venv="${{ inputs.venv-path }}" \
+          --python="${{ steps.setup_python.outputs.python-path }}" \
+          ${{ inputs.bnt-venv-install-cmd }}
+
+    - name: Setup AWS Credentials
+      if: inputs.aws-role-arn != ''
+      uses: ./.github/actions/configure-multiple-aws-roles
+      with:
+        role-to-assume: ${{ inputs.aws-role-arn }}
+        role-duration-seconds: 43200
+        profile: qaihm
+        aws-region: us-west-2
+
+    - name: Configure Hub Credentials
+      id: set_hub_creds
+      if: inputs.hub-deployments != ''
+      shell: bash
+      env:
+        HUB_DEPLOYMENTS: ${{ inputs.hub-deployments }}
+        VENV_PATH: ${{ inputs.venv-path }}
+        HUB_USER_TOKEN_PROD: ${{ inputs.hub-user-token-prod }}
+        HUB_USER_TOKEN_STAGING: ${{ inputs.hub-user-token-staging }}
+        HUB_USER_TOKEN_DEV: ${{ inputs.hub-user-token-dev }}
+        HUB_USER_TOKEN_SANDBOX: ${{ inputs.hub-user-token-sandbox }}
+        HUB_PRIVATE_USER_TOKEN_PROD: ${{ inputs.hub-private-user-token-prod }}
+        HUB_PRIVATE_USER_TOKEN_STAGING: ${{ inputs.hub-private-user-token-staging }}
+        HUB_PRIVATE_USER_TOKEN_DEV: ${{ inputs.hub-private-user-token-dev }}
+      run: |
+        if [ -z "$VENV_PATH" ]; then
+          echo "::error::hub-deployments requires venv-path to be set"
+          exit 1
+        fi
+        source scripts/ci/set-aihub-credential-vars.sh \
+          "$HUB_DEPLOYMENTS" \
+          "$HUB_USER_TOKEN_PROD" \
+          "$HUB_USER_TOKEN_STAGING" \
+          "$HUB_USER_TOKEN_DEV" \
+          "$HUB_USER_TOKEN_SANDBOX" \
+          DEFAULT \
+          "$VENV_PATH"
+        echo "qaihm_test_deployment=$QAIHM_TEST_DEPLOYMENT" >> "$GITHUB_OUTPUT"
+
+        if [ -n "$HUB_PRIVATE_USER_TOKEN_PROD" ]; then
+          source scripts/ci/set-aihub-credential-vars.sh \
+            "$HUB_DEPLOYMENTS" \
+            "$HUB_PRIVATE_USER_TOKEN_PROD" \
+            "$HUB_PRIVATE_USER_TOKEN_STAGING" \
+            "$HUB_PRIVATE_USER_TOKEN_DEV" \
+            "$HUB_USER_TOKEN_SANDBOX" \
+            PRIVATE
+        fi

@@ -33,7 +33,6 @@ on:
         default: 0
 
 env:
-  PYTHON_VERSION: '3.10'
   VENV_PATH: build/ci-envs/qaihm-build
 
 jobs:
@@ -45,17 +44,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - id: setup_python
-        uses: actions/setup-python@v6
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create Virtual Env
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
+          venv-path: ${{ env.VENV_PATH }}
 
       - name: Download Post-Flaky-Job-Retry Artifacts
         id: download-post-flaky-job-retry-artifacts
@@ -140,17 +133,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - id: setup_python
-        uses: actions/setup-python@v6
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create Virtual Env
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
+          venv-path: ${{ env.VENV_PATH }}
 
       # --- Export Artifacts ---
 

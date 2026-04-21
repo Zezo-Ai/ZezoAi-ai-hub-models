@@ -126,9 +126,6 @@ on:
           type: boolean
 
 env:
-  # Versions MUST be quoted, otherwise they will be interpreted as a floats
-  # (and version like 3.10 can be interpreted as 3.1).
-  PYTHON_VERSION: '3.10'
   PYTHONUNBUFFERED: 1
   QAIHM_CI: 1
   VENV_PATH: build/ci-envs/qaihm-build
@@ -142,37 +139,19 @@ jobs:
     env:
       QAIHM_TEST_DEPLOYMENT: ${{ inputs.deployment }}
     steps:
-    - id: setup_python
-      uses: actions/setup-python@v6
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
     - uses: actions/checkout@v6
-    - name: Create Virtual Env
-      run: |
-        python3 scripts/build_and_test.py \
-          --venv="${{ env.VENV_PATH }}" \
-          --python="${{ steps.setup_python.outputs.python-path }}" \
-          install_deps
-    - name: Configure Hub Credentials
-      run: |
-        # Add envvars for "public" client (jobs accessible to anyone in the company)
-        source scripts/ci/set-aihub-credential-vars.sh \
-          ${{ env.QAIHM_TEST_DEPLOYMENT }},prod \
-          ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
-          ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
-          ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
-          ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-          DEFAULT \
-          ${{ env.VENV_PATH }}
 
-        # Add envvars for "private" client (jobs accessible to AI Hub team)
-        source scripts/ci/set-aihub-credential-vars.sh \
-          ${{ env.QAIHM_TEST_DEPLOYMENT }},prod \
-          ${{ secrets['HUB_PRIVATE_USER_TOKEN_PROD'] }} \
-          ${{ secrets['HUB_PRIVATE_USER_TOKEN_STAGING'] }} \
-          ${{ secrets['HUB_PRIVATE_USER_TOKEN_DEV'] }} \
-          ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-          PRIVATE
+    - name: CI Setup
+      uses: ./.github/actions/ci-setup
+      with:
+        sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
+        venv-path: ${{ env.VENV_PATH }}
+        hub-deployments: ${{ env.QAIHM_TEST_DEPLOYMENT }},prod
+        hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+        hub-user-token-staging: ${{ secrets.HUB_USER_TOKEN_STAGING }}
+        hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+        hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
+
     - name: Wait until workbench is deployed
       run: |
         source "${{env.VENV_PATH}}/bin/activate"
@@ -228,7 +207,6 @@ jobs:
       delay: ${{ inputs.delay }}
       deployment: ${{ inputs.deployment }}
       test_mode: false
-      python_version: "3.10"
 
   collect_results_split:
     name: Test Export Scripts, Upload Zip Files & Compute Accuracy
@@ -266,26 +244,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - id: setup_python
-        if: ${{ format('{0}', inputs.generate_test_summary) != 'false' }}
-        uses: actions/setup-python@v6
+      - name: CI Setup
+        id: ci_setup
+        uses: ./.github/actions/ci-setup
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create Virtual Env
-        if: ${{ format('{0}', inputs.generate_test_summary) != 'false' }}
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
+          venv-path: ${{ env.VENV_PATH }}
 
       - name: Download Model Test Results
         id: download_model_results
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
-          name: test-results-scorecard-models-py${{ env.PYTHON_VERSION }}
+          name: test-results-scorecard-models
           path: build/all-test-results/model-tests
 
       - name: Download Accuracy Test Results
@@ -357,7 +328,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Delete model test results
-          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name == \"test-results-scorecard-models-py${{ env.PYTHON_VERSION }}\") | .id" | while read artifact_id; do
+          gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name == \"test-results-scorecard-models\") | .id" | while read artifact_id; do
             echo "Deleting artifact $artifact_id"
             gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
           done

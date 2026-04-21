@@ -128,34 +128,18 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - id: install_platform_deps
-      env:
-        SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
-      run: |
-        bash scripts/ci/install-platform-deps.sh
-
-    - id: setup_python
-      uses: actions/setup-python@v6
+    - name: CI Setup
+      uses: ./.github/actions/ci-setup
       with:
+        sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
         python-version: ${{ env.PYTHON_VERSION }}
-
-    - name: Create Virtual Env, re-generate and install global_requirements.txt
-      run: |
-        python3 scripts/build_and_test.py \
-          --venv="${{ env.VENV_PATH }}" \
-          --python="${{ steps.setup_python.outputs.python-path }}" \
-          install_global_requirements
-
-    - name: Configure Hub Credentials
-      run: |
-        source scripts/ci/set-aihub-credential-vars.sh \
-          prod \
-          ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
-          ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
-          ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
-          ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-          DEFAULT \
-          ${{ env.VENV_PATH }}
+        venv-path: ${{ env.VENV_PATH }}
+        bnt-venv-install-cmd: install_global_requirements
+        hub-deployments: prod
+        hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+        hub-user-token-staging: ${{ secrets.HUB_USER_TOKEN_STAGING }}
+        hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+        hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
 
     - name: Run Pre-Commit
       id: pre-commit
@@ -209,42 +193,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - id: install_platform_deps
-        env:
-          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
-        run: |
-          bash scripts/ci/install-platform-deps.sh
-
-      - id: setup_python
-        uses: actions/setup-python@v6
+      - name: CI Setup
+        id: ci_setup
+        uses: ./.github/actions/ci-setup
         with:
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Setup AWS Credentials
-        uses: ./.github/actions/configure-multiple-aws-roles
-        with:
-          role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
-          role-duration-seconds: 7200
-          profile: qaihm
-          aws-region: us-west-2
-
-      - name: Create Virtual Env
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
-
-      - name: Configure Hub Credentials
-        run: |
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
-            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            DEFAULT \
-            ${{ env.VENV_PATH }}
+          venv-path: ${{ env.VENV_PATH }}
+          aws-role-arn: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+          hub-deployments: ${{ env.QAIHM_TEST_DEPLOYMENT }}
+          hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+          hub-user-token-staging: ${{ secrets.HUB_USER_TOKEN_STAGING }}
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+          hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
 
       - name: Set Environment Variables
         id: set_env_vars
@@ -263,7 +224,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             test_qaihm
 
       - name: Run CLI Tests
@@ -273,7 +234,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             test_cli
 
       - name: Upload Test Results
@@ -303,17 +264,13 @@ jobs:
           (git diff origin/main --name-only) >> "${{ github.workspace }}/build/changed-qaihm-files.txt"
           cat "${{ github.workspace }}/build/changed-qaihm-files.txt"
 
-      - id: setup_python
-        uses: actions/setup-python@v6
+      - name: CI Setup
+        id: ci_setup
+        uses: ./.github/actions/ci-setup
         with:
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create Virtual Env
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
+          venv-path: ${{ env.VENV_PATH }}
 
       - name: Get Changed Models
         id: get_changed
@@ -365,38 +322,22 @@ jobs:
           name: Test Cached Artifact (Flaky-Job-IDs, ${{ github.run_id }}, py${{ inputs.python_version }})
           path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}
 
-      - id: install_platform_deps
+      - name: CI Setup
+        id: ci_setup
         if: ${{ steps.download_artifact.outcome == 'success' }}
-        env:
-          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
-        run: |
-          bash scripts/ci/install-platform-deps.sh
-
-      - id: setup_python
-        if: ${{ steps.download_artifact.outcome == 'success' }}
-        uses: actions/setup-python@v6
+        uses: ./.github/actions/ci-setup
         with:
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create Virtual Env
-        if: ${{ steps.download_artifact.outcome == 'success' }}
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
-
-      - name: Configure Hub Credentials
-        if: ${{ steps.download_artifact.outcome == 'success' }}
-        run: |
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
-            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            DEFAULT \
-            ${{ env.VENV_PATH }}
+          venv-path: ${{ env.VENV_PATH }}
+          hub-deployments: ${{ env.QAIHM_TEST_DEPLOYMENT }}
+          hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+          hub-user-token-staging: ${{ secrets.HUB_USER_TOKEN_STAGING }}
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+          hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
+          hub-private-user-token-prod: ${{ secrets.HUB_PRIVATE_USER_TOKEN_PROD }}
+          hub-private-user-token-staging: ${{ secrets.HUB_PRIVATE_USER_TOKEN_STAGING }}
+          hub-private-user-token-dev: ${{ secrets.HUB_PRIVATE_USER_TOKEN_DEV }}
 
       - name: Create Test Results Directory
         if: ${{ steps.download_artifact.outcome == 'success' }}
@@ -411,7 +352,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             verify_workbench_jobs
 
       - name: Upload Test Results
@@ -440,19 +381,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - id: setup_python
+      - name: CI Setup
+        id: ci_setup
         if: ${{ inputs.generate_test_summary }}
-        uses: actions/setup-python@v6
+        uses: ./.github/actions/ci-setup
         with:
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create Virtual Env
-        if: ${{ inputs.generate_test_summary }}
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
+          venv-path: ${{ env.VENV_PATH }}
 
       - name: Download 'QAIHM Unit Tests' Results
         id: download_unit_results

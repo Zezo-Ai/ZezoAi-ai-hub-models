@@ -98,58 +98,28 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - id: install_platform_deps
-        env:
-          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
-        run: |
-          bash scripts/ci/install-platform-deps.sh
-
-      - id: setup_python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
       - name: Check Out Updated Static Asset Configs
         if: ${{ inputs.sync_assets_branch != '' }}
         run: |
           git fetch origin ${{ inputs.sync_assets_branch }}
           git checkout origin/${{ inputs.sync_assets_branch }} -- src/qai_hub_models/scorecard/static/models
 
-      - name: Create Virtual Env
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
-
-      - name: Setup AWS Credentials
-        uses: ./.github/actions/configure-multiple-aws-roles
+      - name: CI Setup
+        id: ci_setup
+        uses: ./.github/actions/ci-setup
         with:
-          role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
-          role-duration-seconds: 43200 # 12 hours
-          profile: qaihm
-          aws-region: us-west-2
-
-      - name: Configure Hub Credentials
-        run: |
-          # Add envvars for "public" client (jobs accessible to anyone in the company)
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ env.QAIHM_TEST_DEPLOYMENT }},prod \
-            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            DEFAULT \
-            ${{ env.VENV_PATH }}
-
-          # Add envvars for "private" client (jobs accessible to AI Hub team)
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ env.QAIHM_TEST_DEPLOYMENT }},prod \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            PRIVATE
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          venv-path: ${{ env.VENV_PATH }}
+          aws-role-arn: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+          hub-deployments: ${{ env.QAIHM_TEST_DEPLOYMENT }},prod
+          hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+          hub-user-token-staging: ${{ secrets.HUB_USER_TOKEN_STAGING }}
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+          hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
+          hub-private-user-token-prod: ${{ secrets.HUB_PRIVATE_USER_TOKEN_PROD }}
+          hub-private-user-token-staging: ${{ secrets.HUB_PRIVATE_USER_TOKEN_STAGING }}
+          hub-private-user-token-dev: ${{ secrets.HUB_PRIVATE_USER_TOKEN_DEV }}
 
       - name: Dump Environment Variables to File
         id: dump_env
@@ -201,7 +171,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             test_unit_all_models
 
       - name: Run Compile Jobs (Static Models)
@@ -219,7 +189,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             test_pre_quantize_compile_all_models
 
       - name: Run Quantize Jobs (Pytorch Recipes)
@@ -230,7 +200,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             test_quantize_all_models
 
       - name: Run Compile Jobs (Pytorch Recipes)
@@ -246,7 +216,7 @@ jobs:
           fi
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             "$COMPILE_TASK"
 
       - name: Run Link Jobs (Pytorch Recipes)
@@ -257,7 +227,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             test_link_all_models
 
       - name: Run Profile & Inference Jobs (Static Models)
@@ -289,7 +259,7 @@ jobs:
           fi
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             "$QAIHM_TEST_DEVICE_TASK"
 
       - name: Test Model Zip File Creation (Pytorch Recipes)
@@ -300,7 +270,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             test_export_scripts
 
       - name: Combine JUnit XML Files
@@ -315,7 +285,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-results-${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && 'models' || 'scorecard-models' }}-py${{ inputs.python_version }}${{ inputs.split_name != '' && format('-{0}', inputs.split_name) || '' }}
+          name: ${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && format('test-results-models-py{0}{1}', inputs.python_version, inputs.split_name != '' && format('-{0}', inputs.split_name) || '') || format('test-results-scorecard-models{0}', inputs.split_name != '' && format('-{0}', inputs.split_name) || '') }}
           path: build/combined-test-results
           if-no-files-found: ignore
 
@@ -334,5 +304,5 @@ jobs:
         if: ${{ always() && steps.dump_env.outcome == 'success' && inputs.test_scope != 'unit' }}
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ inputs.test_scope == 'unit_and_compile' && 'Test' || 'Scorecard' }} Cached Artifact (Flaky-Job-IDs, ${{ github.run_id }}, py${{ inputs.python_version }}${{ inputs.split_name != '' && format(', {0}', inputs.split_name) || '' }})
+          name: ${{ inputs.test_scope == 'unit_and_compile' && format('Test Cached Artifact (Flaky-Job-IDs, {0}, py{1}{2})', github.run_id, inputs.python_version, inputs.split_name != '' && format(', {0}', inputs.split_name) || '') || format('Scorecard Cached Artifact (Flaky-Job-IDs, {0}{1})', github.run_id, inputs.split_name != '' && format(', {0}', inputs.split_name) || '') }}
           path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}

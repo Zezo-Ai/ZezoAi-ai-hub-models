@@ -87,17 +87,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - id: setup_python
-        uses: actions/setup-python@v6
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
         with:
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create Virtual Env
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
+          venv-path: ${{ env.VENV_PATH }}
 
       - name: Split Models
         id: split
@@ -146,23 +141,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - id: setup_python
-        uses: actions/setup-python@v6
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
         with:
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Create Virtual Env
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
+          venv-path: ${{ env.VENV_PATH }}
 
       - name: Download All Split Artifacts
         if: ${{ inputs.test_scope != 'unit' }}
         uses: actions/download-artifact@v8
         with:
-          pattern: ${{ inputs.test_scope == 'unit_and_compile' && 'Test' || 'Scorecard' }} Cached Artifact (Flaky-Job-IDs, ${{ github.run_id }}, py${{ inputs.python_version }}, *)
+          pattern: ${{ inputs.test_scope == 'unit_and_compile' && format('Test Cached Artifact (Flaky-Job-IDs, {0}, py{1}, *)', github.run_id, inputs.python_version) || format('Scorecard Cached Artifact (Flaky-Job-IDs, {0}, *)', github.run_id) }}
           path: build/split-artifacts
 
       - name: Combine Artifacts
@@ -179,7 +169,7 @@ jobs:
         if: ${{ inputs.test_scope != 'unit' }}
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ inputs.test_scope == 'unit_and_compile' && 'Test' || 'Scorecard' }} Cached Artifact (Flaky-Job-IDs, ${{ github.run_id }}, py${{ inputs.python_version }})
+          name: ${{ inputs.test_scope == 'unit_and_compile' && format('Test Cached Artifact (Flaky-Job-IDs, {0}, py{1})', github.run_id, inputs.python_version) || format('Scorecard Cached Artifact (Flaky-Job-IDs, {0})', github.run_id) }}
           path: build/scorecard-yamls/${{ github.run_id }}
 
       - name: Delete Split Artifacts
@@ -187,7 +177,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ARTIFACT_PREFIX="${{ inputs.test_scope == 'unit_and_compile' && 'Test' || 'Scorecard' }} Cached Artifact (Flaky-Job-IDs, ${{ github.run_id }}, py${{ inputs.python_version }}, "
+          ARTIFACT_PREFIX="${{ inputs.test_scope == 'unit_and_compile' && format('Test Cached Artifact (Flaky-Job-IDs, {0}, py{1}, ', github.run_id, inputs.python_version) || format('Scorecard Cached Artifact (Flaky-Job-IDs, {0}, ', github.run_id) }}"
           gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name | startswith(\"$ARTIFACT_PREFIX\")) | .id" | while read artifact_id; do
             echo "Deleting artifact $artifact_id"
             gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true
@@ -198,7 +188,7 @@ jobs:
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
-          pattern: test-results-${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && 'models' || 'scorecard-models' }}-py${{ inputs.python_version }}-*
+          pattern: ${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && format('test-results-models-py{0}-*', inputs.python_version) || 'test-results-scorecard-models-*' }}
           path: build/split-test-results
 
       - name: Combine JUnit XML Files
@@ -214,14 +204,14 @@ jobs:
         if: ${{ steps.combine_test_results.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-results-${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && 'models' || 'scorecard-models' }}-py${{ inputs.python_version }}
+          name: ${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && format('test-results-models-py{0}', inputs.python_version) || 'test-results-scorecard-models' }}
           path: build/combined-test-results
 
       - name: Delete Split Test Results
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ARTIFACT_PREFIX="test-results-${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && 'models' || 'scorecard-models' }}-py${{ inputs.python_version }}-"
+          ARTIFACT_PREFIX="${{ (inputs.test_scope == 'unit' || inputs.test_scope == 'unit_and_compile') && format('test-results-models-py{0}-', inputs.python_version) || 'test-results-scorecard-models-' }}"
           gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q ".artifacts[] | select(.name | startswith(\"$ARTIFACT_PREFIX\")) | .id" | while read artifact_id; do
             echo "Deleting artifact $artifact_id"
             gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id || true

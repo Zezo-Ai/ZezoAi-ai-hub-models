@@ -94,9 +94,6 @@ on:
           type: string
 
 env:
-  # Versions MUST be quoted, otherwise they will be interpreted as a floats
-  # (and version like 3.10 can be interpreted as 3.1).
-  PYTHON_VERSION: '3.10'
   PYTHONUNBUFFERED: 1
   VENV_PATH: build/ci-envs/qaihm-build
   QAIHM_CI: 1
@@ -124,7 +121,7 @@ jobs:
       performance_diff_url: ${{ steps.upload-perf-diff-summary.conclusion == 'success' && steps.upload-perf-diff-summary.outputs.artifact-url || 'N/A' }}
       numerics_diff_url: ${{ steps.upload-numerics-diff-summary.conclusion == 'success' && steps.upload-numerics-diff-summary.outputs.artifact-url || 'N/A' }}
       results_url: ${{ steps.upload-results.conclusion == 'success' && steps.upload-results.outputs.artifact-url || 'N/A' }}
-      qaihm_test_deployment: ${{ steps.set_hub_creds.outputs.qaihm_test_deployment }}
+      qaihm_test_deployment: ${{ steps.ci_setup.outputs.hub-deployments }}
       csv_url: ${{ steps.upload-metrics.conclusion == 'success' && steps.upload-metrics.outputs.artifact-url || 'N/A' }}
 
     steps:
@@ -171,17 +168,6 @@ jobs:
           # the results. Those scripts are aligned with the base branch checked out by this GitHub action.
           git checkout src/qai_hub_models/models/common.py
           git checkout src/qai_hub_models/models/protocols.py
-
-      - id: install_platform_deps
-        env:
-          SUDO_PASSWORD: "${{ secrets.TETRASERVICE_PASSWORD }}"
-        run: |
-          bash scripts/ci/install-platform-deps.sh
-
-      - id: setup_python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Download Job IDs
         id: download-post-flaky-job-retry-artifact
@@ -258,34 +244,20 @@ jobs:
           echo "QAIHM_TEST_DATE_FORMAT=$QAIHM_TEST_DATE_FORMAT" >> "$GITHUB_ENV"
           echo "QAIHM_TEST_BRANCH=$QAIHM_TEST_BRANCH" >> "$GITHUB_ENV"
 
-      - name: Create Virtual Env
-        run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
-
-      - name: Configure Hub Credentials
-        id: set_hub_creds
-        run: |
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
-            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            DEFAULT \
-            ${{ env.VENV_PATH }}
-          echo "qaihm_test_deployment=$QAIHM_TEST_DEPLOYMENT" >> "$GITHUB_OUTPUT"
-
-          # Add envvars for "private" client (jobs accessible to AI Hub team)
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ env.QAIHM_TEST_DEPLOYMENT }} \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_PRIVATE_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            PRIVATE
+      - name: CI Setup
+        id: ci_setup
+        uses: ./.github/actions/ci-setup
+        with:
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
+          venv-path: ${{ env.VENV_PATH }}
+          hub-deployments: ${{ env.QAIHM_TEST_DEPLOYMENT }}
+          hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+          hub-user-token-staging: ${{ secrets.HUB_USER_TOKEN_STAGING }}
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+          hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
+          hub-private-user-token-prod: ${{ secrets.HUB_PRIVATE_USER_TOKEN_PROD }}
+          hub-private-user-token-staging: ${{ secrets.HUB_PRIVATE_USER_TOKEN_STAGING }}
+          hub-private-user-token-dev: ${{ secrets.HUB_PRIVATE_USER_TOKEN_DEV }}
 
       - name: Create Performance files for models
         id: create-perf-files
@@ -293,7 +265,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             create_perfs
 
       - name: Update numerics files for models
@@ -302,7 +274,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             create_numerics
 
       - name: Update release asset files for models
@@ -311,7 +283,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             create_release_assets
 
       - name: Aggregate Scorecard Results
@@ -320,7 +292,7 @@ jobs:
         run: |
           python3 scripts/build_and_test.py \
           --venv="${{ env.VENV_PATH }}" \
-          --python="${{ steps.setup_python.outputs.python-path }}" \
+          --python="${{ steps.ci_setup.outputs.python-path }}" \
           aggregate_scorecard_results
 
       - name: Generate Failure Analysis

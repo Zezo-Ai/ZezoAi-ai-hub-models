@@ -5,7 +5,6 @@ name: Llama.CPP (performance numbers)
 
 env:
   VENV_PATH: build/ci-envs/qaihm-build
-  PYTHON_VERSION: "3.10"
 
 on:
   schedule:
@@ -83,33 +82,24 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup AWS Credentials
-        uses: ./.github/actions/configure-multiple-aws-roles
+      - name: CI Setup
+        id: ci_setup
+        uses: ./.github/actions/ci-setup
         with:
-          role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
-          role-duration-seconds: 7200
-          profile: qaihm
-          aws-region: us-west-2
-
-      - id: setup_python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
+          venv-path: ${{ env.VENV_PATH }}
+          aws-role-arn: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
 
       - name: Download QDC wheel
         run: |
           python3 scripts/build_and_test.py \
             --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
+            --python="${{ steps.ci_setup.outputs.python-path }}" \
             download_qdc_wheel
           rm -rf "$GITHUB_WORKSPACE"/build/*
 
-      - name: Install dependencies
+      - name: Install QDC SDK
         run: |
-          python3 scripts/build_and_test.py \
-            --venv="${{ env.VENV_PATH }}" \
-            --python="${{ steps.setup_python.outputs.python-path }}" \
-            install_deps
           source "${{ env.VENV_PATH }}/bin/activate"
           pip install "$GITHUB_WORKSPACE"/qualcomm_device_cloud_sdk-*.whl
 
