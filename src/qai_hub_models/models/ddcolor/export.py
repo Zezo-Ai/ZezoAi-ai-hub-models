@@ -235,7 +235,7 @@ def download_model(
 
 def export_model(
     device: hub.Device,
-    precision: Precision = Precision.w8a16,
+    precision: Precision = Precision.float,
     num_calibration_samples: int | None = None,
     quantized_model_id: str | None = None,
     skip_compiling: bool = False,
