@@ -5,7 +5,48 @@
 
 import numpy as np
 
-from qai_hub_models.utils.compare import compute_top_k_accuracy
+from qai_hub_models.utils.compare import (
+    compute_mae,
+    compute_max_abs_diff,
+    compute_mse,
+    compute_top_k_accuracy,
+)
+
+
+def test_compute_mse() -> None:
+    # Identical arrays should have MSE of 0
+    a = np.array([1.0, 2.0, 3.0])
+    b = np.array([1.0, 2.0, 3.0])
+    assert compute_mse(a, b) == 0.0
+
+    # MSE of [1,2,3] vs [2,3,4] = mean([1,1,1]) = 1.0
+    a = np.array([1.0, 2.0, 3.0])
+    b = np.array([2.0, 3.0, 4.0])
+    np.testing.assert_allclose(compute_mse(a, b), 1.0)
+
+
+def test_compute_mae() -> None:
+    # Identical arrays should have MAE of 0
+    a = np.array([1.0, 2.0, 3.0])
+    b = np.array([1.0, 2.0, 3.0])
+    assert compute_mae(a, b) == 0.0
+
+    # MAE of [1,2,3] vs [2,3,4] = mean([1,1,1]) = 1.0
+    a = np.array([1.0, 2.0, 3.0])
+    b = np.array([2.0, 3.0, 4.0])
+    np.testing.assert_allclose(compute_mae(a, b), 1.0)
+
+
+def test_compute_max_abs_diff() -> None:
+    # Identical arrays should have max abs diff of 0
+    a = np.array([1.0, 2.0, 3.0])
+    b = np.array([1.0, 2.0, 3.0])
+    assert compute_max_abs_diff(a, b) == 0.0
+
+    # Max abs diff of [1,2,3] vs [1,2,6] = 3.0
+    a = np.array([1.0, 2.0, 3.0])
+    b = np.array([1.0, 2.0, 6.0])
+    np.testing.assert_allclose(compute_max_abs_diff(a, b), 3.0)
 
 
 def test_compute_top_k_accuracy() -> None:

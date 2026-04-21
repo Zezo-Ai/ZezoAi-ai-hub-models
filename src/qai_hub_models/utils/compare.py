@@ -134,7 +134,7 @@ def compare_psnr(
     eps: float = 1e-5,
     eps2: float = 1e-10,
 ) -> None:
-    """Raises an error if the PSNR between two tensors is above a threshold."""
+    """Raises an error if the PSNR between two tensors is below a threshold."""
     psnr = compute_psnr(output_a, output_b, eps, eps2)
     assert psnr > psnr_threshold
 
@@ -147,13 +147,62 @@ def compute_top_k_accuracy(expected: np.ndarray, actual: np.ndarray, k: int) -> 
     return float(np.mean(np.isin(top_k_expected, top_k_actual)))
 
 
+def _to_flat_numpy(arr: torch.Tensor | np.ndarray) -> np.ndarray:
+    """Converts a torch.Tensor or np.ndarray to a flat float32 numpy array."""
+    if not isinstance(arr, np.ndarray):
+        return arr.detach().float().numpy().flatten()
+    return arr.flatten().astype(np.float32)
+
+
+def compute_mse(
+    expected: torch.Tensor | np.ndarray,
+    actual: torch.Tensor | np.ndarray,
+) -> float:
+    """Computes the Mean Squared Error (MSE) between two tensors."""
+    expected_arr = _to_flat_numpy(expected)
+    actual_arr = _to_flat_numpy(actual)
+
+    mse = np.mean((expected_arr - actual_arr) ** 2)
+    return float(mse)
+
+
+def compute_mae(
+    expected: torch.Tensor | np.ndarray,
+    actual: torch.Tensor | np.ndarray,
+) -> float:
+    """Computes the Mean Absolute Error (MAE) between two tensors."""
+    expected_arr = _to_flat_numpy(expected)
+    actual_arr = _to_flat_numpy(actual)
+
+    mae = np.mean(np.abs(expected_arr - actual_arr))
+    return float(mae)
+
+
+def compute_max_abs_diff(
+    expected: torch.Tensor | np.ndarray,
+    actual: torch.Tensor | np.ndarray,
+) -> float:
+    """Computes the maximum absolute difference between two tensors."""
+    expected_arr = _to_flat_numpy(expected)
+    actual_arr = _to_flat_numpy(actual)
+
+    max_abs_diff = np.max(np.abs(expected_arr - actual_arr))
+    return float(max_abs_diff)
+
+
 TOP_K_EXPLAINER = "Match rate between the top {k} classification predictions. 1 indicates perfect match"
 PSNR_EXPLAINER = (
     "Peak Signal-to-Noise Ratio (PSNR). >30 dB is typically considered good."
 )
+MSE_EXPLAINER = "Mean Squared Error (MSE). Lower values indicate better match. 0 indicates perfect match."
+MAE_EXPLAINER = "Mean Absolute Error (MAE). Lower values indicate better match. 0 indicates perfect match."
+MAX_ABS_DIFF_EXPLAINER = "Maximum Absolute Difference (MaxAbsDiff). Lower values indicate better match. 0 indicates perfect match."
 
 METRICS_FUNCTIONS = dict(
     psnr=(compute_psnr, PSNR_EXPLAINER),
+    mse=(compute_mse, MSE_EXPLAINER),
+    mae=(compute_mae, MAE_EXPLAINER),
+    max_abs_diff=(compute_max_abs_diff, MAX_ABS_DIFF_EXPLAINER),
     top1=(
         lambda expected, actual: compute_top_k_accuracy(expected, actual, 1),
         TOP_K_EXPLAINER.format(k=1),
@@ -185,7 +234,7 @@ def generate_comparison_metrics(
         Optional list of output names to use as DataFrame index. If None, uses
         range index (0, 1, 2...).
     metrics
-        Comma-separated metrics names, e.g., "psnr,top1,top5".
+        Comma-separated metrics names, e.g., "psnr,mse,mae,max_abs_diff".
 
     Returns
     -------
