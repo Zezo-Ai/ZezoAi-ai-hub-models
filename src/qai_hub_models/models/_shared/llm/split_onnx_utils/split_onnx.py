@@ -33,7 +33,7 @@ class OnnxSplitter:
         name: str,  # name of the ONNX graph
         output_tensors: Iterable[str],  # list of new output tensors to include
         additional_input_tensors: Iterable[str] | None = None,
-    ) -> onnx.ModelProto:
+    ) -> onnx.GraphProto:
         """
         Partition a graph with input and output tensors
         - Captures all nodes that required to compute the given output_tensors
@@ -91,9 +91,8 @@ class OnnxSplitter:
         new_value_info_incl_io = [
             i for i in self.model.graph.value_info if i.name in use
         ]
-        new_sparse_initializer = [
-            i for i in self.model.graph.sparse_initializer if i.name in use
-        ]
+        # QAIRT has little support for sparse tensors. Our recipes do not support them.
+        assert len(self.model.graph.sparse_initializer) == 0
 
         value_info_dict = {i.name: i for i in new_value_info_incl_io}
         value_info_dict.update({i.name: i for i in self.model.graph.output})
@@ -130,7 +129,6 @@ class OnnxSplitter:
             outputs=new_outputs,
             initializer=new_initializer,
             value_info=new_value_info,
-            sparse_initializer=new_sparse_initializer,
         )
 
     def split(
