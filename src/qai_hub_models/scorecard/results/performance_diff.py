@@ -9,7 +9,10 @@ from typing import NamedTuple
 
 from prettytable import PrettyTable
 
-from qai_hub_models.configs.devices_and_chipsets_yaml import ScorecardDevice
+from qai_hub_models.configs.devices_and_chipsets_yaml import (
+    DevicesAndChipsetsYaml,
+    ScorecardDevice,
+)
 from qai_hub_models.configs.perf_yaml import QAIHMModelPerf, ScorecardProfilePath
 from qai_hub_models.models.common import Precision
 from qai_hub_models.scorecard.envvars import DeploymentEnvvar
@@ -60,6 +63,9 @@ class PerformanceDiff:
         5. Empty perf reports (models with no passing jobs)
     """
 
+    # Regressions with absolute diff at or below this threshold (ms) are excluded
+    _MIN_REGRESSION_MS = 1.0
+
     def __init__(self) -> None:
         # Perf buckets to track
         self.perf_buckets: list[float] = [
@@ -68,9 +74,6 @@ class PerformanceDiff:
             5,
             2,
             1.5,
-            1.3,
-            1.2,
-            1.1,
         ]
 
         self.empty_models: list[str] = []
@@ -96,6 +99,14 @@ class PerformanceDiff:
 
         # Map<Info -> # of devices affected>
         self.npu_not_primary_cu: dict[NPUNotPrimaryCUInfo, int] = {}
+
+        # Exclude automotive devices (too noisy for regression tracking)
+        yaml_config = DevicesAndChipsetsYaml.load()
+        self._excluded_device_names: set[str] = {
+            name
+            for name, details in yaml_config.devices.items()
+            if details.form_factor == ScorecardDevice.FormFactor.AUTO
+        }
 
     @staticmethod
     def _format_speedup(num: float | None) -> str | float:
@@ -138,6 +149,15 @@ class PerformanceDiff:
             diff = float("inf")
         else:
             # both failed, don't add this to the summary
+            return
+
+        # Skip regressions where absolute diff is within noise margin
+        if (
+            not is_progression
+            and prev_inference_time
+            and new_inference_time
+            and abs(new_inference_time - prev_inference_time) <= self._MIN_REGRESSION_MS
+        ):
             return
 
         append_to = self.progressions if is_progression else self.regressions
@@ -201,6 +221,8 @@ class PerformanceDiff:
             dict[ScorecardProfilePath, QAIHMModelPerf.PerformanceDetails],
         ],
     ) -> None:
+        if str(device) in self._excluded_device_names:
+            return
         if device not in previous_report and device not in new_report:
             return
         if device in previous_report and device not in new_report:

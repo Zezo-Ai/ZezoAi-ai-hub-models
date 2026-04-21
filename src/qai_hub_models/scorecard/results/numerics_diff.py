@@ -8,6 +8,7 @@ from __future__ import annotations
 from prettytable import PrettyTable
 
 from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.devices_and_chipsets_yaml import DevicesAndChipsetsYaml
 from qai_hub_models.configs.info_yaml import NumericsAccuracyBenchmark
 from qai_hub_models.configs.numerics_yaml import (
     QAIHMModelNumerics,
@@ -95,6 +96,14 @@ class NumericsDiff:
                 bool,
             ]
         ] = []
+
+        # Exclude automotive devices (too noisy for regression tracking)
+        yaml_config = DevicesAndChipsetsYaml.load()
+        self._excluded_device_names: set[str] = {
+            name
+            for name, details in yaml_config.devices.items()
+            if details.form_factor == ScorecardDevice.FormFactor.AUTO
+        }
 
         # tuple<Model ID, Dataset Name, Metric Name, Device, Precision, Path, FP Accuracy, Current Device Accuracy, Difference, Difference Threshold, Newly Disabled>
         self.device_vs_float_greater_than_enablement_threshold: list[
@@ -373,6 +382,8 @@ class NumericsDiff:
         ],
         benchmark: NumericsAccuracyBenchmark | None = None,
     ) -> None:
+        if str(device) in self._excluded_device_names:
+            return
         previous_report_device = (
             previous_report.get(device) if previous_report else None
         )
