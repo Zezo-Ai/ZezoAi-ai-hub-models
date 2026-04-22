@@ -57,9 +57,6 @@ outputs:
   python-path:
     description: Path to the Python binary
     value: ${{ steps.resolve_python.outputs.python-path }}
-  hub-deployments:
-    description: Resolved QAIHM_TEST_DEPLOYMENT value
-    value: ${{ steps.set_hub_creds.outputs.qaihm_test_deployment }}
 
 runs:
   using: composite
@@ -125,7 +122,7 @@ runs:
           echo "::error::hub-deployments requires venv-path to be set"
           exit 1
         fi
-        source scripts/ci/set-aihub-credential-vars.sh \
+        bash scripts/ci/setup-workbench-creds.sh \
           "$HUB_DEPLOYMENTS" \
           "$HUB_USER_TOKEN_PROD" \
           "$HUB_USER_TOKEN_STAGING" \
@@ -133,10 +130,9 @@ runs:
           "$HUB_USER_TOKEN_SANDBOX" \
           DEFAULT \
           "$VENV_PATH"
-        echo "qaihm_test_deployment=$QAIHM_TEST_DEPLOYMENT" >> "$GITHUB_OUTPUT"
 
         if [ -n "$HUB_PRIVATE_USER_TOKEN_PROD" ]; then
-          source scripts/ci/set-aihub-credential-vars.sh \
+          bash scripts/ci/setup-workbench-creds.sh \
             "$HUB_DEPLOYMENTS" \
             "$HUB_PRIVATE_USER_TOKEN_PROD" \
             "$HUB_PRIVATE_USER_TOKEN_STAGING" \

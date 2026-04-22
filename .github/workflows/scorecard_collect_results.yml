@@ -121,7 +121,7 @@ jobs:
       performance_diff_url: ${{ steps.upload-perf-diff-summary.conclusion == 'success' && steps.upload-perf-diff-summary.outputs.artifact-url || 'N/A' }}
       numerics_diff_url: ${{ steps.upload-numerics-diff-summary.conclusion == 'success' && steps.upload-numerics-diff-summary.outputs.artifact-url || 'N/A' }}
       results_url: ${{ steps.upload-results.conclusion == 'success' && steps.upload-results.outputs.artifact-url || 'N/A' }}
-      qaihm_test_deployment: ${{ steps.ci_setup.outputs.hub-deployments }}
+      qaihm_test_deployment: ${{ steps.get_branch_and_date.outputs.qaihm_test_deployment }}
       csv_url: ${{ steps.upload-metrics.conclusion == 'success' && steps.upload-metrics.outputs.artifact-url || 'N/A' }}
 
     steps:
@@ -229,6 +229,7 @@ jobs:
       - name: Get Branch Name and Scorecard Date
         id: get_branch_and_date
         run: |
+          echo "qaihm_test_deployment=$QAIHM_TEST_DEPLOYMENT" >> "$GITHUB_OUTPUT"
           QAIHM_TEST_DATE_FORMAT=%Y-%m-%dT%H:%M:%SZ
           if [ -n "${{ inputs.action_id }}" ]; then
             # Restore environment variables from scorecard action
