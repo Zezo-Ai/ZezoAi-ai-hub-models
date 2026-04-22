@@ -36,9 +36,12 @@ if [[ "$#" -eq 0 || "$#" -gt 100 ]]; then
   mypy --warn-unused-configs --config-file="${REPO_ROOT}/${pkg_dir}/pyproject.toml" -p "${package}"
 else
   # Strip the package prefix (src/ or cli/) since we cd into that directory.
+  # Also filter out generated protobuf files (which enforces use of .pyi type stubs)
   files=()
   for f in "$@"; do
-    files+=("${f#${pkg_dir}/}")
+    f="${f#${pkg_dir}/}"
+    [[ "$f" == *_pb2.py ]] && continue
+    files+=("$f")
   done
   mypy --warn-unused-configs --config-file="${REPO_ROOT}/${pkg_dir}/pyproject.toml" "${files[@]}"
 fi

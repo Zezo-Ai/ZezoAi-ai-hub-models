@@ -153,6 +153,7 @@ class ChipsetYaml(BaseQAIHMConfig):
     marketing_name: str
     world: WebsiteWorld
     supports_fp16: bool = False
+    reference_device: str
 
     @staticmethod
     def from_device(device: ScorecardDevice) -> ChipsetYaml:
@@ -161,6 +162,7 @@ class ChipsetYaml(BaseQAIHMConfig):
             aliases=device.chipset_aliases,
             marketing_name=ChipsetYaml.chipset_marketing_name(device.chipset, world),
             world=world,
+            reference_device=device.reference_device_name,
         )
 
     @staticmethod
@@ -275,6 +277,10 @@ class DevicesAndChipsetsYaml(BaseQAIHMConfig):
             out.chipsets[device.chipset].supports_fp16 |= (
                 "htp-supports-fp16:true" in hub_device.attributes
             )
+
+        # Use the scorecard device for the reference device, if one exists.
+        for device in ScorecardDevice.all_devices():
+            out.chipsets[device.chipset].reference_device = device.reference_device.name
 
         return out
 

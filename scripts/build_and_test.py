@@ -655,6 +655,18 @@ class TaskLibrary:
             BuildWheelTask(RELEASE_VENV, PRIVATE_WHEEL_DIR, release_wheel=False),
         )
 
+    @public_task("Compile .proto files to Python for the CLI package.")
+    @depends(["install_deps"])
+    def build_proto(self, plan: Plan, step_id: str = "build_proto") -> str:
+        return plan.add_step(
+            step_id,
+            RunCommandsWithVenvTask(
+                group_name=None,
+                venv=self.venv_path,
+                commands=["python -m qai_hub_models.scripts.compile_proto"],
+            ),
+        )
+
     @public_task("Build CLI Python Wheel")
     @depends(["install_release_deps"])
     def build_cli_wheel(self, plan: Plan, step_id: str = "build_cli_wheel") -> str:
