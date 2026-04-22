@@ -142,34 +142,31 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: CI Setup
+      uses: ./.github/actions/ci-setup
+      with:
+        python-version: USE_EXISTING_INSTALL
+        venv-path: ${{ env.VENV_PATH }}
+        hub-deployments: ${{ inputs.deployment || 'prod' }}
+        hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+        hub-user-token-staging: ${{ secrets.HUB_USER_TOKEN_STAGING }}
+        hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+        hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
+
     - name: Download QDC wheel
       run: |
         python3 scripts/build_and_test.py \
           --venv="${{ env.VENV_PATH }}" \
           --python="$(which python3)" \
-          download_qdc_wheel
-        rm -rf "$GITHUB_WORKSPACE"/build/*
+          download_qdc_wheel --only
 
     - name: Install basic dependencies
       run: |
         git config --global --add safe.directory $GITHUB_WORKSPACE
-        python scripts/build_and_test.py --venv='${{ env.VENV_PATH }}' install_deps
         source ${{ env.VENV_PATH }}/bin/activate
         pip install --upgrade pip setuptools
         pip install qualcomm_device_cloud_sdk-*.whl
         pip uninstall -y onnxruntime
-
-    - name: Configure Hub Credentials
-      run: |
-        cd $GITHUB_WORKSPACE && \
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ inputs.deployment || 'prod' }} \
-            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            DEFAULT \
-            ${{ env.VENV_PATH }}
 
     - name: Install model specific dependencies and run tests
       run: |

@@ -4,11 +4,12 @@ description: Install platform deps, setup Python + venv, and optionally configur
 
 inputs:
   sudo-password:
-    description: SUDO password for install-platform-deps.sh
-    required: true
+    description: SUDO password for install-platform-deps.sh (empty to skip platform deps installation)
+    required: false
+    default: ""
 
   python-version:
-    description: Python version to install
+    description: "Python version to install, or USE_EXISTING_INSTALL to skip setup and use the system python"
     required: false
     default: "3.10"
   venv-path:
@@ -54,11 +55,8 @@ inputs:
 
 outputs:
   python-path:
-    description: Path to the installed Python binary
-    value: ${{ steps.setup_python.outputs.python-path }}
-  python-version:
-    description: Python version that was installed
-    value: ${{ inputs.python-version }}
+    description: Path to the Python binary
+    value: ${{ steps.resolve_python.outputs.python-path }}
   hub-deployments:
     description: Resolved QAIHM_TEST_DEPLOYMENT value
     value: ${{ steps.set_hub_creds.outputs.qaihm_test_deployment }}
@@ -67,6 +65,7 @@ runs:
   using: composite
   steps:
     - id: install_platform_deps
+      if: ${{ inputs.sudo-password != '' }}
       shell: bash
       env:
         SUDO_PASSWORD: ${{ inputs.sudo-password }}
@@ -74,21 +73,32 @@ runs:
         bash scripts/ci/install-platform-deps.sh
 
     - id: setup_python
+      if: ${{ inputs.python-version != 'USE_EXISTING_INSTALL' }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python-version }}
 
+    - name: Resolve Python Path
+      id: resolve_python
+      shell: bash
+      run: |
+        if [ "${{ inputs.python-version }}" = "USE_EXISTING_INSTALL" ]; then
+          echo "python-path=$(which python3)" >> "$GITHUB_OUTPUT"
+        else
+          echo "python-path=${{ steps.setup_python.outputs.python-path }}" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Create Virtual Env
-      if: inputs.venv-path != ''
+      if: ${{ inputs.venv-path != '' }}
       shell: bash
       run: |
         python3 scripts/build_and_test.py \
           --venv="${{ inputs.venv-path }}" \
-          --python="${{ steps.setup_python.outputs.python-path }}" \
+          --python="${{ steps.resolve_python.outputs.python-path }}" \
           ${{ inputs.bnt-venv-install-cmd }}
 
     - name: Setup AWS Credentials
-      if: inputs.aws-role-arn != ''
+      if: ${{ inputs.aws-role-arn != '' }}
       uses: ./.github/actions/configure-multiple-aws-roles
       with:
         role-to-assume: ${{ inputs.aws-role-arn }}
@@ -98,7 +108,7 @@ runs:
 
     - name: Configure Hub Credentials
       id: set_hub_creds
-      if: inputs.hub-deployments != ''
+      if: ${{ inputs.hub-deployments != '' }}
       shell: bash
       env:
         HUB_DEPLOYMENTS: ${{ inputs.hub-deployments }}
@@ -132,5 +142,6 @@ runs:
             "$HUB_PRIVATE_USER_TOKEN_STAGING" \
             "$HUB_PRIVATE_USER_TOKEN_DEV" \
             "$HUB_USER_TOKEN_SANDBOX" \
-            PRIVATE
+            PRIVATE \
+            "$VENV_PATH"
         fi

@@ -146,44 +146,34 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup AWS Credentials
-      uses: ./.github/actions/configure-multiple-aws-roles
+    - name: CI Setup
+      uses: ./.github/actions/ci-setup
       with:
-        role-to-assume: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
-        role-duration-seconds: 7200
-        profile: qaihm
-        aws-region: us-west-2
+        python-version: USE_EXISTING_INSTALL
+        venv-path: ${{ env.VENV_PATH }}
+        aws-role-arn: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+        hub-deployments: ${{ inputs.deployment || 'prod' }}
+        hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+        hub-user-token-staging: ${{ secrets.HUB_USER_TOKEN_STAGING }}
+        hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+        hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
 
     - name: Download QDC tools
       run: |
         python3 scripts/build_and_test.py \
           --venv="${{ env.VENV_PATH }}" \
           --python="$(which python3)" \
-          download_qdc_wheel
+          download_qdc_wheel --only
         python3 scripts/build_and_test.py \
           --venv="${{ env.VENV_PATH }}" \
-          download_qairt_auto_sdk
-        rm -rf "$GITHUB_WORKSPACE"/build/*
+          download_qairt_auto_sdk --only
         mv "$HOME"/qairt_auto_sdk.zip "$GITHUB_WORKSPACE"/
 
-    - name: Install basic dependencies
+    - name: Install QDC
       run: |
         git config --global --add safe.directory $GITHUB_WORKSPACE
-        python scripts/build_and_test.py --venv='${{ env.VENV_PATH }}' install_deps
         source ${{ env.VENV_PATH }}/bin/activate
         pip install qualcomm_device_cloud_sdk-*.whl
-
-    - name: Configure Hub Credentials
-      run: |
-        cd $GITHUB_WORKSPACE && \
-          source scripts/ci/set-aihub-credential-vars.sh \
-            ${{ inputs.deployment || 'dev' }} \
-            ${{ secrets['HUB_USER_TOKEN_PROD'] }} \
-            ${{ secrets['HUB_USER_TOKEN_STAGING'] }} \
-            ${{ secrets['HUB_USER_TOKEN_DEV'] }} \
-            ${{ secrets['HUB_USER_TOKEN_SANDBOX'] }} \
-            DEFAULT \
-            ${{ env.VENV_PATH }}
 
     - name: Run LLM Performance Collection
       continue-on-error: true
