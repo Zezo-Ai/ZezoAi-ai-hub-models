@@ -16,6 +16,7 @@ import ruamel.yaml
 from google.protobuf.json_format import MessageToDict, MessageToJson
 from google.protobuf.message import Message
 from mypy_boto3_s3.service_resource import Bucket
+from qai_hub_models_cli.proto import manifest_pb2
 
 from qai_hub_models._version import __version__
 from qai_hub_models.configs._info_yaml_enums import MODEL_STATUS
@@ -23,6 +24,7 @@ from qai_hub_models.configs.devices_and_chipsets_yaml import DevicesAndChipsetsY
 from qai_hub_models.configs.info_yaml import QAIHMModelInfo
 from qai_hub_models.configs.numerics_yaml import QAIHMModelNumerics
 from qai_hub_models.configs.perf_yaml import QAIHMModelPerf
+from qai_hub_models.configs.proto_helpers import domain_to_proto
 from qai_hub_models.configs.release_assets_yaml import QAIHMModelReleaseAssets
 from qai_hub_models.scorecard.envvars import EnabledModelsEnvvar, SpecialModelSetting
 from qai_hub_models.scorecard.static.list_models import (
@@ -217,10 +219,57 @@ def cmd_website(args: argparse.Namespace) -> None:
     print(f"Built website yamls for {len(model_ids)} models in {output_root}")
 
 
+def _build_manifest(
+    version: str,
+    model_written_paths: dict[str, list[Path]],
+    platform_s3_url: str,
+    output_dir: Path,
+    fmts: list[Format],
+) -> list[Path]:
+    _STEM_TO_FIELD = [
+        ("info", "info"),
+        ("perf", "perf"),
+        ("numerics", "numerics"),
+        ("release-assets", "release_assets"),
+    ]
+
+    model_infos: list[tuple[str, set[str], QAIHMModelInfo, str]] = []
+    for model_id, written in model_written_paths.items():
+        info = QAIHMModelInfo.from_model(model_id)
+        written_stems = {p.stem for p in written}
+        s3_folder_url = ASSET_CONFIG.get_asset_url(
+            ASSET_CONFIG.get_release_s3_folder(model_id, version)
+        )
+        model_infos.append((model_id, written_stems, info, s3_folder_url))
+
+    result: list[Path] = []
+    for fmt in fmts:
+        ext = _EXT[fmt]
+        manifest = manifest_pb2.ReleaseManifest(
+            version=version,
+            platform_url=platform_s3_url.replace(".json", ext),
+        )
+        for model_id, written_stems, info, s3_folder_url in model_infos:
+            url_kwargs: dict[str, str] = {}
+            for stem, field in _STEM_TO_FIELD:
+                if stem in written_stems:
+                    url_kwargs[field] = os.path.join(s3_folder_url, f"{stem}{ext}")
+            manifest.models.append(
+                manifest_pb2.ManifestModelEntry(
+                    id=model_id,
+                    display_name=info.name,
+                    domain=domain_to_proto(info.domain),
+                    manifest_urls=manifest_pb2.ModelManifestUrls(**url_kwargs),
+                )
+            )
+        result.append(_write_proto(manifest, output_dir / "manifest", fmt))
+
+    return result
+
+
 def cmd_aws(args: argparse.Namespace) -> None:
     bucket: Bucket | None = None
     if args.upload:
-        # Do this first to catch if credentials are missing.
         bucket, _ = get_qaihm_s3_or_exit(QAIHM_PUBLIC_S3_BUCKET)
 
     output_root = Path(args.output_dir)
@@ -234,6 +283,8 @@ def cmd_aws(args: argparse.Namespace) -> None:
         (path, os.path.join(global_s3_folder, path.name)) for path in platform_paths
     )
 
+    model_written_paths: dict[str, list[Path]] = {}
+
     def build_model(model_id: str) -> tuple[int, str | None]:
         written, skip_reason = _build_model_protos(
             model_id, args.version, output_root / "models" / model_id, aws_fmts
@@ -243,11 +294,22 @@ def cmd_aws(args: argparse.Namespace) -> None:
             all_files.extend(
                 (path, os.path.join(s3_folder, path.name)) for path in written
             )
+            model_written_paths[model_id] = written
         return len(written), skip_reason
 
     enabled, _ = validate_and_split_enabled_models(args.models)
     model_ids = sorted(enabled)
     _for_each_model(build_model, model_ids)
+
+    platform_s3_url = ASSET_CONFIG.get_asset_url(
+        os.path.join(global_s3_folder, "platform.json")
+    )
+    manifest_paths = _build_manifest(
+        args.version, model_written_paths, platform_s3_url, output_root, aws_fmts
+    )
+    all_files.extend(
+        (path, os.path.join(global_s3_folder, path.name)) for path in manifest_paths
+    )
 
     print(f"Built proto JSON for {len(model_ids)} models in {output_root}")
 
