@@ -323,6 +323,7 @@ def cmd_aws(args: argparse.Namespace) -> None:
                     s3_key,
                     local_path,
                     make_public=True,
+                    disable_progress=True,
                 )
                 for local_path, s3_key in all_files
             ]

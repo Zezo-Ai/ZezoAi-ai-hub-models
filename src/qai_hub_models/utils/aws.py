@@ -133,6 +133,7 @@ def s3_multipart_upload(
     key: str,
     local_file_path: str | os.PathLike,
     make_public: bool = False,
+    disable_progress: bool = False,
 ) -> None:
     """
     Uploads file at local_file_path to s3://<bucket>/<key>.
@@ -151,7 +152,13 @@ def s3_multipart_upload(
     file_size = os.path.getsize(local_file_path)
     with (
         open(local_file_path, "rb") as file_data,
-        tqdm.tqdm(total=file_size, unit="B", unit_scale=True, desc=key) as progress_bar,
+        tqdm.tqdm(
+            total=file_size,
+            unit="B",
+            unit_scale=True,
+            desc=key,
+            disable=disable_progress,
+        ) as progress_bar,
     ):
 
         def upload_progress(bytes_transferred: int) -> None:
