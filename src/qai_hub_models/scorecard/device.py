@@ -439,8 +439,15 @@ class ScorecardDevice:
         """The chipset hexagon version number"""
         for attr in self.reference_device.attributes:
             if attr.startswith("hexagon:v"):
-                return int(attr[9:])
+                return int(attr[len("hexagon:v") :])
         raise ValueError(f"Hexagon version not found for device: {self.name}")
+
+    @cached_property
+    def soc_model(self) -> int:
+        for attr in self.reference_device.attributes:
+            if attr.startswith("soc-model:"):
+                return int(attr[len("soc-model:") :])
+        raise ValueError(f"SoC model not found for device: {self.name}")
 
     @cached_property
     def supports_fp16_npu(self) -> bool:

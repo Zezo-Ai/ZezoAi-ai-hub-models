@@ -211,6 +211,8 @@ class ChipsetYaml(BaseQAIHMConfig):
     marketing_name: str
     world: WebsiteWorld
     supports_fp16: bool = False
+    htp_version: int
+    soc_model: int
     reference_device: str
 
     @staticmethod
@@ -220,6 +222,9 @@ class ChipsetYaml(BaseQAIHMConfig):
             aliases=device.chipset_aliases,
             marketing_name=ChipsetYaml.chipset_marketing_name(device.chipset, world),
             world=world,
+            supports_fp16=device.supports_fp16_npu,
+            htp_version=device.hexagon_version,
+            soc_model=device.soc_model,
             reference_device=device.reference_device_name,
         )
 
@@ -230,6 +235,9 @@ class ChipsetYaml(BaseQAIHMConfig):
             marketing_name=self.marketing_name,
             world=_WEBSITE_WORLD_TO_PROTO[self.world.value],
             supports_fp16=self.supports_fp16,
+            htp_version=self.htp_version,
+            soc_model=self.soc_model,
+            reference_device=self.reference_device,
         )
 
     @staticmethod

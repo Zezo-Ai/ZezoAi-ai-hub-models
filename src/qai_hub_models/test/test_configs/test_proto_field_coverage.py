@@ -225,7 +225,7 @@ class TestPlatformFieldCoverage:
         _check_coverage(
             ChipsetYaml,
             platform_pb2.ChipsetInfo.DESCRIPTOR,
-            proto_only={"name", "htp_version", "soc_model", "reference_device"},
+            proto_only={"name"},
         )
 
 
