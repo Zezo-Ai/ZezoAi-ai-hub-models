@@ -156,6 +156,8 @@ jobs:
       run: git checkout src/qai_hub_models/global_requirements.txt
 
     - name: Build Protobuf Python Files
+      # 3.13 and above don't support our version of grpcio-tools, which is needed to build proto.
+      if: ${{ inputs.python_version == '3.10' || inputs.python_version == '3.11' || inputs.python_version == '3.12' }}
       run: |
         python3 scripts/build_and_test.py \
           --venv="${{ env.VENV_PATH }}" \

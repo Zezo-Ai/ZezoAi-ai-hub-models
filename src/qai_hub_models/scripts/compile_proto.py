@@ -7,20 +7,33 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
-
-from grpc_tools import protoc
 
 from qai_hub_models.utils.path_helpers import QAIHM_REPO_ROOT
 
-_grpcio_tools_version = _pkg_version("grpcio-tools")
-assert _grpcio_tools_version == "1.62.3", (
-    f"Expected grpcio-tools==1.62.3 for code generation, got {_grpcio_tools_version}"
-)
+EXPECTED_GRPCIO_TOOLS_VERSION = "1.62.3"
+EXPECTED_MYPY_PROTOBUF_VERSION = "3.6.0"
+
+try:
+    _grpcio_tools_version = _pkg_version("grpcio-tools")
+    assert _grpcio_tools_version == EXPECTED_GRPCIO_TOOLS_VERSION, (
+        f"Expected grpcio-tools=={EXPECTED_GRPCIO_TOOLS_VERSION} for code generation, got {_grpcio_tools_version}"
+    )
+except PackageNotFoundError as e:
+    if sys.version_info >= (3, 13):
+        raise ValueError(
+            f"grpcio-tools was not found on your system. The required version ({EXPECTED_GRPCIO_TOOLS_VERSION}) is not installable on python 3.13 and above; use python 3.12 or older."
+        ) from e
+    raise
+
 _mypy_protobuf_version = _pkg_version("mypy-protobuf")
-assert _mypy_protobuf_version == "3.6.0", (
-    f"Expected mypy-protobuf==3.6.0 for code generation, got {_mypy_protobuf_version}"
+assert _mypy_protobuf_version == EXPECTED_MYPY_PROTOBUF_VERSION, (
+    f"Expected mypy-protobuf=={EXPECTED_MYPY_PROTOBUF_VERSION} for code generation, got {_mypy_protobuf_version}"
 )
+
+from grpc_tools import protoc  # noqa: E402
 
 PROTO_SRC_DIR = QAIHM_REPO_ROOT / "proto"
 PROTO_OUT_DIR = QAIHM_REPO_ROOT / "cli" / "qai_hub_models_cli" / "proto"

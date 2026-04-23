@@ -11,7 +11,7 @@ types-tabulate==0.9.0.20240106 # for pre-commit
 types-requests==2.31.0.6 # for pre-commit
 types-aiofiles==25.1.0.20251011 # for pre-commit
 adbutils>=2.8.0 # for a script that generates LLM perf numbers
-grpcio-tools==1.62.3 # for compiling .proto files (uses protoc 25.1)
+grpcio-tools==1.62.3;python_version<'3.13' # for compiling .proto files (uses protoc 25.1)
 mypy-protobuf==3.6.0 # for generating typed .pyi stubs from .proto files
 types-protobuf>=4.25.9 # for mypy type checking of protobuf code
 setuptools>=80 # for building the wheel
