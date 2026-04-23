@@ -828,6 +828,11 @@ if __name__ == "__main__":
         )
         perf_report.dump_summary(report_path)
 
+        regressions_path = os.path.join(
+            args.artifacts_dir, f"perf-regressions-2x-{now_str}.json"
+        )
+        perf_report.dump_severe_regressions_json(regressions_path)
+
     # Write jobs and environment to intermediates folder
     if using_prod_hub:
         quantize_job_yamls.to_file(QUANTIZE_YAML_BASE)

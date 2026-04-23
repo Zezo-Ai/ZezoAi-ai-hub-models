@@ -156,6 +156,11 @@ def main() -> None:
     report_path = os.path.join(args.artifacts_dir, f"numerics-summary-{now_str}.txt")
     global_diff.dump_summary(report_path)
 
+    numerics_regressions_path = os.path.join(
+        args.artifacts_dir, f"numerics-regressions-{now_str}.json"
+    )
+    global_diff.dump_regressions_json(numerics_regressions_path)
+
     # Write accuracy to intermediates folder
     if args.sync_code_gen and using_prod_hub:
         if args.models not in (

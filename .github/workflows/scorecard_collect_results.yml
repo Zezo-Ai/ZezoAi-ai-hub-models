@@ -411,6 +411,31 @@ jobs:
           mkdir -p ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets-yamls
           cp --parents -r src/qai_hub_models/models/**/release-assets.yaml ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets-yamls
 
+      - name: Write Scorecard Regression Issue
+        id: write-scorecard-regression-issue
+        if: ${{ !cancelled() && steps.create-perf-files.outcome == 'success' && inputs.notify_slack }}
+        run: |
+          DEPLOYMENT=${{ env.QAIHM_TEST_DEPLOYMENT }}
+          DEPLOYMENT_URL=$( [ "$DEPLOYMENT" = "prod" ] && echo "workbench" || echo "$DEPLOYMENT" )
+          python3 -m qai_hub_models.scripts.file_scorecard_regression_issue \
+            --perf-regressions-json "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/perf-regressions-2x-*.json" \
+            --numerics-regressions-json "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/numerics-regressions-*.json" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --perf-diff-url "${{ steps.upload-perf-diff-summary.outputs.artifact-url || 'N/A' }}" \
+            --numerics-diff-url "${{ steps.upload-numerics-diff-summary.outputs.artifact-url || 'N/A' }}" \
+            --deployment "$DEPLOYMENT_URL" \
+            --output "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/regression-issue.json"
+
+      - name: File Issue for 2x+ Regressions
+        id: file-regression-issue
+        if: ${{ !cancelled() && steps.write-scorecard-regression-issue.outcome == 'success' && hashFiles(format('{0}/regression-issue.json', env.QAIHM_TEST_ARTIFACTS_DIR)) != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.STAGING_GH_TOKEN }}
+        run: |
+          gh api repos/qcom-ai-hub/tetracode/issues \
+            -X POST \
+            --input "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/regression-issue.json"
+
       - name: Upload Job Artifact - Scorecard Results
         id: upload-results
         uses: actions/upload-artifact@v7

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import NamedTuple
 
 from prettytable import PrettyTable
@@ -509,3 +510,40 @@ class PerformanceDiff:
                 sf.write(str(table))
 
         print(f"Perf change summary written to {summary_file_path}")
+
+    def get_severe_regressions(self, min_factor: float = 2.0) -> list[dict[str, str]]:
+        """Return regressions at or above min_factor as a list of dicts.
+
+        Uses _get_summary_table() column names as the single source of truth
+        for key definitions, with values stringified for JSON compatibility.
+
+        Parameters
+        ----------
+        min_factor
+            Minimum regression factor to include (default 2.0).
+
+        Returns
+        -------
+        list[dict[str, str]]
+            Each dict has keys matching the PrettyTable column names.
+        """
+        results: list[dict[str, str]] = []
+        for bucket in self.perf_buckets:
+            if bucket < min_factor:
+                continue
+            table = self._get_summary_table(bucket, get_progressions=False)
+            field_names = table.field_names
+            results.extend(
+                {k: str(v) for k, v in zip(field_names, row, strict=False)}
+                for row in self.regressions[bucket]
+            )
+        return results
+
+    def dump_severe_regressions_json(
+        self, json_path: str, min_factor: float = 2.0
+    ) -> None:
+        """Write 2x+ regressions to a JSON file for downstream consumption."""
+        data = self.get_severe_regressions(min_factor)
+        with open(json_path, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"Severe regressions JSON written to {json_path} ({len(data)} entries)")

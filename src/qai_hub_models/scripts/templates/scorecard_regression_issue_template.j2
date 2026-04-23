@@ -1,0 +1,38 @@
+{# Template for scorecard regression GitHub issue body.
+   Column names come from PrettyTable definitions in performance_diff.py
+   and numerics_diff.py — this template renders them dynamically. #}
+# Scorecard Regressions (2x+)
+
+Date: {{ today }}
+
+{% if perf_regressions %}
+## Performance Regressions
+
+| {% for col in perf_regressions[0].keys() %}{{ col }} | {% endfor %}
+
+| {% for col in perf_regressions[0].keys() %}--- | {% endfor %}
+
+{% for r in perf_regressions %}
+| {% for val in r.values() %}{{ val }} | {% endfor %}
+
+{% endfor %}
+{% endif %}
+{% if numerics_regressions %}
+## Numerics Regressions
+
+| {% for col in numerics_regressions[0].keys() %}{{ col }} | {% endfor %}
+
+| {% for col in numerics_regressions[0].keys() %}--- | {% endfor %}
+
+{% for r in numerics_regressions %}
+| {% for val in r.values() %}{{ val }} | {% endfor %}
+
+{% endfor %}
+{% endif %}
+## Links
+- [Scorecard Run]({{ run_url }})
+- [Performance Diff]({{ perf_diff_url }})
+- [Numerics Diff]({{ numerics_diff_url }})
+
+---
+Auto-created by scorecard regression detection

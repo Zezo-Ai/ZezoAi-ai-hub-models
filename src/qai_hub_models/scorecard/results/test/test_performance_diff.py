@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from qai_hub_models.configs.perf_yaml import QAIHMModelPerf
 from qai_hub_models.models.common import Precision
 from qai_hub_models.scorecard.device import ScorecardDevice, cs_8_gen_3
@@ -267,3 +269,62 @@ def test_small_regression_excluded() -> None:
     # 0.9ms regression should be excluded even though ratio is 1.18x
     for val in perf_diff.regressions.values():
         assert len(val) == 0
+
+
+def test_get_severe_regressions() -> None:
+    """get_severe_regressions returns structured dicts for 2x+ regressions."""
+    prev = get_basic_speedup_report(
+        PREV_JOB_ID, onnx_tf_inference_time=10.0, onnx_ort_qnn_inference_time=5.123
+    )
+    new = get_basic_speedup_report(
+        onnx_tf_inference_time=20.0, onnx_ort_qnn_inference_time=5.123
+    )
+
+    perf_diff = PerformanceDiff()
+    perf_diff.update_summary(MODEL_ID, prev, new)
+
+    results = perf_diff.get_severe_regressions(min_factor=2.0)
+    assert len(results) == 1
+    assert results[0]["Model ID"] == MODEL_ID
+    assert results[0]["Prev Inference time"] == "10.0"
+    assert results[0]["New Inference time"] == "20.0"
+
+
+def test_get_severe_regressions_excludes_small() -> None:
+    """Regressions below the min_factor threshold are excluded."""
+    prev = get_basic_speedup_report(
+        PREV_JOB_ID, onnx_tf_inference_time=10.0, onnx_ort_qnn_inference_time=5.123
+    )
+    new = get_basic_speedup_report(
+        onnx_tf_inference_time=15.0, onnx_ort_qnn_inference_time=5.123
+    )
+
+    perf_diff = PerformanceDiff()
+    perf_diff.update_summary(MODEL_ID, prev, new)
+
+    # 1.5x regression should not appear when min_factor=2.0
+    results = perf_diff.get_severe_regressions(min_factor=2.0)
+    assert len(results) == 0
+
+
+def test_dump_severe_regressions_json(tmp_path: Path) -> None:
+    """dump_severe_regressions_json writes valid JSON."""
+    import json
+
+    prev = get_basic_speedup_report(
+        PREV_JOB_ID, onnx_tf_inference_time=10.0, onnx_ort_qnn_inference_time=5.123
+    )
+    new = get_basic_speedup_report(
+        onnx_tf_inference_time=20.0, onnx_ort_qnn_inference_time=5.123
+    )
+
+    perf_diff = PerformanceDiff()
+    perf_diff.update_summary(MODEL_ID, prev, new)
+
+    json_path = str(tmp_path / "regressions.json")
+    perf_diff.dump_severe_regressions_json(json_path)
+
+    with open(json_path) as f:
+        data = json.load(f)
+    assert len(data) == 1
+    assert data[0]["Model ID"] == MODEL_ID

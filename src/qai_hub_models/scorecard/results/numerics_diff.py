@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import json
+
 from prettytable import PrettyTable
 
 from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
@@ -766,3 +768,29 @@ class NumericsDiff:
                 sf.write("\n")
 
         print(f"Perf change summary written to {summary_file_path}")
+
+    def get_regressions_list(self) -> list[dict[str, str]]:
+        """Return numerics regressions as a list of dicts.
+
+        Uses _get_summary_table_proreg() column names as the single source
+        of truth for key definitions, with values stringified for JSON
+        compatibility.
+
+        Returns
+        -------
+        list[dict[str, str]]
+            Each dict has keys matching the PrettyTable column names.
+        """
+        table = self._get_summary_table_proreg(self.regressions)
+        field_names = table.field_names
+        return [
+            {k: str(v) for k, v in zip(field_names, row, strict=False)}
+            for row in self.regressions
+        ]
+
+    def dump_regressions_json(self, json_path: str) -> None:
+        """Write numerics regressions to a JSON file for downstream consumption."""
+        data = self.get_regressions_list()
+        with open(json_path, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"Numerics regressions JSON written to {json_path} ({len(data)} entries)")
