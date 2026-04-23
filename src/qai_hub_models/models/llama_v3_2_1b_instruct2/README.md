@@ -15,7 +15,7 @@ Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.
 Install the package via pip:
 ```bash
 # NOTE: 3.10 <= PYTHON_VERSION < 3.14 is supported.
-pip install "torch==2.10.0+cpu" "torchvision==0.25.0+cpu" -f https://download.pytorch.org/whl/torch/
+pip install "torch==2.10.0+cpu" "torchvision==0.25.0+cpu" -f https://download.pytorch.org/whl/cpu/
 pip install "qai-hub-models[llama-v3-2-1b-instruct2]"
 ```
 For llama_v3_2_1b_instruct2, some additional functionality can be faster or is available
@@ -34,7 +34,7 @@ significantly but it not strictly required.
 Install the GPU package via pip:
 ```bash
 # NOTE: 3.10 <= PYTHON_VERSION < 3.14 is supported.
-pip install "torch==2.10.0+cpu" "torchvision==0.25.0+cpu" -f https://download.pytorch.org/whl/torch/
+pip install "torch==2.10.0+cpu" "torchvision==0.25.0+cpu" -f https://download.pytorch.org/whl/cpu/
 pip install "qai-hub-models[llama-v3-2-1b-instruct2]" onnxruntime-gpu==1.23.2 https://github.com/quic/aimet/releases/download/2.26.0/aimet_onnx-2.26.0+cu121-cp310-cp310-manylinux_2_34_x86_64.whl --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
