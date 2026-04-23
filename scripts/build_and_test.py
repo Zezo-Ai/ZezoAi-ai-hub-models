@@ -286,6 +286,20 @@ class TaskLibrary:
             ),
         )
 
+    @public_task("Install Compiler Nightly Requirements")
+    @depends(["create_venv"])
+    def install_compiler_nightly(
+        self, plan: Plan, step_id: str = "install_compiler_nightly"
+    ) -> str:
+        return plan.add_step(
+            step_id,
+            RunCommandsWithVenvTask(
+                group_name="Install Compiler Nightly Requirements",
+                venv=self.venv_path,
+                commands=["pip install -r scripts/compiler_nightly/requirements.txt"],
+            ),
+        )
+
     @public_task("Aggregate Scorecard Results")
     @depends(["install_deps"])
     def aggregate_scorecard_results(

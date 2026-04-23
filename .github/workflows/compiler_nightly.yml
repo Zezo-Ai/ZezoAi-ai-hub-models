@@ -1,0 +1,123 @@
+##
+## Compiler Nightly Scorecard
+##
+## Runs nightly to clone and execute compiler scorecard tests from prod to dev
+##
+
+name: Compiler Nightly Scorecard
+
+on:
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      aihm_tag:
+        description: 'Git tag of AIHM (e.g., v0.48.0). If not provided, uses latest tag.'
+        required: false
+        type: string
+      dry_run:
+        description: 'Process only first 10 models for testing'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: "3.10"
+  VENV_PATH: build/ci-envs/qaihm-build
+  COMPILER_NIGHTLY_PROJECT_ID: ${{ secrets.COMPILER_NIGHTLY_PROJECT_ID }}
+
+jobs:
+  compiler_scorecard:
+    name: "Compiler Scorecard"
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          venv-path: ${{ env.VENV_PATH }}
+          bnt-venv-install-cmd: install_compiler_nightly
+          hub-deployments: prod,dev
+          hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+
+      - name: Checkout scorecard intermediates
+        id: checkout_intermediates
+        working-directory: scripts/compiler_nightly
+        env:
+          AIHM_TAG: ${{ inputs.aihm_tag }}
+        run: |
+          bash clone_aihm_intermediates.sh "$AIHM_TAG"
+
+          # Find the created directory
+          INTERMEDIATES_DIR=$(ls -d intermediates_* | head -1)
+          echo "intermediates_dir=${INTERMEDIATES_DIR}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Clone scorecard
+        working-directory: scripts/compiler_nightly
+        env:
+          INTERMEDIATES_DIR: ${{ steps.checkout_intermediates.outputs.intermediates_dir }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+
+          DRY_ARG=""
+          if [ "$DRY_RUN" = "true" ]; then
+            DRY_ARG="--dry-run"
+          fi
+
+          python clone_scorecard.py \
+            --prod-profile prod \
+            --dev-profile dev \
+            --intermediates-dir "${INTERMEDIATES_DIR}" \
+            --output-dir results \
+            $DRY_ARG \
+            --verbose
+        shell: bash
+
+      - name: Submit compile jobs
+        working-directory: scripts/compiler_nightly
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+
+          # Find the most recent dev-compile-scorecard file
+          CONFIG_FILE=$(ls -t results/dev-compile-scorecard-*.yaml | head -1)
+
+          python run_compile_jobs.py \
+            --dev-profile dev \
+            --config "${CONFIG_FILE}" \
+            --output-dir results \
+            --verbose
+        shell: bash
+
+      - name: Collect compile results
+        if: always()
+        working-directory: scripts/compiler_nightly
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+
+          # Find the most recent jobs file
+          JOBS_FILE=$(ls -t results/dev-compile-jobs-*.yaml | head -1)
+
+          python collect_compile_results.py \
+            --dev-profile dev \
+            --jobs-file "${JOBS_FILE}" \
+            --output-dir results \
+            --verbose
+        shell: bash
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compiler-scorecard-results-${{ github.run_number }}
+          path: scripts/compiler_nightly/results/
+          retention-days: 30
