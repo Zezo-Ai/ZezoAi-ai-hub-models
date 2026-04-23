@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from functools import partial
+from typing import Any
 
 from qai_hub_models.models._shared.llm.app import ChatApp as App
 from qai_hub_models.models._shared.llm.model import (
@@ -40,6 +41,9 @@ def llm_chat_demo(
     raw: bool = False,
     test_checkpoint: CheckpointSpec | None = None,
     supports_thinking: bool = False,
+    # VLM parameters (optional)
+    vision_encoder_cls: Any | None = None,
+    hidden_size: int | None = None,
 ) -> None:
     """Shared Chat Demo App to generate output for provided input prompt"""
     # Demo parameters
@@ -76,6 +80,27 @@ def llm_chat_demo(
         default=42,
         help="random seed.",
     )
+    # VLM image argument (only shown if vision_encoder_cls is provided)
+    if vision_encoder_cls is not None:
+        parser.add_argument(
+            "--image",
+            type=str,
+            nargs="+",
+            default=None,
+            help="Path(s) to input image(s). Pass multiple paths for multi-image prompts.",
+        )
+        parser.add_argument(
+            "--image-height",
+            type=int,
+            default=None,
+            help="VEG image height (must be divisible by patch_size * spatial_merge_size).",
+        )
+        parser.add_argument(
+            "--image-width",
+            type=int,
+            default=None,
+            help="VEG image width (must be divisible by patch_size * spatial_merge_size).",
+        )
     if supports_thinking:
         parser.add_argument(
             "--thinking",
@@ -140,6 +165,11 @@ def llm_chat_demo(
             fp_model_cls.get_input_prompt_with_tags, tokenizer=tokenizer
         )
 
+    # Get image path if VLM
+    image_path = (
+        getattr(args, "image", None) if vision_encoder_cls is not None else None
+    )
+
     if test_checkpoint is None:
         print(f"\n{'-' * 85}")
         print(f"** Generating response via {model_id} **")
@@ -154,6 +184,8 @@ def llm_chat_demo(
             print("    This runs the original unquantized model for baseline purposes.")
         print()
         print("Prompt:", prompt)
+        if vision_encoder_cls is not None:
+            print("Image:", image_path if image_path else "(none - text only)")
         print("Raw (prompt will be passed in unchanged):", args.raw)
         if supports_thinking:
             print("Thinking mode:", "enabled" if args.thinking else "disabled")
@@ -178,12 +210,25 @@ def llm_chat_demo(
     else:
         final_model_cls = fp_model_cls
 
+    # Collect VLM image size override if provided
+    vlm_image_size = None
+    if vision_encoder_cls is not None:
+        img_h = getattr(args, "image_height", None)
+        img_w = getattr(args, "image_width", None)
+        if img_h is not None and img_w is not None:
+            vlm_image_size = (img_w, img_h)
+
     app = App(
         final_model_cls,
         get_input_prompt_with_tags=preprocess_prompt_fn,
         tokenizer=tokenizer,
         end_tokens=end_tokens,
         seed=args.seed,
+        # VLM parameters
+        vision_encoder_cls=vision_encoder_cls,
+        hf_repo_name=hf_repo_name if vision_encoder_cls is not None else None,
+        hidden_size=hidden_size,
+        vlm_image_size=vlm_image_size,
     )
 
     app.generate_output_prompt(
@@ -192,4 +237,6 @@ def llm_chat_demo(
         max_output_tokens=max_output_tokens,
         checkpoint=checkpoint,
         model_from_pretrained_extra=extra,
+        image_path=image_path,
+        sequence_length=args.sequence_length,
     )

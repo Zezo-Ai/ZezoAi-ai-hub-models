@@ -1,0 +1,41 @@
+name: Qwen2.5-VL-7B-Instruct
+id: qwen2_5_vl_7b_instruct
+status: unpublished
+status_reason: In development.
+headline: State-of-the-art vision-language model capable of understanding images and generating text responses.
+domain: Generative AI
+description: Qwen2.5-VL-7B-Instruct is a multimodal vision-language model with 7 billion parameters that can process both images and text, enabling visual question answering, image description, and other vision-language tasks.
+use_case: Text Generation
+tags:
+- llm
+- generative-ai
+applicable_scenarios:
+- Dialogue
+- Content Generation
+- Customer Support
+related_models:
+- qwen2_5_7b_instruct
+form_factors:
+- Phone
+- Tablet
+has_static_banner: false
+has_animated_banner: false
+dataset: []
+technical_details:
+  Input sequence length for Prompt Processor: '128'
+  Input image size for Vision Encoder: 504x336
+  Context lengths: '2048'
+  Use: Initiate conversation with prompt-processor and then token generator for subsequent iterations.
+  Supported languages: English, Chinese, and many others.
+  TTFT: Time To First Token is the time it takes to generate the first response token. This is expressed as a range because it varies based on the length of the prompt. The lower bound is for a short prompt (up to 128 tokens, i.e., one iteration of the prompt processor) and the upper bound is for a prompt using the full context length.
+  Response Rate: Rate of response generation after the first response token.
+license_type: apache-2.0
+research_paper: https://arxiv.org/abs/2502.13923
+research_paper_title: "Qwen2.5-VL Technical Report"
+source_repo: https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct
+license: https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/blob/main/LICENSE
+model_type_llm: true
+llm_details:
+  call_to_action: View Readme
+  genie_compatible: true
+  devices: {}

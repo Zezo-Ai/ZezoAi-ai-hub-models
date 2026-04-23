@@ -268,7 +268,9 @@ def _set_matmul_second_input_to_8b(quantsim_model: QuantSimOnnx) -> None:
 
 
 def _apply_int8_kv_cache_tying_and_lm_head(
-    sim: QuantSimOnnx, kv_io_map: dict[str, str]
+    sim: QuantSimOnnx,
+    kv_io_map: dict[str, str],
+    use_16x8_matmuls: bool = True,
 ) -> QuantSimOnnx:
     sim._tie_quantizers_for_op_types(["Concat"])  # pylint: disable=protected-access
     sim._rebuild_session()  # pylint: disable=protected-access
@@ -283,7 +285,7 @@ def _apply_int8_kv_cache_tying_and_lm_head(
     # Tie kv_cache
     _tie_quantizers_for_kv_cache(sim, kv_io_map)
 
-    # Setting Matmul second input to 8b
-    _set_matmul_second_input_to_8b(sim)
+    if use_16x8_matmuls:
+        _set_matmul_second_input_to_8b(sim)
 
     return sim

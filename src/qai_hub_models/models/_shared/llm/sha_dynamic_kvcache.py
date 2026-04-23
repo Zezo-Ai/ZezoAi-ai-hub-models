@@ -23,6 +23,15 @@ class SHADynamicCacheNewValueOnly(DynamicCache):
     new values without accumulation.
     """
 
+    def __init__(self) -> None:
+        super().__init__()
+        # Ensure key_cache/value_cache always exist, even on transformers
+        # versions where DynamicCache uses `layers` instead.
+        if not hasattr(self, "key_cache"):
+            self.key_cache: list[list[torch.Tensor]] = []  # type: ignore[assignment]
+        if not hasattr(self, "value_cache"):
+            self.value_cache: list[list[torch.Tensor]] = []  # type: ignore[assignment]
+
     def update(
         self,
         key_states: list[torch.Tensor],
@@ -62,6 +71,11 @@ class SHADynamicCacheNewValueOnly(DynamicCache):
 
         # return self.key_cache[layer_idx], self.value_cache[layer_idx]
         return self.layers[layer_idx][0], self.layers[layer_idx][1]
+
+    def __len__(self) -> int:
+        if hasattr(self, "key_cache"):
+            return len(self.key_cache)
+        return len(self.layers)
 
     def get_seq_length(self, layer_idx: int | None = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""

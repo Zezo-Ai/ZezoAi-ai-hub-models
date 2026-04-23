@@ -93,7 +93,9 @@ def get_split_tensors(
     def maybe_skip_cast(a: str) -> str:
         if nodes[a].op_type == "Cast":
             inp = producers[nodes[a].input[0]]
-            assert inp is not None
+            # If input is a graph input (no producer), don't skip the cast
+            if inp is None:
+                return a
             return inp
         return a
 
@@ -136,7 +138,15 @@ def get_split_tensors(
         a = maybe_skip_cast(a)
         b = maybe_skip_cast(b)
         add0 = a if seq[a] < seq[b] else b
-        assert is_residual_add(add0, strict=False)
+        if not is_residual_add(add0, strict=False):
+            # VLM models: add0 takes a graph input (e.g. input_embeds)
+            # directly, so is_residual_add fails because the producer is
+            # None. Verify it's still a valid residual Add with one graph
+            # input.
+            node = nodes[add0]
+            assert node.op_type == "Add"
+            a0, b0 = (producers[t] for t in node.input)
+            assert a0 is None or b0 is None
         return add0
 
     def get_layer0_input(add0: str) -> str:
@@ -146,9 +156,10 @@ def get_split_tensors(
         return a if seq[a] < seq[b] else b
 
     residual_add_names = [name for name in nodes if is_residual_add(name, strict=True)]
-    if len(residual_add_names) % 2 == 1 and has_embedding_table(model):
-        # 'add0' is missing in residual_adds
-        # 'add0' is not a valid split point if there is no embedding table provided
+    if len(residual_add_names) % 2 == 1:
+        # 'add0' is missing in residual_adds because its input comes from
+        # embedding (LLM) or inputs_embeds (VLM), not another Add node.
+        # We need to insert it to get the correct layer count.
         add0 = get_add0(residual_add_names[0])
         residual_add_names.insert(0, add0)
 
@@ -439,13 +450,21 @@ def split_onnx(
         deco_digit=False,
         using_qairt_workflow=using_qairt_workflow,
     )
+
+    # Check if embedding table exists before determining split points
+    # VLM models don't have embedding table (Gather op using input_ids) in the ONNX
+    split_embedding = split_embedding and has_embedding_table(onnxmodel)
+
     output_tensor_list = get_split_tensors(
         onnx_graph_file, onnxmodel=onnxmodel, include_first_input=split_embedding
     )
 
     # Infer the shape of per-layer tensors
+    # Note: VLM models use "input_embeds" (singular), LLMs use "input_ids"
     (input_tokens,) = (
-        i for i in onnxmodel.graph.input if i.name in {"input_ids", "inputs_embeds"}
+        i
+        for i in onnxmodel.graph.input
+        if i.name in {"input_ids", "input_embeds", "inputs_embeds"}
     )
 
     # Handle both concrete and symbolic (dynamic) dimensions
@@ -470,8 +489,6 @@ def split_onnx(
     onnxmodel.graph.value_info.extend(per_layer_output_value_info)
 
     names_to_split = []
-    # We should only split the embedding if there is an embedding table in the model
-    split_embedding = split_embedding and has_embedding_table(onnxmodel)
     if split_embedding:
         first_output_tensors = output_tensor_list[0].split(",")
         if (

@@ -153,6 +153,7 @@ class Qwen3_0_6B(Qwen3Base):
 
 class Qwen3_0_6B_AIMETOnnx(Qwen3Base_AIMETOnnx):
     ada_scale_num_rmsnorm_per_blk: int | None = NUM_ATTN_HEADS + NUM_KEY_VALUE_HEADS + 1
+    supports_thinking: bool = True
 
     @classmethod
     def attention_mask_min_clip_and_multiplier(

@@ -9,7 +9,8 @@ import gc
 import itertools
 import math
 from collections.abc import Generator
-from typing import Any, cast
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 import transformers
@@ -26,6 +27,9 @@ from qai_hub_models.models._shared.llm.model import (
     LLM_AIMETOnnx,
     LLMBase,
 )
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 
 def get_past_keyval_with_shift(
@@ -140,6 +144,9 @@ class LLM_Generator(GenerationMixin, torch.nn.Module):
         tokenizer: transformers.PreTrainedTokenizerBase,
         embedding: Embedding,
         accumulate_logits_on_cpu: bool = False,
+        # VLM support
+        vision_encoder: torch.nn.Module | None = None,
+        hf_repo_name: str | None = None,  # for AutoProcessor/AutoConfig
     ) -> None:
         super().__init__()
 
@@ -156,12 +163,26 @@ class LLM_Generator(GenerationMixin, torch.nn.Module):
         self.embedding = embedding
         self.accumulate_logits_on_cpu = accumulate_logits_on_cpu
 
+        # VLM support
+        self.vision_encoder = vision_encoder
+        self.hf_repo_name = hf_repo_name
+        self._vision_processor = None  # Lazy-loaded
+
     def cleanup(self) -> None:
         for model in self.models:
             if isinstance(model, LLM_Loader):
                 model.release()
         if isinstance(self.selected_model, LLM_Loader):
             self.selected_model.release()
+        if isinstance(self.selected_model, LLM_AIMETOnnx):
+            self.selected_model = self.selected_model.to("cpu")
+            if hasattr(self.selected_model, "quant_sim"):
+                del self.selected_model.quant_sim
+        # Clean up VLM components
+        if self.vision_encoder is not None:
+            del self.vision_encoder
+            self.vision_encoder = None
+        self._vision_processor = None
         if "gc" in globals() and gc is not None:
             gc.collect()
         if "torch" in globals() and torch is not None and torch.cuda.is_available():
@@ -177,7 +198,10 @@ class LLM_Generator(GenerationMixin, torch.nn.Module):
 
     @property
     def main_input_name(self) -> str:
-        return self.selected_model.main_input_name
+        # Always report "input_ids" to HuggingFace's generate().
+        # HF's _prepare_model_inputs detects inputs_embeds in kwargs
+        # and promotes it for the first forward pass automatically.
+        return "input_ids"
 
     @property
     def llm_io_type(self) -> LLMIOType:
@@ -198,6 +222,172 @@ class LLM_Generator(GenerationMixin, torch.nn.Module):
         # documentation and mypy.
         return next(iter(self.selected_model.parameters())).device
 
+    @property
+    def is_vlm(self) -> bool:
+        """Check if this generator supports vision-language models."""
+        return self.vision_encoder is not None
+
+    @property
+    def vision_processor(self) -> transformers.ProcessorMixin:
+        """Lazy-load the processor for VLM input processing."""
+        if self._vision_processor is None:
+            if self.hf_repo_name is None:
+                raise ValueError("hf_repo_name required for VLM processor")
+            from transformers import AutoProcessor
+
+            self._vision_processor = AutoProcessor.from_pretrained(
+                self.hf_repo_name, trust_remote_code=True
+            )
+        return self._vision_processor  # type: ignore[return-value, unused-ignore]
+
+    def prepare_vlm_inputs(
+        self,
+        input_prompt: str,
+        image: Image.Image | str | Path | list[Image.Image | str | Path],
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        """
+        Prepare VLM inputs by processing image(s) and merging embeddings.
+
+        This handles:
+        1. Image preprocessing via AutoProcessor
+        2. Vision encoder execution to get vision embeddings
+        3. Text tokenization
+        4. Embedding merge (replacing image tokens with vision embeddings)
+
+        Parameters
+        ----------
+        input_prompt
+            The text prompt to send to the model.
+        image
+            One or more images, each as a PIL Image or path to image file.
+
+        Returns
+        -------
+        merged_embeddings : torch.Tensor
+            Tensor of merged text and vision embeddings.
+        input_tokens_dict : dict[str, torch.Tensor]
+            Dictionary containing input_ids and attention_mask.
+        """
+        from PIL import Image as PILImage
+        from transformers import AutoConfig
+
+        if self.vision_encoder is None:
+            raise ValueError("Vision encoder not set. Cannot prepare VLM inputs.")
+        if self.hf_repo_name is None:
+            raise ValueError("hf_repo_name required for VLM")
+
+        device = self.device
+
+        # Normalise to a list of PIL images
+        if not isinstance(image, list):
+            image = [image]
+        images: list[PILImage.Image] = []
+        for img in image:
+            if isinstance(img, (str, Path)):
+                img = PILImage.open(img).convert("RGB")
+            images.append(img)
+
+        # Resize every image to match the vision encoder's expected dimensions
+        if hasattr(self.vision_encoder, "_image_height"):
+            expected_h = int(self.vision_encoder._image_height)  # type: ignore[arg-type, unused-ignore]
+            expected_w = int(self.vision_encoder._image_width)  # type: ignore[arg-type, unused-ignore]
+            images = [
+                img.resize((expected_w, expected_h))
+                if img.size != (expected_w, expected_h)
+                else img
+                for img in images
+            ]
+
+        # Use the model's get_input_prompt_with_tags for consistent prompt formatting
+        # Pass the number of images so the right number of placeholders are inserted
+        formatted_text = self.selected_model.get_input_prompt_with_tags(
+            user_input_prompt=input_prompt,
+            include_image=len(images),  # type: ignore[arg-type]
+        )
+
+        # Process inputs - processor expands vision placeholders to match image tokens
+        processed = self.vision_processor(  # type: ignore[operator, unused-ignore]
+            text=[formatted_text],
+            images=images,
+            return_tensors="pt",
+            padding=True,
+        ).to(device)
+
+        input_ids = processed["input_ids"]
+        attention_mask = processed["attention_mask"]
+        pixel_values = processed["pixel_values"]
+
+        # Run vision encoder, one image at a time if needed.
+        # The VEG may have fixed input shapes for a single image, so we
+        # split multi-image pixel_values into per-image chunks.
+        self.vision_encoder.eval()
+        with torch.no_grad():
+            veg = self.vision_encoder
+            patch_size = veg._patch_size
+            img_h = veg._image_height
+            img_w = veg._image_width
+            single_seq_len = (img_h // patch_size) * (img_w // patch_size)  # type: ignore[operator, unused-ignore]
+            total_patches = pixel_values.shape[0]
+
+            if total_patches == single_seq_len or len(images) == 1:
+                vision_embeddings = veg(pixel_values=pixel_values)
+            elif total_patches % single_seq_len == 0:
+                chunks = pixel_values.split(single_seq_len, dim=0)
+                vision_embeddings = torch.cat(
+                    [veg(pixel_values=c) for c in chunks], dim=0
+                )
+            else:
+                # Dynamic-shape VEG or unexpected layout — try full tensor
+                vision_embeddings = veg(pixel_values=pixel_values)
+
+        # Get image token ID from config
+        config = AutoConfig.from_pretrained(self.hf_repo_name, trust_remote_code=True)
+        image_token_id = config.image_token_id
+
+        # Convert input_ids to text embeddings using the model's embedding table
+        text_embeddings = self.selected_model.convert_input_ids_to_embeddings(input_ids)
+
+        # Find image token positions and merge embeddings
+        image_mask = input_ids == image_token_id  # (batch, seq_len)
+
+        # Count image tokens - should match vision embedding tokens
+        num_image_tokens = image_mask.sum().item()
+        num_vision_tokens = vision_embeddings.shape[0]
+
+        if num_image_tokens != num_vision_tokens:
+            print(
+                f"Warning: Image token count ({num_image_tokens}) != "
+                f"vision embedding count ({num_vision_tokens})"
+            )
+
+        # Merge: replace image token positions with vision embeddings
+        # vision_embeddings shape: (num_tokens, hidden_size)
+        # text_embeddings shape: (batch, seq_len, hidden_size)
+        merged_embeddings = text_embeddings.clone()
+
+        # Expand mask for hidden dimension
+        image_mask_expanded = image_mask.unsqueeze(-1).expand_as(text_embeddings)
+
+        # Use masked_scatter to replace image token embeddings with vision embeddings
+        merged_embeddings = merged_embeddings.masked_scatter(
+            image_mask_expanded,
+            vision_embeddings.to(
+                device=merged_embeddings.device, dtype=merged_embeddings.dtype
+            ),
+        )
+
+        # Free vision encoder to reclaim GPU memory before text model runs
+        del self.vision_encoder
+        self.vision_encoder = None
+        self._vision_processor = None
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        return merged_embeddings, {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.Tensor | None = None,
@@ -207,29 +397,24 @@ class LLM_Generator(GenerationMixin, torch.nn.Module):
         **kwargs: Any,
     ) -> dict[str, torch.Tensor | DynamicCache | None]:
         """
-        Overridden prepare_inputs_for_generation function to enable Huggingface generate() on models with static
-        graph constraints
+        Prepare inputs for one generation step.
+
+        HuggingFace's generate() calls this before each forward().
+        Static-shape padding/truncation happens in forward(), not here.
+
+        For VLM: HF keeps inputs_embeds in model_kwargs across all
+        iterations. On the first call (no KV cache), we use them.
+        On subsequent calls, the KV cache has more entries than
+        input_ids (which only tracks generated tokens), so we use
+        the last token from input_ids.
         """
-        # We need a way to ensure that all the previous tokens that have already been consumed are stripped out of the
-        # input ids
-
-        # If past_key_values is None, this indicates that this `prepare_inputs_for_generation()` is being called for
-        # the first time, and nothing should be stripped out of `input_ids`. In other cases though, the number of tokens
-        # already inside `past_key_values` indicates how many tokens should be stripped out of `input_ids`
-
-        # Notes: `input_ids`, `attention_mask`, `past_key_values` should NOT have static shape requirements imposed on
-        # them by the time they reach this function. That is, in order for this to work, the static shape padding and
-        # truncation must happen directly in the model `forward` function
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
+        if input_ids is None and inputs_embeds is None:
             raise ValueError(
-                "You must specify exactly one of input_ids or inputs_embeds"
+                "You must specify at least one of input_ids or inputs_embeds"
             )
-        assert input_ids is not None or inputs_embeds is not None
 
         if past_key_values is None:
             num_processed_tokens = 0
-
         elif hasattr(past_key_values, "value_cache"):
             num_processed_tokens = (
                 0
@@ -247,10 +432,16 @@ class LLM_Generator(GenerationMixin, torch.nn.Module):
             raise ValueError("Unsupported KV cache type")
 
         inputs: dict[str, torch.Tensor | DynamicCache | None] = {}
-        if input_ids is not None:
-            inputs["input_ids"] = input_ids[:, num_processed_tokens:]
-        elif inputs_embeds is not None:
-            inputs["inputs_embeds"] = inputs_embeds[:, num_processed_tokens:, :]
+        if inputs_embeds is not None and num_processed_tokens < inputs_embeds.shape[1]:
+            inputs = {"inputs_embeds": inputs_embeds[:, num_processed_tokens:, :]}
+        elif input_ids is not None and num_processed_tokens < input_ids.shape[1]:
+            inputs = {"input_ids": input_ids[:, num_processed_tokens:]}
+        elif input_ids is not None:
+            # Decode after VLM prefill: KV cache reflects the full
+            # embeddings length, but input_ids only has generated tokens.
+            inputs = {"input_ids": input_ids[:, -1:]}
+        else:
+            inputs = {"inputs_embeds": inputs_embeds[:, num_processed_tokens:, :]}  # type: ignore[index]
 
         return inputs | {
             "past_key_values": past_key_values,
@@ -654,11 +845,14 @@ class LLM_Generator(GenerationMixin, torch.nn.Module):
         past_key_values_list = preconsumed_outputs["past_key_values"]
         assert isinstance(past_key_values_list, list)
         prefilled_inputs = self.prepare_inputs(
-            remaining_input_tokens,
-            remaining_attention_mask,
-            past_key_values_list,
-            model.sequence_length,
-            model.context_length,
+            input_ids=remaining_input_tokens if input_ids is not None else None,
+            attention_mask=remaining_attention_mask,
+            past_key_values=past_key_values_list,
+            sequence_length=model.sequence_length,
+            context_length=model.context_length,
+            inputs_embeds=cast(torch.FloatTensor, remaining_input_tokens)
+            if inputs_embeds is not None
+            else None,
         )
 
         yield tuple(tensor.cpu() for tensor in prefilled_inputs)

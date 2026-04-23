@@ -29,9 +29,19 @@ from qai_hub_models.utils.checkpoint import (
 
 
 def get_dataset(
-    model: torch.nn.Module, task: str, num_samples: int
+    model: torch.nn.Module,
+    task: str,
+    num_samples: int,
+    processor: Any = None,
+    image_size: tuple[int, int] | None = None,
 ) -> DataLoader[AugmentedLabelDataset]:
     # Load dataset.
+    # For VLM tasks, pass the processor so images are included.
+    extra_kwargs: dict[str, Any] = {}
+    if processor is not None:
+        extra_kwargs["processor"] = processor
+    if image_size is not None:
+        extra_kwargs["image_size"] = image_size
     dataset = get_dataset_from_name(
         name=task,
         tokenizer=model.tokenizer,
@@ -39,6 +49,7 @@ def get_dataset(
         context_length=model.context_length,
         num_samples=num_samples,
         split=DatasetSplit.TEST,
+        **extra_kwargs,
     )
     return DataLoader(
         dataset, shuffle=False, batch_size=1, collate_fn=dataset.collate_fn
@@ -53,8 +64,16 @@ def evaluate(
     task: str,
     kwargs: Mapping[str, Any],
     skip_fp_model_eval: bool = False,
+    vision_encoder_cls: Any = None,
+    hf_repo_name: str | None = None,
+    vlm_image_size: tuple[int, int] | None = None,
 ) -> tuple[float, str]:
     checkpoint_type = CheckpointType.from_checkpoint(kwargs["checkpoint"])
+    if checkpoint_type == CheckpointType.INVALID:
+        raise ValueError(
+            f"Checkpoint '{kwargs['checkpoint']}' is not recognized "
+            f"as a valid quantized checkpoint."
+        )
 
     host_device = (
         torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -92,7 +111,27 @@ def evaluate(
     if final_kwargs["checkpoint"] in {"DEFAULT", "DEFAULT_UNQUANTIZED"}:
         del final_kwargs["checkpoint"]
 
-    eval_dataloader = get_dataset(fp_model, task, num_samples)
+    # For VLM models, load processor so multimodal datasets include images.
+    # Also determine the VEG's expected image size for resizing.
+    vlm_processor = None
+    if vision_encoder_cls is not None and hf_repo_name is not None:
+        from transformers import AutoProcessor
+
+        vlm_processor = AutoProcessor.from_pretrained(
+            hf_repo_name, trust_remote_code=True
+        )
+        if vlm_image_size is None:
+            raise ValueError(
+                "vlm_image_size must be provided when vision_encoder_cls is set."
+            )
+
+    eval_dataloader = get_dataset(
+        fp_model,
+        task,
+        num_samples,
+        processor=vlm_processor,
+        image_size=vlm_image_size,
+    )
     evaluator = fp_model.get_evaluator(
         task,
         torch.device("cpu") if not is_fp else host_device,
@@ -142,6 +181,8 @@ def evaluate(
     else:
         model = fp_model.to(host_device)
 
+    model.eval()
+
     if eval_dataloader is None:
         eval_dataloader = get_dataset(model, task, num_samples)
 
@@ -152,11 +193,36 @@ def evaluate(
             config=model.llm_config,
         )
 
+    # Load vision encoder for VLM evaluation
+    vision_encoder = None
+    if vision_encoder_cls is not None:
+        from qai_hub_models.models.common import Precision
+
+        veg_kwargs: dict[str, Any] = {}
+        if vlm_image_size is not None:
+            veg_kwargs["image_width"] = vlm_image_size[0]
+            veg_kwargs["image_height"] = vlm_image_size[1]
+
+        if is_fp:
+            veg_kwargs["precision"] = Precision.float
+        else:
+            checkpoint_path = kwargs.get("checkpoint")
+            if checkpoint_path is not None:
+                veg_kwargs["checkpoint"] = checkpoint_path
+
+        print("Loading vision encoder for evaluation...")
+        vision_encoder = vision_encoder_cls.from_pretrained(
+            device=host_device,
+            **veg_kwargs,
+        )
+
     generator = LLM_Generator(
         [model],
         model.tokenizer,
         embedding,
         accumulate_logits_on_cpu=True,
+        vision_encoder=vision_encoder,
+        hf_repo_name=hf_repo_name,
     )
 
     evaluator.add_from_dataset(
@@ -175,6 +241,9 @@ def llm_evaluate(
     qnn_model_cls: type[LLM_QNN],
     supported_precisions: list[Precision],
     default_calibration_seqlen: int = 2048,
+    vision_encoder_cls: Any = None,
+    hf_repo_name: str | None = None,
+    vlm_image_size: tuple[int, int] | None = None,
 ) -> None:
     parser = get_model_cli_parser(
         quantized_model_cls,
@@ -193,6 +262,19 @@ def llm_evaluate(
         default=0,
         help="Number of samples to be used for evaluation.",
     )
+    if vision_encoder_cls is not None:
+        parser.add_argument(
+            "--image-height",
+            type=int,
+            default=None,
+            help="VEG image height (must be divisible by patch_size * spatial_merge_size).",
+        )
+        parser.add_argument(
+            "--image-width",
+            type=int,
+            default=None,
+            help="VEG image width (must be divisible by patch_size * spatial_merge_size).",
+        )
 
     parser.set_defaults(sequence_length=default_calibration_seqlen)
     args = parser.parse_args()
@@ -205,6 +287,13 @@ def llm_evaluate(
         # The NPU does not support the higher sequence length we use on GPU
         kwargs["sequence_length"] = DEFAULT_SEQUENCE_LENGTH
 
+    # Collect VLM image size: CLI args override the caller-provided default
+    if vision_encoder_cls is not None:
+        img_h = getattr(args, "image_height", None)
+        img_w = getattr(args, "image_width", None)
+        if img_h is not None and img_w is not None:
+            vlm_image_size = (img_w, img_h)
+
     _, formatted_accuracy = evaluate(
         quantized_model_cls=quantized_model_cls,
         fp_model_cls=fp_model_cls,
@@ -212,6 +301,9 @@ def llm_evaluate(
         num_samples=args.num_samples,
         task=args.task,
         kwargs=kwargs,
+        vision_encoder_cls=vision_encoder_cls,
+        hf_repo_name=hf_repo_name,
+        vlm_image_size=vlm_image_size,
     )
 
     print(formatted_accuracy)

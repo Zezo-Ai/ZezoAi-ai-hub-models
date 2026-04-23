@@ -9,6 +9,8 @@ from collections.abc import Callable
 from typing import Any, cast
 
 import torch
+import transformers
+from packaging.version import Version
 from torch import nn
 from transformers.cache_utils import Cache
 from transformers.models.qwen2.modeling_qwen2 import (
@@ -219,13 +221,15 @@ class SHAQwen2Attention(Qwen2Attention):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_value: Cache | None = None,
+        past_key_value: Cache | None = None,  # transformers<4.55
+        past_key_values: Cache | None = None,  # transformers>=4.55
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: torch.LongTensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor]
-        | None = None,  # will become mandatory in v4.45
-    ) -> tuple[torch.Tensor, list[torch.Tensor] | None, Cache | None]:
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, list[torch.Tensor] | None]:
+        if past_key_values is not None and past_key_value is None:
+            past_key_value = past_key_values
         bsz, q_len, _ = hidden_states.size()
 
         assert isinstance(self.hidden_size, int)
@@ -290,10 +294,7 @@ class SHAQwen2Attention(Qwen2Attention):
         value_states = list(repeat_kv(value_states, self.num_key_value_groups))
 
         attn_weights = [
-            # Note: The original divides with sqrt after the matmul. However,
-            # the matmul overflows in fp16, so moving this division into one of
-            # the operands is key modification.
-            torch.matmul(q, k / math.sqrt(self.head_dim))
+            torch.matmul(q, k) * (1.0 / math.sqrt(self.head_dim))
             for q, k in zip(query_states, key_states, strict=False)
         ]
         if attn_weights[0].size() != (bsz, 1, q_len, kv_seq_len):
@@ -344,7 +345,9 @@ class SHAQwen2Attention(Qwen2Attention):
 
         attn_weights_return = attn_weights if output_attentions else None
 
-        return attn_output_return, attn_weights_return, past_key_value
+        if Version(transformers.__version__) >= Version("4.48.0"):
+            return attn_output_return, attn_weights_return
+        return attn_output_return, attn_weights_return, past_key_value  # type: ignore[return-value]
 
 
 class QCQwen2MLP(Qwen2MLP):

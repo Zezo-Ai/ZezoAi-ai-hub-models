@@ -244,8 +244,8 @@ class SHALlamaAttention(LlamaAttention):
                 past_key = past_key_value.key_cache[self.layer_idx]
                 past_value = past_key_value.value_cache[self.layer_idx]  # type: ignore[attr-defined, unused-ignore]
             elif hasattr(past_key_value.layers[self.layer_idx], "keys"):  # type: ignore[attr-defined, unused-ignore]
-                past_key = past_key_value.layers[self.layer_idx].keys  # type: ignore[attr-defined, unused-ignore]
-                past_value = past_key_value.layers[self.layer_idx].values  # type: ignore[attr-defined, unused-ignore]
+                past_key = past_key_value.layers[self.layer_idx].keys  # type: ignore[attr-defined, assignment, unused-ignore]
+                past_value = past_key_value.layers[self.layer_idx].values  # type: ignore[attr-defined, assignment, unused-ignore]
             else:
                 past_key = past_key_value.layers[self.layer_idx][0]  # type: ignore[attr-defined, index, unused-ignore]
                 past_value = past_key_value.layers[self.layer_idx][1]  # type: ignore[attr-defined, index, unused-ignore]

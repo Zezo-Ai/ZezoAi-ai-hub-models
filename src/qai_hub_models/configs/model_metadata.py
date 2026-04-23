@@ -235,6 +235,7 @@ class GenieMetadata(BaseQAIHMConfig):
     context_lengths: list[int]
     supports_streaming: bool = True
     supports_vision: bool = False
+    supports_thinking: bool = False
     pipeline: GeniePipeline | None = None
     sample_inputs: list[GenieSampleInput] | None = None
     vision_preprocessing: GenieVisionPreprocessing | None = None

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from qai_hub_models.datasets.common import BaseDataset, DatasetMetadata, DatasetSplit
@@ -48,7 +49,11 @@ class InterleavedDataset(BaseDataset):
         batch: list[dict[str, Any]],
     ) -> tuple[Any, ...]:
         item = batch[0]
-        if isinstance(item, dict) and "input_ids" in item and "attention_mask" in item:
+        if (
+            isinstance(item, Mapping)
+            and "input_ids" in item
+            and "attention_mask" in item
+        ):
             result: tuple[Any, ...] = (
                 item["input_ids"],
                 item["attention_mask"],

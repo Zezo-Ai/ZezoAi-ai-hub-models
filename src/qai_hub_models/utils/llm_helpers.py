@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import qai_hub
+import torch
 from filelock import FileLock
 
 if TYPE_CHECKING:
@@ -106,11 +107,67 @@ def create_genie_config(
     llm_config: PretrainedConfig,
     embedding_type: str,
     model_list: list[str],
+    embedding_size: int | None = None,
     top_level_key: str = "dialog",
+    embedding_lut_path: str | None = None,
+    vlm_rope_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """
+    Create Genie configuration for LLM or VLM models.
+
+    Parameters
+    ----------
+    context_length
+        Maximum context length.
+    llm_config
+        LLM configuration from transformers.
+    embedding_type
+        Type of positional embedding (e.g., "rope").
+    model_list
+        List of model binary files.
+    embedding_size
+        For VLM models using inputs_embeds (-e flag), specify the embedding/hidden size.
+        When provided, adds the "embedding" section required for VLM inference.
+    top_level_key
+        Top-level config key. "dialog" for standalone LLMs, "text-generator"
+        for VLM pipeline configs.
+    embedding_lut_path
+        Path to embedding LUT file. When provided, the embedding section uses
+        the LUT format (type, lut-path, size, datatype) for VLM pipelines.
+    vlm_rope_config
+        VLM-specific MRoPE positional encoding overrides. When provided,
+        replaces the standard rope-scaling logic. Expected keys:
+        "rope-type", "time-step", "spatial-merge-size", "mrope-section".
+
+    Returns
+    -------
+    dict[str, Any]
+        Genie configuration dictionary.
+    """
     kv_dim = getattr(
         llm_config, "head_dim", llm_config.hidden_size // llm_config.num_attention_heads
     )
+    rope_dim = kv_dim // 2
+
+    sampler = {
+        "version": 1,
+        "seed": 42,
+        "temp": 0.8,
+        "top-k": 40,
+        "top-p": 0.95,
+    }
+
+    qnn_htp: dict[str, Any] = {
+        "version": 1,
+        "use-mmap": True,
+        "spill-fill-bufsize": 0,
+        "mmap-budget": 0,
+        "poll": True,
+        "cpu-mask": "0xe0",
+        "kv-dim": kv_dim,
+        "allow-async-init": False,
+    }
+
     inner: dict[str, Any] = {
         "version": 1,
         "type": "basic",
@@ -121,13 +178,7 @@ def create_genie_config(
             "bos-token": llm_config.bos_token_id,
             "eos-token": llm_config.eos_token_id,
         },
-        "sampler": {
-            "version": 1,
-            "seed": 42,
-            "temp": 0.8,
-            "top-k": 40,
-            "top-p": 0.95,
-        },
+        "sampler": sampler,
         "tokenizer": {"version": 1, "path": "tokenizer.json"},
         "engine": {
             "version": 1,
@@ -135,18 +186,7 @@ def create_genie_config(
             "backend": {
                 "version": 1,
                 "type": "QnnHtp",
-                "QnnHtp": {
-                    "version": 1,
-                    "use-mmap": True,
-                    "spill-fill-bufsize": 0,
-                    "mmap-budget": 0,
-                    "poll": True,
-                    "cpu-mask": "0xe0",
-                    "kv-dim": kv_dim,
-                    "pos-id-dim": kv_dim // 2,
-                    "allow-async-init": False,
-                    "rope-theta": int(llm_config.rope_theta),
-                },
+                "QnnHtp": qnn_htp,
                 "extensions": "htp_backend_ext_config.json",
             },
             "model": {
@@ -159,27 +199,69 @@ def create_genie_config(
             },
         },
     }
-    genie_config: dict[str, Any] = {top_level_key: inner}
-    if hasattr(llm_config, "rope_scaling") and llm_config.rope_scaling is not None:
-        positional_encodings = {
-            "type": embedding_type,
-            "rope-dim": kv_dim // 2,
-            "rope-theta": int(llm_config.rope_theta),
-            "rope-scaling": {
-                "rope-type": llm_config.rope_scaling["rope_type"],
-                "factor": 8.0,
-                "low-freq-factor": llm_config.rope_scaling["low_freq_factor"],
-                "high-freq-factor": llm_config.rope_scaling["high_freq_factor"],
-                "original-max-position-embeddings": llm_config.rope_scaling[
-                    "original_max_position_embeddings"
-                ],
-            },
-        }
-        del inner["engine"]["backend"]["QnnHtp"]["pos-id-dim"]
-        inner["engine"]["model"]["positional-encoding"] = positional_encodings
-        del inner["engine"]["backend"]["QnnHtp"]["rope-theta"]
 
-    return genie_config
+    # Positional encoding handling
+    if vlm_rope_config is not None:
+        # VLM-specific MRoPE (e.g., Qwen2.5-VL uses qwen2vl-mrope)
+        qnn_htp["enable-graph-switching"] = False
+        inner["engine"]["model"]["positional-encoding"] = {
+            "type": embedding_type,
+            "rope-dim": rope_dim,
+            "rope-theta": int(llm_config.rope_theta),
+            "rope-scaling": vlm_rope_config,
+        }
+    else:
+        # Standard LLM: put rope-theta and pos-id-dim in QnnHtp backend
+        qnn_htp["pos-id-dim"] = rope_dim
+        qnn_htp["rope-theta"] = int(llm_config.rope_theta)
+
+        # Add rope-scaling for models like Llama 3.x that have full scaling params
+        rope_scaling = getattr(llm_config, "rope_scaling", None)
+        if rope_scaling is not None and all(
+            k in rope_scaling
+            for k in [
+                "rope_type",
+                "low_freq_factor",
+                "high_freq_factor",
+                "original_max_position_embeddings",
+            ]
+        ):
+            inner["engine"]["model"]["positional-encoding"] = {
+                "type": embedding_type,
+                "rope-dim": rope_dim,
+                "rope-theta": int(llm_config.rope_theta),
+                "rope-scaling": {
+                    "rope-type": rope_scaling["rope_type"],
+                    "factor": 8.0,
+                    "low-freq-factor": rope_scaling["low_freq_factor"],
+                    "high-freq-factor": rope_scaling["high_freq_factor"],
+                    "original-max-position-embeddings": rope_scaling[
+                        "original_max_position_embeddings"
+                    ],
+                },
+            }
+            del qnn_htp["pos-id-dim"]
+            del qnn_htp["rope-theta"]
+
+    # Add embedding section
+    if embedding_lut_path is not None and embedding_size is not None:
+        # VLM pipeline: LUT-based embedding with explicit path
+        inner["embedding"] = {
+            "version": 1,
+            "type": "lut",
+            "lut-path": embedding_lut_path,
+            "size": embedding_size,
+            "datatype": "float32",
+        }
+    elif embedding_size is not None:
+        # VLM with inputs_embeds (-e flag): simple embedding section
+        inner["embedding"] = {
+            "version": 1,
+            "size": embedding_size,
+            "datatype": "float32",
+        }
+
+    return {top_level_key: inner}
 
 
 def generate_genie_app_script(
@@ -187,8 +269,17 @@ def generate_genie_app_script(
     connections: list,
     sample_inputs: list,
 ) -> str:
-    """Generate genie-app-script.txt from pipeline topology data."""
+    """Generate genie-app-script.txt from pipeline topology data.
+
+    Uses the same node/connection/sample_input structures that populate
+    metadata.genie, so both outputs stay in sync.
+    """
     config_names = {name: f"{name}Config" for name in nodes}
+
+    io_type_hints = {
+        "GENIE_NODE_TEXT_ENCODER_TEXT_INPUT": "textFile",
+        "GENIE_NODE_IMAGE_ENCODER_IMAGE_INPUT": "image",
+    }
 
     lines: list[str] = []
     lines.append("version")
@@ -216,12 +307,11 @@ def generate_genie_app_script(
         f" {conn.consumer_node} {conn.consumer_node_io}"
         for conn in connections
     )
-    if connections:
-        lines.append("")
+    lines.append("")
 
-    lines.extend(
-        f"node set textFile {si.node} {si.node_io} {si.file}" for si in sample_inputs
-    )
+    for si in sample_inputs:
+        set_type = io_type_hints.get(si.node_io, "embedding")
+        lines.append(f"node set {set_type} {si.node} {si.node_io} {si.file}")
     lines.append("")
 
     lines.append("pipeline execute GeniePipeline")
@@ -230,6 +320,37 @@ def generate_genie_app_script(
     lines.append("pipeline free GeniePipeline")
 
     return "\n".join(lines) + "\n"
+
+
+def export_embedding_weights_from_tensor(
+    embed_weights: torch.Tensor,
+    output_path: Path | str,
+    filename: str = "embedding_weights.raw",
+) -> Path:
+    """Export embedding weights tensor as a raw float32 file."""
+    import numpy as np
+
+    output_path = Path(output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+    output_file = output_path / filename
+    embed_weights.cpu().numpy().astype(np.float32).tofile(output_file)
+    return output_file
+
+
+def export_embedding_weights(
+    model: torch.nn.Module,
+    output_path: Path | str,
+    filename: str = "embedding_weights.raw",
+) -> Path:
+    """Export the embedding table from a model as a raw float32 file."""
+    if hasattr(model, "get_input_embeddings"):
+        embed_layer = model.get_input_embeddings()  # type: ignore[operator, unused-ignore]
+    elif hasattr(model, "model") and hasattr(model.model, "embed_tokens"):
+        embed_layer = model.model.embed_tokens
+    else:
+        raise ValueError("Could not find embedding layer in model")
+    embed_weights: torch.Tensor = embed_layer.weight.data
+    return export_embedding_weights_from_tensor(embed_weights, output_path, filename)
 
 
 # The folder is not always the ABI name (may include toolchain as well)

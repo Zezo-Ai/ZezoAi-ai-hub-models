@@ -192,4 +192,15 @@ def get_dataset_from_name(
         and "input_spec" in inspect.signature(dataset_cls.__init__).parameters
     ):
         kwargs["input_spec"] = input_spec
+
+    # Filter kwargs to only those accepted by the dataset constructor,
+    # so callers can pass VLM-specific args (processor, image_size) without
+    # breaking datasets that don't accept them.
+    init_params = inspect.signature(dataset_cls.__init__).parameters
+    has_var_keyword = any(
+        p.kind == inspect.Parameter.VAR_KEYWORD for p in init_params.values()
+    )
+    if not has_var_keyword:
+        kwargs = {k: v for k, v in kwargs.items() if k in init_params}
+
     return dataset_cls(split=split, **kwargs)

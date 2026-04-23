@@ -216,7 +216,7 @@ def sample_input(
         }
     else:
         inputs_embeds = torch.zeros(
-            (input_ids.shape[0], input_ids.shape[1], llm_config.vocab_size)
+            (input_ids.shape[0], input_ids.shape[1], llm_config.hidden_size)
         )
         input_dict = {"inputs_embeds": [inputs_embeds.detach().numpy()]}
 
@@ -442,9 +442,9 @@ def _get_evaluator(
     tokenizer: PreTrainedTokenizerBase,
     device: torch.device,
 ) -> BaseEvaluator:
+    from qai_hub_models.evaluators.kldiv_evaluator import KLDivEvaluator
     from qai_hub_models.evaluators.mmlu_evaluator import MMLUEvaluator
     from qai_hub_models.evaluators.ppl_evaluator import PerplexityEvaluator
-    from qai_hub_models.evaluators.kldiv_evaluator import KLDivEvaluator
 
     if "wikitext" in task:
         return PerplexityEvaluator(context_length, device, tokenizer)
@@ -1053,6 +1053,13 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
         Subclasses that define explicit chat template tokens should override
         this.  The base implementation returns an empty dict (template is only
         known to the HuggingFace tokenizer).
+
+        Returns
+        -------
+        dict[str, str]
+            Keys: system_prefix, system_suffix, user_prefix, user_suffix,
+            assistant_prefix, assistant_suffix, default_system_prompt.
+            Optionally: vision_start, vision_end.
         """
         return {}
 
@@ -1062,9 +1069,32 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
         user_input_prompt: str | None = None,
         system_context_prompt: str | None = None,
         tokenizer: PreTrainedTokenizerBase | None = None,
+        include_image: bool = False,
         **kwargs: Any,
     ) -> str:
-        """Format a prompt using the tokenizer's chat template."""
+        """
+        Format a prompt using the tokenizer's chat template.
+
+        Parameters
+        ----------
+        user_input_prompt
+            The user's input prompt. Defaults to cls.default_user_prompt.
+        system_context_prompt
+            System context/instructions. Defaults to cls.default_system_prompt.
+        tokenizer
+            Tokenizer for applying chat template. Required for base implementation.
+        include_image
+            For VLM models, whether to include vision placeholder tokens.
+            VLM subclasses should override to handle this parameter.
+            Ignored by default (non-VLM models).
+        **kwargs
+            Additional arguments passed to tokenizer.apply_chat_template.
+
+        Returns
+        -------
+        str
+            Formatted prompt string.
+        """
         if tokenizer is None:
             raise ValueError("tokenizer is required for get_input_prompt_with_tags")
         if user_input_prompt is None:
@@ -1463,6 +1493,9 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
     # PyTorch equivalent of this class
     FPModel: type[LLMBase] | None = None
 
+    # Whether the model supports thinking mode (e.g., Qwen3 models).
+    supports_thinking: bool = False
+
     @classmethod
     def get_chat_template(cls) -> dict[str, str]:
         """Delegate to FPModel's get_chat_template."""
@@ -1521,7 +1554,9 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
                 torch.cuda.empty_cache()
 
     def release(self) -> None:
-        del self.quant_sim
+        if hasattr(self, "quant_sim") and self.quant_sim is not None:
+            del self.quant_sim
+            self.quant_sim = None
 
     @staticmethod
     def get_input_spec(
@@ -1613,6 +1648,9 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         if host_device is None:
             host_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        _fp_tokenizer = fp_model.tokenizer if fp_model is not None else None
+        _fp_llm_config = fp_model.llm_config if fp_model is not None else None
+
         if not _skip_quantsim_creation:
             if AIMET_ONNX_INSTALLED:
                 AimetLogger.set_level_for_all_areas(logging.WARNING)
@@ -1669,6 +1707,18 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             if onnx_path is None:
                 tmp_dir.cleanup()
 
+            # Free the fp_model GPU memory before creating QuantSim to avoid
+            # OOM for large models (e.g. 7B) where both PyTorch weights and
+            # the AIMET-ONNX CUDA session don't fit on a single GPU.
+            # Preserve tokenizer/config which are needed later.
+            if fp_model is not None:
+                fp_model.to("cpu")
+                del fp_model
+                fp_model = None
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
             # Two copies are needed. One for QuantSim and one for passing to
             # quantize function for applying Sequential MSE.
             # Deepcopy causes error on GPU.
@@ -1703,8 +1753,8 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             context_length=context_length,
             host_device=host_device,
             checkpoint=checkpoint,
-            tokenizer=fp_model.tokenizer if fp_model is not None else None,
-            llm_config=fp_model.llm_config if fp_model is not None else None,
+            tokenizer=_fp_tokenizer,
+            llm_config=_fp_llm_config,
             attention_mask_min_clip=attention_mask_min_clip,
             attention_mask_multiplier=attention_mask_multiplier,
         )
@@ -2213,6 +2263,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             context_lengths=context_lengths,
             supports_streaming=True,
             supports_vision=False,
+            supports_thinking=cls.supports_thinking,
             pipeline=GeniePipeline(
                 nodes=pipeline_nodes,
                 connections=[],

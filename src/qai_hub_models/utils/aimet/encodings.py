@@ -34,6 +34,8 @@ def propagate_memory_encodings(
                     "Cast",
                     "Reshape",
                     "Slice",
+                    "Squeeze",
+                    "Unsqueeze",
                 }
                 and node.input[0] in encodings["activation_encodings"]
             ):
