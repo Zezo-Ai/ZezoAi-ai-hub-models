@@ -196,7 +196,6 @@ class DeviceInfo(google.protobuf.message.Message):
     VENDOR_FIELD_NUMBER: builtins.int
     ICON_FIELD_NUMBER: builtins.int
     ENABLED_IN_SCORECARD_FIELD_NUMBER: builtins.int
-    AVAILABLE_IN_WORKBENCH_FIELD_NUMBER: builtins.int
     name: builtins.str
     chipset: builtins.str
     npu_count: builtins.int
@@ -204,7 +203,6 @@ class DeviceInfo(google.protobuf.message.Message):
     vendor: builtins.str
     icon: global___WebsiteIcon.ValueType
     enabled_in_scorecard: builtins.bool
-    available_in_workbench: builtins.bool
     @property
     def os(self) -> global___OperatingSystem: ...
     def __init__(
@@ -218,10 +216,9 @@ class DeviceInfo(google.protobuf.message.Message):
         vendor: builtins.str = ...,
         icon: global___WebsiteIcon.ValueType = ...,
         enabled_in_scorecard: builtins.bool = ...,
-        available_in_workbench: builtins.bool = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["os", b"os"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["available_in_workbench", b"available_in_workbench", "chipset", b"chipset", "enabled_in_scorecard", b"enabled_in_scorecard", "form_factor", b"form_factor", "icon", b"icon", "name", b"name", "npu_count", b"npu_count", "os", b"os", "vendor", b"vendor"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["chipset", b"chipset", "enabled_in_scorecard", b"enabled_in_scorecard", "form_factor", b"form_factor", "icon", b"icon", "name", b"name", "npu_count", b"npu_count", "os", b"os", "vendor", b"vendor"]) -> None: ...
 
 global___DeviceInfo = DeviceInfo
 

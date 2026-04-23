@@ -7,6 +7,7 @@ from typing import cast
 import qai_hub as hub
 from qai_hub.client import JobType
 from qai_hub.public_rest_api import get_job_results
+from qai_hub_models_cli.proto.shared import tool_versions_pb2
 
 import qai_hub_models._version as pkg_version
 from qai_hub_models.models.common import QAIRTVersion, TargetRuntime
@@ -31,6 +32,16 @@ class ToolVersions(BaseQAIHMConfig):
     tflite: str | None = None
     litert: str | None = None
     ai_hub_models: str | None = None
+
+    def to_proto(self) -> tool_versions_pb2.ToolVersions:
+        return tool_versions_pb2.ToolVersions(
+            ai_hub_models=self.ai_hub_models,
+            qairt=self.qairt.full_version_with_flavor if self.qairt else None,
+            onnx=self.onnx,
+            onnx_runtime=self.onnx_runtime,
+            tflite=self.tflite,
+            litert=self.litert,
+        )
 
     @staticmethod
     def from_compiled_model(

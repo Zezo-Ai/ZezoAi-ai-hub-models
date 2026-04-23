@@ -25,6 +25,8 @@ from collections.abc import Iterator
 from enum import Enum
 from typing import Any, Literal, overload
 
+from qai_hub_models_cli.proto.shared import range_pb2, tensor_spec_pb2
+
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
 
 
@@ -85,11 +87,45 @@ class BboxMetadata(BaseQAIHMConfig):
 # ---------------------------------------------------------------------------
 # Quantization Parameters
 # ---------------------------------------------------------------------------
+_DTYPE_TO_PROTO: dict[str, int] = {
+    "float16": tensor_spec_pb2.DTYPE_FLOAT16,
+    "float32": tensor_spec_pb2.DTYPE_FLOAT32,
+    "float64": tensor_spec_pb2.DTYPE_FLOAT64,
+    "int8": tensor_spec_pb2.DTYPE_INT8,
+    "int16": tensor_spec_pb2.DTYPE_INT16,
+    "int32": tensor_spec_pb2.DTYPE_INT32,
+    "int64": tensor_spec_pb2.DTYPE_INT64,
+    "uint8": tensor_spec_pb2.DTYPE_UINT8,
+    "uint16": tensor_spec_pb2.DTYPE_UINT16,
+    "uint32": tensor_spec_pb2.DTYPE_UINT32,
+    "uint64": tensor_spec_pb2.DTYPE_UINT64,
+    "bool": tensor_spec_pb2.DTYPE_BOOL,
+}
+
+_IO_TYPE_TO_PROTO: dict[str, int] = {
+    "tensor": tensor_spec_pb2.IO_TYPE_TENSOR,
+    "image": tensor_spec_pb2.IO_TYPE_IMAGE,
+    "bbox": tensor_spec_pb2.IO_TYPE_BBOX,
+}
+
+_COLOR_FORMAT_TO_PROTO: dict[str, int] = {
+    "rgb": tensor_spec_pb2.COLOR_FORMAT_RGB,
+    "bgr": tensor_spec_pb2.COLOR_FORMAT_BGR,
+    "grayscale": tensor_spec_pb2.COLOR_FORMAT_GRAYSCALE,
+}
+
+
 class QuantizationParameters(BaseQAIHMConfig):
     """Quantization parameters for a tensor."""
 
     scale: float
     zero_point: int
+
+    def to_proto(self) -> tensor_spec_pb2.QuantizationParameters:
+        return tensor_spec_pb2.QuantizationParameters(
+            scale=self.scale,
+            zero_point=self.zero_point,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -178,3 +214,38 @@ class TensorSpec(BaseQAIHMConfig):
         """
         yield self.shape
         yield self.dtype
+
+    def to_proto(self, name: str) -> tensor_spec_pb2.TensorSpec:
+        quant = None
+        if self.quantization_parameters is not None:
+            quant = self.quantization_parameters.to_proto()
+
+        value_range = None
+        if self.value_range != (float("-inf"), float("inf")):
+            value_range = range_pb2.Range(
+                double_r=range_pb2.DoubleRange(
+                    min=self.value_range[0], max=self.value_range[1]
+                )
+            )
+
+        image_metadata = None
+        if self.image_metadata is not None:
+            image_metadata = tensor_spec_pb2.ImageMetadata(
+                color_format=_COLOR_FORMAT_TO_PROTO.get(
+                    self.image_metadata.color_format.value,
+                    tensor_spec_pb2.COLOR_FORMAT_UNSPECIFIED,
+                ),
+            )
+
+        return tensor_spec_pb2.TensorSpec(
+            name=name,
+            shape=list(self.shape),
+            dtype=_DTYPE_TO_PROTO.get(self.dtype, tensor_spec_pb2.DTYPE_UNSPECIFIED),
+            quantization_parameters=quant,
+            description=self.description,
+            value_range=value_range,
+            io_type=_IO_TYPE_TO_PROTO.get(
+                self.io_type.value, tensor_spec_pb2.IO_TYPE_UNSPECIFIED
+            ),
+            image_metadata=image_metadata,
+        )

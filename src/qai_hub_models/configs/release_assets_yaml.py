@@ -9,7 +9,9 @@ import os
 from pathlib import Path
 
 from pydantic import Field
+from qai_hub_models_cli.proto import release_assets_pb2
 
+from qai_hub_models.configs.proto_helpers import precision_to_proto, runtime_to_proto
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.common import Precision
 from qai_hub_models.scorecard import ScorecardProfilePath
@@ -81,6 +83,44 @@ class QAIHMModelReleaseAssets(BaseQAIHMConfig):
                 return None
             return self.precisions[precision].chipset_assets[chipset].get(path)
         return self.precisions[precision].universal_assets.get(path)
+
+    def to_proto(
+        self, aihm_version: str, model_id: str
+    ) -> release_assets_pb2.ModelReleaseAssets:
+        assets: list[release_assets_pb2.ModelReleaseAssets.AssetDetails] = []
+        for precision, prec_details in self.precisions.items():
+            for path, asset in prec_details.universal_assets.items():
+                if asset.download_url:
+                    assets.append(
+                        release_assets_pb2.ModelReleaseAssets.AssetDetails(
+                            precision=precision_to_proto(precision),
+                            runtime=runtime_to_proto(path.runtime),
+                            download_url=asset.download_url,
+                            tool_versions=asset.tool_versions.to_proto()
+                            if asset.tool_versions
+                            else None,
+                        )
+                    )
+            for chipset, path_dict in prec_details.chipset_assets.items():
+                for path, asset in path_dict.items():
+                    if asset.download_url:
+                        assets.append(
+                            release_assets_pb2.ModelReleaseAssets.AssetDetails(
+                                precision=precision_to_proto(precision),
+                                runtime=runtime_to_proto(path.runtime),
+                                chipset=chipset,
+                                download_url=asset.download_url,
+                                tool_versions=asset.tool_versions.to_proto()
+                                if asset.tool_versions
+                                else None,
+                            )
+                        )
+
+        return release_assets_pb2.ModelReleaseAssets(
+            aihm_version=aihm_version,
+            model_id=model_id,
+            assets=assets,
+        )
 
     @classmethod
     def from_model(

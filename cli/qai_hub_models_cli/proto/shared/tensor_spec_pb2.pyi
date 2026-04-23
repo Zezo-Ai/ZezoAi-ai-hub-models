@@ -84,6 +84,7 @@ class _IoTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTyp
     IO_TYPE_UNSPECIFIED: _IoType.ValueType  # 0
     IO_TYPE_TENSOR: _IoType.ValueType  # 1
     IO_TYPE_IMAGE: _IoType.ValueType  # 2
+    IO_TYPE_BBOX: _IoType.ValueType  # 3
 
 class IoType(_IoType, metaclass=_IoTypeEnumTypeWrapper):
     """Semantic type of an input/output tensor."""
@@ -91,6 +92,7 @@ class IoType(_IoType, metaclass=_IoTypeEnumTypeWrapper):
 IO_TYPE_UNSPECIFIED: IoType.ValueType  # 0
 IO_TYPE_TENSOR: IoType.ValueType  # 1
 IO_TYPE_IMAGE: IoType.ValueType  # 2
+IO_TYPE_BBOX: IoType.ValueType  # 3
 global___IoType = IoType
 
 class _ColorFormat:

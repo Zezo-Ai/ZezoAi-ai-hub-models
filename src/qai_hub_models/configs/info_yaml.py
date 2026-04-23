@@ -11,6 +11,7 @@ from pathlib import Path
 import requests
 from pydantic import Field, ValidationInfo, model_validator
 from qai_hub.util.session import create_session
+from qai_hub_models_cli.proto import info_pb2, numerics_pb2
 
 from qai_hub_models.configs._info_yaml_enums import (
     MODEL_DOMAIN,
@@ -21,6 +22,15 @@ from qai_hub_models.configs._info_yaml_enums import (
 )
 from qai_hub_models.configs._info_yaml_llm_details import LLM_CALL_TO_ACTION, LLMDetails
 from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.proto_helpers import (
+    call_to_action_to_proto,
+    domain_to_proto,
+    form_factor_to_proto,
+    license_to_proto,
+    status_to_proto,
+    tag_to_proto,
+    use_case_to_proto,
+)
 from qai_hub_models.evaluators.metrics import VALID_METRIC_PAIRS
 from qai_hub_models.scorecard import ScorecardDevice
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, QAIHM_WEB_ASSET
@@ -54,6 +64,15 @@ class NumericsAccuracyBenchmark(BaseQAIHMConfig):
     # Where this benchmark value came from (e.g., a URL to the paper or
     # model card, or "AI Hub Models Reference Eval" for scorecard-derived values).
     source: str
+
+    def to_proto(self) -> numerics_pb2.NumericsAccuracyBenchmark:
+        return numerics_pb2.NumericsAccuracyBenchmark(
+            dataset_name=self.dataset_name,
+            metric_name=self.metric_name,
+            value=self.value,
+            unit=self.unit,
+            source=self.source,
+        )
 
 
 class QAIHMModelInfo(BaseQAIHMConfig):
@@ -160,6 +179,66 @@ class QAIHMModelInfo(BaseQAIHMConfig):
 
     # Add per device, download, app and if the model is available for purchase.
     llm_details: LLMDetails | None = None
+
+    def to_proto(self, aihm_version: str) -> info_pb2.ModelInfo:
+        technical_details = []
+        for key, val in self.technical_details.items():
+            td = info_pb2.ModelInfo.TechnicalDetail(key=key)
+            if isinstance(val, int):
+                td.int_value = val
+            elif isinstance(val, float):
+                td.float_value = val
+            else:
+                td.string_value = str(val)
+            technical_details.append(td)
+
+        llm_details = None
+        if self.llm_details is not None:
+            llm_details = info_pb2.ModelInfo.LLMDetails(
+                call_to_action=call_to_action_to_proto(self.llm_details.call_to_action),
+                genie_compatible=self.llm_details.genie_compatible,
+                llama_cpp_compatible=self.llm_details.llama_cpp_compatible,
+                llama_cpp_model_url=self.llm_details.llama_cpp_model_url,
+            )
+
+        numerics_benchmark = None
+        if self.numerics_benchmark is not None:
+            numerics_benchmark = self.numerics_benchmark.to_proto()
+
+        return info_pb2.ModelInfo(
+            aihm_version=aihm_version,
+            id=self.id,
+            name=self.name,
+            status=status_to_proto(self.status),
+            status_reason=self.status_reason,
+            headline=self.headline,
+            domain=domain_to_proto(self.domain),
+            description=self.description,
+            use_case=use_case_to_proto(self.use_case),
+            tags=[tag_to_proto(t) for t in self.tags],
+            applicable_scenarios=self.applicable_scenarios,
+            related_models=self.related_models,
+            form_factors=[form_factor_to_proto(ff) for ff in self.form_factors],
+            technical_details=technical_details,
+            license_type=license_to_proto(self.license_type),
+            model_maker_id=self.model_maker_id,
+            dataset=self.dataset,
+            research_paper=self.research_paper,
+            research_paper_title=self.research_paper_title,
+            source_repo=self.source_repo,
+            license_url=self.license,
+            has_static_banner=self.has_static_banner,
+            has_animated_banner=self.has_animated_banner,
+            imsdk_supported=self.imsdk_supported,
+            restrict_model_sharing=self.restrict_model_sharing,
+            numerics_benchmark=numerics_benchmark,
+            model_type_llm=self.model_type_llm,
+            llm_details=llm_details,
+            private_perf_form_factors=[
+                form_factor_to_proto(ff)
+                for ff in (self.private_perf_form_factors or [])
+            ],
+        )
 
     @model_validator(mode="after")
     def check_fields(self, info: ValidationInfo) -> QAIHMModelInfo:

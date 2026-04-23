@@ -10,8 +10,10 @@ from enum import Enum, unique
 
 import qai_hub as hub
 from pydantic import Field
+from qai_hub_models_cli.proto import platform_pb2
 from typing_extensions import assert_never
 
+from qai_hub_models.configs.proto_helpers import form_factor_to_proto, runtime_to_proto
 from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
@@ -108,6 +110,38 @@ class WebsiteIcon(Enum):
         assert_never(device.form_factor)
 
 
+_WEBSITE_WORLD_TO_PROTO: dict[str, int] = {
+    "Mobile": platform_pb2.WEBSITE_WORLD_MOBILE,
+    "Compute": platform_pb2.WEBSITE_WORLD_COMPUTE,
+    "Automotive": platform_pb2.WEBSITE_WORLD_AUTOMOTIVE,
+    "IoT": platform_pb2.WEBSITE_WORLD_IOT,
+    "XR": platform_pb2.WEBSITE_WORLD_XR,
+}
+
+_WEBSITE_ICON_TO_PROTO: dict[str, int] = {
+    "Car": platform_pb2.WEBSITE_ICON_CAR,
+    "IoT_Chip": platform_pb2.WEBSITE_ICON_IOT_CHIP,
+    "IoT_Drone": platform_pb2.WEBSITE_ICON_IOT_DRONE,
+    "Laptop_Generic": platform_pb2.WEBSITE_ICON_LAPTOP_GENERIC,
+    "Laptop_X_Elite": platform_pb2.WEBSITE_ICON_LAPTOP_X_ELITE,
+    "Phone_S21": platform_pb2.WEBSITE_ICON_PHONE_S21,
+    "Phone_S22": platform_pb2.WEBSITE_ICON_PHONE_S22,
+    "Phone_S23": platform_pb2.WEBSITE_ICON_PHONE_S23,
+    "Phone_S23_Ultra": platform_pb2.WEBSITE_ICON_PHONE_S23_ULTRA,
+    "Phone_S24": platform_pb2.WEBSITE_ICON_PHONE_S24,
+    "Phone_S24_Ultra": platform_pb2.WEBSITE_ICON_PHONE_S24_ULTRA,
+    "Tablet_Android": platform_pb2.WEBSITE_ICON_TABLET_ANDROID,
+    "XR_Headset": platform_pb2.WEBSITE_ICON_XR_HEADSET,
+}
+
+_OS_TYPE_TO_PROTO: dict[str, int] = {
+    "Android": platform_pb2.OPERATING_SYSTEM_TYPE_ANDROID,
+    "Windows": platform_pb2.OPERATING_SYSTEM_TYPE_WINDOWS,
+    "Linux": platform_pb2.OPERATING_SYSTEM_TYPE_LINUX,
+    "Qualcomm Linux": platform_pb2.OPERATING_SYSTEM_TYPE_QC_LINUX,
+}
+
+
 class FormFactorYaml(BaseQAIHMConfig):
     display_name: str
     world: WebsiteWorld
@@ -117,6 +151,15 @@ class FormFactorYaml(BaseQAIHMConfig):
         return FormFactorYaml(
             display_name=FormFactorYaml._form_factor_to_display_name(form_factor),
             world=WebsiteWorld.from_form_factor(form_factor),
+        )
+
+    def to_proto(
+        self, form_factor: ScorecardDevice.FormFactor
+    ) -> platform_pb2.FormFactorInfo:
+        return platform_pb2.FormFactorInfo(
+            form_factor=form_factor_to_proto(form_factor),
+            display_name=self.display_name,
+            world=_WEBSITE_WORLD_TO_PROTO[self.world.value],
         )
 
     @staticmethod
@@ -147,6 +190,21 @@ class DeviceDetailsYaml(BaseQAIHMConfig):
             enabled_in_scorecard=device in ScorecardDevice._registry.values(),
         )
 
+    def to_proto(self, name: str) -> platform_pb2.DeviceInfo:
+        return platform_pb2.DeviceInfo(
+            name=name,
+            chipset=self.chipset,
+            npu_count=self.npu_count,
+            os=platform_pb2.OperatingSystem(
+                ostype=_OS_TYPE_TO_PROTO[self.os.ostype.value],
+                version=self.os.version,
+            ),
+            form_factor=form_factor_to_proto(self.form_factor),
+            vendor=self.vendor,
+            icon=_WEBSITE_ICON_TO_PROTO[self.icon.value],
+            enabled_in_scorecard=self.enabled_in_scorecard,
+        )
+
 
 class ChipsetYaml(BaseQAIHMConfig):
     aliases: list[str]
@@ -163,6 +221,15 @@ class ChipsetYaml(BaseQAIHMConfig):
             marketing_name=ChipsetYaml.chipset_marketing_name(device.chipset, world),
             world=world,
             reference_device=device.reference_device_name,
+        )
+
+    def to_proto(self, name: str) -> platform_pb2.ChipsetInfo:
+        return platform_pb2.ChipsetInfo(
+            name=name,
+            aliases=self.aliases,
+            marketing_name=self.marketing_name,
+            world=_WEBSITE_WORLD_TO_PROTO[self.world.value],
+            supports_fp16=self.supports_fp16,
         )
 
     @staticmethod
@@ -283,6 +350,31 @@ class DevicesAndChipsetsYaml(BaseQAIHMConfig):
             out.chipsets[device.chipset].reference_device = device.reference_device.name
 
         return out
+
+    def to_proto(self, aihm_version: str) -> platform_pb2.PlatformInfo:
+        runtimes = [
+            platform_pb2.RuntimeInfo(
+                runtime=runtime_to_proto(path.runtime),
+                website_runtime=self.scorecard_path_to_website_runtime[path],
+                file_extension=self.scorecard_path_extensions[path],
+                is_aot_compiled=self.scorecard_path_assets_require_chipset[path],
+            )
+            for path in self.scorecard_path_to_website_runtime
+        ]
+        form_factors = [
+            ff_yaml.to_proto(ff) for ff, ff_yaml in self.form_factors.items()
+        ]
+        devices = [details.to_proto(name) for name, details in self.devices.items()]
+        chipsets = [
+            chipset_yaml.to_proto(name) for name, chipset_yaml in self.chipsets.items()
+        ]
+        return platform_pb2.PlatformInfo(
+            aihm_version=aihm_version,
+            runtimes=runtimes,
+            form_factors=form_factors,
+            devices=devices,
+            chipsets=chipsets,
+        )
 
     @staticmethod
     def load() -> DevicesAndChipsetsYaml:

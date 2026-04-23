@@ -9,7 +9,10 @@ import os
 from pathlib import Path
 
 from pydantic import Field
+from qai_hub_models_cli.proto import numerics_pb2
+from qai_hub_models_cli.proto.shared import range_pb2
 
+from qai_hub_models.configs.proto_helpers import precision_to_proto, runtime_to_proto
 from qai_hub_models.models.common import Precision
 from qai_hub_models.scorecard import ScorecardProfilePath
 from qai_hub_models.scorecard.device import ScorecardDevice
@@ -61,6 +64,50 @@ class QAIHMModelNumerics(BaseQAIHMConfig):
 
     def is_empty(self) -> bool:
         return len(self.metrics) == 0
+
+    def to_proto(self, aihm_version: str, model_id: str) -> numerics_pb2.ModelNumerics:
+        metrics: list[numerics_pb2.ModelNumerics.NumericsMetric] = []
+        for m in self.metrics:
+            device_metrics: list[
+                numerics_pb2.ModelNumerics.NumericsMetric.DeviceNumericsMetrics
+            ] = []
+            for device, prec_dict in m.device_metric.items():
+                for precision, path_dict in prec_dict.items():
+                    for path, details in path_dict.items():
+                        device_metrics.append(
+                            numerics_pb2.ModelNumerics.NumericsMetric.DeviceNumericsMetrics(
+                                device=str(device),
+                                precision=precision_to_proto(precision),
+                                runtime=runtime_to_proto(path.runtime),
+                                partial_metric=details.partial_metric,
+                            )
+                        )
+
+            metric_range = range_pb2.DoubleRange(
+                min=m.metric_range.min, max=m.metric_range.max
+            )
+            metrics.append(
+                numerics_pb2.ModelNumerics.NumericsMetric(
+                    dataset_name=m.dataset_name,
+                    dataset_link=m.dataset_link,
+                    dataset_split_description=m.dataset_split_description,
+                    metric_name=m.metric_name,
+                    metric_description=m.metric_description,
+                    metric_unit=m.metric_unit,
+                    metric_range=metric_range,
+                    metric_enablement_threshold=m.metric_enablement_threshold,
+                    benchmark_value=m.benchmark_value,
+                    num_partial_samples=m.num_partial_samples,
+                    partial_torch_metric=m.partial_torch_metric,
+                    device_metrics=device_metrics,
+                )
+            )
+
+        return numerics_pb2.ModelNumerics(
+            aihm_version=aihm_version,
+            model_id=model_id,
+            metrics=metrics,
+        )
 
     @classmethod
     def from_model(

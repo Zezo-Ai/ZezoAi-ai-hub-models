@@ -15,6 +15,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from qai_hub_models_cli.proto import model_metadata_pb2
+
+from qai_hub_models.configs.proto_helpers import precision_to_proto, runtime_to_proto
 from qai_hub_models.configs.tensor_spec import (
     QuantizationParameters,
     TensorSpec,
@@ -118,6 +121,13 @@ class ModelFileMetadata(BaseQAIHMConfig):
             **kwargs,
         )
 
+    def to_proto(self, filename: str) -> model_metadata_pb2.ModelFileMetadata:
+        return model_metadata_pb2.ModelFileMetadata(
+            filename=filename,
+            inputs=[spec.to_proto(name) for name, spec in self.inputs.items()],
+            outputs=[spec.to_proto(name) for name, spec in self.outputs.items()],
+        )
+
 
 class GenieChatTemplate(BaseQAIHMConfig):
     """Chat template tokens and defaults for Genie SDK."""
@@ -133,6 +143,20 @@ class GenieChatTemplate(BaseQAIHMConfig):
     vision_end: str = ""
     default_system_prompt: str = ""
 
+    def to_proto(self) -> model_metadata_pb2.GenieChatTemplate:
+        return model_metadata_pb2.GenieChatTemplate(
+            global_prefix=self.global_prefix,
+            system_prefix=self.system_prefix,
+            system_suffix=self.system_suffix,
+            user_prefix=self.user_prefix,
+            user_suffix=self.user_suffix,
+            assistant_prefix=self.assistant_prefix,
+            assistant_suffix=self.assistant_suffix,
+            vision_start=self.vision_start,
+            vision_end=self.vision_end,
+            default_system_prompt=self.default_system_prompt,
+        )
+
 
 class GeniePipelineConnection(BaseQAIHMConfig):
     """A connection between two nodes in a Genie pipeline."""
@@ -142,6 +166,16 @@ class GeniePipelineConnection(BaseQAIHMConfig):
     consumer_node: str
     consumer_node_io: str
 
+    def to_proto(
+        self,
+    ) -> model_metadata_pb2.GenieMetadata.GeniePipeline.GeniePipelineConnection:
+        return model_metadata_pb2.GenieMetadata.GeniePipeline.GeniePipelineConnection(
+            producer_node=self.producer_node,
+            producer_node_io=self.producer_node_io,
+            consumer_node=self.consumer_node,
+            consumer_node_io=self.consumer_node_io,
+        )
+
 
 class GenieSampleInput(BaseQAIHMConfig):
     """A sample input binding for a Genie pipeline node."""
@@ -150,12 +184,25 @@ class GenieSampleInput(BaseQAIHMConfig):
     node_io: str
     file: str
 
+    def to_proto(self) -> model_metadata_pb2.GenieMetadata.GenieSampleInput:
+        return model_metadata_pb2.GenieMetadata.GenieSampleInput(
+            node=self.node,
+            node_io=self.node_io,
+            file=self.file,
+        )
+
 
 class GeniePipeline(BaseQAIHMConfig):
     """Pipeline topology for Genie SDK."""
 
     nodes: dict[str, str]
     connections: list[GeniePipelineConnection]
+
+    def to_proto(self) -> model_metadata_pb2.GenieMetadata.GeniePipeline:
+        return model_metadata_pb2.GenieMetadata.GeniePipeline(
+            nodes=self.nodes,
+            connections=[c.to_proto() for c in self.connections],
+        )
 
 
 class GenieVisionPreprocessing(BaseQAIHMConfig):
@@ -169,6 +216,17 @@ class GenieVisionPreprocessing(BaseQAIHMConfig):
     normalize_mean: list[float]
     normalize_std: list[float]
 
+    def to_proto(self) -> model_metadata_pb2.GenieMetadata.GenieVisionPreprocessing:
+        return model_metadata_pb2.GenieMetadata.GenieVisionPreprocessing(
+            image_width=self.image_width,
+            image_height=self.image_height,
+            patch_size=self.patch_size,
+            temporal_patch_size=self.temporal_patch_size,
+            spatial_merge_size=self.spatial_merge_size,
+            normalize_mean=self.normalize_mean,
+            normalize_std=self.normalize_std,
+        )
+
 
 class GenieMetadata(BaseQAIHMConfig):
     """Genie SDK metadata for on-device deployment."""
@@ -180,6 +238,21 @@ class GenieMetadata(BaseQAIHMConfig):
     pipeline: GeniePipeline | None = None
     sample_inputs: list[GenieSampleInput] | None = None
     vision_preprocessing: GenieVisionPreprocessing | None = None
+
+    def to_proto(self) -> model_metadata_pb2.GenieMetadata:
+        return model_metadata_pb2.GenieMetadata(
+            chat_template=self.chat_template.to_proto(),
+            context_lengths=self.context_lengths,
+            supports_streaming=self.supports_streaming,
+            supports_vision=self.supports_vision,
+            pipeline=self.pipeline.to_proto() if self.pipeline else None,
+            sample_inputs=[s.to_proto() for s in self.sample_inputs]
+            if self.sample_inputs
+            else [],
+            vision_preprocessing=self.vision_preprocessing.to_proto()
+            if self.vision_preprocessing
+            else None,
+        )
 
 
 class ModelMetadata(BaseQAIHMConfig):
@@ -252,6 +325,29 @@ class ModelMetadata(BaseQAIHMConfig):
             exclude_defaults=False,
             exclude_unset=True,
             **kwargs,
+        )
+
+    def to_proto(self, aihm_version: str) -> model_metadata_pb2.ModelMetadata:
+        model_files = [
+            file_meta.to_proto(filename)
+            for filename, file_meta in self.model_files.items()
+        ]
+        supplementary_files = [
+            model_metadata_pb2.SupplementaryFileMetadata(
+                filename=filename, description=description
+            )
+            for filename, description in self.supplementary_files.items()
+        ]
+        return model_metadata_pb2.ModelMetadata(
+            aihm_version=aihm_version,
+            model_id=self.model_id,
+            model_name=self.model_name,
+            runtime=runtime_to_proto(self.runtime),
+            precision=precision_to_proto(self.precision),
+            tool_versions=self.tool_versions.to_proto(),
+            model_files=model_files,
+            supplementary_files=supplementary_files,
+            genie=self.genie.to_proto() if self.genie else None,
         )
 
 

@@ -13,7 +13,10 @@ from typing import cast
 import qai_hub as hub
 from pydantic import Field
 from qai_hub.client import JobType
+from qai_hub_models_cli.proto import perf_pb2
+from qai_hub_models_cli.proto.shared import range_pb2
 
+from qai_hub_models.configs.proto_helpers import precision_to_proto, runtime_to_proto
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.common import Precision
 from qai_hub_models.scorecard import ScorecardDevice, ScorecardProfilePath
@@ -231,3 +234,83 @@ class QAIHMModelPerf(BaseQAIHMConfig):
         out = QAIHM_MODELS_ROOT / model_id / "perf.yaml"
         self.to_yaml(out)
         return out
+
+    def to_proto(self, aihm_version: str, model_id: str) -> perf_pb2.ModelPerf:
+        perf_details: list[perf_pb2.ModelPerf.PerformanceDetails] = []
+
+        def _collect(
+            precision: Precision,
+            component: str,
+            device: ScorecardDevice,
+            path: ScorecardProfilePath,
+            details: QAIHMModelPerf.PerformanceDetails,
+        ) -> None:
+            profile_job = None
+            if details.job_id is not None:
+                profile_job = perf_pb2.ModelPerf.ProfileJob(
+                    id=details.job_id,
+                    status=details.job_status or "",
+                )
+
+            metrics = None
+            if details.inference_time_milliseconds is not None:
+                layer_counts = None
+                if details.layer_counts is not None:
+                    layer_counts = perf_pb2.ModelPerf.PerfMetrics.LayerCounts(
+                        total=details.layer_counts.total,
+                        npu=details.layer_counts.npu,
+                        gpu=details.layer_counts.gpu,
+                        cpu=details.layer_counts.cpu,
+                    )
+                mem_range = None
+                if details.estimated_peak_memory_range_mb is not None:
+                    mem_range = range_pb2.IntRange(
+                        min=details.estimated_peak_memory_range_mb.min,
+                        max=details.estimated_peak_memory_range_mb.max,
+                    )
+                metrics = perf_pb2.ModelPerf.PerfMetrics(
+                    inference_time_milliseconds=details.inference_time_milliseconds,
+                    estimated_peak_memory_range_mb=mem_range,
+                    primary_compute_unit=details.primary_compute_unit or "",
+                    layer_counts=layer_counts,
+                )
+
+            llm_metrics = []
+            if details.llm_metrics:
+                for lm in details.llm_metrics:
+                    ttft = None
+                    if lm.time_to_first_token_range_milliseconds:
+                        ttft = range_pb2.DoubleRange(
+                            min=lm.time_to_first_token_range_milliseconds.min,
+                            max=lm.time_to_first_token_range_milliseconds.max,
+                        )
+                    llm_metrics.append(
+                        perf_pb2.ModelPerf.LLMPerfMetrics(
+                            context_length=lm.context_length,
+                            tokens_per_second=lm.tokens_per_second,
+                            time_to_first_token_range_milliseconds=ttft,
+                        )
+                    )
+
+            perf_details.append(
+                perf_pb2.ModelPerf.PerformanceDetails(
+                    precision=precision_to_proto(precision),
+                    component=component,
+                    device=str(device),
+                    runtime=runtime_to_proto(path.runtime),
+                    tool_versions=details.tool_versions.to_proto(),
+                    profile_job=profile_job,
+                    metrics=metrics,
+                    llm_metrics=llm_metrics,
+                )
+            )
+
+        self.for_each_entry(_collect)
+
+        return perf_pb2.ModelPerf(
+            aihm_version=aihm_version,
+            model_id=model_id,
+            supported_devices=[str(d) for d in self.supported_devices],
+            supported_chipsets=self.supported_chipsets,
+            performance_metrics=perf_details,
+        )
