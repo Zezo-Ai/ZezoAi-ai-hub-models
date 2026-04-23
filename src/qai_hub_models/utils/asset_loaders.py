@@ -457,6 +457,7 @@ class ModelZooAssetConfig:
         models_website_url: str,
         models_website_relative_path: str,
         genie_url: str,
+        global_release_asset_folder: str,
         released_asset_folder: str,
         released_asset_filename: str,
         released_asset_with_chipset_filename: str,
@@ -475,6 +476,7 @@ class ModelZooAssetConfig:
         self.models_website_url = models_website_url
         self.models_website_relative_path = models_website_relative_path
         self.genie_url = genie_url
+        self.global_release_asset_folder = global_release_asset_folder
         self.released_asset_folder = released_asset_folder
         self.released_asset_filename = released_asset_filename
         self.released_asset_with_chipset_filename = released_asset_with_chipset_filename
@@ -620,6 +622,16 @@ class ModelZooAssetConfig:
             self.get_release_asset_filename(model_id, runtime, precision, chipset)
         )[0]
 
+    def get_release_s3_folder(self, model_id: str, version: str) -> str:
+        return self.released_asset_folder.format(
+            model_id=model_id, version=QAIHMVersion.tag_from_string(version)[1:]
+        )
+
+    def get_global_release_s3_folder(self, version: str) -> str:
+        return self.global_release_asset_folder.format(
+            version=QAIHMVersion.tag_from_string(version)[1:]
+        )
+
     def get_release_asset_s3_key(
         self,
         model_id: str,
@@ -628,9 +640,10 @@ class ModelZooAssetConfig:
         precision: Precision,
         chipset: str | None,
     ) -> str:
-        return self.released_asset_folder.format(
-            model_id=model_id, version=QAIHMVersion.tag_from_string(version)[1:]
-        ) + self.get_release_asset_filename(model_id, runtime, precision, chipset)
+        return os.path.join(
+            self.get_release_s3_folder(model_id, version),
+            self.get_release_asset_filename(model_id, runtime, precision, chipset),
+        )
 
     def get_release_asset_url(
         self,
@@ -672,6 +685,7 @@ class ModelZooAssetConfig:
             asset_cfg["models_website_url"],
             asset_cfg["models_website_relative_path"],
             asset_cfg["genie_url"],
+            asset_cfg["global_release_asset_folder"],
             asset_cfg["released_asset_folder"],
             asset_cfg["released_asset_filename"],
             asset_cfg["released_asset_with_chipset_filename"],
@@ -695,6 +709,7 @@ class ModelZooAssetConfig:
                 "models_website_relative_path": str,
                 "email_template": str,
                 "genie_url": str,
+                "global_release_asset_folder": str,
                 "released_asset_folder": str,
                 "released_asset_filename": str,
                 "released_asset_with_chipset_filename": str,

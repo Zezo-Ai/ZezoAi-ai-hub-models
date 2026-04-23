@@ -55,6 +55,7 @@ def main() -> None:
     pytorch_models, _ = validate_and_split_enabled_models(args.models)
     version = QAIHMVersion.tag_from_string(args.version)
     replace_existing_assets: bool = args.overwrite
+
     private_s3 = get_qaihm_s3(QAIHM_PRIVATE_S3_BUCKET)[0]
     public_s3 = get_qaihm_s3(
         QAIHM_PUBLIC_S3_BUCKET, requires_admin=replace_existing_assets

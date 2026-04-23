@@ -718,6 +718,36 @@ class TaskLibrary:
             ),
         )
 
+    @public_task("Build Website YAMLs from proto serialization")
+    @depends(["install_deps"])
+    def build_website_yamls(
+        self, plan: Plan, step_id: str = "build_website_yamls"
+    ) -> str:
+        return plan.add_step(
+            step_id,
+            RunCommandsWithVenvTask(
+                group_name=None,
+                venv=self.venv_path,
+                commands=[
+                    "python -m qai_hub_models.scripts.build_release_proto website -o src/qai_hub_models"
+                ],
+            ),
+        )
+
+    @public_task("Publish Proto JSON to AWS S3")
+    @depends(["install_deps"])
+    def release_protos(self, plan: Plan, step_id: str = "release_protos") -> str:
+        return plan.add_step(
+            step_id,
+            RunCommandsWithVenvTask(
+                group_name=None,
+                venv=self.venv_path,
+                commands=[
+                    "python -m qai_hub_models.scripts.build_release_proto aws -o /tmp/release_protos -u"
+                ],
+            ),
+        )
+
     @public_task("Push QAIHM Assets to AWS S3")
     @depends(["install_deps"])
     def release_assets(self, plan: Plan, step_id: str = "release_assets") -> str:

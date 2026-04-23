@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
+import contextlib
 import functools
 import logging
 import os
@@ -24,38 +25,24 @@ QAIHM_PUBLIC_S3_BUCKET = "qaihub-public-assets"
 QAIHM_PRIVATE_S3_BUCKET = "qai-hub-models-private-assets"
 QAIHM_AWS_PROFILE = "qaihm"
 
+
+class NoAWSCredsError(ValueError):
+    def __init__(self) -> None:
+        super().__init__(
+            "S3 credentials not found or expired. Run `python scripts/build_and_test.py validate_aws_credentials` and retry."
+        )
+
+
 CallableRetT = TypeVar("CallableRetT")
 
 
-def has_qaihm_aws_profile() -> bool:
-    """
-    Check whether the local AWS config contains a 'qaihm' profile.
-
-    This indicates the user has previously run the credential setup script
-    (scripts/aws/validate_credentials.py), meaning they are an internal user
-    whose credentials may just need refreshing.
-
-    Returns True if the profile section exists (regardless of whether
-    the credentials are currently valid), False otherwise.
-    """
-    try:
-        boto3.Session(profile_name=QAIHM_AWS_PROFILE)
-        return True
-    except (botocore.exceptions.ProfileNotFound, botocore.exceptions.BotoCoreError):
-        return False
-
-
-@functools.lru_cache(maxsize=1)
+@functools.cache
 def can_access_private_s3() -> bool:
     """Check if user can access private S3 (CI or has AWS profile with valid credentials)."""
-    if not IsOnCIEnvvar.get() or not has_qaihm_aws_profile():
-        return False
-    try:
-        session = boto3.Session(profile_name=QAIHM_AWS_PROFILE)
-        session.client("sts").get_caller_identity()
+    with contextlib.suppress(NoAWSCredsError):
+        get_qaihm_s3(QAIHM_PRIVATE_S3_BUCKET)
         return True
-    except (botocore.exceptions.BotoCoreError, ClientError, NoCredentialsError):
-        return False
+    return False
 
 
 def attempt_with_s3_credentials_warning(
@@ -73,9 +60,7 @@ def attempt_with_s3_credentials_warning(
         if isinstance(e, NoCredentialsError) or e.response.get("Error", {}).get(
             "Code", None
         ) in ["400", "ExpiredToken"]:
-            raise ValueError(
-                "S3 credentials not found or expired. Run `python scripts/build_and_test.py validate_aws_credentials` and retry."
-            ) from e
+            raise NoAWSCredsError() from e
         raise
 
 
@@ -208,6 +193,7 @@ def s3_copy(
         )
 
 
+@functools.cache
 def get_qaihm_s3(bucket_name: str, requires_admin: bool = False) -> tuple[Bucket, bool]:
     """
     Get boto3 objects for interacting with the given bucket using QAIHM credentials.
@@ -229,11 +215,10 @@ def get_qaihm_s3(bucket_name: str, requires_admin: bool = False) -> tuple[Bucket
     """
     try:
         session = boto3.Session(profile_name=QAIHM_AWS_PROFILE)
+        session.client("sts").get_caller_identity()  # Verifies no session expiry
         bucket = session.resource("s3").Bucket(bucket_name)
-    except Exception as e:
-        raise ValueError(
-            "Could not find valid AWS profile. Run <repo_root>/scripts/build_and_test.py --task validate_aws_credentials"
-        ) from e
+    except (botocore.exceptions.BotoCoreError, ClientError, NoCredentialsError) as e:
+        raise NoAWSCredsError() from e
 
     # Only check admin role when explicitly required, to avoid an STS round-trip on every call.
     is_admin = False
@@ -277,7 +262,7 @@ def get_qaihm_s3_or_exit(
     """
     try:
         return get_qaihm_s3(bucket_name, requires_admin)
-    except ValueError as e:
+    except NoAWSCredsError as e:
         print(e)
         sys.exit(1)
 

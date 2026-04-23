@@ -37,6 +37,7 @@ def _make_asset_config(tmpdir: str) -> ModelZooAssetConfig:
         models_website_url="",
         models_website_relative_path="",
         genie_url="",
+        global_release_asset_folder="",
         released_asset_folder="",
         released_asset_filename="",
         released_asset_with_chipset_filename="",
@@ -61,7 +62,6 @@ def _fake_s3_download(src_file: Path) -> Callable[..., str]:
     return _download
 
 
-_PROFILE_PATCH = "qai_hub_models.utils.private_asset_loaders.has_qaihm_aws_profile"
 _ACCESS_PATCH = "qai_hub_models.utils.private_asset_loaders.can_access_private_s3"
 _INTERNAL_PATCH = "qai_hub_models.utils.private_asset_loaders.is_internal_repo"
 

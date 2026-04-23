@@ -49,6 +49,13 @@ jobs:
           sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
           aws-role-arn: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
 
+      - name: Publish Proto JSON to S3
+        shell: bash
+        run: |
+          python3 scripts/build_and_test.py \
+            --venv="${{ env.VENV_PATH }}" \
+            release_protos
+
       - name: Release Assets
         shell: bash
         env:

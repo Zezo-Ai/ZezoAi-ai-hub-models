@@ -138,6 +138,13 @@ jobs:
             with:
               node-version: ${{ env.NODE_VERSION }}
 
+          - name: Build Website YAMLs
+            working-directory: ai-hub-models-internal
+            run: |
+              python3 scripts/build_and_test.py \
+                --venv="${{ env.VENV_PATH }}" \
+                build_website_yamls
+
           - name: Website Scorecard Import
             working-directory: tetra-public-website
             run: |
