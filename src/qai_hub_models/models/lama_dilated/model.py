@@ -11,9 +11,11 @@ from importlib import reload
 
 import torch
 from omegaconf import OmegaConf
+from qai_hub.client import Device
 from typing_extensions import Self
 
 from qai_hub_models.models._shared.repaint.model import RepaintModel
+from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.utils.asset_loaders import (
     CachedWebModelAsset,
     SourceAsRoot,
@@ -36,6 +38,20 @@ LAMA_DILATED_SOURCE_PATCHES = [
 
 class LamaDilated(RepaintModel):
     """Exportable LamaDilated inpainting algorithm by Samsung Research."""
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        if target_runtime == TargetRuntime.QNN_DLC:
+            other_compile_options += " -O2"
+        return super().get_hub_compile_options(
+            target_runtime, precision, other_compile_options, device, context_graph_name
+        )
 
     @classmethod
     def from_pretrained(cls, weights_name: str = DEFAULT_WEIGHTS) -> Self:

@@ -8,12 +8,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import torch
+from qai_hub.client import Device
 from typing_extensions import Self
 
 from qai_hub_models.models._shared.cityscapes_segmentation.model import (
     CityscapesSegmentor,
 )
-from qai_hub_models.models.common import SampleInputsType
+from qai_hub_models.models.common import Precision, SampleInputsType, TargetRuntime
 from qai_hub_models.utils.asset_loaders import (
     CachedWebModelAsset,
     SourceAsRoot,
@@ -119,6 +120,20 @@ class DDRNet(CityscapesSegmentor):
                 ),
             ),
         }
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        if target_runtime == TargetRuntime.QNN_DLC:
+            other_compile_options += " -O2"
+        return super().get_hub_compile_options(
+            target_runtime, precision, other_compile_options, device, context_graph_name
+        )
 
     @staticmethod
     def get_output_names() -> list[str]:
