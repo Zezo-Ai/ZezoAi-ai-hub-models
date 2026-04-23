@@ -238,8 +238,10 @@ class GenieMetadata(google.protobuf.message.Message):
     PIPELINE_FIELD_NUMBER: builtins.int
     SAMPLE_INPUTS_FIELD_NUMBER: builtins.int
     VISION_PREPROCESSING_FIELD_NUMBER: builtins.int
+    SUPPORTS_THINKING_FIELD_NUMBER: builtins.int
     supports_streaming: builtins.bool
     supports_vision: builtins.bool
+    supports_thinking: builtins.bool
     @property
     def chat_template(self) -> global___GenieChatTemplate: ...
     @property
@@ -260,9 +262,10 @@ class GenieMetadata(google.protobuf.message.Message):
         pipeline: global___GenieMetadata.GeniePipeline | None = ...,
         sample_inputs: collections.abc.Iterable[global___GenieMetadata.GenieSampleInput] | None = ...,
         vision_preprocessing: global___GenieMetadata.GenieVisionPreprocessing | None = ...,
+        supports_thinking: builtins.bool = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["_pipeline", b"_pipeline", "_vision_preprocessing", b"_vision_preprocessing", "chat_template", b"chat_template", "pipeline", b"pipeline", "vision_preprocessing", b"vision_preprocessing"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_pipeline", b"_pipeline", "_vision_preprocessing", b"_vision_preprocessing", "chat_template", b"chat_template", "context_lengths", b"context_lengths", "pipeline", b"pipeline", "sample_inputs", b"sample_inputs", "supports_streaming", b"supports_streaming", "supports_vision", b"supports_vision", "vision_preprocessing", b"vision_preprocessing"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["_pipeline", b"_pipeline", "_vision_preprocessing", b"_vision_preprocessing", "chat_template", b"chat_template", "context_lengths", b"context_lengths", "pipeline", b"pipeline", "sample_inputs", b"sample_inputs", "supports_streaming", b"supports_streaming", "supports_thinking", b"supports_thinking", "supports_vision", b"supports_vision", "vision_preprocessing", b"vision_preprocessing"]) -> None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_pipeline", b"_pipeline"]) -> typing.Literal["pipeline"] | None: ...
     @typing.overload

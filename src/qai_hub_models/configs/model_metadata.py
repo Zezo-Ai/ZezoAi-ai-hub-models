@@ -253,6 +253,7 @@ class GenieMetadata(BaseQAIHMConfig):
             vision_preprocessing=self.vision_preprocessing.to_proto()
             if self.vision_preprocessing
             else None,
+            supports_thinking=self.supports_thinking,
         )
 
 

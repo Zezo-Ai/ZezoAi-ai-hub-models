@@ -56,6 +56,7 @@ message GenieMetadata {
   optional GeniePipeline pipeline = 5;
   repeated GenieSampleInput sample_inputs = 6;
   optional GenieVisionPreprocessing vision_preprocessing = 7;
+  bool supports_thinking = 8;
 
   message GeniePipeline {
     map<string, string> nodes = 1;
