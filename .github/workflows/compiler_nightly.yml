@@ -7,6 +7,9 @@
 name: Compiler Nightly Scorecard
 
 on:
+  # Run daily at 1am PST (9am UTC)
+  schedule:
+    - cron: '0 9 * * *'
   # Allow manual trigger
   workflow_dispatch:
     inputs:
@@ -19,6 +22,19 @@ on:
         required: false
         type: boolean
         default: false
+      delay:
+        description: 'Wait time before collecting results'
+        required: true
+        default: compiler_nightly_2h_delay
+        type: choice
+        options:
+          - compiler_nightly_2h_delay
+          - compiler_nightly_immediate
+      always_upload:
+        description: 'Always upload models from prod (skip checking for existing models in dev)'
+        required: false
+        type: boolean
+        default: false
 
 env:
   PYTHON_VERSION: "3.10"
@@ -26,8 +42,31 @@ env:
   COMPILER_NIGHTLY_PROJECT_ID: ${{ secrets.COMPILER_NIGHTLY_PROJECT_ID }}
 
 jobs:
-  compiler_scorecard:
-    name: "Compiler Scorecard"
+  wait_workbench_deployment:
+    name: "Wait For Workbench to Finish Deploying"
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    timeout-minutes: 180
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          venv-path: ${{ env.VENV_PATH }}
+          bnt-venv-install-cmd: install_compiler_nightly
+          hub-deployments: dev
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+
+      - name: Wait for workbench
+        uses: ./.github/actions/wait-workbench-deployment
+        with:
+          venv-path: ${{ env.VENV_PATH }}
+
+  submit_compile_jobs:
+    name: "Submit Compile Jobs"
+    needs: wait_workbench_deployment
     runs-on: [tetra-ubuntu-2204, self-hosted]
     permissions:
       contents: read
@@ -37,6 +76,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Fetch all history for all tags
 
       - name: CI Setup
         uses: ./.github/actions/ci-setup
@@ -66,12 +107,18 @@ jobs:
         env:
           INTERMEDIATES_DIR: ${{ steps.checkout_intermediates.outputs.intermediates_dir }}
           DRY_RUN: ${{ inputs.dry_run }}
+          ALWAYS_UPLOAD: ${{ inputs.always_upload }}
         run: |
-          source "${{ env.VENV_PATH }}/bin/activate"
+          source "${{ github.workspace }}/${{ env.VENV_PATH }}/bin/activate"
 
           DRY_ARG=""
           if [ "$DRY_RUN" = "true" ]; then
             DRY_ARG="--dry-run"
+          fi
+
+          ALWAYS_UPLOAD_ARG=""
+          if [ "$ALWAYS_UPLOAD" = "true" ]; then
+            ALWAYS_UPLOAD_ARG="--always-upload"
           fi
 
           python clone_scorecard.py \
@@ -80,13 +127,14 @@ jobs:
             --intermediates-dir "${INTERMEDIATES_DIR}" \
             --output-dir results \
             $DRY_ARG \
+            $ALWAYS_UPLOAD_ARG \
             --verbose
         shell: bash
 
       - name: Submit compile jobs
         working-directory: scripts/compiler_nightly
         run: |
-          source "${{ env.VENV_PATH }}/bin/activate"
+          source "${{ github.workspace }}/${{ env.VENV_PATH }}/bin/activate"
 
           # Find the most recent dev-compile-scorecard file
           CONFIG_FILE=$(ls -t results/dev-compile-scorecard-*.yaml | head -1)
@@ -98,11 +146,51 @@ jobs:
             --verbose
         shell: bash
 
+      - name: Upload job submission results
+        uses: actions/upload-artifact@v7
+        with:
+          name: compiler-scorecard-jobs-${{ github.run_number }}
+          path: scripts/compiler_nightly/results/
+          retention-days: 30
+
+  collect_compile_results:
+    name: "Collect Compile Results"
+    needs: submit_compile_jobs
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+
+    environment:
+      name: ${{ inputs.delay == 'compiler_nightly_immediate' && 'compiler_nightly_immediate' || 'compiler_nightly_2h_delay' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Fetch all history for all tags
+
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          venv-path: ${{ env.VENV_PATH }}
+          bnt-venv-install-cmd: install_compiler_nightly
+          hub-deployments: dev
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+
+      - name: Download job submission results
+        uses: actions/download-artifact@v8
+        with:
+          name: compiler-scorecard-jobs-${{ github.run_number }}
+          path: scripts/compiler_nightly/results/
+
       - name: Collect compile results
         if: always()
         working-directory: scripts/compiler_nightly
         run: |
-          source "${{ env.VENV_PATH }}/bin/activate"
+          source "${{ github.workspace }}/${{ env.VENV_PATH }}/bin/activate"
 
           # Find the most recent jobs file
           JOBS_FILE=$(ls -t results/dev-compile-jobs-*.yaml | head -1)
@@ -111,6 +199,17 @@ jobs:
             --dev-profile dev \
             --jobs-file "${JOBS_FILE}" \
             --output-dir results \
+            --verbose
+        shell: bash
+
+      - name: Print results summary
+        if: always()
+        working-directory: scripts/compiler_nightly
+        run: |
+          source "${{ github.workspace }}/${{ env.VENV_PATH }}/bin/activate"
+
+          python post_compile_results.py \
+            --results-dir results \
             --verbose
         shell: bash
 

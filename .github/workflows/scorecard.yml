@@ -152,19 +152,10 @@ jobs:
         hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
         hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
 
-    - name: Wait until workbench is deployed
-      run: |
-        source "${{env.VENV_PATH}}/bin/activate"
-        while true; do
-            OUTPUT=$(qai-hub list-devices 2>&1) || true
-            echo "$OUTPUT"
-            if [[ "$OUTPUT" != *"Qualcomm AI Hub is unavailable"* ]]; then
-            echo "workbench is available, ending"
-            break
-            fi
-            echo "workbench is unavailable. Waiting 5 minutes..."
-            sleep 300
-        done
+    - name: Wait for workbench
+      uses: ./.github/actions/wait-workbench-deployment
+      with:
+        venv-path: ${{ env.VENV_PATH }}
 
   sync_assets:
     name: Sync Static Model Assets

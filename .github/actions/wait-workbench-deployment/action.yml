@@ -1,0 +1,26 @@
+name: Wait for Workbench Deployment
+
+description: Poll qai-hub until workbench is available (handles long deployments)
+
+inputs:
+  venv-path:
+    description: Path to virtual environment with qai-hub installed
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Wait until workbench is deployed
+      shell: bash
+      run: |
+        source "${{ github.workspace }}/${{ inputs.venv-path }}/bin/activate"
+        while true; do
+            OUTPUT=$(qai-hub list-devices 2>&1) || true
+            echo "$OUTPUT"
+            if [[ "$OUTPUT" != *"Qualcomm AI Hub is unavailable"* ]]; then
+              echo "workbench is available, ending"
+              break
+            fi
+            echo "workbench is unavailable. Waiting 5 minutes..."
+            sleep 300
+        done

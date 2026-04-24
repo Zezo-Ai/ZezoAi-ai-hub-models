@@ -100,13 +100,13 @@ def fetch_existing_dev_models(
 def get_or_upload_model(
     source_model: Model,
     model_name: str,
-    uploaded_models: dict[str, str | None],
+    uploaded_models: dict[str, str],
     existing_dev_models: dict[str, str],
     dev_client: Client,
     project_id: str,
     lock: Lock,
-) -> tuple[str, bool] | None:
-    """Upload model if needed, return (dev_model_id, was_reused) or None if another thread is uploading."""
+) -> tuple[str, bool]:
+    """Upload model if needed, return (dev_model_id, was_reused)."""
     # Check read-only dict first (no lock needed)
     if source_model.model_id in existing_dev_models:
         dev_model_id = existing_dev_models[source_model.model_id]
@@ -114,17 +114,12 @@ def get_or_upload_model(
             uploaded_models[source_model.model_id] = dev_model_id
         return dev_model_id, True
 
-    # Check if already uploaded or being uploaded by another thread
+    # Check if already uploaded by another thread
     with lock:
         if source_model.model_id in uploaded_models:
-            dev_model_id = uploaded_models[source_model.model_id]
-            if dev_model_id is not None:
-                return dev_model_id, True  # Already uploaded
-            return None  # Another thread is currently uploading
-        # Not yet claimed, claim it
-        uploaded_models[source_model.model_id] = None
+            return uploaded_models[source_model.model_id], True
 
-    # Perform upload without holding lock
+    # Perform upload without holding lock (allows parallel uploads)
     model_name_with_prod_id = format_dev_model_name(model_name, source_model.model_id)
     with tempfile.TemporaryDirectory(prefix=f"model_{model_name}_") as temp_dir:
         model_path = Path(temp_dir) / f"{model_name}_{source_model.model_id}"
@@ -152,14 +147,14 @@ def process_compile_job(
     dev_client: Client,
     job_id: str,
     model_name: str,
-    uploaded_models: dict[str, str | None],
+    uploaded_models: dict[str, str],
     existing_dev_models: dict[str, str],
     project_id: str,
     lock: Lock,
-) -> tuple[dict, bool] | None:
+) -> tuple[dict, bool]:
     job = prod_client.get_job(job_id, JobType.COMPILE)
 
-    upload_result = get_or_upload_model(
+    dev_model_id, was_reused = get_or_upload_model(
         job.model,
         model_name,
         uploaded_models,
@@ -168,10 +163,6 @@ def process_compile_job(
         project_id,
         lock,
     )
-    if upload_result is None:
-        return None
-
-    dev_model_id, was_reused = upload_result
     job_status = job.get_status()
 
     return {
@@ -335,6 +326,11 @@ def main() -> int:
         default="cs_8_elite",
         help="Filter profile jobs by device (case-insensitive, e.g., 'cs_8_elite', 'monaco')",
     )
+    parser.add_argument(
+        "--always-upload",
+        action="store_true",
+        help="Always upload models from prod, skip checking for existing models in dev",
+    )
 
     args = parser.parse_args()
 
@@ -352,7 +348,12 @@ def main() -> int:
 
         prod_client = load_client(args.prod_profile)
         dev_client = load_client(args.dev_profile)
-        existing_dev_models = fetch_existing_dev_models(dev_client, project_id)
+
+        if args.always_upload:
+            log_and_print("--always-upload: skipping model existence check", logger)
+            existing_dev_models = {}
+        else:
+            existing_dev_models = fetch_existing_dev_models(dev_client, project_id)
 
         all_jobs: dict[str, dict[str, str]] = {
             "compile": load_yaml_safe(args.intermediates_dir / "compile-jobs.yaml"),
@@ -381,17 +382,17 @@ def main() -> int:
             logger,
         )
 
-        uploaded_models: dict[str, str | None] = {}
+        uploaded_models: dict[str, str] = {}
         lock = Lock()
         scorecards: dict[str, dict[str, dict]] = {
             "compile": {},
             "link": {},
             "profile": {},
         }
-        stats = {"uploaded": 0, "reused": 0, "skipped": 0, "failed": 0}
+        stats = {"uploaded": 0, "reused": 0, "failed": 0}
 
         with ThreadPoolExecutor(max_workers=args.workers) as executor:
-            futures: dict[Future[tuple[dict, bool] | None], tuple[str, str]] = {}
+            futures: dict[Future[tuple[dict, bool]], tuple[str, str]] = {}
 
             for model_name, job_id in all_jobs["compile"].items():
                 future = executor.submit(
@@ -419,18 +420,8 @@ def main() -> int:
                 job_type, model_name = futures[future]
 
                 try:
-                    result = future.result()
-
-                    # Handle skipped (compile jobs only)
-                    if result is None:
-                        stats["skipped"] += 1
-                        print(
-                            f"  [{completed}/{total_jobs}] {job_type} {model_name}: skipped"
-                        )
-                        continue
-
                     # All jobs now return (result_dict, was_reused)
-                    result_dict, was_reused = result
+                    result_dict, was_reused = future.result()
                     scorecards[job_type][model_name] = result_dict
 
                     if job_type == "compile":
@@ -467,7 +458,7 @@ def main() -> int:
             )
 
         log_and_print(
-            f"Models: {stats['uploaded']} uploaded, {stats['reused']} reused, {stats['skipped']} skipped, {stats['failed']} failed",
+            f"Models: {stats['uploaded']} uploaded, {stats['reused']} reused, {stats['failed']} failed",
             logger,
         )
         return 0

@@ -12,13 +12,18 @@ if [ -z "$AIHM_TAG" ]; then
     AIHM_TAG=$(curl -s https://pypi.org/pypi/qai-hub-models/json | jq -r '.info.version')
 fi
 
+if [[ ! "$AIHM_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ ! "$AIHM_TAG" =~ ^[0-9a-f]{7,40}$ ]]; then
+  echo "ERROR: Invalid tag format (must be semver X.Y.Z or commit hash): $AIHM_TAG" >&2
+  exit 1
+fi
+
 OUTPUT_DIR="intermediates_${AIHM_TAG}"
 echo "Checking out intermediates from v${AIHM_TAG} to ${OUTPUT_DIR}"
 
 mkdir -p "$OUTPUT_DIR"
 
 for file in compile-jobs.yaml link-jobs.yaml profile-jobs.yaml; do
-    git show "v${AIHM_TAG}:qai_hub_models/scorecard/intermediates/${file}" > "${OUTPUT_DIR}/${file}"
+    git show "v${AIHM_TAG}:src/qai_hub_models/scorecard/intermediates/${file}" > "${OUTPUT_DIR}/${file}"
 done
 
 echo "Done."
