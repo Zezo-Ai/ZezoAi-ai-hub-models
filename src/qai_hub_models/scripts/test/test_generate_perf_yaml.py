@@ -14,23 +14,20 @@ from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
 from qai_hub_models.scorecard.results.yaml import ProfileScorecardJobYaml
 from qai_hub_models.utils.collection_model_helpers import get_components
-from qai_hub_models.utils.hub_clients import (
-    deployment_is_prod,
-    get_default_hub_deployment,
-)
+from qai_hub_models.utils.hub_clients import deployment_is_prod
 
 EXPECTED_MODEL_CARD = QAIHMModelPerf.from_yaml(
     os.path.join(os.path.dirname(__file__), "perf_gt.yaml")
 )
 
 
-def test_generate_perf() -> None:
-    # Verify the model card is made correctly given the info
-    if not deployment_is_prod(get_default_hub_deployment() or ""):
+def test_generate_perf(hub_test_deployment: str) -> None:
+    if not deployment_is_prod(hub_test_deployment):
         pytest.skip(
-            f"This test uses jobs only accessible on production AI Hub Workbench. Enabled deployment: {get_default_hub_deployment()}"
+            f"This test uses jobs only accessible on production AI Hub Workbench. Enabled deployment: {hub_test_deployment}"
         )
 
+    # Verify the model card is made correctly given the info
     job_ids = ProfileScorecardJobYaml.from_file(
         os.path.join(os.path.dirname(__file__), "profile_job_ids.yaml")
     )

@@ -20,6 +20,9 @@ import qai_hub_models.scorecard.envvars  # noqa: F401
 from qai_hub_models.utils.envvar_bases import PYTEST_CLI_ENVVAR_REGISTRY
 from qai_hub_models.utils.envvars import IsOnCIEnvvar
 
+# Re-export shared fixtures so tests can reference them by name without importing.
+from qai_hub_models.utils.testing import hub_test_deployment  # noqa: F401
+
 ReturnT = TypeVar("ReturnT")
 
 # ---------------------------------------------------------------------------

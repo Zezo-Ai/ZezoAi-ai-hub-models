@@ -25,6 +25,7 @@ from tabulate import tabulate
 from qai_hub_models.datasets.common import get_folder_name
 from qai_hub_models.models.common import TargetRuntime
 from qai_hub_models.scorecard import ScorecardDevice
+from qai_hub_models.scorecard.envvars import DeploymentEnvvar
 from qai_hub_models.utils.asset_loaders import (
     always_answer_prompts,
     load_yaml,
@@ -40,6 +41,10 @@ from qai_hub_models.utils.evaluate import (
     CACHE_SAMPLES_PER_JOB_FILE,
     get_dataset_path,
     get_torch_val_dataloader,
+)
+from qai_hub_models.utils.hub_clients import (
+    default_hub_client_as,
+    get_hub_client_or_raise,
 )
 from qai_hub_models.utils.inference import (
     AsyncOnDeviceResult,
@@ -86,6 +91,26 @@ def skip_clone_repo_check(func: Callable) -> Callable:
 def skip_clone_repo_check_fixture() -> Generator[None, None, None]:
     with always_answer_prompts(True):
         yield
+
+
+@pytest.fixture
+def hub_test_deployment() -> Generator[str, None, None]:
+    """
+    Set the global Hub client to match ``QAIHM_TEST_DEPLOYMENT``.
+
+    Reads the deployment from :func:`DeploymentEnvvar.get` and swaps the
+    global Hub client for the duration of the test via
+    :func:`default_hub_client_as`, so ``hub.*`` calls use the correct
+    deployment regardless of what ``~/.qai_hub/client.ini`` points at.
+
+    Yields
+    ------
+    str
+        The deployment name (e.g. ``"prod"``, ``"dev"``).
+    """
+    deployment = DeploymentEnvvar.get()
+    with default_hub_client_as(get_hub_client_or_raise(deployment)):
+        yield deployment
 
 
 def assert_most_same(arr1: np.ndarray, arr2: np.ndarray, diff_tol: float) -> None:

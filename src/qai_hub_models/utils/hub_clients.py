@@ -154,7 +154,6 @@ def default_hub_client_as(
             set_default_hub_client(prev_client, prev_hub_attrs, prev_hub_hub_attrs)
 
 
-@functools.cache
 def get_default_hub_deployment() -> str | None:
     try:
         client = hub.hub._global_client
