@@ -21,6 +21,7 @@ from qai_hub_models.scripts.build_release_proto import (
 )
 
 SAMPLE_MODELS = {"mobilenet_v2", "aotgan"}
+RESTRICTED_MODEL = "yolov8_det"
 
 
 @pytest.fixture
@@ -136,3 +137,24 @@ def test_cmd_aws(output_dir: Path) -> None:
                 assert asset["runtime"].startswith("RUNTIME_"), (
                     f"JSON should preserve proto enum names, got {asset['runtime']}"
                 )
+
+
+def test_restricted_model_excludes_release_assets(output_dir: Path) -> None:
+    models = {RESTRICTED_MODEL}
+    args_website = argparse.Namespace(
+        output_dir=str(output_dir / "website"), version=__version__, models=models
+    )
+    cmd_website(args_website)
+    model_dir = output_dir / "website" / "models" / RESTRICTED_MODEL
+    assert not (model_dir / "release-assets.yaml").exists()
+
+    args_aws = argparse.Namespace(
+        output_dir=str(output_dir / "aws"),
+        version=__version__,
+        models=models,
+        upload=False,
+    )
+    cmd_aws(args_aws)
+    model_dir = output_dir / "aws" / "models" / RESTRICTED_MODEL
+    assert not (model_dir / "release-assets.json").exists()
+    assert not (model_dir / "release-assets.pb").exists()

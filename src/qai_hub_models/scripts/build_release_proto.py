@@ -166,9 +166,10 @@ def _build_model_protos(
             )
         )
 
-    written.extend(
-        _build_release_assets_proto(model_id, aihm_version, output_dir, fmts)
-    )
+    if not info.restrict_model_sharing:
+        written.extend(
+            _build_release_assets_proto(model_id, aihm_version, output_dir, fmts)
+        )
 
     return written, None
 
@@ -227,6 +228,7 @@ def cmd_website(args: argparse.Namespace) -> None:
     _copy_global_yamls(output_root, args.version)
 
     def build_model(model_id: str) -> tuple[int, str | None]:
+        info = QAIHMModelInfo.from_model(model_id)
         model_src = QAIHM_MODELS_ROOT / model_id
         model_dst = output_root / "models" / model_id
         model_dst.mkdir(parents=True, exist_ok=True)
@@ -235,13 +237,27 @@ def cmd_website(args: argparse.Namespace) -> None:
         for yaml_name in MODEL_YAMLS_TO_COPY:
             src = (model_src / yaml_name).resolve()
             dst = (model_dst / yaml_name).resolve()
-            if src.exists() and src != dst:
-                shutil.copy2(src, dst)
-                written += 1
+            if src.exists():
+                if info.status != MODEL_STATUS.PUBLISHED:
+                    # The website build is usually in-source (meaning it is targeting the repo source tree rather than dumped to a separate folder).
+                    # We need to delete the in-source YAML file instead of just not copying it.
+                    if src == dst:
+                        src.unlink()
+                else:
+                    if src != dst:
+                        shutil.copy2(src, dst)
+                    written += 1
 
-        written += len(
-            _build_release_assets_proto(model_id, args.version, model_dst, ["yaml"])
-        )
+        if info.restrict_model_sharing or info.status != MODEL_STATUS.PUBLISHED:
+            dst_yml = model_dst / "release-assets.yaml"
+            # The website build is usually in-source (meaning it is targeting the repo source tree rather than dumped to a separate folder).
+            # We need to delete the in-source YAML file instead of just not writing it.
+            if model_src.resolve() == model_dst.resolve() and dst_yml.exists():
+                dst_yml.unlink()
+        else:
+            written += len(
+                _build_release_assets_proto(model_id, args.version, model_dst, ["yaml"])
+            )
 
         return written, (None if written else "no yamls found")
 
