@@ -77,10 +77,6 @@ class Yolo2DDetection(YoloV3):
     ) -> SampleInputsType:
         return super()._sample_inputs_impl(input_spec or self.get_input_spec())
 
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "kitti"
-
 
 class VGG3DDetection(BaseModel):
     """
@@ -172,10 +168,6 @@ class VGG3DDetection(BaseModel):
     @staticmethod
     def get_channel_last_inputs() -> list[str]:
         return ["image"]
-
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "kitti"
 
 
 @CollectionModel.add_component(Yolo2DDetection, "yolo_2d_detection")

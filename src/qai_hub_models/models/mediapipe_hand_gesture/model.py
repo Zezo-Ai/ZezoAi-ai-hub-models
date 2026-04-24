@@ -82,10 +82,6 @@ class PalmDetector(HandDetector):
             return options
         return options + " --range_scheme min_max"
 
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "hagrid_palmdetector"
-
     @classmethod
     def from_pretrained(
         cls,
@@ -789,10 +785,6 @@ class HandLandmarkDetector(BaseModel):
             return options
         return options + " --range_scheme min_max"
 
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "hagrid_handlandmark"
-
 
 class MulAdd1d(nn.Module):
     """
@@ -1060,10 +1052,6 @@ class CannedGestureClassifier(BaseModel):
         if "--range_scheme" in options:
             return options
         return options + " --range_scheme min_max"
-
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "hagrid_gesturerecognizer"
 
 
 # ------------------------------------------------------------------------------------

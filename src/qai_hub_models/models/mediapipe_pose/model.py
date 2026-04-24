@@ -245,10 +245,6 @@ class PoseDetector(BaseModel):
         return options + " --range_scheme min_max"
 
     @staticmethod
-    def calibration_dataset_name() -> str:
-        return "human_poses"
-
-    @staticmethod
     def get_channel_last_inputs() -> list[str]:
         return ["image"]
 
@@ -349,10 +345,6 @@ class PoseLandmarkDetector(BaseModel):
             MODEL_ID, MODEL_ASSET_VERSION, "sample_landmark_inputs.npy"
         )
         return {"image": [load_numpy(numpy_inputs)]}
-
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "human_poses"
 
     def get_hub_quantize_options(
         self, precision: Precision, other_options: str | None = None

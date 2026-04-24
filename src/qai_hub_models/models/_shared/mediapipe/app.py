@@ -472,6 +472,35 @@ class MediaPipeApp(BaseCollectionApp):
 
         return batched_selected_roi
 
+    def crop_landmark_inputs(
+        self,
+        NHWC_int_numpy_frame: np.ndarray,
+        roi_4corners: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Crop and resize an image to produce landmark detector inputs using ROIs.
+
+        Parameters
+        ----------
+        NHWC_int_numpy_frame
+            Single numpy array of shape (H W C x uint8) -- RGB channel layout.
+        roi_4corners
+            Region of interest corner coordinates of shape [num_rois, 4, 2].
+
+        Returns
+        -------
+        cropped_inputs : torch.Tensor
+            Cropped and resized images of shape [num_rois, C, H, W] in float [0, 1].
+        """
+        affines = compute_box_affine_crop_resize_matrix(
+            roi_4corners[:, :3], self.landmark_input_dims
+        )
+        return numpy_image_to_torch(
+            apply_batched_affines_to_frame(
+                NHWC_int_numpy_frame, affines, self.landmark_input_dims
+            )
+        )
+
     def _run_landmark_detector(
         self,
         NHWC_int_numpy_frames: list[np.ndarray],
@@ -523,14 +552,15 @@ class MediaPipeApp(BaseCollectionApp):
         for batch_idx, roi_4corners in enumerate(batched_roi_4corners):
             if roi_4corners.nelement() == 0:
                 continue
+
             affines = compute_box_affine_crop_resize_matrix(
                 roi_4corners[:, :3], self.landmark_input_dims
             )
-
-            # Create input images by applying the affine transforms.
             keypoint_net_inputs = numpy_image_to_torch(
                 apply_batched_affines_to_frame(
-                    NHWC_int_numpy_frames[batch_idx], affines, self.landmark_input_dims
+                    NHWC_int_numpy_frames[batch_idx],
+                    affines,
+                    self.landmark_input_dims,
                 )
             )
 

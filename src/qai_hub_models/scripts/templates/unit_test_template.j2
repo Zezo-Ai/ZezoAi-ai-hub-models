@@ -53,8 +53,9 @@ from qai_hub_models.scorecard.execution_helpers import (
     get_evaluation_parameterized_pytest_config,
     pytest_device_idfn,
 )
-{%- if not is_collection_model %}
-from qai_hub_models.utils.testing import verify_io_names
+from qai_hub_models.utils.validation import perform_runtime_model_validation
+{%- if is_collection_model %}
+import qai_hub_models.models.{{ model_name }} as _model_module
 {%- endif %}
 from qai_hub_models.utils.args import get_model_kwargs
 from qai_hub_models.utils.testing import skip_invalid_runtime_device
@@ -105,10 +106,12 @@ PASSING_PRECISION_RUNTIMES : {{ common.write_supported_precision_runtimes(test_p
 EVAL_DEVICE = ScorecardDevice.get("{{ default_device }}")
 HAS_EVAL_DATASET = (len(Model.eval_datasets()) > 0)
 
-{%- if not is_collection_model %}
 @pytest.mark.compile
-def test_verify_io_names() -> None:
-    verify_io_names(Model)
+def test_runtime_model_validation() -> None:
+{%- if is_collection_model %}
+    perform_runtime_model_validation(Model, MODEL_ID, getattr(_model_module, "App", None))
+{%- else %}
+    perform_runtime_model_validation(Model, MODEL_ID)
 {%- endif %}
 
 {%- if can_use_quantize_job %}

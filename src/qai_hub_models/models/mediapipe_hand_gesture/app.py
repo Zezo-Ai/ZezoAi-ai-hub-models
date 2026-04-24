@@ -12,7 +12,10 @@ import cv2
 import numpy as np
 import torch
 from PIL.Image import Image
+from qai_hub.client import DatasetEntries
 
+from qai_hub_models.datasets import get_dataset_from_name
+from qai_hub_models.datasets.common import DatasetSplit
 from qai_hub_models.models._shared.mediapipe.app import MediaPipeApp
 from qai_hub_models.models._shared.mediapipe.utils import preprocess_hand_x64
 from qai_hub_models.models.mediapipe_hand.model import (
@@ -24,8 +27,11 @@ from qai_hub_models.models.mediapipe_hand.model import (
     ROTATION_VECTOR_OFFSET_RADS,
     WRIST_CENTER_KEYPOINT_INDEX,
 )
-from qai_hub_models.models.mediapipe_hand_gesture.model import GESTURE_LABELS
-from qai_hub_models.utils.base_model import CollectionModel
+from qai_hub_models.models.mediapipe_hand_gesture.model import (
+    GESTURE_LABELS,
+    MediaPipeHandGesture,
+)
+from qai_hub_models.utils.base_model import CollectionModel, PretrainedCollectionModel
 from qai_hub_models.utils.bounding_box_processing import (
     compute_box_affine_crop_resize_matrix,
 )
@@ -34,6 +40,7 @@ from qai_hub_models.utils.image_processing import (
     apply_affine_to_coordinates,
     apply_batched_affines_to_frame,
     numpy_image_to_torch,
+    torch_image_to_numpy,
 )
 from qai_hub_models.utils.input_spec import InputSpec
 
@@ -416,10 +423,6 @@ class MediaPipeHandGestureApp(MediaPipeApp):
 
     @classmethod
     def from_pretrained(cls, model: CollectionModel) -> MediaPipeHandGestureApp:
-        from qai_hub_models.models.mediapipe_hand_gesture.model import (
-            MediaPipeHandGesture,
-        )
-
         assert isinstance(model, MediaPipeHandGesture)
         return cls(
             model.palm_detector,
@@ -430,3 +433,92 @@ class MediaPipeHandGestureApp(MediaPipeApp):
             model.hand_landmark_detector.get_input_spec(),
             model.gesture_classifier,
         )
+
+    @staticmethod
+    def calibration_dataset_name() -> str:
+        return "hagrid_palmdetector"
+
+    @classmethod
+    def get_calibration_data(
+        cls,
+        collection_model: PretrainedCollectionModel,
+        component_name: str,
+        input_specs: dict[str, InputSpec] | None = None,
+        num_samples: int | None = None,
+    ) -> DatasetEntries:
+        assert isinstance(collection_model, MediaPipeHandGesture)
+
+        det_spec = (
+            input_specs.get("palm_detector") if input_specs else None
+        ) or collection_model.palm_detector.get_input_spec()
+        dataset = get_dataset_from_name(
+            cls.calibration_dataset_name(),
+            DatasetSplit.TRAIN,
+            input_spec=det_spec,
+        )
+        num_samples = num_samples or dataset.default_samples_per_job()
+
+        if component_name == "palm_detector":
+            entries: dict[str, list[np.ndarray]] = {"image": []}
+            for i in range(min(num_samples, len(dataset))):
+                image_tensor, _ = dataset[i]
+                entries["image"].append(image_tensor.unsqueeze(0).numpy())
+            return entries
+
+        if component_name == "hand_landmark_detector":
+            # Run detector to get hand ROIs, then crop for landmark calibration
+            app = cls.from_pretrained(collection_model)
+            entries = {"image": []}
+            collected = 0
+            for i in range(len(dataset)):
+                if collected >= num_samples:
+                    break
+                image_tensor, _ = dataset[i]
+                NCHW = image_tensor.unsqueeze(0)
+                raw = app.predict_landmarks_from_image(NCHW, raw_output=True)
+                _, _, batched_roi_4corners = raw[:3]
+                if not batched_roi_4corners or batched_roi_4corners[0].numel() == 0:
+                    continue
+                cropped = app.crop_landmark_inputs(
+                    torch_image_to_numpy(NCHW), batched_roi_4corners[0]
+                )
+                for j in range(cropped.shape[0]):
+                    if collected >= num_samples:
+                        break
+                    entries["image"].append(cropped[j : j + 1].numpy())
+                    collected += 1
+            return entries
+
+        if component_name == "canned_gesture_classifier":
+            # Run detector + landmark to get hand landmarks, then preprocess for gesture classifier
+            app = cls.from_pretrained(collection_model)
+            entries = {"hand": [], "mirrored_hand": []}
+            collected = 0
+            for i in range(len(dataset)):
+                if collected >= num_samples:
+                    break
+                image_tensor, _ = dataset[i]
+                NCHW = image_tensor.unsqueeze(0)
+                raw = app.predict_landmarks_from_image(NCHW, raw_output=True)
+                # raw = (boxes, keypoints, roi_corners, landmarks, is_right, gestures)
+                if len(raw) <= 3:
+                    continue
+                batched_landmarks: list[torch.Tensor] = raw[3]  # type: ignore[assignment]
+                if not batched_landmarks or batched_landmarks[0].numel() == 0:
+                    continue
+                landmarks_tensor = batched_landmarks[0]
+                for ld_idx in range(landmarks_tensor.shape[0]):
+                    if collected >= num_samples:
+                        break
+                    hand = landmarks_tensor[ld_idx].unsqueeze(0)
+                    lr = torch.zeros(1)  # assume left hand for calibration
+                    entries["hand"].append(
+                        preprocess_hand_x64(hand, lr, mirror=False).numpy()
+                    )
+                    entries["mirrored_hand"].append(
+                        preprocess_hand_x64(hand, lr, mirror=True).numpy()
+                    )
+                    collected += 1
+            return entries
+
+        raise ValueError(f"Unknown component: {component_name}")

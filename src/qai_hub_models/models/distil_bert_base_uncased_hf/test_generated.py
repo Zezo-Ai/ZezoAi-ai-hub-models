@@ -42,7 +42,7 @@ from qai_hub_models.scorecard.execution_helpers import (
     pytest_device_idfn,
 )
 from qai_hub_models.utils.args import get_model_kwargs
-from qai_hub_models.utils.testing import skip_invalid_runtime_device, verify_io_names
+from qai_hub_models.utils.testing import skip_invalid_runtime_device
 from qai_hub_models.utils.testing_async_utils import CachedScorecardJobError
 from qai_hub_models.utils.testing_export_eval import (
     accuracy_on_dataset_via_evaluate_and_export,
@@ -61,6 +61,7 @@ from qai_hub_models.utils.testing_export_eval import (
     torch_inference_for_accuracy_validation,
     torch_inference_for_accuracy_validation_outputs,
 )
+from qai_hub_models.utils.validation import perform_runtime_model_validation
 
 # All runtime + precision pairs that are enabled for testing and are compatibile with this model.
 # NOTE:
@@ -100,8 +101,8 @@ HAS_EVAL_DATASET = len(Model.eval_datasets()) > 0
 
 
 @pytest.mark.compile
-def test_verify_io_names() -> None:
-    verify_io_names(Model)
+def test_runtime_model_validation() -> None:
+    perform_runtime_model_validation(Model, MODEL_ID)
 
 
 @pytest.mark.pre_quantize_compile

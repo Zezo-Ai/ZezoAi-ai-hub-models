@@ -13,6 +13,7 @@ import pytest
 import qai_hub as hub
 import torch
 
+import qai_hub_models.models.fomm as _model_module
 from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.models.fomm import MODEL_ID, Model
 from qai_hub_models.models.fomm import export as model_export_module
@@ -55,6 +56,7 @@ from qai_hub_models.utils.testing_export_eval import (
     torch_inference_for_accuracy_validation,
     torch_inference_for_accuracy_validation_outputs,
 )
+from qai_hub_models.utils.validation import perform_runtime_model_validation
 
 # All runtime + precision pairs that are enabled for testing and are compatibile with this model.
 # NOTE:
@@ -82,6 +84,13 @@ PASSING_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
 
 EVAL_DEVICE = ScorecardDevice.get("Samsung Galaxy S25 (Family)")
 HAS_EVAL_DATASET = len(Model.eval_datasets()) > 0
+
+
+@pytest.mark.compile
+def test_runtime_model_validation() -> None:
+    perform_runtime_model_validation(
+        Model, MODEL_ID, getattr(_model_module, "App", None)
+    )
 
 
 @pytest.mark.pre_quantize_compile

@@ -13,18 +13,24 @@ import numpy as np
 import numpy.typing as npt
 import torch
 from PIL import Image
+from qai_hub.client import DatasetEntries
 
+from qai_hub_models.datasets import get_dataset_from_name
+from qai_hub_models.datasets.common import DatasetSplit
 from qai_hub_models.models.deepbox.model import (
     DEEPBOX_SOURCE_REPO_COMMIT,
     DEEPBOX_SOURCE_REPOSITORY,
     MODEL_ASSET_VERSION,
     MODEL_ID,
+    DeepBox,
     VGG3DDetection,
     Yolo2DDetection,
 )
 from qai_hub_models.utils.asset_loaders import SourceAsRoot, find_replace_in_repo
+from qai_hub_models.utils.base_model import CollectionModel, PretrainedCollectionModel
 from qai_hub_models.utils.bounding_box_processing import batched_nms
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
+from qai_hub_models.utils.input_spec import InputSpec
 
 with SourceAsRoot(
     DEEPBOX_SOURCE_REPOSITORY,
@@ -273,3 +279,80 @@ class DeepBoxApp:
         # plots 3d boxes
         plot_3d_box(numpy_image, proj_matrix, orient, dim, location)
         return (proj_matrix, orient, dim, location)
+
+    @classmethod
+    def from_pretrained(cls, model: CollectionModel) -> DeepBoxApp:
+        assert isinstance(model, DeepBox)
+        return cls(model.yolo_2d_det, model.vgg_3d_det)
+
+    @staticmethod
+    def calibration_dataset_name() -> str:
+        return "kitti"
+
+    @classmethod
+    def get_calibration_data(
+        cls,
+        collection_model: PretrainedCollectionModel,
+        component_name: str,
+        input_specs: dict[str, InputSpec] | None = None,
+        num_samples: int | None = None,
+    ) -> DatasetEntries:
+        assert isinstance(collection_model, DeepBox)
+
+        yolo_spec = (
+            input_specs.get("yolo_2d_detection") if input_specs else None
+        ) or collection_model.yolo_2d_det.get_input_spec()
+        dataset = get_dataset_from_name(
+            cls.calibration_dataset_name(),
+            DatasetSplit.TRAIN,
+            input_spec=yolo_spec,
+        )
+        num_samples = num_samples or dataset.default_samples_per_job()
+
+        if component_name == "yolo_2d_detection":
+            entries: dict[str, list[np.ndarray]] = {"image": []}
+            for i in range(min(num_samples, len(dataset))):
+                image_tensor, _ = dataset[i]
+                entries["image"].append(image_tensor.unsqueeze(0).numpy())
+            return entries
+
+        if component_name == "vgg_3d_detection":
+            # Run 2D detector to get bounding boxes, then crop for 3D estimator
+            app = cls.from_pretrained(collection_model)
+            vgg_spec = (
+                input_specs.get("vgg_3d_detection") if input_specs else None
+            ) or collection_model.vgg_3d_det.get_input_spec()
+            vgg_h, vgg_w = vgg_spec["image"][0][-2:]
+            entries = {"image": []}
+            collected = 0
+            for i in range(len(dataset)):
+                if collected >= num_samples:
+                    break
+                image_tensor, _ = dataset[i]
+                image_pil = Image.fromarray(
+                    (image_tensor.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+                )
+                raw_boxes, pred_scores, _ = app.detect_2d_bboxes(image_pil)
+                if not pred_scores or pred_scores[0].shape[0] == 0:
+                    continue
+                numpy_image = np.array(image_pil)
+                for j in range(raw_boxes[0].shape[0]):
+                    if collected >= num_samples:
+                        break
+                    x1, y1, x2, y2 = raw_boxes[0][j].int().tolist()
+                    if x1 < 0 or y1 < 0 or x2 < 0 or y2 < 0:
+                        continue
+                    cropped = numpy_image[y1 : y2 + 1, x1 : x2 + 1]
+                    if cropped.size == 0:
+                        continue
+                    cropped = cv2.resize(
+                        cropped, dsize=(vgg_w, vgg_h), interpolation=cv2.INTER_CUBIC
+                    )
+                    cropped = cropped.astype(np.float32) / 255.0
+                    entries["image"].append(
+                        np.expand_dims(cropped.transpose(2, 0, 1), 0)
+                    )
+                    collected += 1
+            return entries
+
+        raise ValueError(f"Unknown component: {component_name}")

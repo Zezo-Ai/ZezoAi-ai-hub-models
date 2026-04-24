@@ -12,10 +12,11 @@ from torchvision.datasets import ImageFolder
 
 from qai_hub_models.datasets.common import (
     BaseDataset,
-    DatasetMetadata,
     DatasetSplit,
 )
+from qai_hub_models.models.mediapipe_face.model import FaceDetector
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
+from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 DATASET_VERSION = 2
@@ -45,15 +46,16 @@ class HumanFacesDataset(BaseDataset):
         self,
         split: DatasetSplit = DatasetSplit.TRAIN,
         input_data_zip: str | None = None,
-        width: int = 256,
-        height: int = 256,
+        input_spec: InputSpec | None = None,
     ) -> None:
         self.images_path = HUMAN_FACES_PRIVATE_ASSET.extracted_path
         self.data_path = self.images_path.parent
         self.input_data_zip = input_data_zip
 
-        self.img_width = width
-        self.img_height = height
+        if input_spec is None:
+            input_spec = FaceDetector.get_input_spec()
+        self.img_height = input_spec["image"][0][2]
+        self.img_width = input_spec["image"][0][3]
         self.scale_width = 1.0 / self.img_width
         self.scale_height = 1.0 / self.img_height
         BaseDataset.__init__(self, self.data_path, split=split)
@@ -78,27 +80,3 @@ class HumanFacesDataset(BaseDataset):
     def default_samples_per_job() -> int:
         """The default value for how many samples to run in each inference job."""
         return 1000
-
-
-class HumanFaces192Dataset(HumanFacesDataset):
-    def __init__(
-        self,
-        split: DatasetSplit = DatasetSplit.TRAIN,
-        input_data_zip: str | None = None,
-    ) -> None:
-        super().__init__(split, input_data_zip, 192, 192)
-
-    @classmethod
-    def dataset_name(cls) -> str:
-        """
-        Name for the dataset,
-            which by default is set to the filename where the class is defined.
-        """
-        return "human_faces_192"
-
-    @staticmethod
-    def get_dataset_metadata() -> DatasetMetadata:
-        return DatasetMetadata(
-            link="https://www.kaggle.com/datasets/ashwingupta3012/human-faces",
-            split_description="validation split",
-        )

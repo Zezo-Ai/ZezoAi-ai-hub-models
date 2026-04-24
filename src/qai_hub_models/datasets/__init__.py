@@ -79,7 +79,6 @@ _try_import_dataset(".ppe", "PPEDataset")
 _try_import_dataset(".coco91class", "Coco91ClassDataset")
 _try_import_dataset(".coco_face", "CocoFaceDataset")
 _try_import_dataset(".human_faces", "HumanFacesDataset")
-_try_import_dataset(".human_faces", "HumanFaces192Dataset", name="human_faces_192")
 _try_import_dataset(".human_poses", "HumanPosesDataset")
 _try_import_dataset(".coco_panoptic_seg", "CocoPanopticSegmentationDataset")
 _try_import_dataset(".foot_track_dataset", "FootTrackDataset")
@@ -168,10 +167,6 @@ _try_import_dataset(
 )
 _try_import_dataset(".audioset", "AudioSetDataset")
 _try_import_dataset(".hagrid", "PalmDetectorDataset", name="hagrid_palmdetector")
-_try_import_dataset(".hagrid", "HandLandmarkDataset", name="hagrid_handlandmark")
-_try_import_dataset(
-    ".hagrid", "GestureClassifierDataset", name="hagrid_gesturerecognizer"
-)
 
 
 def get_dataset_from_name(

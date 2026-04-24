@@ -8,8 +8,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import cast
 
+import numpy as np
 import torch
+from qai_hub.client import DatasetEntries
 
+from qai_hub_models.datasets import get_dataset_from_name
+from qai_hub_models.datasets.common import DatasetSplit
 from qai_hub_models.models._shared.mediapipe.app import MediaPipeApp
 from qai_hub_models.models.mediapipe_pose.model import (
     DETECT_DSCALE,
@@ -21,12 +25,16 @@ from qai_hub_models.models.mediapipe_pose.model import (
     POSE_KEYPOINT_INDEX_START,
     POSE_LANDMARK_CONNECTIONS,
     ROTATION_VECTOR_OFFSET_RADS,
+    MediaPipePose,
 )
-from qai_hub_models.utils.base_model import CollectionModel
+from qai_hub_models.utils.base_model import CollectionModel, PretrainedCollectionModel
 from qai_hub_models.utils.bounding_box_processing import (
     compute_box_corners_with_rotation,
 )
-from qai_hub_models.utils.image_processing import compute_vector_rotation
+from qai_hub_models.utils.image_processing import (
+    compute_vector_rotation,
+    torch_image_to_numpy,
+)
 from qai_hub_models.utils.input_spec import InputSpec
 
 
@@ -182,8 +190,6 @@ class MediaPipePoseApp(MediaPipeApp):
 
     @classmethod
     def from_pretrained(cls, model: CollectionModel) -> MediaPipePoseApp:
-        from qai_hub_models.models.mediapipe_pose.model import MediaPipePose
-
         assert isinstance(model, MediaPipePose)
         return cls(
             model.pose_detector,
@@ -193,3 +199,59 @@ class MediaPipePoseApp(MediaPipeApp):
             model.pose_detector.get_input_spec(),
             model.pose_landmark_detector.get_input_spec(),
         )
+
+    @staticmethod
+    def calibration_dataset_name() -> str:
+        return "human_poses"
+
+    @classmethod
+    def get_calibration_data(
+        cls,
+        collection_model: PretrainedCollectionModel,
+        component_name: str,
+        input_specs: dict[str, InputSpec] | None = None,
+        num_samples: int | None = None,
+    ) -> DatasetEntries:
+        assert isinstance(collection_model, MediaPipePose)
+
+        det_spec = (
+            input_specs.get("pose_detector") if input_specs else None
+        ) or collection_model.pose_detector.get_input_spec()
+        dataset = get_dataset_from_name(
+            cls.calibration_dataset_name(),
+            DatasetSplit.TRAIN,
+            input_spec=det_spec,
+        )
+        num_samples = num_samples or dataset.default_samples_per_job()
+
+        if component_name == "pose_detector":
+            entries: dict[str, list[np.ndarray]] = {"image": []}
+            for i in range(min(num_samples, len(dataset))):
+                image_tensor, _ = dataset[i]
+                entries["image"].append(image_tensor.unsqueeze(0).numpy())
+            return entries
+
+        if component_name == "pose_landmark_detector":
+            app = cls.from_pretrained(collection_model)
+            entries = {"image": []}
+            collected = 0
+            for i in range(len(dataset)):
+                if collected >= num_samples:
+                    break
+                image_tensor, _ = dataset[i]
+                NCHW = image_tensor.unsqueeze(0)
+                raw = app.predict_landmarks_from_image(NCHW, raw_output=True)
+                _, _, batched_roi_4corners = raw[:3]
+                if not batched_roi_4corners or batched_roi_4corners[0].numel() == 0:
+                    continue
+                cropped = app.crop_landmark_inputs(
+                    torch_image_to_numpy(NCHW), batched_roi_4corners[0]
+                )
+                for j in range(cropped.shape[0]):
+                    if collected >= num_samples:
+                        break
+                    entries["image"].append(cropped[j : j + 1].numpy())
+                    collected += 1
+            return entries
+
+        raise ValueError(f"Unknown component: {component_name}")

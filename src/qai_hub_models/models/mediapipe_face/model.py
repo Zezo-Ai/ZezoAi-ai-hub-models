@@ -364,10 +364,6 @@ class FaceDetector(BaseModel):
             return options
         return options + " --range_scheme min_max"
 
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "human_faces"
-
 
 class FaceLandmarkDetector(BaseModel):
     """
@@ -434,10 +430,6 @@ class FaceLandmarkDetector(BaseModel):
         self, input_spec: InputSpec | None = None
     ) -> SampleInputsType:
         return {"image": [load_numpy(LANDMARK_DETECTOR_SAMPLE_INPUTS_ADDRESS)]}
-
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "human_faces_192"
 
 
 @CollectionModel.add_component(FaceDetector, "face_detector")

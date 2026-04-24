@@ -176,29 +176,6 @@ def mock_on_device_model_call(inference_job: hub.InferenceJob) -> Callable:
     return mock_call
 
 
-def verify_io_names(model_cls: type[BaseModel]) -> None:
-    """
-    Performs various checks on a model's input and output names.
-    Raises an AssertionError if any checks fail.
-
-    - Checks that the inputs and outputs specified to have the channel
-    last transpose are present in the list of input and output names.
-    - Checks that inputs and output names don't have dashes. The QNN compiler
-    converts dashes in names to underscores, so this would create mismatch between
-    the target model name and the name specified in this codebase.
-    """
-    input_spec = model_cls.get_input_spec()
-    for channel_last_input in model_cls.get_channel_last_inputs():
-        assert channel_last_input in input_spec
-    output_names = model_cls.get_output_names()
-    for channel_last_output in model_cls.get_channel_last_outputs():
-        assert channel_last_output in output_names
-    for output_name in output_names:
-        assert "-" not in output_name, "output name cannot contain `-`"
-    for input_name in input_spec:
-        assert "-" not in input_name, "input name cannot contain `-`"
-
-
 def mock_tabulate_fn(df: pd.DataFrame, **kwargs: Any) -> tuple[list[str], str]:
     psnr_values = []
     for _, value in df.iterrows():
