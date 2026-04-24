@@ -246,6 +246,7 @@ class GenieMetadata(BaseQAIHMConfig):
             context_lengths=self.context_lengths,
             supports_streaming=self.supports_streaming,
             supports_vision=self.supports_vision,
+            supports_thinking=self.supports_thinking,
             pipeline=self.pipeline.to_proto() if self.pipeline else None,
             sample_inputs=[s.to_proto() for s in self.sample_inputs]
             if self.sample_inputs
@@ -253,7 +254,6 @@ class GenieMetadata(BaseQAIHMConfig):
             vision_preprocessing=self.vision_preprocessing.to_proto()
             if self.vision_preprocessing
             else None,
-            supports_thinking=self.supports_thinking,
         )
 
 

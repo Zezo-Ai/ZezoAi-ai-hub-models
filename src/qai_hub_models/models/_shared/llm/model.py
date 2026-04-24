@@ -555,6 +555,8 @@ class PreSplitOnnxMixin:
     split_model_name: str = ""
     num_splits: int = 0
     num_layers_per_split: int = 0
+    # VLM models feed inputs_embeds directly and have no embedding split.
+    split_embedding: bool = True
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -588,6 +590,7 @@ class PreSplitOnnxMixin:
         temp_path = Path(self._temp_dir.name)
 
         full_bundle = self.get_full_onnx_bundle(temp_path)
+        full_bundle = self._postprocess_full_onnx_bundle(full_bundle)
 
         split_output_dir = temp_path / "splits_dynamic"
         split_output_dir.mkdir(parents=True, exist_ok=True)
@@ -598,7 +601,7 @@ class PreSplitOnnxMixin:
             num_splits=self.num_splits,
             num_layers_per_split=self.num_layers_per_split,
             output_dir=str(split_output_dir),
-            split_embedding=True,
+            split_embedding=self.split_embedding,
         )
 
         for i, bundle in enumerate(split_bundles):
@@ -643,6 +646,18 @@ class PreSplitOnnxMixin:
             shutil.copy(src_enc, bundle_dir / "model.encodings")
 
         return ONNXBundle.from_bundle_path(bundle_dir, "model")
+
+    def _postprocess_full_onnx_bundle(self, bundle: ONNXBundle) -> ONNXBundle:
+        """Hook for subclasses to adjust the full ONNX bundle before splitting.
+
+        Cooperative: forwards to later classes in the MRO so model-family
+        classes (which sit after this mixin in MRO) can reshape the shipped
+        ONNX/encodings to match what the split/compile step expects.
+        """
+        postprocess = getattr(super(), "_postprocess_full_onnx_bundle", None)
+        if postprocess is not None:
+            bundle = postprocess(bundle)
+        return bundle
 
     def free_memory(self) -> None:
         """Free memory by clearing caches and releasing resources."""
@@ -889,6 +904,86 @@ class QuantizablePreSplitMixin(
         super().save_calibrated_checkpoint(  # type: ignore[misc]
             output_checkpoint, fp_model, use_dynamic_shapes=True
         )
+
+
+class DynamicQuantizablePreSplitMixin(QuantizablePreSplitMixin[FPModelT]):
+    """Dynamic-ONNX QuantizablePreSplit for self-contained checkpoints.
+
+    For models whose S3 asset zip contains the FULL output directory of
+    quantize.py (dynamic ONNX + external weights + encodings + tokenizer +
+    config + any supplementary files). Downloading DEFAULT is equivalent
+    to passing the quantize.py output directory as ``--checkpoint``.
+
+    Override of ``resolve_default_checkpoint`` only downloads and extracts
+    the zip — it does not re-export ONNX or regenerate tokenizer/config,
+    because those are already shipped in the asset. No FP torch model is
+    needed to resolve the checkpoint.
+
+    This is the preferred base for new dynamic-style quantized models.
+    Llama uses :class:`LlamaQuantizablePreSplitMixin` instead, which
+    downloads only encodings (weights cannot be redistributed) and
+    exports ONNX locally from the FP torch model.
+    """
+
+    @classmethod
+    def fetch_default_checkpoint(cls, precision: Precision) -> str:
+        """Download and extract the DEFAULT asset zip for *precision*.
+
+        Returns the local path to the extracted checkpoint directory.
+        """
+        precision_checkpoint = cls.default_checkpoint[precision]
+        return str(
+            CachedWebModelAsset.from_asset_store(
+                cls.model_id,
+                cls.model_asset_version,
+                precision_checkpoint + ".zip",
+            ).fetch(extract=True)
+        )
+
+    @classmethod
+    def resolve_default_checkpoint(
+        cls,
+        precision: Precision,
+        sequence_length: int,
+        context_length: int,
+        host_device: torch.device,
+        fp_model: FPModelT | None,
+    ) -> tuple[str, FPModelT | None]:
+        return cls.fetch_default_checkpoint(precision), fp_model
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        checkpoint: str | os.PathLike | Path = "DEFAULT",
+        host_device: torch.device | None = None,
+        sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
+        context_length: int = DEFAULT_CONTEXT_LENGTH,
+        precision: Precision | None = None,
+        fp_model: FPModelT | None = None,
+        _skip_quantsim_creation: bool = False,
+    ) -> Self:
+        # Self-contained checkpoints ship dynamic ONNX + encodings, so
+        # building QuantSim needs no FP torch model. Default to building
+        # it so the presplit can run forward() directly (demo/eval).
+        # Callers that only need ONNX splitting (export, compile) still
+        # pass _skip_quantsim_creation=True explicitly.
+        return super().from_pretrained(
+            checkpoint=checkpoint,
+            host_device=host_device,
+            sequence_length=sequence_length,
+            context_length=context_length,
+            precision=precision,
+            fp_model=fp_model,
+            _skip_quantsim_creation=_skip_quantsim_creation,
+        )
+
+    def release(self) -> None:
+        # No-op: this is a singleton via SingleSlotCacheMixin, and the same
+        # QuantSim is reused across sequence lengths. LLM_Generator calls
+        # release() when switching seqlens (prompt -> token), which would
+        # otherwise tear down the shared QuantSim before the next load()
+        # hits the cache. Actual teardown happens via clear_cache().
+        pass
 
 
 class SplitForwardMixin:

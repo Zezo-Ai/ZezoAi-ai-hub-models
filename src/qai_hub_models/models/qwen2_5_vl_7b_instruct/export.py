@@ -51,7 +51,7 @@ from qai_hub_models.utils.qai_hub_helpers import (
     can_access_qualcomm_ai_hub,
 )
 
-DEFAULT_CONTEXT_LENGTHS = [2048]
+DEFAULT_CONTEXT_LENGTHS = [512, 1024, 2048]
 
 
 def compile_model(

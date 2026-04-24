@@ -40,6 +40,7 @@ from qai_hub_models.models._shared.qwen2.model import (
     QwenPositionProcessor,
 )
 from qai_hub_models.utils.base_model import Precision
+from qai_hub_models.utils.onnx.helpers import ONNXBundle
 
 if TYPE_CHECKING:
     from aimet_onnx.quantsim import QuantizationSimModel
@@ -63,7 +64,7 @@ USER_ID = "user"
 END_TOKENS = {"<|im_end|>", "<|endoftext|>"}
 
 DEFAULT_PROMPT_CONTEXT = "You are a helpful AI assistant"
-DEFAULT_USER_PROMPT = "Describe this image in detail."
+DEFAULT_USER_PROMPT = "Give me a short introduction to large language model."
 
 # Vision token placeholder (Qwen2.5-VL format)
 VISION_PLACEHOLDER = "<|vision_start|><|image_pad|><|vision_end|>"
@@ -953,6 +954,16 @@ class Qwen2VLTextBase_AIMETOnnx(Qwen2Base_AIMETOnnx):
 
         with open(dst_encodings_path, "w") as write_file:
             json.dump(encodings, write_file, indent=4, sort_keys=True)
+
+    def _postprocess_full_onnx_bundle(self, bundle: ONNXBundle) -> ONNXBundle:
+        # Rewrite the shipped encodings file into the layout the downstream
+        # split/compile step expects.
+        if bundle.aimet_encodings_path is not None:
+            encodings_path = str(bundle.aimet_encodings_path)
+            self._adapt_aimet_encodings(
+                encodings_path, encodings_path, str(bundle.onnx_graph_path)
+            )
+        return bundle
 
 
 class Qwen2VLTextBase_QNN(Qwen2Base_QNN):

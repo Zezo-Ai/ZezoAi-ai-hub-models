@@ -45,7 +45,8 @@ from qai_hub_models.models._shared.llm.common import LLMIOType
 from qai_hub_models.models._shared.llm.model import (
     DEFAULT_CONTEXT_LENGTH,
     DEFAULT_SEQUENCE_LENGTH,
-    LLMBase,
+    DynamicQuantizablePreSplitMixin,
+    SingleSlotCacheMixin,
     get_onnx_model,
 )
 from qai_hub_models.models._shared.llm.split_onnx_utils.utils import split_onnx
@@ -106,48 +107,15 @@ MIN_MEMORY_RECOMMENDED = 80
 # Precision settings
 DEFAULT_PRECISION = Precision.w4a16
 SUPPORTED_PRECISIONS = [Precision.w4a16]
-DEFAULT_CHECKPOINT: dict = {}
+DEFAULT_CHECKPOINT: dict = {
+    Precision.w4a16: "qwen2_5_vl_7b_instruct_w4a16_seqmse",
+}
 
 # Default image dimensions (must be divisible by patch_size * spatial_merge_size)
 DEFAULT_IMAGE_HEIGHT = 336
 DEFAULT_IMAGE_WIDTH = 504
 
-
-# ---------------------------------------------------------------------------
-# SingleSlotCacheMixin
-# ---------------------------------------------------------------------------
-
-
-class SingleSlotCacheMixin:
-    """Mixin that maintains a single class-level cached instance keyed by a string key."""
-
-    _cached_instance: Any = None
-    _cached_key: str | None = None
-
-    @classmethod
-    def _cache_lookup(cls, cache_key: str) -> Any:
-        if cls._cached_instance is not None and cls._cached_key == cache_key:
-            return cls._cached_instance
-        if cls._cached_instance is not None:
-            cls._cached_instance.free_memory()
-            cls._cached_instance = None
-            cls._cached_key = None
-        return None
-
-    @classmethod
-    def _cache_store(cls, instance: Any, cache_key: str) -> None:
-        cls._cached_instance = instance
-        cls._cached_key = cache_key
-
-    @classmethod
-    def clear_cache(cls) -> None:
-        if cls._cached_instance is not None:
-            cls._cached_instance.free_memory()
-            cls._cached_instance = None
-            cls._cached_key = None
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+SPLIT_MODEL_NAME = "Qwen2_5_VL_7B"
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +183,7 @@ class Qwen2_5_VL_7B_PreSplit(SingleSlotCacheMixin, Qwen2VLTextBase):
         _skip_optimizations: list[str] | None = None,
     ) -> Qwen2_5_VL_7B_PreSplit:
         cache_key = str(checkpoint)
-        cached = cls._cache_lookup(cache_key)
+        cached = cls.cache_lookup(cache_key)
         if cached is not None:
             cached.sequence_length = sequence_length
             cached.context_length = context_length
@@ -236,7 +204,7 @@ class Qwen2_5_VL_7B_PreSplit(SingleSlotCacheMixin, Qwen2VLTextBase):
         except Exception:
             cls.clear_cache()
             raise
-        cls._cache_store(instance, cache_key)
+        cls.cache_store(instance, cache_key)
         return instance
 
     @staticmethod
@@ -335,33 +303,34 @@ class Qwen2_5_VL_7B_PreSplit(SingleSlotCacheMixin, Qwen2VLTextBase):
 # ---------------------------------------------------------------------------
 
 
-class Qwen2_5_VL_7B_QuantizablePreSplit(
-    SingleSlotCacheMixin, Qwen2VLTextBase_AIMETOnnx
+class Qwen2_5_VL_7B_QuantizablePreSplit(  # type: ignore[misc]
+    DynamicQuantizablePreSplitMixin["Qwen2_5_VL_7B_PreSplit"],
+    Qwen2VLTextBase_AIMETOnnx,
 ):
     """
     Quantizable PreSplit for Qwen2.5-VL-7B.
 
-    Manages QuantSim and calibration. Uses class-level cache keyed by checkpoint.
+    The S3 asset zip contains the FULL output of quantize.py (dynamic
+    ONNX + weights + encodings + tokenizer + config + embedding_weights.raw),
+    so DEFAULT resolution just downloads and extracts. No FP torch model
+    is needed to load the quantized checkpoint.
     """
 
     FPModel = Qwen2_5_VL_7B_PreSplit  # type: ignore[assignment]
     _hf_repo_name: str = HF_REPO_NAME
 
-    def __init__(
-        self,
-        checkpoint: str | Path = "DEFAULT",
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(*args, checkpoint=checkpoint, **kwargs)  # type: ignore[misc]
-        self.onnx_splits: dict[int, ONNXBundle] = {}
-        self._temp_dir: tempfile.TemporaryDirectory[str] | None = None
-        self.precision: Precision = kwargs.get("precision", DEFAULT_PRECISION)
+    # DynamicQuantizablePreSplitMixin config
+    model_id = MODEL_ID
+    model_asset_version = MODEL_ASSET_VERSION
+    default_checkpoint = DEFAULT_CHECKPOINT
+    supported_precisions = SUPPORTED_PRECISIONS
+    default_precision = DEFAULT_PRECISION
 
-    def __del__(self) -> None:
-        if hasattr(self, "_temp_dir") and self._temp_dir is not None:
-            with contextlib.suppress(Exception):
-                self._temp_dir.cleanup()
+    # PreSplitOnnxMixin config
+    split_model_name = SPLIT_MODEL_NAME
+    num_splits = NUM_SPLITS
+    num_layers_per_split = NUM_LAYERS_PER_SPLIT
+    split_embedding = False  # VLM uses inputs_embeds directly
 
     @classmethod
     def attention_mask_min_clip_and_multiplier(
@@ -371,86 +340,6 @@ class Qwen2_5_VL_7B_QuantizablePreSplit(
         # Some layers have per-layer scaling
         # defined in _shared/qwen2_vl/model.py.
         return (-250.0, 1.0)
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        checkpoint: str | Path = "DEFAULT",
-        host_device: torch.device | None = None,
-        sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
-        context_length: int = DEFAULT_CONTEXT_LENGTH,
-        precision: Precision = DEFAULT_PRECISION,
-        _skip_quantsim_creation: bool = False,
-        fp_model: LLMBase | None = None,
-        **kwargs: Any,
-    ) -> Qwen2_5_VL_7B_QuantizablePreSplit:
-        cache_key = str(checkpoint)
-        cached = cls._cache_lookup(cache_key)
-        if cached is not None:
-            cached.sequence_length = sequence_length
-            cached.context_length = context_length
-            return cached
-
-        if host_device is None:
-            host_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        # Create FP model internally when needed (DEFAULT checkpoint)
-        if (
-            fp_model is None
-            and isinstance(checkpoint, str)
-            and checkpoint.startswith("DEFAULT")
-        ):
-            fp_model = Qwen2_5_VL_7B_PreSplit.from_pretrained(
-                sequence_length=sequence_length,
-                context_length=context_length,
-                host_device=host_device,
-            )
-
-        # Extract embedding weights from FP model before it might be deleted
-        fp_embedding_weights = None
-        if fp_model is not None and hasattr(fp_model, "_embedding_weights"):
-            fp_embedding_weights = fp_model._embedding_weights
-
-        try:
-            instance = super().from_pretrained(
-                checkpoint=checkpoint,
-                host_device=host_device,
-                sequence_length=sequence_length,
-                context_length=context_length,
-                precision=precision,
-                fp_model=fp_model,
-                _skip_quantsim_creation=_skip_quantsim_creation,
-                use_dynamic_shapes=True,
-            )
-        except Exception:
-            cls.clear_cache()
-            raise
-        finally:
-            # Free the heavy FP model weights after ONNX export.
-            # The QuantizablePreSplit only needs the QuantSim (ONNX) going forward;
-            # tokenizer and config have already been copied.
-            if fp_model is not None:
-                Qwen2_5_VL_7B_PreSplit.clear_cache()
-                del fp_model
-                gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-
-        instance.precision = precision
-
-        # For VLM: ensure embedding weights are available for token-to-embedding
-        # conversion during calibration and evaluation.
-        if getattr(instance, "_embedding_weights", None) is None:
-            instance._embedding_weights = fp_embedding_weights  # type: ignore[assignment]
-
-        cls._cache_store(instance, cache_key)
-        return instance
-
-    def release(self) -> None:
-        # Dynamic-shape model uses a single QuantSim for all sequence lengths.
-        # Don't destroy quant_sim on release — it's shared via the class cache.
-        # The cache cleanup handles actual teardown.
-        pass
 
     @staticmethod
     def get_output_names() -> list[str]:
@@ -470,71 +359,10 @@ class Qwen2_5_VL_7B_QuantizablePreSplit(
             llm_io_type=llm_io_type,
         )
 
-    def convert_to_onnx_and_split(
-        self,
-        part_id: int = 1,
-    ) -> ONNXBundle:
-        """Get ONNX split bundle from checkpoint. Results are cached."""
-        if part_id in self.onnx_splits:
-            return self.onnx_splits[part_id]
-
-        if self._temp_dir is None:
-            self._temp_dir = tempfile.TemporaryDirectory()
-        temp_path = Path(self._temp_dir.name)
-
-        bundle_dir = temp_path / "bundle_dynamic"
-        bundle_dir.mkdir(parents=True, exist_ok=True)
-
-        if self.checkpoint is not None:
-            checkpoint_path = Path(self.checkpoint)
-        else:
-            # Default checkpoint is in the model directory: checkpoint/{precision}/
-            checkpoint_path = Path(__file__).parent / "checkpoint" / str(self.precision)
-
-        src_onnx = checkpoint_path / "model_dynamic.onnx"
-        shutil.copy(src_onnx, bundle_dir / "model.onnx")
-
-        src_data = checkpoint_path / "model.data"
-        if src_data.exists():
-            shutil.copy(src_data, bundle_dir / "model.data")
-
-        src_enc = checkpoint_path / "model.encodings"
-        if src_enc.exists():
-            shutil.copy(src_enc, bundle_dir / "model.encodings")
-            # Fix RMSNorm weight encodings: AIMET stores them in
-            # activation_encodings (Mul is elementwise), but the compiler
-            # needs them in param_encodings. _adapt_aimet_encodings moves
-            # any "weight" activation encoding into param_encodings.
-            self._adapt_aimet_encodings(
-                str(bundle_dir / "model.encodings"),
-                str(bundle_dir / "model.encodings"),
-                str(bundle_dir / "model.onnx"),
-            )
-
-        source_bundle = ONNXBundle.from_bundle_path(bundle_dir, "model")
-
-        split_output_dir = temp_path / "splits_dynamic"
-        split_output_dir.mkdir(parents=True, exist_ok=True)
-
-        split_bundles = split_onnx(
-            onnxfile=source_bundle,
-            modelname="Qwen2_5_VL_7B",
-            num_splits=NUM_SPLITS,
-            num_layers_per_split=NUM_LAYERS_PER_SPLIT,
-            output_dir=str(split_output_dir),
-            split_embedding=False,
-        )
-
-        for i, bundle in enumerate(split_bundles):
-            self.onnx_splits[i + 1] = bundle
-
-        return self.onnx_splits[part_id]
-
     def save_calibrated_checkpoint(
         self,
-        output_checkpoint: str | Path,
-        fp_model: LLMBase | None = None,
-        **kwargs: Any,
+        output_checkpoint: str | os.PathLike | Path,
+        fp_model: Qwen2_5_VL_7B_PreSplit | None = None,
     ) -> None:
         """Save calibrated checkpoint with ONNX, encodings, and embedding weights."""
         if fp_model is None:
@@ -542,29 +370,13 @@ class Qwen2_5_VL_7B_QuantizablePreSplit(
                 sequence_length=self.sequence_length,
                 context_length=self.context_length,
             )
+        super().save_calibrated_checkpoint(output_checkpoint, fp_model)
 
-        super().save_calibrated_checkpoint(
-            output_checkpoint, fp_model, use_dynamic_shapes=True
+        # VLM-specific: embedding table is needed for on-device LUT encoder
+        # and for token-to-embedding conversion during evaluation.
+        export_embedding_weights_from_tensor(
+            fp_model.get_embedding_weights(), Path(output_checkpoint)
         )
-
-        # Export embedding weights for VLM
-        if isinstance(fp_model, Qwen2_5_VL_7B_PreSplit):
-            embedding_weights = fp_model.get_embedding_weights()
-            export_embedding_weights_from_tensor(
-                embedding_weights, Path(output_checkpoint)
-            )
-
-    def free_memory(self) -> None:
-        if hasattr(self, "quant_sim") and self.quant_sim is not None:
-            del self.quant_sim
-            self.quant_sim = None
-        self.onnx_splits.clear()
-        if self._temp_dir is not None:
-            self._temp_dir.cleanup()
-            self._temp_dir = None
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -601,6 +413,16 @@ class Qwen2_5_VL_7B_VisionEncoder(Qwen2VLVisionEncoder):
     ) -> Qwen2_5_VL_7B_VisionEncoder:
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # For quantized inference, resolve DEFAULT to the downloaded asset
+        # checkpoint (which contains vision_encoder.onnx/encodings alongside
+        # the text model artifacts). FP inference does not need the asset.
+        if precision != Precision.float and (
+            isinstance(checkpoint, str) and checkpoint.startswith("DEFAULT")
+        ):
+            checkpoint = Qwen2_5_VL_7B_QuantizablePreSplit.fetch_default_checkpoint(
+                precision
+            )
 
         # Load FP VEG (provides model weights for FP, buffers for quantized)
         load_device = device if precision == Precision.float else torch.device("cpu")
@@ -1392,7 +1214,17 @@ class Qwen2_5_VL_7B_Collection(PretrainedCollectionModel):
             comp_cls.from_pretrained(**part_kwargs) for comp_cls in comp_classes
         ]
         instance = cls(*components)
-        instance._checkpoint = str(checkpoint)
+        # Use the resolved checkpoint path (not the "DEFAULT" sentinel) so
+        # downstream supplementary-file copies find tokenizer.json etc.
+        resolved_checkpoint: str | Path = checkpoint
+        if isinstance(checkpoint, str) and checkpoint.startswith("DEFAULT"):
+            for comp in components:
+                presplit = getattr(comp, "_presplit", None)
+                ckpt = getattr(presplit, "checkpoint", None)
+                if ckpt is not None:
+                    resolved_checkpoint = ckpt
+                    break
+        instance._checkpoint = str(resolved_checkpoint)
         return instance
 
     def write_supplementary_files(
@@ -1430,6 +1262,14 @@ class Qwen2_5_VL_7B_Collection(PretrainedCollectionModel):
             if src.exists():
                 shutil.copy(src, output_dir / name)
                 metadata.supplementary_files[name] = f"Model {name} from checkpoint."
+
+        # --- Sample prompt (text-only; vision prompt is assembled at runtime) ---
+        sample_prompt = Qwen2VLTextBase.get_input_prompt_with_tags(include_image=False)
+        with open(output_dir / "sample_prompt.txt", "w") as f:
+            f.write(sample_prompt)
+        metadata.supplementary_files["sample_prompt.txt"] = (
+            "Sample text-only prompt for standalone genie-t2t-run."
+        )
 
         # --- HTP backend extension config ---
         hub_device = getattr(self, "_hub_device", None)
