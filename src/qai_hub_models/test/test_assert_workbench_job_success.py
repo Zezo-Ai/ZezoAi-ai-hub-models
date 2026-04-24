@@ -3,9 +3,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
+import json
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from pprint import pformat
 
 import pytest
@@ -92,6 +94,32 @@ def _check_single_job(
             failed_jobs[name] = f"<exception: {exc}>"
 
 
+_FAILED_JOBS_JSON = "failed-workbench-jobs.json"
+
+
+def _write_failed_jobs_json(
+    job_type: str,
+    failed_jobs: dict[str, str],
+    timeout_jobs: dict[str, str],
+) -> None:
+    """Append failed/timeout job URLs to a JSON file in the test-results directory."""
+    junit_xml_path = os.environ.get("QAIHM_JUNIT_XML_PATH")
+    if not junit_xml_path:
+        return
+    output_path = Path(junit_xml_path).parent / _FAILED_JOBS_JSON
+
+    # Load existing entries (other job types may have already written)
+    existing: dict[str, str] = {}
+    if output_path.exists():
+        existing = json.loads(output_path.read_text())
+
+    existing.update({f"{job_type}/{name}": url for name, url in failed_jobs.items()})
+    existing.update(
+        {f"{job_type}/{name} (timeout)": url for name, url in timeout_jobs.items()}
+    )
+    output_path.write_text(json.dumps(existing, indent=2))
+
+
 def _verify_jobs_successful(job_ids: dict[str, str], job_type: str) -> None:
     """
     Verifies that the jobs with the given job ids all succeeded.
@@ -132,6 +160,11 @@ def _verify_jobs_successful(job_ids: dict[str, str], job_type: str) -> None:
         ]
         for f in as_completed(futures, timeout=thread_timeout):
             f.result()
+
+    # Write failed/timeout job URLs to JSON for structured downstream consumption
+    # (e.g. nightly failure notifications). Written before raising so the file
+    # is available even when the test fails.
+    _write_failed_jobs_json(job_type, failed_jobs, timeout_jobs)
 
     error_strs = []
     if failed_jobs:

@@ -231,65 +231,77 @@ jobs:
             contents: read
             issues: write
             actions: read
+        env:
+            VENV_PATH: build/ci-envs/qaihm-notify
 
         steps:
-        - name: Create GitHub Issue
-          id: create-github-issue
-          uses: actions/github-script@v9
+        - uses: actions/checkout@v6
+
+        - name: CI Setup
+          id: ci_setup
+          uses: ./.github/actions/ci-setup
           with:
-            github-token: ${{ secrets.STAGING_GH_TOKEN }}
-            script: |
-              const today = new Date().toISOString().split('T')[0];
+            venv-path: ${{ env.VENV_PATH }}
 
-              // Build issue body
-              let issueBody = `# 🚨 QAI Hub Models Nightly Tests Failed
+        - name: Download Workbench Verification Results
+          id: download-workbench-results
+          uses: actions/download-artifact@v8
+          continue-on-error: true
+          with:
+            name: test-results-workbench-jobs-py3.10
+            path: build/workbench-results
 
-              Date: ${today}
+        - name: Generate Issue Bodies
+          id: generate-issues
+          run: |
+            source "${{ env.VENV_PATH }}/bin/activate"
 
-              ## Links
-              - [View Workflow Run Summary](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
+            # Build failure arguments from failed workflow jobs (same pattern as generate_test_summary)
+            FAILURE_ARGS=()
+            while IFS=$'\t' read -r name url; do
+              FAILURE_ARGS+=("--workflow-failure" "$name" "--workflow-failure-url" "$url")
+            done < <(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs --paginate -q '.jobs[] | select(.conclusion == "failure") | "\(.name)\t${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/\(.id)"')
 
-              ## Next Steps
+            python -m qai_hub_models.scripts.notify_nightly_failures \
+              "${FAILURE_ARGS[@]}" \
+              --output-dir build/nightly-issues \
+              --repository "${{ github.repository }}" \
+              --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}" \
+              --ref-name "${{ github.ref_name }}" \
+              --failed-jobs-json "build/workbench-results/failed-workbench-jobs.json"
 
-              1. Check the workflow summary tab for detailed error messages and stack traces
-              2. Determine appropriate ML Tech Team member for assignment of issue
-              3. Review individual job logs for specific failure causes
-              4. 📊 [Update the Nightly Failure Log spreadsheet](https://qualcomm.sharepoint.com/:x:/r/teams/TetraAI2/Shared%20Documents/model-zoo/QAIHM%20Nightly%20Failure%20Log.xlsx?d=w73cc2ddb0d7b4fe58a9a8ba9efc10fd8)
+        - name: Create GitHub Issues
+          id: create-github-issues
+          run: |
+            ISSUE_URLS=""
 
-              ## Common Causes for Test Job Failures
+            if [ -f build/nightly-issues/workbench_issue.md ]; then
+              URL=$(gh issue create \
+                --repo qcom-ai-hub/tetracode \
+                --title "$(cat build/nightly-issues/workbench_title.txt)" \
+                --body-file build/nightly-issues/workbench_issue.md \
+                --label p0 --label ai-hub-models \
+                --assignee baarts_QCOM --assignee brtal_QCOM)
+              echo "Created workbench issue: $URL"
+              ISSUE_URLS="$URL"
+            fi
 
-              **If no test results are found, this is likely due to:**
-              - Dependency installation failure (e.g., network timeouts downloading packages)
-              - Environment setup issues preventing pytest execution
-              - Build or compilation problems
-              - Virtual environment creation failures
+            if [ -f build/nightly-issues/general_issue.md ]; then
+              URL=$(gh issue create \
+                --repo qcom-ai-hub/tetracode \
+                --title "$(cat build/nightly-issues/general_title.txt)" \
+                --body-file build/nightly-issues/general_issue.md \
+                --label p0 --label ai-hub-models)
+              echo "Created general issue: $URL"
+              ISSUE_URLS="${ISSUE_URLS:+$ISSUE_URLS$'\n'}$URL"
+            fi
 
-              **Check the individual job logs for:**
-              - Package installation errors (pip/uv timeouts)
-              - Import errors or missing dependencies
-              - Environment variable issues
-              - Platform-specific build failures
-
-              ## Workflow Info
-              - Source Repository: ${{ github.repository }}
-              - Branch: ${{ github.ref_name }}
-              - Triggered by: ${{ github.event_name }}
-
-              ---
-              Auto-created by nightly workflow failure notification`;
-
-              const result = await github.rest.issues.create({
-                owner: 'qcom-ai-hub',
-                repo: 'tetracode',
-                title: `QAI Hub Models Nightly Tests Failed - ${today}`,
-                body: issueBody,
-                labels: ['p0', 'ai-hub-models']
-              });
-
-              console.log(`Created consolidated issue: ${result.data.html_url}`);
-
-              // Set output for Slack notification
-              core.setOutput('issue_url', result.data.html_url);
+            # Write URLs to GITHUB_OUTPUT for Slack step
+            {
+              echo "issue_urls<<EOF_ISSUE_URLS"
+              echo "$ISSUE_URLS"
+              echo "EOF_ISSUE_URLS"
+            } >> "$GITHUB_OUTPUT"
 
         # Send result to Slack channel #ai-hub-models
         - name: Send Slack Notification
@@ -305,4 +317,5 @@ jobs:
 
                 Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
 
-                GitHub Issue: ${{ steps.create-github-issue.outputs.issue_url }}
+                GitHub Issues:
+                ${{ steps.create-github-issues.outputs.issue_urls }}

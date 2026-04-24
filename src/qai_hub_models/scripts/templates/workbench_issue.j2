@@ -1,0 +1,30 @@
+# Workbench Job Failures
+
+Date: {{ today }}
+
+## Failed Jobs
+{% for f in failures -%}
+- [{{ f.name }}]({{ f.url }})
+{% endfor %}
+{%- if failed_aihub_jobs %}
+
+## Failed AI Hub Jobs
+{% for name, url in failed_aihub_jobs.items() -%}
+- **{{ name }}**: {{ url }}
+{% endfor %}
+{%- endif %}
+
+## Links
+- [View Workflow Run]({{ run_url }})
+
+## Triage Steps
+1. Click the failed workbench job links above to investigate
+2. Determine if failure is a platform issue or a model issue
+3. Look at the JUnit XML in the `test-results-workbench-jobs-py3.10` artifact for full details
+
+## Workflow Info
+- Repository: {{ repository }}
+- Branch: {{ ref_name }}
+
+---
+Auto-created by nightly workflow failure notification
