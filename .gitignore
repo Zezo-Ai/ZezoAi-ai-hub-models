@@ -42,6 +42,11 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
+# External repo clones, symlinks, and hash files (allow __init__.py and .diff patches)
+src/qai_hub_models/models/*/external_repos/*
+!src/qai_hub_models/models/*/external_repos/__init__.py
+!src/qai_hub_models/models/*/external_repos/*.diff
+
 # Unit test / coverage reports
 htmlcov/
 .tox/

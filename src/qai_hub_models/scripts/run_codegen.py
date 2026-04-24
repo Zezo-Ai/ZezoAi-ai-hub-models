@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -232,6 +233,27 @@ def _generate_evaluate(
     return str(evaluate_path)
 
 
+def _generate_external_repos_init(
+    environment: Environment,
+    model_name: str,
+    external_repos: dict[str, Any],
+    model_dir: Path,
+) -> str:
+    external_repos_dir = model_dir / "external_repos"
+    os.makedirs(external_repos_dir, exist_ok=True)
+
+    template = environment.get_template("external_repos_init_template.j2")
+    file_contents = template.render(
+        model_name=model_name,
+        external_repos=external_repos,
+        header=HEADER,
+    )
+    file_path = os.path.join(external_repos_dir, "__init__.py")
+    with open(file_path, "w") as f:
+        f.write(file_contents)
+    return file_path
+
+
 def generate_code_for_model(model_name: str) -> list[str]:
     model_dir = QAIHM_MODELS_ROOT / model_name
     export_options = QAIHMModelCodeGen.from_model(model_name)
@@ -263,8 +285,25 @@ def generate_code_for_model(model_name: str) -> list[str]:
             model_dir,
         )
     ]
+    # Generate or clean up external repo files
+    external_repos_dir = model_dir / "external_repos"
+    if export_options.external_repos:
+        external_repos_dict = {
+            name: config.model_dump()
+            for name, config in export_options.external_repos.items()
+        }
+        generated_files.append(
+            _generate_external_repos_init(
+                environment, model_name, external_repos_dict, model_dir
+            )
+        )
+    elif external_repos_dir.exists():
+        shutil.rmtree(external_repos_dir)
+
     export_options_dict = export_options.model_dump()
     _extract_runtime_and_precision_options(export_options, export_options_dict)
+
+    export_options_dict["has_external_repos"] = bool(export_options.external_repos)
 
     should_generate_tests = not export_options.skip_hub_tests_and_scorecard
     test_path = model_dir / "test_generated.py"

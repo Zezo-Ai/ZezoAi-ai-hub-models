@@ -141,6 +141,9 @@ jobs:
         hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
         hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
 
+    - name: Setup external repos
+      run: source "${{ env.VENV_PATH }}/bin/activate" && python -m qai_hub_models.scripts.setup_external_repos -a
+
     - name: Run Pre-Commit
       id: pre-commit
       run: |

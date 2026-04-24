@@ -6,36 +6,28 @@
 from __future__ import annotations
 
 import os
-import sys
 from typing import Any
 
 import torch
+from hydra import compose, initialize_config_dir
 from typing_extensions import Self
 
+import qai_hub_models.models.gkt.external_repos.gkt as gkt_repo
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.evaluators.nuscenes_bev_evaluator import (
     NuscenesBevSegmentationEvaluator,
 )
 from qai_hub_models.models.common import Precision
-from qai_hub_models.models.gkt.model_patches import (
-    GeometryKernelAttention_forward,
-    IndexBEVProjector_forward,
-    KernelAttention_forward,
+from qai_hub_models.models.gkt.external_repos.gkt.segmentation.cross_view_transformer.common import (
+    remove_prefix,
+    setup_network,
 )
-from qai_hub_models.utils.asset_loaders import (
-    CachedWebModelAsset,
-    SourceAsRoot,
-    find_replace_in_repo,
-    load_torch,
-)
+from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_torch
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
-
-GKT_SOURCE_REPOSITORY = "https://github.com/hustvl/GKT.git"
-GKT_SOURCE_REPO_COMMIT = "104c27f66799f620e54eb0242509ee3b041ae426"
 
 # Checkpoint is sourced from
 GKT_CKPT = CachedWebModelAsset.from_asset_store(
@@ -54,51 +46,22 @@ class GKT(BaseModel):
 
     @classmethod
     def from_pretrained(cls, ckpt_name: str | None = None) -> Self:
-        with SourceAsRoot(
-            GKT_SOURCE_REPOSITORY,
-            GKT_SOURCE_REPO_COMMIT,
-            MODEL_ID,
-            MODEL_ASSET_VERSION,
-        ) as repo_path:
-            sys.path.insert(0, os.path.join(repo_path, "segmentation"))
+        if ckpt_name:
+            checkpoint = load_torch(ckpt_name)
+        else:
+            checkpoint = load_torch(GKT_CKPT.fetch())
 
-            # Patch efficientnet.py to use auto-downloaded weights instead of local path.
-            find_replace_in_repo(
-                repo_path,
-                "segmentation/cross_view_transformer/model/backbones/efficientnet.py",
-                'weights_path="../../../pretrained_models/efficientnet-b4-6ed6700e.pth")',
-                ")",
+        config_path = os.path.join(
+            os.path.dirname(gkt_repo.__file__), "segmentation", "config"
+        )
+        with initialize_config_dir(version_base=None, config_dir=config_path):
+            cfg = compose(
+                config_name="config",
+                overrides=["+experiment=gkt_nuscenes_vehicle_kernel_7x1"],
             )
-            find_replace_in_repo(
-                repo_path,
-                "segmentation/cross_view_transformer/data/augmentations.py",
-                "import imgaug.augmenters as iaa",
-                " ",
-            )
-            from cross_view_transformer.common import remove_prefix, setup_network
-            from cross_view_transformer.model.geometry_kernel_transformer_encoder import (
-                GeometryKernelAttention,
-                IndexBEVProjector,
-                KernelAttention,
-            )
-            from hydra import compose, initialize_config_dir
-
-            GeometryKernelAttention.forward = GeometryKernelAttention_forward
-            IndexBEVProjector.forward = IndexBEVProjector_forward
-            KernelAttention.forward = KernelAttention_forward
-            if ckpt_name:
-                checkpoint = load_torch(ckpt_name)
-            else:
-                checkpoint = load_torch(GKT_CKPT.fetch())
-            CONFIG_PATH = os.path.join(repo_path, "segmentation", "config")
-            with initialize_config_dir(version_base=None, config_dir=CONFIG_PATH):
-                cfg = compose(
-                    config_name="config",
-                    overrides=["+experiment=gkt_nuscenes_vehicle_kernel_7x1"],
-                )
-            state_dict = remove_prefix(checkpoint["state_dict"], "backbone")
-            model = setup_network(cfg)
-            model.load_state_dict(state_dict)
+        state_dict = remove_prefix(checkpoint["state_dict"], "backbone")
+        model = setup_network(cfg)
+        model.load_state_dict(state_dict)
         return cls(model)
 
     def forward(

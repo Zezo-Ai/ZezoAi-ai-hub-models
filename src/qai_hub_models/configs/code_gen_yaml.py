@@ -20,8 +20,28 @@ from qai_hub_models.utils.base_config import BaseQAIHMConfig
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
 
 
+class ExternalRepoConfig(BaseQAIHMConfig):
+    """Configuration for a single external repository dependency."""
+
+    repo_url: str
+    commit_sha: str
+    patches_filename: str | None = None
+
+    @model_validator(mode="after")
+    def check_fields(self) -> ExternalRepoConfig:
+        if not self.repo_url:
+            raise ValueError("repo_url must not be empty.")
+        if not self.commit_sha:
+            raise ValueError("commit_sha must not be empty.")
+        return self
+
+
 class QAIHMModelCodeGen(BaseQAIHMConfig):
     """Schema & loader for model code-gen.yaml."""
+
+    # External repository dependencies for this model.
+    # Keys are repo names used as import paths (e.g., "gkt" -> external_repos.gkt.module).
+    external_repos: dict[str, ExternalRepoConfig] | None = None
 
     # Whether the model is quantized with aimet.
     is_aimet: bool = False

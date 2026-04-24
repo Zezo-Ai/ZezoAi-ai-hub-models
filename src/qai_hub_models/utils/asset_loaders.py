@@ -34,6 +34,7 @@ import numpy as np
 import requests
 import ruamel.yaml
 import torch
+from inputimeout import TimeoutOccurred, inputimeout
 from PIL import Image
 from qai_hub.util.dataset_entries_converters import h5_to_dataset_entries
 from schema import And, Schema, SchemaError
@@ -122,14 +123,17 @@ def check_unpublished_model_warning() -> bool:
     return query_yes_no("Continue?")
 
 
-def query_yes_no(question: str, default: str | None = "yes") -> bool:
+def query_yes_no(
+    question: str, default: str = "yes", timeout: int | None = None
+) -> bool:
     """
     Ask a yes/no question and return their answer.
 
     "question" is a string that is presented to the user.
     "default" is the presumed answer if the user just hits <Enter>.
-            It must be "yes" (the default), "no" or None (meaning
-            an answer is required of the user).
+            It must be "yes" (the default) or "no".
+    "timeout" is an optional timeout in seconds. If the user doesn't
+            respond within the timeout, the default answer is used.
 
     The "answer" return value is True for "yes" or False for "no".
 
@@ -139,9 +143,7 @@ def query_yes_no(question: str, default: str | None = "yes") -> bool:
         return _always_answer
 
     valid = {"yes": True, "y": True, "ye": True, "no": False, "n": False}
-    if default is None:
-        prompt = " [y/n] "
-    elif default == "yes":
+    if default == "yes":
         prompt = " [Y/n] "
     elif default == "no":
         prompt = " [y/N] "
@@ -150,8 +152,14 @@ def query_yes_no(question: str, default: str | None = "yes") -> bool:
 
     while True:
         print(question + prompt, end="")
-        choice = input().lower()
-        if default is not None and choice == "":
+        if timeout is not None:
+            try:
+                choice = inputimeout(prompt="", timeout=timeout).lower()
+            except TimeoutOccurred:
+                choice = "no"
+        else:
+            choice = input().lower()
+        if choice == "":
             return valid[default]
         if choice in valid:
             return valid[choice]
