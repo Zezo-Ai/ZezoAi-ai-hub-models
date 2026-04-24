@@ -11,7 +11,6 @@ from pathlib import Path
 
 import requests
 from pydantic import Field, ValidationInfo, model_validator
-from qai_hub.util.session import create_session
 from qai_hub_models_cli.proto import info_pb2, numerics_pb2
 
 from qai_hub_models.configs._info_yaml_enums import (
@@ -62,12 +61,10 @@ def _validate_urls_exist(urls: list[tuple[str, str]]) -> None:
 
     def _check(url: str, label: str) -> str | None:
         try:
-            session = create_session()
-            status = session.head(url, allow_redirects=True, timeout=10).status_code
-            if status == 429 and "huggingface" in url:
-                return None  # Hugging Face is very aggressive with timeouts, so we ignore them.
-            if status != requests.codes.ok:
-                return f"{label} at {url}"
+            status = requests.head(url, allow_redirects=True, timeout=10).status_code
+            # IEEE returns error 418 for all HEAD requests. We ignore that.
+            if status not in [requests.codes.ok, requests.codes.too_many_requests, 418]:
+                return f"{label} at {url} (status: {status})"
         except requests.RequestException as e:
             return f"{label} at {url} ({e})"
         return None

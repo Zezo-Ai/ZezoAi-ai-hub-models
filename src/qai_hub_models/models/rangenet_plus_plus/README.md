@@ -55,7 +55,7 @@ Additional options are documented with the `--help` option.
   [here](https://github.com/PRBonn/lidar-bonnetal/blob/master/LICENSE).
 
 ## References
-* [RangeNet++: Fast and Accurate LiDAR Semantic Segmentation](https://doi.org/10.1109/IROS40897.2019.8967762)
+* [RangeNet++: Fast and Accurate LiDAR Semantic Segmentation](https://ieeexplore.ieee.org/document/8967762)
 * [Source Model Implementation](https://github.com/PRBonn/lidar-bonnetal)
 
 ## Community
