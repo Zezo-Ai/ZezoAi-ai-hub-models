@@ -5,14 +5,20 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import pytest
+import ruamel.yaml
 from google.protobuf.json_format import Parse
 from qai_hub_models_cli.proto import manifest_pb2
 
 from qai_hub_models._version import __version__
-from qai_hub_models.scripts.build_release_proto import cmd_aws, cmd_website
+from qai_hub_models.scripts.build_release_proto import (
+    _simplify_enum_values_for_website_import,
+    cmd_aws,
+    cmd_website,
+)
 
 SAMPLE_MODELS = {"mobilenet_v2", "aotgan"}
 
@@ -20,6 +26,30 @@ SAMPLE_MODELS = {"mobilenet_v2", "aotgan"}
 @pytest.fixture
 def output_dir(tmp_path: Path) -> Path:
     return tmp_path / "release_output"
+
+
+def test_simplify_enum_values_for_website_import() -> None:
+    assert _simplify_enum_values_for_website_import("PRECISION_W8A8") == "w8a8"
+    assert (
+        _simplify_enum_values_for_website_import("RUNTIME_QNN_CONTEXT_BINARY")
+        == "qnn_context_binary"
+    )
+    assert _simplify_enum_values_for_website_import("RUNTIME_TFLITE") == "tflite"
+    assert _simplify_enum_values_for_website_import("PRECISION_FLOAT") == "float"
+    assert (
+        _simplify_enum_values_for_website_import("some_other_string")
+        == "some_other_string"
+    )
+    assert _simplify_enum_values_for_website_import(
+        {"precision": "PRECISION_W8A16", "name": "foo"}
+    ) == {
+        "precision": "w8a16",
+        "name": "foo",
+    }
+    assert _simplify_enum_values_for_website_import(["RUNTIME_ONNX", "hello"]) == [
+        "onnx",
+        "hello",
+    ]
 
 
 def test_cmd_website(output_dir: Path) -> None:
@@ -36,6 +66,15 @@ def test_cmd_website(output_dir: Path) -> None:
         model_dir = output_dir / "models" / model_id
         assert model_dir.exists()
         assert (model_dir / "info.yaml").exists()
+
+        release_assets_yaml = model_dir / "release-assets.yaml"
+        if release_assets_yaml.exists():
+            text = release_assets_yaml.read_text()
+            assert "PRECISION_" not in text, f"Unsanitized precision enum in {model_id}"
+            assert "RUNTIME_" not in text, f"Unsanitized runtime enum in {model_id}"
+
+            data = ruamel.yaml.YAML().load(text)
+            assert isinstance(data, dict)
 
 
 def test_cmd_aws(output_dir: Path) -> None:
@@ -79,3 +118,14 @@ def test_cmd_aws(output_dir: Path) -> None:
         assert model_dir.exists()
         assert (model_dir / "info.json").exists()
         assert (model_dir / "info.pb").exists()
+
+        release_assets_json = model_dir / "release-assets.json"
+        if release_assets_json.exists():
+            data = json.loads(release_assets_json.read_text())
+            for asset in data.get("assets", []):
+                assert asset["precision"].startswith("PRECISION_"), (
+                    f"JSON should preserve proto enum names, got {asset['precision']}"
+                )
+                assert asset["runtime"].startswith("RUNTIME_"), (
+                    f"JSON should preserve proto enum names, got {asset['runtime']}"
+                )

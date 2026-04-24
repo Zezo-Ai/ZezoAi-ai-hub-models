@@ -10,7 +10,7 @@ import shutil
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import ruamel.yaml
 from google.protobuf.json_format import MessageToDict, MessageToJson
@@ -53,6 +53,23 @@ GLOBAL_YAMLS_TO_COPY = [
 
 
 _EXT: dict[Format, str] = {"yaml": ".yaml", "json": ".json", "proto": ".pb"}
+
+# Proto enum prefixes from release_assets.proto (Precision, Runtime).
+# Update this list if new enum types are added to the proto schema.
+_ENUM_PREFIXES = ["PRECISION_", "RUNTIME_"]
+
+
+def _simplify_enum_values_for_website_import(obj: Any) -> Any:
+    # The website expects lowercase names without the proto prefix (e.g. "w8a8", not "PRECISION_W8A8").
+    if isinstance(obj, dict):
+        return {k: _simplify_enum_values_for_website_import(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_simplify_enum_values_for_website_import(v) for v in obj]
+    if isinstance(obj, str):
+        for prefix in _ENUM_PREFIXES:
+            if obj.startswith(prefix):
+                return obj[len(prefix) :].lower()
+    return obj
 
 
 def _make_yaml() -> ruamel.yaml.YAML:
@@ -100,7 +117,18 @@ def _build_release_assets_proto(
                 )
 
     proto_msg = release_assets.to_proto(aihm_version, model_id)
-    return _write_proto_multi(proto_msg, output_dir / "release-assets", fmts)
+    result: list[Path] = []
+    for fmt in fmts:
+        if fmt == "yaml":
+            out_path = (output_dir / "release-assets").with_suffix(".yaml")
+            proto_dict = MessageToDict(proto_msg, preserving_proto_field_name=True)
+            proto_dict = _simplify_enum_values_for_website_import(proto_dict)
+            with open(out_path, "w") as f:
+                _make_yaml().dump(proto_dict, f)
+            result.append(out_path)
+        else:
+            result.append(_write_proto(proto_msg, output_dir / "release-assets", fmt))
+    return result
 
 
 def _build_model_protos(
