@@ -49,7 +49,7 @@ Additional options are documented with the `--help` option.
 
 ## License
 * The license for the original implementation of CREStereo can be found
-  [here](https://github.com/ibaiGorordo/CREStereo-Pytorch/blob/main/LICENSE).
+  [here](https://github.com/megvii-research/CREStereo/blob/master/LICENSE).
 
 ## References
 * [Practical Stereo Matching via Cascaded Recurrent Network with Adaptive Correlation](https://arxiv.org/abs/2203.11483)

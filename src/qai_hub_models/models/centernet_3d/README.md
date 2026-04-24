@@ -49,7 +49,7 @@ Additional options are documented with the `--help` option.
 
 ## License
 * The license for the original implementation of CenterNet-3D can be found
-  [here](https://github.com/xingyizhou/CenterNet/blob/master/LICENSE https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/Qualcomm+AI+Hub+Proprietary+License.pdf).
+  [here](https://github.com/xingyizhou/CenterNet/blob/master/LICENSE).
 
 ## References
 * [Objects as Points](https://arxiv.org/abs/1904.07850)

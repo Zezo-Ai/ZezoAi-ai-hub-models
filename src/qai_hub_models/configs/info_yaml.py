@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -52,6 +53,30 @@ __all__ = [
     "NumericsAccuracyBenchmark",
     "QAIHMModelInfo",
 ]
+
+
+def _validate_urls_exist(urls: list[tuple[str, str]]) -> None:
+    """HEAD-check a list of (url, error_label) pairs in parallel. Raises ValueError on failures."""
+    if not urls:
+        return
+
+    def _check(url: str, label: str) -> str | None:
+        try:
+            session = create_session()
+            status = session.head(url, allow_redirects=True, timeout=10).status_code
+            if status == 429 and "huggingface" in url:
+                return None  # Hugging Face is very aggressive with timeouts, so we ignore them.
+            if status != requests.codes.ok:
+                return f"{label} at {url}"
+        except requests.RequestException as e:
+            return f"{label} at {url} ({e})"
+        return None
+
+    with ThreadPoolExecutor(max_workers=len(urls)) as pool:
+        results = list(pool.map(lambda t: _check(*t), urls))
+    errors = [r for r in results if r is not None]
+    if errors:
+        raise ValueError("\n".join(errors))
 
 
 class NumericsAccuracyBenchmark(BaseQAIHMConfig):
@@ -347,19 +372,37 @@ class QAIHMModelInfo(BaseQAIHMConfig):
             if not self.has_static_banner:
                 raise ValueError("Published models must have a static asset.")
 
-        session = create_session()
-        if validate_urls_exist and self.has_static_banner:
-            static_banner_url = ASSET_CONFIG.get_web_asset_url(
-                self.id, QAIHM_WEB_ASSET.STATIC_IMG
-            )
-            if session.head(static_banner_url).status_code != requests.codes.ok:
-                raise ValueError(f"Static banner is missing at {static_banner_url}")
-        if validate_urls_exist and self.has_animated_banner:
-            animated_banner_url = ASSET_CONFIG.get_web_asset_url(
-                self.id, QAIHM_WEB_ASSET.ANIMATED_MOV
-            )
-            if session.head(animated_banner_url).status_code != requests.codes.ok:
-                raise ValueError(f"Animated banner is missing at {animated_banner_url}")
+        urls_to_check: list[tuple[str, str]] = []
+        if validate_urls_exist:
+            if self.has_static_banner:
+                urls_to_check.append(
+                    (
+                        ASSET_CONFIG.get_web_asset_url(
+                            self.id, QAIHM_WEB_ASSET.STATIC_IMG
+                        ),
+                        "Static banner does not exist",
+                    )
+                )
+            if self.has_animated_banner:
+                urls_to_check.append(
+                    (
+                        ASSET_CONFIG.get_web_asset_url(
+                            self.id, QAIHM_WEB_ASSET.ANIMATED_MOV
+                        ),
+                        "Animated banner does not exist",
+                    )
+                )
+            if self.license:
+                urls_to_check.append((self.license, "License does not exist"))
+            if self.research_paper:
+                urls_to_check.append(
+                    (
+                        self.research_paper,
+                        "Research paper does not exist",
+                    )
+                )
+            if self.source_repo:
+                urls_to_check.append((self.source_repo, "Source repo does not exist"))
 
         expected_qaihm_repo = Path("src") / "qai_hub_models" / "models" / self.id
         if expected_qaihm_repo != ASSET_CONFIG.get_qaihm_repo(self.id):
@@ -382,23 +425,17 @@ class QAIHMModelInfo(BaseQAIHMConfig):
                 LLM_CALL_TO_ACTION.CONTACT_US,
             ]
 
-            # Download URL can only be validated in a scope with a model ID, so this
-            # is validated here rather than on the LLM details class' validator.
             if validate_urls_exist:
                 if self.llm_details.devices:
-                    # Validate per-device URLs (genie_compatible=True)
                     for (
                         device_runtime_config_mapping
                     ) in self.llm_details.devices.values():
                         for runtime_detail in device_runtime_config_mapping.values():
-                            # Support both absolute URLs and relative paths
                             if runtime_detail.model_download_url.startswith(
                                 ("http://", "https://")
                             ):
-                                # Absolute URL - use directly
                                 model_download_url = runtime_detail.model_download_url
                             else:
-                                # Relative path - construct URL using ASSET_CONFIG
                                 version = runtime_detail.model_download_url.split("/")[
                                     0
                                 ][1:]
@@ -408,29 +445,23 @@ class QAIHMModelInfo(BaseQAIHMConfig):
                                 model_download_url = ASSET_CONFIG.get_model_asset_url(
                                     self.id, version, relative_path
                                 )
-                            response = session.head(model_download_url)
-                            # Accept 200 OK or 302 Found (redirect to download)
-                            if response.status_code not in [
-                                requests.codes.ok,
-                                requests.codes.found,
-                            ]:
-                                raise ValueError(
-                                    f"Download URL is missing at {runtime_detail.model_download_url}"
+                            urls_to_check.append(
+                                (
+                                    model_download_url,
+                                    f"Download URL does not exist ({runtime_detail.model_download_url})",
                                 )
+                            )
                 elif self.llm_details.llama_cpp_model_url:
-                    # Validate global llama.cpp URL (genie_compatible=False)
-                    model_download_url = self.llm_details.llama_cpp_model_url
-                    response = session.head(model_download_url)
-                    # Accept 200 OK or 302 Found (redirect to download)
-                    if response.status_code not in [
-                        requests.codes.ok,
-                        requests.codes.found,
-                    ]:
-                        raise ValueError(
-                            f"Download URL is missing at {model_download_url}"
+                    urls_to_check.append(
+                        (
+                            self.llm_details.llama_cpp_model_url,
+                            "Llama.cpp download URL does not exist",
                         )
+                    )
         elif self.llm_details:
             raise ValueError("Model type must be LLM if llm_details is set")
+
+        _validate_urls_exist(urls_to_check)
 
         return self
 

@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from qai_hub_models.configs._info_yaml_enums import MODEL_DOMAIN_USE_CASES
 from qai_hub_models.configs.info_yaml import (
     MODEL_DOMAIN,
@@ -80,19 +82,26 @@ def test_model_usecase_to_hf_pipeline_tag() -> None:
         assert use_case.map_to_hf_pipeline_tag() in HF_PIPELINE_TAGS
 
 
-def test_info_yaml() -> None:
-    for model_id in MODEL_IDS:
-        try:
-            info_spec = QAIHMModelInfo.from_model(model_id)
-            QAIHMModelInfo.model_validate(
-                info_spec, context=dict(validate_urls_exist=True)
-            )
-        except Exception as err:
-            raise AssertionError(
-                f"{model_id} config validation failed: {err!s}"
-            ) from None
+def _validate_model(model_id: str) -> None:
+    info_spec = QAIHMModelInfo.from_model(model_id)
+    QAIHMModelInfo.model_validate(info_spec, context=dict(validate_urls_exist=True))
+    assert info_spec.id == model_id, (
+        f"{model_id} config ID does not match the model's folder name"
+    )
 
-        # Verify model ID is the same as folder name
-        assert info_spec.id == model_id, (
-            f"{model_id} config ID does not match the model's folder name"
-        )
+
+def test_info_yaml() -> None:
+    errors: list[str] = []
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {
+            pool.submit(_validate_model, model_id): model_id for model_id in MODEL_IDS
+        }
+        for future in as_completed(futures):
+            model_id = futures[future]
+            try:
+                future.result()
+            except Exception as err:
+                errors.append(f"{model_id}: {err!s}")
+    assert not errors, f"{len(errors)} model(s) failed validation:\n" + "\n".join(
+        errors
+    )

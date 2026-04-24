@@ -2,7 +2,7 @@
 
 Real-time multiple person detection with accurate feet localization optimized for mobile and edge.
 
-This is based on the implementation of Person-Foot-Detection found [here](https://github.com/quic/ai-hub-models/blob/main/qai_hub_models/models/foot_track_net/model.py).
+This is based on the implementation of Person-Foot-Detection found [here](https://github.com/qualcomm/ai-hub-models/blob/main/src/qai_hub_models/models/foot_track_net/model.py).
 This repository contains scripts for optimized on-device export suitable to run on Qualcomm® devices. More details on model performance across various devices, can be found [here](https://aihub.qualcomm.com/models/foot_track_net).
 
 Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.qualcomm.com) to compile, profile, and evaluate this model. [Sign up](https://myaccount.qualcomm.com/signup) to run these models on a hosted Qualcomm® device.
@@ -49,10 +49,10 @@ Additional options are documented with the `--help` option.
 
 ## License
 * The license for the original implementation of Person-Foot-Detection can be found
-  [here](https://github.com/quic/ai-hub-models/blob/main/LICENSE).
+  [here](https://github.com/qualcomm/ai-hub-models/blob/main/LICENSE).
 
 ## References
-* [Source Model Implementation](https://github.com/quic/ai-hub-models/blob/main/qai_hub_models/models/foot_track_net/model.py)
+* [Source Model Implementation](https://github.com/qualcomm/ai-hub-models/blob/main/src/qai_hub_models/models/foot_track_net/model.py)
 
 ## Community
 * Join [our AI Hub Slack community](https://aihub.qualcomm.com/community/slack) to collaborate, post questions and learn more about on-device AI.

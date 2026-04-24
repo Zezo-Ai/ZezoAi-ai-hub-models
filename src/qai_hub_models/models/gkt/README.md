@@ -2,7 +2,7 @@
 
 Geometry-guided Kernel Transformer is a machine learning model for generating a birds eye view represenation from the sensors(cameras) mounted on a vehicle.
 
-This is based on the implementation of GKT found [here](https://github.com/hustvl/GKT/ https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/Qualcomm+AI+Hub+Proprietary+License.pdf).
+This is based on the implementation of GKT found [here](https://github.com/hustvl/GKT/).
 This repository contains scripts for optimized on-device export suitable to run on Qualcomm® devices. More details on model performance across various devices, can be found [here](https://aihub.qualcomm.com/models/gkt).
 
 Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.qualcomm.com) to compile, profile, and evaluate this model. [Sign up](https://myaccount.qualcomm.com/signup) to run these models on a hosted Qualcomm® device.
@@ -54,7 +54,7 @@ Additional options are documented with the `--help` option.
 
 ## References
 * [Efficient and Robust 2D-to-BEV Representation Learning via Geometry-guided Kernel Transformer](https://arxiv.org/abs/2206.04584)
-* [Source Model Implementation](https://github.com/hustvl/GKT/ https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/Qualcomm+AI+Hub+Proprietary+License.pdf)
+* [Source Model Implementation](https://github.com/hustvl/GKT/)
 
 ## Community
 * Join [our AI Hub Slack community](https://aihub.qualcomm.com/community/slack) to collaborate, post questions and learn more about on-device AI.

@@ -73,7 +73,7 @@ Additional options are documented with the `--help` option.
 
 ## License
 * The license for the original implementation of Qwen2.5-VL-7B-Instruct can be found
-  [here](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/blob/main/LICENSE).
+  [here](https://huggingface.co/datasets/choosealicense/licenses/blob/main/markdown/apache-2.0.md).
 
 ## References
 * [Qwen2.5-VL Technical Report](https://arxiv.org/abs/2502.13923)

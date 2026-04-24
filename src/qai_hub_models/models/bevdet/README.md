@@ -50,7 +50,7 @@ Additional options are documented with the `--help` option.
 
 ## License
 * The license for the original implementation of BEVDet can be found
-  [here](https://github.com/HuangJunJie2017/BEVDet/blob/dev3.0/LICENSE https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/Qualcomm+AI+Hub+Proprietary+License.pdf).
+  [here](https://github.com/HuangJunJie2017/BEVDet/blob/dev3.0/LICENSE).
 
 ## References
 * [BEVDet: High-Performance Multi-Camera 3D Object Detection in Bird-Eye-View](https://arxiv.org/abs/2112.11790)

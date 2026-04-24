@@ -48,7 +48,7 @@ Additional options are documented with the `--help` option.
 
 ## License
 * The license for the original implementation of Lightweight-Face-Detection can be found
-  [here](https://github.com/quic/ai-hub-models/blob/main/LICENSE).
+  [here](https://github.com/qualcomm/ai-hub-models/blob/main/LICENSE).
 
 
 

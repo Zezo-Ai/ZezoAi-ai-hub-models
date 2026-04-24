@@ -49,7 +49,7 @@ Additional options are documented with the `--help` option.
 
 ## License
 * The license for the original implementation of EyeGaze can be found
-  [here](https://github.com/quic/ai-hub-models/blob/main/LICENSE).
+  [here](https://github.com/qualcomm/ai-hub-models/blob/main/LICENSE).
 
 ## References
 * [Source Model Implementation](https://github.com/david-wb/gaze-estimation)

@@ -2,7 +2,7 @@
 
 YoloR is a machine learning model that predicts bounding boxes and classes of objects in an image.
 
-This is based on the implementation of Yolo-R found [here](https://github.com/WongKinYiu/yolor.git).
+This is based on the implementation of Yolo-R found [here](https://github.com/WongKinYiu/yolor).
 This repository contains scripts for optimized on-device export suitable to run on Qualcomm® devices. More details on model performance across various devices, can be found [here](https://aihub.qualcomm.com/models/yolor).
 
 Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.qualcomm.com) to compile, profile, and evaluate this model. [Sign up](https://myaccount.qualcomm.com/signup) to run these models on a hosted Qualcomm® device.
@@ -53,7 +53,7 @@ Additional options are documented with the `--help` option.
 
 ## References
 * [You Only Learn One Representation: Unified Network for Multiple Tasks](https://arxiv.org/abs/2105.04206)
-* [Source Model Implementation](https://github.com/WongKinYiu/yolor.git)
+* [Source Model Implementation](https://github.com/WongKinYiu/yolor)
 
 ## Community
 * Join [our AI Hub Slack community](https://aihub.qualcomm.com/community/slack) to collaborate, post questions and learn more about on-device AI.

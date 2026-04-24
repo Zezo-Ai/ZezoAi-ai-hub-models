@@ -2,7 +2,7 @@
 
 ResNet34-SSD is a single-stage object detection model that integrates the ResNet34 backbone with the SSD (Single Shot MultiBox Detector) framework. It is optimized for real-time detection tasks and supports multiple deployment backends including PyTorch, TensorFlow, and ONNX.
 
-This is based on the implementation of ResNet34-SSD found [here](https://github.com/mlcommons/inference/tree/master/vision/classification_and_detection).
+This is based on the implementation of ResNet34-SSD found [here](https://github.com/mlcommons/inference/tree/33894a19c4af6207f7cfdda75f84570f04836de5/vision/classification_and_detection).
 This repository contains scripts for optimized on-device export suitable to run on Qualcomm® devices. More details on model performance across various devices, can be found [here](https://aihub.qualcomm.com/models/resnet34_ssd1200).
 
 Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.qualcomm.com) to compile, profile, and evaluate this model. [Sign up](https://myaccount.qualcomm.com/signup) to run these models on a hosted Qualcomm® device.
@@ -49,10 +49,10 @@ Additional options are documented with the `--help` option.
 
 ## License
 * The license for the original implementation of ResNet34-SSD can be found
-  [here](https://github.com/mlcommons/inference/blob/master/LICENSE).
+  [here](https://github.com/mlcommons/inference/blob/33894a19c4af6207f7cfdda75f84570f04836de5/LICENSE.md).
 
 ## References
-* [Source Model Implementation](https://github.com/mlcommons/inference/tree/master/vision/classification_and_detection)
+* [Source Model Implementation](https://github.com/mlcommons/inference/tree/33894a19c4af6207f7cfdda75f84570f04836de5/vision/classification_and_detection)
 
 ## Community
 * Join [our AI Hub Slack community](https://aihub.qualcomm.com/community/slack) to collaborate, post questions and learn more about on-device AI.

@@ -52,7 +52,7 @@ Additional options are documented with the `--help` option.
   [here](https://huggingface.co/datasets/choosealicense/licenses/blob/main/markdown/apache-2.0.md).
 
 ## References
-* [Introducing Nomic Embed: A Truly Open Embedding Model](https://www.nomic.ai/blog/posts/nomic-embed-text-v1)
+* [Introducing Nomic Embed: A Truly Open Embedding Model](https://www.nomic.ai/news/nomic-embed-text-v1)
 * [Source Model Implementation](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5)
 
 ## Community
