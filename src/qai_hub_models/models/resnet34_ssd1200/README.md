@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [ResNet34-SSD: Object detection model combining ResNet34 backbone with SSD architecture](https://aihub.qualcomm.com/models/resnet34_ssd1200)
 
 ResNet34-SSD is a single-stage object detection model that integrates the ResNet34 backbone with the SSD (Single Shot MultiBox Detector) framework. It is optimized for real-time detection tasks and supports multiple deployment backends including PyTorch, TensorFlow, and ONNX.

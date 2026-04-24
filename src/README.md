@@ -258,6 +258,7 @@ and many more.
 | [Person-Foot-Detection](https://aihub.qualcomm.com/models/foot_track_net) | `qai_hub_models.models.foot_track_net` |
 | [RF-DETR](https://aihub.qualcomm.com/models/rf_detr) | `qai_hub_models.models.rf_detr` |
 | [RTMDet](https://aihub.qualcomm.com/models/rtmdet) | `qai_hub_models.models.rtmdet` |
+| [ResNet34-SSD](https://aihub.qualcomm.com/models/resnet34_ssd1200) | `qai_hub_models.models.resnet34_ssd1200` |
 | [YOLO26-Detection](https://aihub.qualcomm.com/models/yolo26_det) | `qai_hub_models.models.yolo26_det` |
 | [YOLOv10-Detection](https://aihub.qualcomm.com/models/yolov10_det) | `qai_hub_models.models.yolov10_det` |
 | [YOLOv11-Detection](https://aihub.qualcomm.com/models/yolov11_det) | `qai_hub_models.models.yolov11_det` |
