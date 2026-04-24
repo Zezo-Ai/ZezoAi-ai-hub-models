@@ -704,8 +704,6 @@ def export_model(
                 The assets were compiled with QAIRT SDK {version} and we
                 recommend matching this version for on-device deployment.
 
-                [Note] Avoid QAIRT SDK 2.38 since it has a known Genie issue.
-
                 For a full tutorial, please follow the instructions here:
 
                     https://github.com/quic/ai-hub-apps/tree/main/tutorials/llm_on_genie.

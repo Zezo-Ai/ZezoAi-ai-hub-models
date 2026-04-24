@@ -176,7 +176,7 @@ jobs:
         pip install qualcomm_device_cloud_sdk-*.whl
 
     - name: Run LLM Performance Collection
-      continue-on-error: true
+      id: run_tests
       env:
         QAIHM_LLM_MODELS: ${{ inputs.model || 'all' }}
         QAIHM_TEST_DEVICES: ${{ inputs.device || 'Snapdragon X Elite CRD,Snapdragon X2 Elite CRD,Snapdragon 8 Elite QRD,Snapdragon 8 Elite Gen 5 QRD' }}
@@ -190,22 +190,21 @@ jobs:
             collect_llm_perf
 
     - name: Generate Test Failure Summary
-      if: always()
+      if: ${{ !cancelled() }}
       run: |
         source "${{ env.VENV_PATH }}/bin/activate"
         pip install -q six
         python3 scripts/build_and_test.py --venv="${{ env.VENV_PATH }}" generate_test_summary
 
     - name: Upload Test Results
-      if: always()
+      if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v7
       with:
         name: test-results
         path: ${{ github.workspace }}/test-results
 
     - name: Check for changes
-      if: ${{ inputs.create_pr }}
-      continue-on-error: true
+      if: ${{ !cancelled() && inputs.create_pr }}
       id: check_changes
       run: |
         # Check for both modified and new/untracked perf.yaml files
@@ -222,8 +221,7 @@ jobs:
 
     - name: Commit & Push Changes
       id: push_changes
-      if: ${{ (inputs.create_pr) && steps.check_changes.outputs.has_changes == 'true' }}
-      continue-on-error: true
+      if: ${{ !cancelled() && (inputs.create_pr) && steps.check_changes.outputs.has_changes == 'true' }}
       env:
         QAIHM_TEST_MODELS: ${{ inputs.model || 'all' }}
         QAIHM_TEST_DEVICES: ${{ inputs.device || 'Snapdragon X Elite CRD,Snapdragon X2 Elite CRD,Snapdragon 8 Elite QRD,Snapdragon 8 Elite Gen 5 QRD' }}
@@ -245,21 +243,21 @@ jobs:
         echo "branch_name=$branch_name" >> "$GITHUB_OUTPUT"
 
     - name: Upload CSV Results
-      if: always()
+      if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v7
       with:
         name: llm-perf-results
         path: ${{ github.workspace }}/*.csv
 
     - name: Add CSV to GitHub summary
-      if: always()
+      if: ${{ !cancelled() }}
       run: |
         source "${{ env.VENV_PATH }}/bin/activate"
         pip install -q pandas tabulate
         python -c 'import os, pandas as pd; print("## On-device Results"); fn="test_perf_on_device.csv"; print(pd.read_csv(fn).to_markdown(index=False)) if os.path.exists(fn) else print(f"File {fn} not found.")' >> "$GITHUB_STEP_SUMMARY"
 
     - name: Upload updated perf.yaml files
-      if: always()
+      if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v7
       with:
         name: updated-perf-yamls
@@ -267,7 +265,7 @@ jobs:
           ${{ github.workspace }}/src/qai_hub_models/models/**/perf.yaml
 
     - name: Create Pull Request
-      if: ${{ (inputs.create_pr) && steps.push_changes.outputs.branch_name != '' && steps.check_changes.outputs.has_changes == 'true' }}
+      if: ${{ !cancelled() && (inputs.create_pr) && steps.push_changes.outputs.branch_name != '' && steps.check_changes.outputs.has_changes == 'true' }}
       uses: actions/github-script@v9
       env:
         QAIHM_TEST_MODELS: ${{ inputs.model || 'all' }}
@@ -298,7 +296,7 @@ jobs:
           return result.data.html_url;
 
     - name: Cleanup (always runs)
-      if: always()
+      if: ${{ !cancelled() }}
       run: |
         # Cleanup temporary files
         if [ -n "$HOME" ]; then
@@ -308,3 +306,7 @@ jobs:
         rm -rf "$GITHUB_WORKSPACE"/qualcomm_device_cloud_sdk-*.whl
         rm -rf "$GITHUB_WORKSPACE"/genie_bundles/*
         rm -rf "$TMPDIR"
+
+    - name: Fail workflow if tests failed
+      if: ${{ !cancelled() && steps.run_tests.outcome != 'success' }}
+      run: exit 1

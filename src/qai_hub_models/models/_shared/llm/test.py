@@ -785,7 +785,7 @@ def _link_download_and_prepare_bundle(
 
     target_model_list: list[str] = []
     output_path = output_dir / ASSET_CONFIG.get_release_asset_name(
-        cached.model_name, target_runtime, precision, chipset
+        model_id, target_runtime, precision, chipset
     )
     output_path.mkdir(parents=True, exist_ok=True)
     for component_name, link_job in link_jobs.items():
@@ -968,7 +968,7 @@ def run_llm_perf_test(
         )
 
     genie_bundle_path = output_dir / ASSET_CONFIG.get_release_asset_name(
-        model_name, TargetRuntime.GENIE, precision, device.chipset
+        model_id, TargetRuntime.GENIE, precision, device.chipset
     )
 
     # QDC run
