@@ -62,6 +62,13 @@ def test_cmd_website(output_dir: Path) -> None:
     assert (output_dir / "asset_bases.yaml").exists()
     assert (output_dir / "devices_and_chipsets.yaml").exists()
 
+    asset_bases_text = (output_dir / "asset_bases.yaml").read_text()
+    version_tag = f"v{__version__}" if not __version__.startswith("v") else __version__
+    assert f"ai-hub-models/blob/{version_tag}" in asset_bases_text
+    assert "ai-hub-models/blob/main" not in asset_bases_text
+    assert "ai-hub-models/tree/main" not in asset_bases_text
+    assert "ai-hub-apps/tree/main" in asset_bases_text
+
     for model_id in sorted(SAMPLE_MODELS):
         model_dir = output_dir / "models" / model_id
         assert model_dir.exists()

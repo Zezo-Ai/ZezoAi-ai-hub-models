@@ -195,12 +195,16 @@ def _copy_global_yamls(output_root: Path, version: str) -> None:
         if src != dst:
             shutil.copy2(src, dst)
 
-    # Pin asset_bases.yaml repo URLs to the release tag
+    # Pin the models repo URL to the release tag (but not other repos like ai-hub-apps).
     asset_bases_dst = output_root / "asset_bases.yaml"
     if asset_bases_dst.exists():
         text = asset_bases_dst.read_text()
-        text = text.replace("/blob/main", f"/blob/{version_tag}")
-        text = text.replace("/tree/main", f"/tree/{version_tag}")
+        text = text.replace(
+            "ai-hub-models/blob/main", f"ai-hub-models/blob/{version_tag}"
+        )
+        text = text.replace(
+            "ai-hub-models/tree/main", f"ai-hub-models/tree/{version_tag}"
+        )
         asset_bases_dst.write_text(text)
 
 
