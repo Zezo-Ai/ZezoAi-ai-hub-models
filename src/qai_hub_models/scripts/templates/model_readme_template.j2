@@ -62,6 +62,9 @@
         URL to download the GGUF model file for llama.cpp.
     readme_install_system_deps : str, optional
         Text describing system-level dependencies to install.
+    readme_export_device : str, optional
+        When set, appends ``--device "<value>"`` to the README export command.
+        Derived from ``requires_aot_prepare`` in code-gen.yaml.
 #}
 {% macro render(
     model_name,
@@ -90,6 +93,7 @@
     llama_cpp_npu_command=None,
     llama_cpp_model_url=None,
     readme_install_system_deps=None,
+    readme_export_device=None,
     model_status="published",
     unpublished_model_warning=""
 ) %}
@@ -113,7 +117,7 @@
 {% endif %}
 {% if include_example_and_usage %}
 
-{{ example_and_usage(model_id, model_package, supported_precisions, has_on_target_demo, has_model_requirements, pip_pre_build_reqs, pip_install_flags, pip_install_flags_gpu, python_version_gte, python_version_lt, readme_install_system_deps) }}
+{{ example_and_usage(model_id, model_package, supported_precisions, has_on_target_demo, has_model_requirements, pip_pre_build_reqs, pip_install_flags, pip_install_flags_gpu, python_version_gte, python_version_lt, readme_install_system_deps, readme_export_device=readme_export_device) }}
 {% endif %}
 
 {{ license(model_name, license_url) }}

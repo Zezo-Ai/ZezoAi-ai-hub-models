@@ -93,6 +93,9 @@ def generate_and_write_model_readme(model_id: str) -> Path:
             # Flags
             "include_example_and_usage": not model_code_gen.skip_example_usage,
             "has_on_target_demo": model_code_gen.has_on_target_demo,
+            "readme_export_device": model_code_gen.default_device
+            if model_code_gen.requires_aot_prepare
+            else None,
             # llama.cpp commands for LLM models
             "llama_cpp_cpu_command": model_code_gen.llama_cpp_cpu_command,
             "llama_cpp_gpu_command": model_code_gen.llama_cpp_gpu_command,

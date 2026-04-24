@@ -174,6 +174,10 @@ Navigate to [docs](https://workbench.aihub.qualcomm.com/docs/) for more informat
         Text describing system-level dependencies to install.
     is_hf_readme : bool, optional
         Whether generating for Hugging Face (default: False).
+    readme_export_device : str, optional
+        When set, appends ``--device "<value>"`` to the export command. Resolved
+        from the global default device when ``requires_aot_prepare`` is set in
+        code-gen.yaml.
 #}
 {%- macro example_and_usage(
     model_id,
@@ -187,7 +191,8 @@ Navigate to [docs](https://workbench.aihub.qualcomm.com/docs/) for more informat
     python_version_gte=None,
     python_version_lt=None,
     readme_install_system_deps=None,
-    is_hf_readme=False
+    is_hf_readme=False,
+    readme_export_device=None
 ) -%}
 {%- set precisions_str = "{ --quantize " ~ (supported_precisions | reject('equalto', 'float') | join(', ')) ~ " }" if supported_precisions and supported_precisions|length > 1 else "" -%}
 {%- set step = namespace(num=1) -%}
@@ -225,7 +230,7 @@ By default, the demo will run locally in PyTorch. Pass `--eval-mode on-device` t
 To run the model on Qualcomm® devices, you must export the model for use with an edge runtime such as
 TensorFlow Lite, ONNX Runtime, or Qualcomm AI Engine Direct. Use the following command to export the model:
 ```bash
-python -m {{ model_package }}.export{{ ' ' ~ precisions_str if precisions_str else '' }}
+python -m {{ model_package }}.export{{ ' --device "' ~ readme_export_device ~ '"' if readme_export_device else '' }}{{ ' ' ~ precisions_str if precisions_str else '' }}
 ```
 Additional options are documented with the `--help` option.
 {%- endmacro -%}

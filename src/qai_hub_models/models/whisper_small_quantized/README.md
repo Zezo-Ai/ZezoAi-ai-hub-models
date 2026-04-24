@@ -52,7 +52,7 @@ models](../../../#getting-started) for more usage instructions.
 To run the model on Qualcomm® devices, you must export the model for use with an edge runtime such as
 TensorFlow Lite, ONNX Runtime, or Qualcomm AI Engine Direct. Use the following command to export the model:
 ```bash
-python -m qai_hub_models.models.whisper_small_quantized.export
+python -m qai_hub_models.models.whisper_small_quantized.export --device "Samsung Galaxy S25 (Family)"
 ```
 Additional options are documented with the `--help` option.
 
