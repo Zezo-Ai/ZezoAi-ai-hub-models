@@ -1,12 +1,22 @@
 supported_devices:
+- Snapdragon X Elite CRD
 - Snapdragon X2 Elite CRD
 supported_chipsets:
+- qualcomm-snapdragon-x-elite
 - qualcomm-snapdragon-x2-elite
 precisions:
   w4a16:
     components:
       Qwen2.5-VL-7B-Instruct:
         performance_metrics:
+          Snapdragon X Elite CRD:
+            genie:
+              llm_metrics:
+              - context_length: 2048
+                tokens_per_second: 6.205299758911133
+                time_to_first_token_range_milliseconds:
+                  min: 172.9066
+                  max: 2766.5056
           Snapdragon X2 Elite CRD:
             genie:
               llm_metrics:
