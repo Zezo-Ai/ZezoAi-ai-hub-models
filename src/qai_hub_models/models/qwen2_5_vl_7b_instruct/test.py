@@ -65,7 +65,7 @@ def test_load_encodings_to_quantsim(checkpoint: str) -> None:
 @pytest.mark.parametrize(
     ("checkpoint", "task", "expected_metric", "num_samples"),
     [
-        ("DEFAULT", "wikitext", 9.75, 0),
+        pytest.param("DEFAULT", "wikitext", 9.75, 0, marks=pytest.mark.nightly),
         ("DEFAULT", "mmlu", 0.689, 1000),
         ("DEFAULT_UNQUANTIZED", "wikitext", 8.38, 0),
         ("DEFAULT_UNQUANTIZED", "tiny_mmlu", 0.661, 0),

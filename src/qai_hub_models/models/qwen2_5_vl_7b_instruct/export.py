@@ -20,6 +20,7 @@ from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.configs.model_metadata import ModelFileMetadata, ModelMetadata
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models._shared.llm.export import (
+    DEFAULT_EXPORT_SEQUENCE_LENGTHS,
     _ensure_int_list,
     _parse_comma_separated_ints,
 )
@@ -375,7 +376,12 @@ def export_model(
     # 1. Instantiates a PyTorch model and converts it to a traced TorchScript format
     model_kwargs = dict(**additional_model_kwargs, precision=precision)
 
-    # Normalize context_length to a list and pass as context_lengths
+    # Normalize sequence_length / context_length to lists
+    sequence_lengths = _ensure_int_list(
+        model_kwargs.pop("sequence_length", DEFAULT_EXPORT_SEQUENCE_LENGTHS)
+    )
+    model_kwargs["sequence_length"] = sequence_lengths[0]
+
     context_lengths = _ensure_int_list(model_kwargs.pop("context_length", [4096]))
     model_kwargs["context_length"] = context_lengths[0]
     model_kwargs["context_lengths"] = context_lengths
