@@ -1139,7 +1139,7 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
 
     # Default prompts for demos (override in subclasses)
     default_user_prompt: str = "What is gravity?"
-    default_system_prompt: str = "You are a helpful AI assistant"
+    default_system_prompt: str = "You are a helpful AI assistant."
 
     @classmethod
     def get_chat_template(cls) -> dict[str, str]:

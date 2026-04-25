@@ -76,7 +76,7 @@ class Qwen3Base(LLMBase):
 
     # Default prompts for demos
     default_user_prompt = "What is gravity? Keep the answer under ten words."
-    default_system_prompt = "You are a helpful AI assistant"
+    default_system_prompt = "You are a helpful AI assistant."
 
     @classmethod
     def get_chat_template(cls) -> dict[str, str]:

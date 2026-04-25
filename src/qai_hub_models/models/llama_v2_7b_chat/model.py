@@ -89,7 +89,7 @@ INST_START = "[INST]"
 INST_END = "[/INST]"
 END_TOKENS = {"</s>"}
 
-DEFAULT_PROMPT_CONTEXT = "You are a helpful AI assistant"
+DEFAULT_PROMPT_CONTEXT = "You are a helpful AI assistant."
 DEFAULT_USER_PROMPT = "Hi! What is 2+3?"
 
 

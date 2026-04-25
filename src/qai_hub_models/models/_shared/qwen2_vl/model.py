@@ -63,7 +63,7 @@ ASSISTANT_ID = "assistant"
 USER_ID = "user"
 END_TOKENS = {"<|im_end|>", "<|endoftext|>"}
 
-DEFAULT_PROMPT_CONTEXT = "You are a helpful AI assistant"
+DEFAULT_PROMPT_CONTEXT = "You are a helpful AI assistant."
 DEFAULT_USER_PROMPT = "Give me a short introduction to large language model."
 
 # Vision token placeholder (Qwen2.5-VL format)

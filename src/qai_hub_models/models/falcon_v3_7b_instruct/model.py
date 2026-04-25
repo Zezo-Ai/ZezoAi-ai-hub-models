@@ -67,7 +67,7 @@ class Falcon3_7B(Llama3Base):
 
     # Default prompts for demos
     default_user_prompt = "What do falcons eat? Keep the answer under ten words."
-    default_system_prompt = "You are a helpful AI assistant"
+    default_system_prompt = "You are a helpful AI assistant."
 
     def __init__(
         self,
