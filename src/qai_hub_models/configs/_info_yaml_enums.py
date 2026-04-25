@@ -164,7 +164,7 @@ class MODEL_LICENSE(Enum):
         if self == MODEL_LICENSE.LLAMA2:
             return "https://github.com/facebookresearch/llama/blob/main/LICENSE"
         if self == MODEL_LICENSE.TAIDE:
-            return "https://en.taide.tw/download.html"
+            return "https://drive.google.com/file/d/1ICTxogjS9Bc2O3K1P9ZauQYVoruT13n5/view?pli=1"
         if self == MODEL_LICENSE.FALCON3:
             return "https://falconllm.tii.ae/falcon-terms-and-conditions.html"
         if self == MODEL_LICENSE.GEMMA:

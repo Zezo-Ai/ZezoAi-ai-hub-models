@@ -70,7 +70,7 @@ Additional options are documented with the `--help` option.
 
 ## License
 * The license for the original implementation of Llama3-TAIDE-LX-8B-Chat-Alpha1 can be found
-  [here](https://en.taide.tw/download.html).
+  [here](https://drive.google.com/file/d/1ICTxogjS9Bc2O3K1P9ZauQYVoruT13n5/view?pli=1).
 
 ## References
 * [LLaMA: Open and Efficient Foundation Language Models](https://ai.meta.com/blog/meta-llama-3/)

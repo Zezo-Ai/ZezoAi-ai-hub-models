@@ -14,7 +14,6 @@ from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetSplit,
 )
-from qai_hub_models.models.mediapipe_face.model import FaceDetector
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
@@ -53,6 +52,9 @@ class HumanFacesDataset(BaseDataset):
         self.input_data_zip = input_data_zip
 
         if input_spec is None:
+            # Local import to prevent circular dependency
+            from qai_hub_models.models.mediapipe_face.model import FaceDetector
+
             input_spec = FaceDetector.get_input_spec()
         self.img_height = input_spec["image"][0][2]
         self.img_width = input_spec["image"][0][3]
