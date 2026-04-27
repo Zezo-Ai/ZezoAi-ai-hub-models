@@ -198,7 +198,7 @@ def compile_model(
     {%- filter indent(width=4 if is_collection_model else 0) %}
     {%- if can_use_quantize_job %}
     {%- if enable_pt2 %}
-    model_to_compile: hub.Model | torch.export.ExportedProgram | None
+    model_to_compile: hub.Model | torch.export.ExportedProgram
     {%- endif %}
     if {{ "source_model" if not is_collection_model else "source_models and (source_model := source_models.get(component_name))" }}:
         model_to_compile = source_model
@@ -215,7 +215,8 @@ def compile_model(
     {%- else %}
     {%- if enable_pt2 %}
     ensure_supported_version("torch", min_version=PT2_MIN_TORCH_VERSION, below_version=PT2_LESS_THAN_TORCH_VERSION)
-    model_to_compile = torch.export.export({{ model_var }}.to("cpu"), tuple(make_torch_inputs(input_spec)))
+    with torch.no_grad():
+        model_to_compile = torch.export.export({{ model_var }}.to("cpu"), tuple(make_torch_inputs(input_spec)))
     {%- else %}
     model_to_compile = torch.jit.trace({{ model_var }}.to("cpu"), make_torch_inputs(input_spec){{ check_trace }})
     {% if torchscript_opt %}

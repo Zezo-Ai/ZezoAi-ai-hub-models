@@ -100,7 +100,7 @@ def compile_model(
     extra_options: str = "",
 ) -> hub.client.CompileJob:
     input_spec = input_spec or model.get_input_spec()
-    model_to_compile: hub.Model | torch.export.ExportedProgram | None
+    model_to_compile: hub.Model | torch.export.ExportedProgram
     if source_model:
         model_to_compile = source_model
     else:
@@ -110,9 +110,10 @@ def compile_model(
             min_version=PT2_MIN_TORCH_VERSION,
             below_version=PT2_LESS_THAN_TORCH_VERSION,
         )
-        model_to_compile = torch.export.export(
-            model.to("cpu"), tuple(make_torch_inputs(input_spec))
-        )
+        with torch.no_grad():
+            model_to_compile = torch.export.export(
+                model.to("cpu"), tuple(make_torch_inputs(input_spec))
+            )
 
     model_compile_options = model.get_hub_compile_options(
         target_runtime, precision, extra_options, device, MODEL_ID

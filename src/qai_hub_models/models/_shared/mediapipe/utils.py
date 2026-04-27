@@ -4,13 +4,11 @@
 # ---------------------------------------------------------------------
 
 from functools import partial
-from typing import cast
 
 import torch
 
 from qai_hub_models.utils.asset_loaders import SourceAsRoot
 from qai_hub_models.utils.bounding_box_processing import box_xywh_to_xyxy
-from qai_hub_models.utils.input_spec import InputSpec
 
 # ContextManager for running code with MediaPipePyTorch in python path and the
 # root directory of MediaPipePyTorch set as cwd
@@ -21,32 +19,6 @@ MediaPipePyTorchAsRoot = partial(
     "mediapipe_pytorch",
     1,
 )
-
-
-def trace_mediapipe(
-    detector_input_spec: InputSpec,
-    box_detector: torch.nn.Module,
-    landmark_input_spec: InputSpec,
-    landmark_detector: torch.nn.Module,
-) -> tuple[torch.ScriptModule, torch.ScriptModule]:
-    # Convert the models to pytorch traces. Traces can be saved & loaded from disk.
-    # With Qualcomm® AI Hub, a pytorch trace can be exported to run efficiently on mobile devices!
-    #
-    # Returns: tuple[Box Detector Trace Object, Landmark Detector Trace Object]
-    #
-    box_detector_input_shape = detector_input_spec["image"][0]
-    box_detector_trace = torch.jit.trace(
-        box_detector, [torch.rand(box_detector_input_shape)]
-    )
-
-    landmark_detector_input_shape = landmark_input_spec["image"][0]
-    landmark_detector_trace = torch.jit.trace(
-        landmark_detector, [torch.rand(landmark_detector_input_shape)]
-    )
-
-    return cast(torch.ScriptModule, box_detector_trace), cast(
-        torch.ScriptModule, landmark_detector_trace
-    )
 
 
 def decode_preds_from_anchors(

@@ -7,13 +7,11 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from typing import Any
 
 import numpy as np
 import pytest
 import qai_hub as hub
 import torch
-from torch.utils import mobile_optimizer
 
 import qai_hub_models.models.sam2 as _model_module
 from qai_hub_models.models.common import Precision, TargetRuntime
@@ -356,40 +354,21 @@ def test_export(
 def cached_torch_trace_for_export() -> Generator[pytest.MonkeyPatch, None, None]:
     with pytest.MonkeyPatch.context() as mp:
         model_cache: dict[str, hub.Model] = {}
-        torch_trace = torch.jit.trace
+        torch_export = torch.export.export
 
-        optimize_for_mobile = mobile_optimizer.optimize_for_mobile
-
-        def _cached_torch_trace(
-            module: torch.nn.Module,
-            inputs: torch.Tensor | tuple[torch.Tensor, ...],
-            check_trace: bool = True,
+        def _cached_torch_export(
+            module: torch.nn.Module, inputs: torch.Tensor | tuple[torch.Tensor, ...]
         ) -> hub.Model:
             model_key = str(module) + str(
                 sorted([f"{x.shape}{x.type()}" for x in inputs])
             )
             model = model_cache.get(model_key)
             if not model:
-                trace = torch_trace(module, inputs, check_trace=check_trace)
-                trace = optimize_for_mobile(
-                    trace,
-                    optimization_blocklist={
-                        mobile_optimizer.MobileOptimizerType.HOIST_CONV_PACKED_PARAMS,  # type: ignore[attr-defined]
-                        mobile_optimizer.MobileOptimizerType.INSERT_FOLD_PREPACK_OPS,  # type: ignore[attr-defined]
-                        mobile_optimizer.MobileOptimizerType.CONV_BN_FUSION,  # type: ignore[attr-defined]
-                    },
-                )
-                model = hub.upload_model(trace)
+                export = torch_export(module, inputs)  # type: ignore[arg-type]
+                model = hub.upload_model(export)
                 model_cache[model_key] = model
             assert isinstance(model, hub.Model)
             return model
 
-        mp.setattr(model_export_module.torch.jit, "trace", _cached_torch_trace)
-
-        def _dummy_optimize_for_mobile(
-            model: torch.jit.ScriptModule, *args: Any, **kwargs: Any
-        ) -> torch.jit.ScriptModule:
-            return model
-
-        mp.setattr(mobile_optimizer, "optimize_for_mobile", _dummy_optimize_for_mobile)
+        mp.setattr(model_export_module.torch.export, "export", _cached_torch_export)
         yield mp

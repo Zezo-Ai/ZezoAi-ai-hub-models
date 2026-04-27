@@ -16,7 +16,6 @@ from typing import Any, cast
 
 import qai_hub as hub
 import torch
-from torch.utils import mobile_optimizer
 
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.configs.model_metadata import (
@@ -56,6 +55,11 @@ from qai_hub_models.utils.printing import (
 from qai_hub_models.utils.qai_hub_helpers import (
     assert_success_and_get_target_models,
     can_access_qualcomm_ai_hub,
+)
+from qai_hub_models.utils.version_helpers import (
+    PT2_LESS_THAN_TORCH_VERSION,
+    PT2_MIN_TORCH_VERSION,
+    ensure_supported_version,
 )
 
 
@@ -128,22 +132,20 @@ def compile_model(
     for component_name in components or Model.component_class_names:
         component = model.components[component_name]
         input_spec = (input_specs or {}).get(component_name, component.get_input_spec())
+        model_to_compile: hub.Model | torch.export.ExportedProgram
         if source_models and (source_model := source_models.get(component_name)):
             model_to_compile = source_model
         else:
-            # Trace the model
-            model_to_compile = torch.jit.trace(
-                component.to("cpu"), make_torch_inputs(input_spec)
+            # Serialize the model
+            ensure_supported_version(
+                "torch",
+                min_version=PT2_MIN_TORCH_VERSION,
+                below_version=PT2_LESS_THAN_TORCH_VERSION,
             )
-
-            model_to_compile = mobile_optimizer.optimize_for_mobile(
-                model_to_compile,  # type: ignore[assignment]
-                optimization_blocklist={
-                    mobile_optimizer.MobileOptimizerType.HOIST_CONV_PACKED_PARAMS,  # type: ignore[attr-defined]
-                    mobile_optimizer.MobileOptimizerType.INSERT_FOLD_PREPACK_OPS,  # type: ignore[attr-defined]
-                    mobile_optimizer.MobileOptimizerType.CONV_BN_FUSION,  # type: ignore[attr-defined]
-                },
-            )
+            with torch.no_grad():
+                model_to_compile = torch.export.export(
+                    component.to("cpu"), tuple(make_torch_inputs(input_spec))
+                )
 
         model_compile_options = component.get_hub_compile_options(
             target_runtime,

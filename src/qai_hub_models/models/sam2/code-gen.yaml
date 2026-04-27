@@ -3,18 +3,15 @@ supported_precisions:
 - w8a8
 has_on_target_demo: true
 disabled_paths:
-  float:
-    tflite:
-      scorecard_failure: 'Compilation Failure(s): encoder:jp1dm98lp'
   w8a8:
     tflite:
-      scorecard_failure: 'Compilation Failure(s): encoder:jpy4yljrp'
+      scorecard_failure: 'Compilation Failure(s): encoder:jgn94mej5'
     onnx:
-      scorecard_failure: 'Profiling Failure(s): encoder:jp34lqwmg'
+      scorecard_failure: 'Profiling Failure(s): encoder:jperqw87g'
+  float:
+    tflite:
+      scorecard_failure: 'Compilation Failure(s): encoder:jgkl1qyv5'
 is_collection_model: true
 global_requirements_incompatible: true
 pip_install_flags: git+https://github.com/facebookresearch/sam2.git@2b90b9f
-torchscript_opt:
-- HOIST_CONV_PACKED_PARAMS
-- INSERT_FOLD_PREPACK_OPS
-- CONV_BN_FUSION
+enable_pt2: true

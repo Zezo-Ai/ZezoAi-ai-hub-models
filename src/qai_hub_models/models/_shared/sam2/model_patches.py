@@ -5,9 +5,10 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 import torch
-import torch.nn.functional as F
 from sam2.modeling.backbones.hieradet import MLP as SAM2MaskDecoderMLP
 from sam2.modeling.backbones.hieradet import (
     MultiScaleBlock as SAMEncoderAttentionBlock,
@@ -16,7 +17,6 @@ from sam2.modeling.backbones.hieradet import do_pool
 from sam2.modeling.sam.mask_decoder import MaskDecoder
 from sam2.modeling.sam.prompt_encoder import PromptEncoder
 from torch import nn
-from torchvision.transforms import Normalize
 
 from qai_hub_models.models._shared.sam.model_patches import Conv2DInplaceLinear
 
@@ -43,6 +43,9 @@ class SplitHeadSAMEncoderAttention(nn.Module):
 
     def __init__(self, attention_block: SAMEncoderAttentionBlock) -> None:
         super().__init__()
+
+        assert isinstance(attention_block.qkv, nn.Linear)
+
         self.out_feature, self.in_feature = (
             attention_block.qkv.weight.shape[0] // 3,
             attention_block.qkv.weight.shape[1],
@@ -53,8 +56,8 @@ class SplitHeadSAMEncoderAttention(nn.Module):
         self.k = Conv2DInplaceLinear(self.in_feature, self.out_feature, has_bias=bias)
         self.v = Conv2DInplaceLinear(self.in_feature, self.out_feature, has_bias=bias)
         self.proj = Conv2DInplaceLinear.from_linear(attention_block.proj)
-        self.num_heads = attention_block.num_heads
-        self.q_pool = attention_block.q_pool
+        self.num_heads = cast(int, attention_block.num_heads)
+        self.q_pool = cast(nn.Module | None, attention_block.q_pool)
 
         for chunk, projList in enumerate([self.q, self.k, self.v]):
             projList.conv2d.weight.data.copy_(
@@ -110,12 +113,12 @@ class SplitHeadSAMEncoderAttention(nn.Module):
                 .permute(0, 2, 1, 3)
                 .reshape(B * self.num_heads, H * W, -1)
             )
-        # Torch's SDPA expects [B, nheads, H*W, C] so we transpose
-        x = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-        )
+
+        # Scaled dot product attention. 3D instead of 4D for NPU performance.
+        scale = q.size(-1) ** -0.5  # 1 / (√d_k)
+        attn = torch.matmul(q, k.transpose(-2, -1)) * scale  # Q @ K^T / √d_k
+        attn = torch.softmax(attn, dim=-1)  # softmax(Q @ K^T / √d_k)
+        x = torch.matmul(attn, v)  # softmax(Q @ K^T / √d_k) @ V
 
         # Transpose back
         x = x.reshape(B, self.num_heads, H * W, -1)
@@ -135,16 +138,11 @@ class SAM2Normalize(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.mean = [0.485, 0.456, 0.406]
-        self.std = [0.229, 0.224, 0.225]
-        self.transforms = torch.jit.script(
-            nn.Sequential(
-                Normalize(self.mean, self.std),
-            )
-        )
+        self.mean = torch.Tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+        self.std = torch.Tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return self.transforms(x)
+        return (x - self.mean) / self.std
 
 
 def sam_decoder_predict_masks(
