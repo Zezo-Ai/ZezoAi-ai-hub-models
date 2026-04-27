@@ -417,7 +417,7 @@ jobs:
         run: |
           DEPLOYMENT=${{ env.QAIHM_TEST_DEPLOYMENT }}
           DEPLOYMENT_URL=$( [ "$DEPLOYMENT" = "prod" ] && echo "workbench" || echo "$DEPLOYMENT" )
-          python3 -m qai_hub_models.scripts.file_scorecard_regression_issue \
+          source ${{ env.VENV_PATH }}/bin/activate && python3 -m qai_hub_models.scripts.file_scorecard_regression_issue \
             --perf-regressions-json "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/perf-regressions-2x-*.json" \
             --numerics-regressions-json "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/numerics-regressions-*.json" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
