@@ -6,11 +6,16 @@
 
 from __future__ import annotations
 
+import csv
 import logging
 import os
+import re
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
+from prettytable import PrettyTable
 from qai_hub import Client
 from ruamel.yaml import YAML
 
@@ -22,7 +27,7 @@ DEFAULT_MAX_WORKERS = 10
 # Job status constants
 JOB_STATUS_SUCCESS = "SUCCESS"
 JOB_STATUS_FAILED = "FAILED"
-MAX_JOB_RUNTIME_SECONDS = 3 * 3600  # 2 hours
+MAX_JOB_RUNTIME_SECONDS = 3 * 3600  # 3 hours
 
 # Display constants
 DISPLAY_SEPARATOR = "=" * 80
@@ -33,6 +38,19 @@ DEVICE_PATTERNS = ("cs_", "samsung_")
 
 def get_date_str() -> str:
     return datetime.now().strftime("%m-%d-%Y")
+
+
+def extract_tag_and_dir_from_yaml(yaml_path: Path) -> tuple[str, Path]:
+    """Extract tag and output directory from YAML file path.
+
+    Expects filenames like: dev-compile-jobs__TAG.yaml
+    """
+    output_dir = yaml_path.parent
+    stem = yaml_path.stem
+    tag = stem.split("__", 1)[1] if "__" in stem else get_date_str()
+    if not re.fullmatch(r"[\w\-\.]+", tag):
+        raise ValueError(f"Unsafe tag extracted from filename: {tag!r}")
+    return tag, output_dir
 
 
 def load_client(profile: str) -> Client:
@@ -123,3 +141,95 @@ def merge_job_options(base_options: str, extra_options: str | None) -> str:
     if extra_options:
         return f"{base_options} {extra_options}".strip()
     return base_options
+
+
+def map_prod_by_model(prod_config: dict) -> dict:
+    logger = logging.getLogger(__name__)
+    prod_by_model = {}
+    for prod_key, prod_info in prod_config.items():
+        model_name_only = strip_device_suffix(prod_key)
+        if model_name_only in prod_by_model:
+            logger.warning(
+                f"map_prod_by_model: duplicate model key '{model_name_only}' "
+                f"(from '{prod_key}'), overwriting previous entry"
+            )
+        prod_by_model[model_name_only] = prod_info
+    return prod_by_model
+
+
+def create_results_table(
+    models: dict,
+    field_names: list[str],
+    row_extractor: Callable[[str, dict], list[Any]],
+    sort_key: Callable[[tuple[str, Any]], Any] | None = None,
+) -> PrettyTable:
+    table = PrettyTable()
+    table.field_names = field_names
+    for field in field_names:
+        table.align[field] = "l"
+
+    sorted_models = sorted(models.items(), key=sort_key) if sort_key else models.items()
+    for model_name, info in sorted_models:
+        table.add_row(row_extractor(model_name, info))
+
+    return table
+
+
+def print_results_table(
+    models: dict,
+    title: str,
+    field_names: list[str],
+    row_extractor: Callable[[str, dict], list[Any]],
+    sort_key: Callable[[tuple[str, Any]], Any] | None = None,
+    empty_message: str = "No models to display.",
+    print_to_console: bool = True,
+) -> None:
+    logger = logging.getLogger(__name__)
+
+    if not models:
+        if print_to_console:
+            log_and_print(f"\n{DISPLAY_SEPARATOR}", logger)
+            log_and_print(empty_message, logger)
+            log_and_print(DISPLAY_SEPARATOR, logger)
+        else:
+            logger.info(f"\n{DISPLAY_SEPARATOR}")
+            logger.info(empty_message)
+            logger.info(DISPLAY_SEPARATOR)
+        return
+
+    table = create_results_table(models, field_names, row_extractor, sort_key)
+    table_str = str(table)
+
+    if print_to_console:
+        log_and_print(f"\n{DISPLAY_SEPARATOR}", logger)
+        log_and_print(title, logger)
+        log_and_print(DISPLAY_SEPARATOR, logger)
+        log_and_print(table_str, logger)
+    else:
+        logger.info(f"\n{DISPLAY_SEPARATOR}")
+        logger.info(title)
+        logger.info(DISPLAY_SEPARATOR)
+        logger.info(table_str)
+
+
+def save_results_csv(
+    results: dict,
+    output_path: Path,
+    field_names: list[str],
+    row_extractor: Callable[[str, dict], list[Any]],
+    sort_key: Callable[[tuple[str, Any]], Any] | None = None,
+) -> Path:
+    logger = logging.getLogger(__name__)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sorted_results = (
+        sorted(results.items(), key=sort_key) if sort_key else results.items()
+    )
+
+    with open(output_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(field_names)
+        for model_name, info in sorted_results:
+            writer.writerow(row_extractor(model_name, info))
+
+    log_and_print(f"Saved results to: {output_path}", logger)
+    return output_path

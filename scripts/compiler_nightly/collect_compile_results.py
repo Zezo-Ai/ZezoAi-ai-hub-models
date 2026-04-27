@@ -19,7 +19,7 @@ from utils import (
     JOB_STATUS_FAILED,
     JOB_STATUS_SUCCESS,
     MAX_JOB_RUNTIME_SECONDS,
-    get_date_str,
+    extract_tag_and_dir_from_yaml,
     load_client,
     load_yaml_safe,
     log_and_print,
@@ -140,13 +140,7 @@ def main() -> int:
         "--jobs-file",
         type=Path,
         required=True,
-        help="Path to dev-compile-jobs-<date>.yaml file from run_compile_jobs.py",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("results"),
-        help="Output directory for results (default: results)",
+        help="Path to dev-compile-jobs__<tag>.yaml file from run_compile_jobs.py",
     )
     parser.add_argument(
         "--verbose",
@@ -160,18 +154,12 @@ def main() -> int:
         default=DEFAULT_MAX_WORKERS,
         help=f"Number of parallel workers for waiting on jobs (default: {DEFAULT_MAX_WORKERS})",
     )
-    parser.add_argument(
-        "--tag",
-        type=str,
-        default=None,
-        help="Tag used for output file identifier (default: current date)",
-    )
 
     args = parser.parse_args()
 
-    job_yaml_tag = args.tag or get_date_str()
+    tag, output_dir = extract_tag_and_dir_from_yaml(args.jobs_file)
     log_file = setup_script_logging(
-        args.output_dir, "collect-compile-results", args.verbose, job_yaml_tag
+        output_dir, "collect-compile-results", args.verbose, tag
     )
     log_and_print(f"Logging to {log_file}", logger)
 
@@ -203,7 +191,7 @@ def main() -> int:
 
         for data, filename_prefix, label in results_to_save:
             if data:
-                path = args.output_dir / f"{filename_prefix}-{job_yaml_tag}.yaml"
+                path = output_dir / f"{filename_prefix}__{tag}.yaml"
                 save_yaml_results(data, path)
                 log_and_print(f"Saved {label}: {path}", logger)
 

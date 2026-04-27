@@ -137,7 +137,7 @@ jobs:
           source "${{ github.workspace }}/${{ env.VENV_PATH }}/bin/activate"
 
           # Find the most recent dev-compile-scorecard file
-          CONFIG_FILE=$(ls -t results/dev-compile-scorecard-*.yaml | head -1)
+          CONFIG_FILE=$(ls -t results/dev-compile-scorecard__*.yaml | head -1)
 
           python run_compile_jobs.py \
             --dev-profile dev \
@@ -150,6 +150,118 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: compiler-scorecard-jobs-${{ github.run_number }}
+          path: scripts/compiler_nightly/results/
+          retention-days: 30
+
+  submit_link_jobs:
+    name: "Submit Link Jobs"
+    needs: submit_compile_jobs
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+
+    environment:
+      name: compiler_nightly_90m_delay
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          venv-path: ${{ env.VENV_PATH }}
+          bnt-venv-install-cmd: install_compiler_nightly
+          hub-deployments: prod,dev
+          hub-user-token-prod: ${{ secrets.HUB_USER_TOKEN_PROD }}
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+
+      - name: Download job submission results
+        uses: actions/download-artifact@v8
+        with:
+          name: compiler-scorecard-jobs-${{ github.run_number }}
+          path: scripts/compiler_nightly/results/
+
+      - name: Submit link jobs
+        working-directory: scripts/compiler_nightly
+        run: |
+          source "${{ github.workspace }}/${{ env.VENV_PATH }}/bin/activate"
+
+          # Find compile jobs and link scorecard
+          COMPILE_JOBS=$(ls -t results/dev-compile-jobs__*.yaml | head -1)
+          LINK_SCORECARD=$(ls -t results/link-scorecard__*.yaml | head -1)
+
+          python run_link_jobs.py \
+            --dev-profile dev \
+            --dev-compile-config "${COMPILE_JOBS}" \
+            --prod-link-config "${LINK_SCORECARD}" \
+            --verbose
+        shell: bash
+
+      - name: Upload link job submission results
+        uses: actions/upload-artifact@v7
+        with:
+          name: compiler-scorecard-link-jobs-${{ github.run_number }}
+          path: scripts/compiler_nightly/results/dev-link-jobs__*.yaml
+          retention-days: 30
+
+  collect_link_results:
+    name: "Collect Link Results"
+    needs: submit_link_jobs
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+
+    environment:
+      name: compiler_nightly_3h_delay
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          venv-path: ${{ env.VENV_PATH }}
+          bnt-venv-install-cmd: install_compiler_nightly
+          hub-deployments: dev
+          hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
+
+      - name: Download link job submission results
+        uses: actions/download-artifact@v8
+        with:
+          name: compiler-scorecard-link-jobs-${{ github.run_number }}
+          path: scripts/compiler_nightly/results/
+
+      - name: Collect link results
+        if: always()
+        working-directory: scripts/compiler_nightly
+        run: |
+          source "${{ github.workspace }}/${{ env.VENV_PATH }}/bin/activate"
+
+          JOBS_FILE=$(ls -t results/dev-link-jobs__*.yaml | head -1)
+
+          python collect_link_results.py \
+            --dev-profile dev \
+            --dev-link-config "${JOBS_FILE}" \
+            --verbose
+        shell: bash
+
+      - name: Upload link results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compiler-scorecard-link-results-${{ github.run_number }}
           path: scripts/compiler_nightly/results/
           retention-days: 30
 
@@ -193,12 +305,11 @@ jobs:
           source "${{ github.workspace }}/${{ env.VENV_PATH }}/bin/activate"
 
           # Find the most recent jobs file
-          JOBS_FILE=$(ls -t results/dev-compile-jobs-*.yaml | head -1)
+          JOBS_FILE=$(ls -t results/dev-compile-jobs__*.yaml | head -1)
 
           python collect_compile_results.py \
             --dev-profile dev \
             --jobs-file "${JOBS_FILE}" \
-            --output-dir results \
             --verbose
         shell: bash
 

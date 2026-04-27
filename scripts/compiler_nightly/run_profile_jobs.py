@@ -14,8 +14,8 @@ from qai_hub import Client, Device, JobType
 from utils import (
     DEFAULT_MAX_WORKERS,
     JOB_STATUS_SUCCESS,
+    extract_tag_and_dir_from_yaml,
     get_aihw_compiler_nightly_project,
-    get_date_str,
     load_client,
     load_yaml_safe,
     log_and_print,
@@ -248,12 +248,6 @@ def main() -> int:
         help="Path to prod profile-scorecard.yaml (optional). If provided, device and options are taken from this file.",
     )
     parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("results"),
-        help="Output directory for results (default: results)",
-    )
-    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -266,12 +260,6 @@ def main() -> int:
         help='Extra profile options to append (e.g., "--compute_unit npu")',
     )
     parser.add_argument(
-        "--tag",
-        type=str,
-        default=None,
-        help="Tag used for output file identifier (default: current date)",
-    )
-    parser.add_argument(
         "--workers",
         type=int,
         default=DEFAULT_MAX_WORKERS,
@@ -280,10 +268,8 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    job_yaml_tag = args.tag or get_date_str()
-    log_file = setup_script_logging(
-        args.output_dir, "run-profile-jobs", args.verbose, job_yaml_tag
-    )
+    tag, output_dir = extract_tag_and_dir_from_yaml(args.dev_compile_config)
+    log_file = setup_script_logging(output_dir, "run-profile-jobs", args.verbose, tag)
     log_and_print(f"Full logs: {log_file}", logger)
 
     try:
@@ -326,16 +312,13 @@ def main() -> int:
             args.workers,
         )
 
-        dev_profile_jobs_file = (
-            args.output_dir / f"dev-profile-jobs-{job_yaml_tag}.yaml"
-        )
+        dev_profile_jobs_file = output_dir / f"dev-profile-jobs__{tag}.yaml"
         save_yaml_results(job_map, dev_profile_jobs_file)
         log_and_print(f"Saved to {dev_profile_jobs_file}", logger)
 
         if failed_jobs:
             failed_jobs_file = (
-                args.output_dir
-                / f"dev-profile-jobs-submission-failures-{job_yaml_tag}.yaml"
+                output_dir / f"dev-profile-jobs-submission-failures__{tag}.yaml"
             )
             save_yaml_results(failed_jobs, failed_jobs_file)
             log_and_print(

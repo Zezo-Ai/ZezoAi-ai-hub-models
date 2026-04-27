@@ -163,7 +163,7 @@ def submit_compile_jobs(
 
         for future in as_completed(futures):
             model_name, result, error = future.result()
-            if error is None:
+            if error is None and result is not None:
                 job_map[model_name] = result
             else:
                 failed_jobs[model_name] = {
@@ -258,14 +258,14 @@ def main() -> int:
             dev_client, scorecard, project_id, args.extra_compiler_args, args.workers
         )
 
-        dev_jobs_file = args.output_dir / f"dev-compile-jobs-{job_yaml_tag}.yaml"
+        dev_jobs_file = args.output_dir / f"dev-compile-jobs__{job_yaml_tag}.yaml"
         save_yaml_results(job_map, dev_jobs_file)
         log_and_print(f"Saved to {dev_jobs_file}", logger)
 
         if failed_jobs:
             failed_jobs_file = (
                 args.output_dir
-                / f"dev-compile-jobs-submission-failures-{job_yaml_tag}.yaml"
+                / f"dev-compile-jobs-submission-failures__{job_yaml_tag}.yaml"
             )
             save_yaml_results(failed_jobs, failed_jobs_file)
             log_and_print(

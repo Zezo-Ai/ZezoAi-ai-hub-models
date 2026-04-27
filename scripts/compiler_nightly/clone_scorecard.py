@@ -106,7 +106,6 @@ def get_or_upload_model(
     project_id: str,
     lock: Lock,
 ) -> tuple[str, bool]:
-    """Upload model if needed, return (dev_model_id, was_reused)."""
     # Check read-only dict first (no lock needed)
     if source_model.model_id in existing_dev_models:
         dev_model_id = existing_dev_models[source_model.model_id]
@@ -197,27 +196,36 @@ def filter_scorecard_by_runtime_name(
         return scorecard
 
     runtime_lower = runtime_filter.lower()
+    runtime_upper = runtime_filter.upper()
 
     # Special handling for qnn_dlc to exclude qnn_dlc_via_ep
     if runtime_lower == "qnn_dlc":
         filtered = {
             model_name: job_id
             for model_name, job_id in scorecard.items()
-            if "_qnn_dlc-" in model_name.lower()
+            if (
+                f"_{runtime_upper}-" in model_name
+                or model_name.endswith(f"_{runtime_upper}")
+            )
             and "_qnn_dlc_via_" not in model_name.lower()
         }
     elif runtime_lower == "qnn_dlc_via_ep":
         filtered = {
             model_name: job_id
             for model_name, job_id in scorecard.items()
-            if "_qnn_dlc_via_qnn_ep-" in model_name.lower()
+            if (
+                "_QNN_DLC_VIA_QNN_EP-" in model_name
+                or model_name.endswith("_QNN_DLC_VIA_QNN_EP")
+            )
         }
     else:
-        # Generic substring match for other runtimes (tflite, onnx, etc.)
+        # Generic match for other runtimes (tflite, onnx, etc.)
+        # Match _RUNTIME- or _RUNTIME at end
         filtered = {
             model_name: job_id
             for model_name, job_id in scorecard.items()
-            if f"_{runtime_lower}-" in model_name.lower()
+            if f"_{runtime_upper}-" in model_name
+            or model_name.endswith(f"_{runtime_upper}")
         }
 
     logger.info(
@@ -231,12 +239,27 @@ def filter_scorecard_by_device_name(scorecard: dict, device_filter: str | None) 
     if not device_filter:
         return scorecard
 
-    device_lower = device_filter.lower()
-    filtered = {
-        model_name: job_id
-        for model_name, job_id in scorecard.items()
-        if device_lower in model_name.lower()
-    }
+    device_pattern = f"-{device_filter.lower()}"
+    filtered = {}
+
+    for model_name, job_id in scorecard.items():
+        model_lower = model_name.lower()
+        idx = model_lower.find(device_pattern)
+        if idx == -1:
+            continue
+
+        after_idx = idx + len(device_pattern)
+
+        # Valid if at end, followed by '-', or followed by '_' (but not '_gen')
+        if (
+            after_idx >= len(model_lower)
+            or model_lower[after_idx] == "-"
+            or (
+                model_lower[after_idx] == "_"
+                and not model_lower[after_idx:].startswith("_gen")
+            )
+        ):
+            filtered[model_name] = job_id
 
     logger.info(
         f"Filtered scorecard by device name '{device_filter}': "
@@ -315,6 +338,18 @@ def main() -> int:
         help=f"Number of parallel workers (default: {DEFAULT_MAX_WORKERS})",
     )
     parser.add_argument(
+        "--compile-runtime",
+        type=str,
+        default=None,
+        help="Filter compile jobs by runtime (case-insensitive, e.g., 'qnn_dlc', 'tflite', 'onnx')",
+    )
+    parser.add_argument(
+        "--link-device",
+        type=str,
+        default=None,
+        help="Filter link jobs by device (case-insensitive, e.g., 'cs_8_elite', 'monaco'). Also applies compile runtime filter to link jobs.",
+    )
+    parser.add_argument(
         "--profile-runtime",
         type=str,
         default="qnn_dlc",
@@ -360,6 +395,20 @@ def main() -> int:
             "link": load_yaml_safe(args.intermediates_dir / "link-jobs.yaml"),
             "profile": load_yaml_safe(args.intermediates_dir / "profile-jobs.yaml"),
         }
+
+        # Apply compile filter (runtime only)
+        all_jobs["compile"] = filter_scorecard_by_runtime_name(
+            all_jobs["compile"], args.compile_runtime
+        )
+
+        # Apply link filters
+        # Link jobs only exist for qnn_dlc runtime, so skip if compile runtime is not qnn_dlc
+        if args.compile_runtime and "qnn_dlc" not in args.compile_runtime.lower():
+            all_jobs["link"] = {}
+        else:
+            all_jobs["link"] = filter_scorecard_by_device_name(
+                all_jobs["link"], args.link_device
+            )
 
         # Apply profile filters if specified
         all_jobs["profile"] = filter_scorecard_by_runtime_name(
@@ -444,9 +493,9 @@ def main() -> int:
         yaml_writer.default_flow_style = False
 
         output_files = {
-            "compile": args.output_dir / f"dev-compile-scorecard-{aihm_tag}.yaml",
-            "link": args.output_dir / f"link-scorecard-{aihm_tag}.yaml",
-            "profile": args.output_dir / f"profile-scorecard-{aihm_tag}.yaml",
+            "compile": args.output_dir / f"dev-compile-scorecard__{aihm_tag}.yaml",
+            "link": args.output_dir / f"link-scorecard__{aihm_tag}.yaml",
+            "profile": args.output_dir / f"profile-scorecard__{aihm_tag}.yaml",
         }
 
         for job_type, output_file in output_files.items():

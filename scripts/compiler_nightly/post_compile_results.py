@@ -13,6 +13,7 @@ from prettytable import PrettyTable
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import (
     DISPLAY_SEPARATOR,
+    create_results_table,
     get_date_str,
     load_yaml_safe,
     log_and_print,
@@ -22,13 +23,8 @@ from utils import (
 logger = logging.getLogger(__name__)
 
 
-def build_model_comparison_table(title: str, data: dict) -> str:
-    table = PrettyTable()
-    table.field_names = ["Model", "Prod Job URL", "Dev Job URL"]
-    table.align = "l"
-    for name, info in data.items():
-        table.add_row([name, info["prod_job_url"], info["dev_job_url"]])
-    return str(table)
+def _compile_row(model_name: str, info: dict) -> list:
+    return [model_name, info["prod_job_url"], info["dev_job_url"]]
 
 
 def print_summary(
@@ -54,13 +50,13 @@ def print_summary(
         log_and_print(line, logger)
 
     # Print regressions to console and log
+    field_names = ["Model", "Prod Job URL", "Dev Job URL"]
     if regressions:
+        table = create_results_table(regressions, field_names, _compile_row)
         log_and_print(f"\n{DISPLAY_SEPARATOR}", logger)
         log_and_print("REGRESSIONS: Prod SUCCESS -> Dev FAILED", logger)
         log_and_print(DISPLAY_SEPARATOR, logger)
-        for line in build_model_comparison_table("REGRESSIONS", regressions).split(
-            "\n"
-        ):
+        for line in str(table).split("\n"):
             log_and_print(line, logger)
 
     # Log-only sections
@@ -71,10 +67,11 @@ def print_summary(
 
     for data, title in sections:
         if data:
+            table = create_results_table(data, field_names, _compile_row)
             logger.info(f"\n{DISPLAY_SEPARATOR}")
             logger.info(title)
             logger.info(DISPLAY_SEPARATOR)
-            for line in build_model_comparison_table(title, data).split("\n"):
+            for line in str(table).split("\n"):
                 logger.info(line)
 
 
