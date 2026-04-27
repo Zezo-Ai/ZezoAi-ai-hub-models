@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [Qwen2.5-VL-7B-Instruct: State-of-the-art vision-language model capable of understanding images and generating text responses](https://aihub.qualcomm.com/models/qwen2_5_vl_7b_instruct)
 
 Qwen2.5-VL-7B-Instruct is a multimodal vision-language model with 7 billion parameters that can process both images and text, enabling visual question answering, image description, and other vision-language tasks.

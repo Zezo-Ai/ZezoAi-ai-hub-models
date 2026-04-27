@@ -373,6 +373,7 @@ and many more.
 | [Phi-3.5-Mini-Instruct](https://aihub.qualcomm.com/models/phi_3_5_mini_instruct) | `qai_hub_models.models.phi_3_5_mini_instruct` |
 | [Qwen2-7B-Instruct](https://aihub.qualcomm.com/models/qwen2_7b_instruct) | `qai_hub_models.models.qwen2_7b_instruct` |
 | [Qwen2.5-7B-Instruct](https://aihub.qualcomm.com/models/qwen2_5_7b_instruct) | `qai_hub_models.models.qwen2_5_7b_instruct` |
+| [Qwen2.5-VL-7B-Instruct](https://aihub.qualcomm.com/models/qwen2_5_vl_7b_instruct) | `qai_hub_models.models.qwen2_5_vl_7b_instruct` |
 | [Qwen3-4B](https://aihub.qualcomm.com/models/qwen3_4b) | `qai_hub_models.models.qwen3_4b` |
 | [Qwen3-4B-Instruct-2507](https://aihub.qualcomm.com/models/qwen3_4b_instruct_2507) | `qai_hub_models.models.qwen3_4b_instruct_2507` |
 
