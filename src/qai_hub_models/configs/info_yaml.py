@@ -5,13 +5,16 @@
 
 from __future__ import annotations
 
+import json
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
 from pydantic import Field, ValidationInfo, model_validator
 from qai_hub_models_cli.proto import info_pb2, numerics_pb2
+from urllib3.util.retry import Retry
 
 from qai_hub_models.configs._info_yaml_enums import (
     MODEL_DOMAIN,
@@ -33,7 +36,11 @@ from qai_hub_models.configs.proto_helpers import (
 )
 from qai_hub_models.evaluators.metrics import VALID_METRIC_PAIRS
 from qai_hub_models.scorecard import ScorecardDevice
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, QAIHM_WEB_ASSET
+from qai_hub_models.utils.asset_loaders import (
+    ASSET_CONFIG,
+    LOCAL_STORE_DEFAULT_PATH,
+    QAIHM_WEB_ASSET,
+)
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
 from qai_hub_models.utils.path_helpers import (
     MODEL_IDS,
@@ -54,24 +61,75 @@ __all__ = [
 ]
 
 
+URL_CACHE_TTL_SECONDS = 86400
+URL_CACHE_PATH = Path(LOCAL_STORE_DEFAULT_PATH) / "url_check_cache.json"
+
+
+def _load_url_cache() -> dict[str, float]:
+    """Load the URL check cache. Returns {url: timestamp}."""
+    if not URL_CACHE_PATH.exists():
+        return {}
+    try:
+        return json.loads(URL_CACHE_PATH.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_url_cache(cache: dict[str, float]) -> None:
+    """Save the URL check cache."""
+    URL_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    URL_CACHE_PATH.write_text(json.dumps(cache))
+
+
+def _make_url_check_session() -> requests.Session:
+    """Create a Session that retries on 502 (transient proxy errors) and connection failures."""
+    retry = Retry(total=4, backoff_factor=1, status_forcelist=[502])
+    adapter = requests.adapters.HTTPAdapter(max_retries=retry)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
 def _validate_urls_exist(urls: list[tuple[str, str]]) -> None:
-    """HEAD-check a list of (url, error_label) pairs in parallel. Raises ValueError on failures."""
+    """HEAD-check a list of (url, error_label) pairs in parallel.
+
+    URLs that were successfully checked within the last 24 hours are
+    skipped. Raises ValueError on failures.
+    """
     if not urls:
         return
 
+    now = time.time()
+    cache = _load_url_cache()
+    urls_to_check = [
+        (url, label)
+        for url, label in urls
+        if now - cache.get(url, 0) > URL_CACHE_TTL_SECONDS
+    ]
+
+    if not urls_to_check:
+        return
+
+    session = _make_url_check_session()
+
     def _check(url: str, label: str) -> str | None:
         try:
-            status = requests.head(url, allow_redirects=True, timeout=10).status_code
+            status = session.head(url, allow_redirects=True, timeout=10).status_code
             # IEEE returns error 418 for all HEAD requests. We ignore that.
             if status not in [requests.codes.ok, requests.codes.too_many_requests, 418]:
                 return f"{label} at {url} (status: {status})"
         except requests.RequestException as e:
             return f"{label} at {url} ({e})"
+        cache[url] = now
         return None
 
-    with ThreadPoolExecutor(max_workers=len(urls)) as pool:
-        results = list(pool.map(lambda t: _check(*t), urls))
+    with ThreadPoolExecutor(max_workers=len(urls_to_check)) as pool:
+        results = list(pool.map(lambda t: _check(*t), urls_to_check))
     errors = [r for r in results if r is not None]
+
+    _save_url_cache(cache)
+
     if errors:
         raise ValueError("\n".join(errors))
 

@@ -35,7 +35,7 @@ ReturnT = TypeVar("ReturnT")
 # Only active when QAIHM_CI=1.
 # ---------------------------------------------------------------------------
 RETRY_MAX_ATTEMPTS = 5
-RETRY_WAIT_SECS = 120
+RETRY_BASE_WAIT_SECS = 40
 
 
 def _wrap_with_retry(
@@ -43,7 +43,10 @@ def _wrap_with_retry(
     is_transient: Callable[[BaseException], bool],
     label: str,
 ) -> Callable[..., ReturnT]:
-    """Wrap a function with retry logic for transient errors."""
+    """Wrap a function with retry logic for transient errors.
+
+    Uses exponential backoff: 40s, 80s, 160s, 320s (~10 min total).
+    """
 
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> ReturnT:
@@ -55,11 +58,12 @@ def _wrap_with_retry(
                     raise
                 if attempt == RETRY_MAX_ATTEMPTS:
                     raise
+                wait = RETRY_BASE_WAIT_SECS * (2 ** (attempt - 1))
                 print(
                     f"[{label}] Transient error (attempt {attempt}/{RETRY_MAX_ATTEMPTS}): {e!r}"
-                    f"\n{' ' * (len(label) + 3)}Retrying in {RETRY_WAIT_SECS}s..."
+                    f"\n{' ' * (len(label) + 3)}Retrying in {wait}s..."
                 )
-                time.sleep(RETRY_WAIT_SECS)
+                time.sleep(wait)
         raise AssertionError("unreachable")
 
     return wrapper
