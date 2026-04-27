@@ -31,7 +31,6 @@ def _make_asset_config(tmpdir: str) -> ModelZooAssetConfig:
         dataset_asset_folder="datasets/{dataset_id}/v{version}",
         local_store_path=tmpdir,
         qaihm_repo="",
-        example_use="",
         huggingface_path="",
         repo_url="",
         models_website_url="",

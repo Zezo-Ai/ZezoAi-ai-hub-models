@@ -463,12 +463,6 @@ class QAIHMModelInfo(BaseQAIHMConfig):
         if expected_qaihm_repo != ASSET_CONFIG.get_qaihm_repo(self.id):
             raise ValueError("QAIHM repo not pointing to expected relative path")
 
-        expected_example_use = f"src/qai_hub_models/models/{self.id}#example--usage"
-        if expected_example_use != ASSET_CONFIG.get_example_use(self.id):
-            raise ValueError(
-                "Example-usage field not pointing to expected relative path"
-            )
-
         # Check that model_type_llm and llm_details fields
         if self.model_type_llm:
             if not self.llm_details:

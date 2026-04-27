@@ -459,7 +459,6 @@ class ModelZooAssetConfig:
         dataset_asset_folder: str,
         local_store_path: str,
         qaihm_repo: str,
-        example_use: str,
         huggingface_path: str,
         repo_url: str,
         models_website_url: str,
@@ -478,7 +477,6 @@ class ModelZooAssetConfig:
         self.model_asset_folder = model_asset_folder
         self.dataset_asset_folder = dataset_asset_folder
         self.qaihm_repo = qaihm_repo
-        self.example_use = example_use
         self.huggingface_path = huggingface_path
         self.repo_url = repo_url
         self.models_website_url = models_website_url
@@ -596,9 +594,6 @@ class ModelZooAssetConfig:
             return f"{self.models_website_url.rstrip('/')}/{relative_path.as_posix()}"
         return relative_path
 
-    def get_example_use(self, model_id: str) -> str:
-        return self.example_use.lstrip("/").format(model_id=model_id)
-
     def get_release_asset_filename(
         self,
         model_id: str,
@@ -687,7 +682,6 @@ class ModelZooAssetConfig:
             asset_cfg["dataset_asset_folder"],
             local_store_path,
             asset_cfg["qaihm_repo"],
-            asset_cfg["example_use"],
             asset_cfg["huggingface_path"],
             asset_cfg["repo_url"],
             asset_cfg["models_website_url"],
@@ -710,7 +704,6 @@ class ModelZooAssetConfig:
                 "model_asset_folder": str,
                 "qaihm_repo": str,
                 "labels_path": str,
-                "example_use": str,
                 "huggingface_path": str,
                 "repo_url": str,
                 "models_website_url": str,
