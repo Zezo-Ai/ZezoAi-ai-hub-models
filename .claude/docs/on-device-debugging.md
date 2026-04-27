@@ -4,7 +4,7 @@ Reference this document when compilation or profiling fails on device.
 
 ## Downloading Debug Artifacts
 
-Use `download_debug_artifacts` on the `qai_hub` client job object to download runtime logs and other debug info for a failed job.
+Use `job.download_job_logs(output_dir)` to download runtime logs and other debug info for a failed job. This downloads both device logs and hub logs to the specified directory.
 
 For full API documentation, see the AI Hub Workbench docs at https://workbench.aihub.qualcomm.com/docs/
 

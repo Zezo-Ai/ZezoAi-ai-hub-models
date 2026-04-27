@@ -94,6 +94,12 @@ This sets `autoConnectIde` to `false` in `~/.claude.json`. Without this, Claude 
 
 ## Constraints
 
+**ALL IMPORTS AT THE TOP OF THE FILE.** This is the single most frequently violated rule
+in this project. Every `import` statement goes at the top of the file, before any function
+or class definition. No exceptions except circular import avoidance. "It's only used in
+one function" is not a reason to put it inside the function. "It's a heavy import" is not
+a reason. Put it at the top. Every time. Check your code before submitting.
+
 Throughout the session, stay within the boundaries defined by the permissions above:
 
 - **File operations**: Only read/edit/write within this repo, `/tmp/claude/`, and the QAIHM cache. Never write to other locations without asking the user.
@@ -107,13 +113,13 @@ Throughout the session, stay within the boundaries defined by the permissions ab
   - **Bad**: `gh api ... | python3 -c "..."` — pipe confuses permission check
   - **Good**: `git show HEAD:file.py` — read output directly from tool result
   - **Good**: `gh api ... --jq '<filter>'` — use tool's own flags instead of piping
-- **Imports at top of file**: All import statements must go at the top of the file. Never use inline/local imports inside functions unless absolutely necessary (e.g., circular import avoidance). This is a project-wide convention.
 
 ## Getting Started
 
 After permissions are configured, ask the user what they're working on and load the appropriate resource:
 
 - **Adding a new model** → read `.claude/agents/onboarding.md`
+- **Running a HuggingFace model on device** (export, compile, profile on Snapdragon) → read `.claude/docs/hf_onboarding/guide.md`
 - **Testing, CI, environment config** → read `.claude/docs/repo-reference.md`
 - **Something else** → explore the repo structure and existing models as needed
 
@@ -137,6 +143,7 @@ Onboarding sub-guides (loaded only when needed):
 - `.claude/docs/collection-models.md` — splitting iterative/recurrent models
 
 Other guides:
+- `.claude/docs/hf_onboarding/guide.md` — exporting HF models to ONNX and profiling on Snapdragon via AI Hub
 - `.claude/docs/github-ci-guide.md` — using `gh` CLI to fetch PR comments, check CI status, and read test failure logs
 - `.claude/docs/filing-issues.md` — filing and querying issues in `qcom-ai-hub/tetracode`
 
