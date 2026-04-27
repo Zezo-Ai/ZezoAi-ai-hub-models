@@ -3,14 +3,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
-from qai_hub_models.models._shared.video_classifier.app import KineticsClassifierApp
-from qai_hub_models.models.resnet_3d.demo import INPUT_VIDEO_PATH
-from qai_hub_models.models.resnet_3d.demo import main as demo_main
-from qai_hub_models.models.resnet_3d.model import ResNet3D
+from qai_hub_models.models.video_mae.app import VideoMAEApp
+from qai_hub_models.models.video_mae.demo import INPUT_VIDEO_PATH
+from qai_hub_models.models.video_mae.demo import main as demo_main
+from qai_hub_models.models.video_mae.model import VideoMAE
 
 
 def test_task() -> None:
-    kinetics_app = KineticsClassifierApp(model=ResNet3D.from_pretrained())
+    kinetics_app = VideoMAEApp(model=VideoMAE.from_pretrained())
     dst_path = INPUT_VIDEO_PATH.fetch()
     prediction = kinetics_app.predict(path=dst_path)
     assert "surfing water" in prediction

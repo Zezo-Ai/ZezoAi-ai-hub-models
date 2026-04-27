@@ -209,7 +209,7 @@ class YoloX(Yolo):
         if self.split_output:
             return xy, wh, scores
 
-        return torch.cat([xy, wh, scores], dim=0)
+        return torch.cat([xy, wh, scores], dim=-1)
 
     @staticmethod
     def get_output_names(

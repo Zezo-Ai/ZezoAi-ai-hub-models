@@ -51,7 +51,7 @@ class HRNetFaceEvaluator(BaseEvaluator):
 
         # Decode keypoints in heatmap coords and map to image coords
         coords_hm = refine_keypoints_from_heatmaps(heatmaps_np)
-        B, _, heatmap_w, heatmap_h = heatmaps_np.shape
+        B, _, heatmap_h, heatmap_w = heatmaps_np.shape
         preds = np.empty_like(coords_hm)
         for i in range(B):
             preds[i] = denormalize_coordinates_affine(

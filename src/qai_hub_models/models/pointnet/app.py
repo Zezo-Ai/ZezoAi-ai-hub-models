@@ -102,6 +102,7 @@ class PointNetApp:
         predicted_class_indices : torch.Tensor
             A tensor of predicted class indices for each input point cloud in the batch.
         """
+        all_predicted = []
         for data in test_loader:
             inputs = data["pointcloud"].to("cpu").float()
             with torch.no_grad():
@@ -110,4 +111,5 @@ class PointNetApp:
                     inputs.transpose(1, 2)
                 )  # Transpose to (B, 3, N)
                 _, predicted = torch.max(outputs.data, 1)
-        return predicted
+            all_predicted.append(predicted)
+        return torch.cat(all_predicted)

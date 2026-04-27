@@ -158,7 +158,7 @@ class FastSAMApp:
 
             # Crop masks to associated bounding box
             ih, iw = source_image_size
-            mw, mh = (batch_masks.shape[1], batch_masks.shape[2])
+            mh, mw = (batch_masks.shape[1], batch_masks.shape[2])
             width_ratio = mw / iw
             height_ratio = mh / ih
             downsampled_bboxes = batch_boxes.clone()

@@ -65,7 +65,12 @@ class OpusMTApp:
         self.tokenizer = get_tokenizer(hf_model_id)
 
         # Get special tokens
-        self.bos_token_id = self.tokenizer.bos_token_id or self.tokenizer.pad_token_id
+        # Helsinki-NLP Opus-MT uses pad_token_id as BOS; explicit fallback is intentional
+        bos = self.tokenizer.bos_token_id
+        if bos is None:
+            bos = self.tokenizer.pad_token_id
+        assert bos is not None, "Tokenizer has neither bos_token_id nor pad_token_id"
+        self.bos_token_id = bos
         self.eos_token_id = self.tokenizer.eos_token_id
         self.pad_token_id = self.tokenizer.pad_token_id
 
@@ -159,9 +164,9 @@ class OpusMTApp:
         if not isinstance(encoder_outputs, (tuple, list)):
             encoder_outputs = (encoder_outputs,)
 
-        # Initialize decoder inputs - use 65000 as starting token
+        # Initialize decoder inputs with BOS token
         decoder_input_ids = torch.zeros([1, 1], dtype=torch.int32)
-        token = 65000
+        token = self.bos_token_id
         decoder_input_ids[0, 0] = token
 
         # Initialize past key values for decoder
@@ -216,7 +221,7 @@ class OpusMTApp:
             token = int(torch.argmax(logits, -1)[0, 0].item())
 
             # Check for end of sequence - use token == 0
-            if token == 0:
+            if token == self.eos_token_id:
                 break
 
             generated_tokens.append(token)

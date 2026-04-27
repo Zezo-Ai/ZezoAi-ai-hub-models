@@ -80,7 +80,7 @@ class ElectraBertApp:
             input_ids[0].tolist(), skip_special_tokens=True
         )
         valid_length = len(tokens)
-        predictions = predictions[1:valid_length]
+        predictions = predictions[1 : valid_length + 1]
         for token, pred in zip(tokens, predictions.tolist(), strict=False):
             if pred == 1:
                 return token

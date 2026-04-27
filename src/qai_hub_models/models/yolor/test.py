@@ -15,7 +15,7 @@ from qai_hub_models.utils.asset_loaders import (
 from qai_hub_models.utils.testing import skip_clone_repo_check
 
 OUTPUT_HORSES = CachedWebModelAsset.from_asset_store(
-    MODEL_ID, MODEL_ASSET_VERSION, "yolor_horses_outputs.npz"
+    MODEL_ID, MODEL_ASSET_VERSION, "yolor_horses_outputs_v2.npz"
 ).fetch()
 
 
@@ -24,16 +24,21 @@ def test_task() -> None:
     image = load_image(IMAGE_ADDRESS)
     model = YoloR.from_pretrained(include_postprocessing=True)
     app = YoloRDetectionApp(model)
-    boxes, scores, class_idx = app.predict_boxes_from_image(image, raw_output=True)
+    boxes_list, scores_list, class_idx_list = app.predict_boxes_from_image(
+        image, raw_output=True
+    )
+    boxes = boxes_list[0].numpy()
+    scores = scores_list[0].numpy()
+    class_idx = class_idx_list[0].numpy()
 
     with np.load(OUTPUT_HORSES) as data:
         boxes_saved = data["boxes"]
         scores_saved = data["scores"]
         class_idx_saved = data["class_idx"]
 
-    np.allclose(boxes_saved, boxes, rtol=1e-5, atol=1e-6)
-    np.allclose(scores_saved, scores, rtol=1e-5, atol=1e-6)
-    np.array_equal(class_idx_saved, class_idx)
+    np.testing.assert_allclose(boxes_saved, boxes, rtol=1e-2, atol=1e-2)
+    np.testing.assert_allclose(scores_saved, scores, rtol=1e-2, atol=1e-2)
+    np.testing.assert_equal(class_idx_saved, class_idx)
 
 
 @skip_clone_repo_check

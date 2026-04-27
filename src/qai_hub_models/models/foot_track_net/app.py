@@ -156,7 +156,7 @@ class BBox_landmarks:
         x, y, r, b = (int(bb + 0.5) for bb in np.array(self.box).astype(int))
 
         # 3DMM adjustment,  reuse the bbox structure
-        if self.label_prop == 0:
+        if self.label_prop == "0":
             cx, cy = (r + x) // 2, (b + y) // 2
             offset = max(r - x, b - y) // 2
             x = int(cx - offset)

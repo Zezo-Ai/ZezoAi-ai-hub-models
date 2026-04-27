@@ -804,8 +804,8 @@ class MulAdd1d(nn.Module):
     def from_bn1d(cls, bn: nn.BatchNorm1d) -> Self:
         if (
             not bn.track_running_stats
-            and (bn.running_mean is not None)
-            and (bn.running_var is not None)
+            or bn.running_mean is None
+            or bn.running_var is None
         ):
             raise ValueError(
                 "convert_bn1d requires a BatchNorm1d with track_running_stats=True "

@@ -63,12 +63,12 @@ class DDColorApp:
             assert pil_image.mode == "RGB", (
                 "Only RGB and Grayscale Pillow images are supported"
             )
-        orig_l = cv2.cvtColor(img, cv2.COLOR_BGR2Lab)[:, :, :1]  # (h, w, 1)
+        orig_l = cv2.cvtColor(img, cv2.COLOR_RGB2Lab)[:, :, :1]  # (h, w, 1)
 
         # Resize and convert image to grayscale
         height_resized, width_resized = DDColor.get_input_spec()["image"][0][-2:]
-        img_resized = cv2.resize(img, (height_resized, width_resized))
-        img_l = cv2.cvtColor(img_resized, cv2.COLOR_BGR2Lab)[:, :, :1]
+        img_resized = cv2.resize(img, (width_resized, height_resized))
+        img_l = cv2.cvtColor(img_resized, cv2.COLOR_RGB2Lab)[:, :, :1]
         img_gray_lab = np.concatenate(
             (img_l, np.zeros_like(img_l), np.zeros_like(img_l)), axis=-1
         )

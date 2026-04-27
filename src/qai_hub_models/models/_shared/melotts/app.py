@@ -312,7 +312,7 @@ class MeloTTSApp(CollectionAppProtocol):
         tts_object = get_tts_object(language_)
         speaker_id = next(iter(tts_object.hps.data.spk2id.values()))
         tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_IDS[language_])
-        noise_scale = (0.667,)
+        noise_scale = 0.667
         length_scale = 1.0
         noise_scale_w = 0.8
         sdp_ratio = 0.2
@@ -369,7 +369,7 @@ class MeloTTSApp(CollectionAppProtocol):
 
                 m_p = m_p.to(torch.float32)
                 logs_p = logs_p.to(torch.float32)
-                noise_scale_pt = torch.tensor(noise_scale, dtype=torch.float32)
+                noise_scale_pt = torch.tensor([noise_scale], dtype=torch.float32)
 
                 inputs[0].append(m_p)
                 inputs[1].append(logs_p)
@@ -415,7 +415,7 @@ class MeloTTSApp(CollectionAppProtocol):
 
                 m_p = m_p.to(torch.float32)
                 logs_p = logs_p.to(torch.float32)
-                noise_scale_pt = torch.tensor([noise_scale], dtype=torch.float32)
+                noise_scale_pt = torch.tensor([[noise_scale]], dtype=torch.float32)
                 z = flow_fpm(m_p, logs_p, y_mask, g, attn_squeezed, noise_scale_pt)
 
                 z_buf = torch.zeros(

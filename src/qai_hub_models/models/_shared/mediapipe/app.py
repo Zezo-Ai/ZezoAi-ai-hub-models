@@ -576,7 +576,7 @@ class MediaPipeApp(BaseCollectionApp):
             all_landmarks = []
             for ld_batch_idx in range(landmarks.shape[0]):
                 # Exclude landmarks that don't meet the appropriate score threshold.
-                if ld_scores[ld_batch_idx] >= self.min_detector_box_score:
+                if ld_scores[ld_batch_idx] >= self.min_landmark_score:
                     # Apply the inverse of affine transform used above to the landmark coordinates.
                     # This will convert the coordinates to their locations in the original input image.
                     inverted_affine = torch.from_numpy(

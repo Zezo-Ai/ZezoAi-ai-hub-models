@@ -85,7 +85,7 @@ class FaceMap_3DMMApp:
             torch.from_numpy(
                 cv2.resize(
                     image[y0 : y1 + 1, x0 : x1 + 1],
-                    (resized_height, resized_width),
+                    (resized_width, resized_height),
                     interpolation=cv2.INTER_LINEAR,
                 )
             ).float()
