@@ -256,7 +256,7 @@ def export_model(
     skip_downloading: bool = False,
     skip_summary: bool = False,
     output_dir: str | None = None,
-    target_runtime: TargetRuntime = TargetRuntime.QNN_DLC,
+    target_runtime: TargetRuntime = TargetRuntime.TFLITE,
     compile_options: str = "",
     quantize_options: str = "",
     profile_options: str = "",
@@ -533,6 +533,7 @@ def main() -> None:
     warnings.filterwarnings("ignore")
     supported_precision_runtimes: dict[Precision, list[TargetRuntime]] = {
         Precision.float: [
+            TargetRuntime.TFLITE,
             TargetRuntime.QNN_DLC,
             TargetRuntime.QNN_CONTEXT_BINARY,
             TargetRuntime.ONNX,

@@ -1,3 +1,8 @@
+external_repos:
+  gkt:
+    repo_url: https://github.com/hustvl/GKT.git
+    commit_sha: 104c27f66799f620e54eb0242509ee3b041ae426
+    patches_filename: gkt_patches.diff
 supported_precisions:
 - float
 - w8a16_mixed_fp16
@@ -5,12 +10,7 @@ has_on_target_demo: true
 disabled_paths:
   w8a16_mixed_fp16:
     qnn_context_binary:
-      scorecard_failure: No profile jobs found with default device Samsung Galaxy S25
+      scorecard_failure: 'Link Failure(s): jp278mom5'
 requires_aot_prepare: true
 global_requirements_incompatible: true
 pip_pre_build_reqs: nuscenes-devkit==1.2.0 --no-deps
-external_repos:
-  gkt:
-    repo_url: https://github.com/hustvl/GKT.git
-    commit_sha: 104c27f66799f620e54eb0242509ee3b041ae426
-    patches_filename: gkt_patches.diff
