@@ -38,12 +38,13 @@ class LibriSpeechEvaluator(BaseEvaluator):
         output
             Tensor of logits [(batch_size, seq_len, vocab_size)] from model.
         target
-            Tensor of shape [max_text_length] containing ASCII character codes for the transcription, padded with zeros if needed.
+            Tensor of shape [batch_size, max_text_length] containing ASCII
+            character codes for the transcription, padded with zeros if needed.
         """
-        output = output[0]
+        logits = output if isinstance(output, torch.Tensor) else output[0]
 
         # Decode predictions
-        pred_ids = torch.argmax(output, dim=-1)
+        pred_ids = torch.argmax(logits, dim=-1)
         transcriptions = self.processor.batch_decode(pred_ids)
 
         # Convert ASCII to string

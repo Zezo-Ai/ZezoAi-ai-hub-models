@@ -36,7 +36,7 @@ SAMPLE_INPUTS = CachedWebModelAsset.from_asset_store(
 class HuggingFaceWavLMBasePlus(BaseModel):
     """Exportable Voice Recognition model"""
 
-    def __init__(self, wavlm_model: WavLMForCTC, apply_npu_opt: bool = False) -> None:
+    def __init__(self, wavlm_model: WavLMForCTC, apply_npu_opt: bool = True) -> None:
         if apply_npu_opt:
             wavlm_model = convert_to_wavlm_npu(wavlm_model)
         super().__init__(wavlm_model)
@@ -44,7 +44,7 @@ class HuggingFaceWavLMBasePlus(BaseModel):
 
     @classmethod
     def from_pretrained(
-        cls, weights_path: str | None = None, apply_npu_opt: bool = False
+        cls, weights_path: str | None = None, apply_npu_opt: bool = True
     ) -> Self:
         """Load WavLM from a weightfile created by the source HUggingFaceWavLM repository."""
         if weights_path is None:
@@ -54,22 +54,31 @@ class HuggingFaceWavLMBasePlus(BaseModel):
 
         return cls(model, apply_npu_opt)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, attention_mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """
-        Run WAvLM on `x`, and produce feature vector.
+        Run WavLM on `x`, and produce logits.
 
         Parameters
         ----------
         x
-            1x320000 tensor, 20 seconds of audio sampled at 16kHz.
+            Tensor of shape (batch, sample_length). 10 seconds at 16kHz = 160000 samples.
+        attention_mask
+            Optional binary tensor of shape (batch, sample_length): 1 for real audio,
+            0 for zero-padding. When None, a full-ones mask is generated internally.
+            Pass explicitly during torch eval to improve WER on clips shorter than
+            sample_length. Not compiled into the on-device graph (see get_input_spec).
 
         Returns
         -------
-        logits : torch.Tensor
+        torch.Tensor
             Logits tensor of shape (1, sequence_length, vocab_size).
-            Where sequence_length = 499, vocab_size = 31, representing the predicted token probabilities.
+            Where sequence_length = 499, vocab_size = 31.
         """
-        return self.model(x)
+        if attention_mask is None:
+            attention_mask = torch.ones(x.shape, dtype=torch.long, device=x.device)
+        return self.model(x, attention_mask=attention_mask)
 
     @staticmethod
     def get_input_spec(
@@ -107,14 +116,12 @@ class HuggingFaceWavLMBasePlus(BaseModel):
         device: Device | None = None,
         context_graph_name: str | None = None,
     ) -> str:
-        if (
-            target_runtime == TargetRuntime.TFLITE
-            and "--truncate_64bit_tensors" not in other_compile_options
-        ):
-            other_compile_options += " --truncate_64bit_tensors"
-        return super().get_hub_compile_options(
+        compile_options = super().get_hub_compile_options(
             target_runtime, precision, other_compile_options, device, context_graph_name
         )
+        if target_runtime != TargetRuntime.ONNX:
+            compile_options += " --truncate_64bit_tensors"
+        return compile_options
 
     def get_evaluator(self) -> BaseEvaluator:
         return LibriSpeechEvaluator()
@@ -231,5 +238,14 @@ def convert_to_wavlm_npu(model: WavLMForCTC) -> WavLMForCTC:
     # Replace with NPU friendly implementation
     conv_layer1_npu = SliceConv1d(conv_layer1)
     model.wavlm.feature_extractor.conv_layers[1].conv = conv_layer1_npu
+
+    # Layers 2-6: slice_size=4000 keeps each output tile within DSP VTCM (8MB).
+    # Output per slice = 512 channels * (4000/stride) * 4 bytes = 4.1MB < 8MB.
+    for i in range(2, 7):
+        conv_layer_i = model.wavlm.feature_extractor.conv_layers[i].conv
+        assert isinstance(conv_layer_i, torch.nn.Conv1d)
+        model.wavlm.feature_extractor.conv_layers[i].conv = SliceConv1d(
+            conv_layer_i, slice_size=4000
+        )
 
     return model

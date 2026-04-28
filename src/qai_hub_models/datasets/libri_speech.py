@@ -19,7 +19,10 @@ LIBRISPEECH_CLEAN_ASSET = CachedWebDatasetAsset.from_asset_store(
     LIBRISPEECH_VERSION,
     "test-clean.tar.gz",
 )
-DEFAULT_SEQUENCE_LENGTH = 160000  # 5 seconds at 16kHz
+DEFAULT_SEQUENCE_LENGTH = 160000  # 10 seconds at 16kHz
+DEFAULT_MAX_TEXT_LENGTH = (
+    600  # covers longest transcription in LibriSpeech test-clean (576 chars)
+)
 
 
 class LibriSpeechDataset(BaseDataset):
@@ -28,7 +31,7 @@ class LibriSpeechDataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.TEST,
         target_sample_rate: int = 16000,
         max_sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
-        max_text_length: int = 200,
+        max_text_length: int = DEFAULT_MAX_TEXT_LENGTH,
     ) -> None:
         self.base_path = LIBRISPEECH_CLEAN_ASSET.extracted_path
         BaseDataset.__init__(self, self.base_path, split)
@@ -36,7 +39,9 @@ class LibriSpeechDataset(BaseDataset):
         self.max_sequence_length = max_sequence_length
         self.max_text_length = max_text_length
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(
+        self, index: int
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """
         Parameters
         ----------
@@ -45,10 +50,11 @@ class LibriSpeechDataset(BaseDataset):
 
         Returns
         -------
-        audio : torch.Tensor
-            Processed audio tensor of shape [sequence_length],
-            normalized and padded/truncated to max_sequence_length.
-        gt_tensor : torch.Tensor
+        tuple[torch.Tensor, torch.Tensor]
+            Processed audio tensor of shape [sequence_length], raw float32
+            samples and binary attention mask, both padded/truncated to
+            max_sequence_length. Returned as (audio, attention_mask).
+        torch.Tensor
             Tensor of shape [max_text_length] containing
             ASCII character codes for the transcription, padded with zeros if needed.
         """
@@ -70,15 +76,17 @@ class LibriSpeechDataset(BaseDataset):
         audio_len = min(audio.shape[-1], self.max_sequence_length)
         audio = audio[..., :audio_len]
 
+        # Build attention mask before padding: 1 for real samples, 0 for padding
+        attention_mask = torch.ones(audio_len, dtype=torch.int64)
+
         if audio_len < self.max_sequence_length:
             pad_len = self.max_sequence_length - audio_len
             audio = F.pad(audio, (0, pad_len), mode="constant")
+            attention_mask = F.pad(attention_mask, (0, pad_len), value=0)
 
         audio = audio.squeeze(0)
-        audio = audio / torch.max(torch.abs(audio))
         # Process transcription text with FIXED maximum length
         text = str(self.transcriptions[index])
-        text = text.replace("'", "")  # Remove single quotes
         text = text[: self.max_text_length]  # Truncate to max length
 
         # Convert to tensor of character indices with padding
@@ -89,7 +97,7 @@ class LibriSpeechDataset(BaseDataset):
             pad_len = self.max_text_length - len(gt_tensor)
             gt_tensor = F.pad(gt_tensor, (0, pad_len), value=0)  # 0 = padding index
 
-        return audio, gt_tensor
+        return (audio, attention_mask), gt_tensor
 
     def _validate_data(self) -> bool:
         self.audio_files = []
