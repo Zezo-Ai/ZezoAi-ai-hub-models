@@ -24,23 +24,20 @@ jobs:
       models: none # only enable unit tests
       use_public_wheel: true
 
-  approve:
-    name: Approve Release
-    if: ${{ inputs.target == 'prod' }}
-    needs: [test_public_wheel]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: release
-    steps:
-      - run: echo "Release approved"
+  # This has an approval step built in; the release will be skipped if approval is not recieved.
+  release_assets:
+      name: Release Assets
+      if: ${{ inputs.target == 'prod' }}
+      secrets: inherit
+      needs: [test_public_wheel]
+      uses: ./.github/workflows/release_assets.yaml
 
   # Code release (public repo tag) must wait for assets so that the
   # published tag's fetch APIs work immediately on install.
   release_code:
       name: Release code to Repository
       secrets: inherit
-      needs: [approve, test_public_wheel, release_assets]
-      if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' && needs.release_assets.result == 'success' }}
+      needs: [release_assets]
       uses: ./.github/workflows/release_code.yaml
       with:
           skip_approval: true
@@ -52,8 +49,8 @@ jobs:
   release_pypi:
       name: Release wheel to ${{ inputs.target == 'prod' && 'PyPi' || 'test PyPi' }}
       secrets: inherit
-      needs: [approve, test_public_wheel, release_assets]
-      if: ${{ !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' && (inputs.target != 'prod' || needs.release_assets.result == 'success') }}
+      needs: [test_public_wheel, release_assets]
+      if: ${{ !cancelled() && needs.test_public_wheel.result == 'success' && (inputs.target != 'prod' || needs.release_assets.result == 'success') }}
       uses: ./.github/workflows/release_pypi.yaml
       with:
           target: ${{ inputs.target }}
@@ -62,27 +59,17 @@ jobs:
   # HF release verifies assets exist on S3 before pushing model cards
   release_huggingface:
       name: Release Hugging Face Model Cards
-      if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' && needs.release_assets.result == 'success' }}
       secrets: inherit
-      needs: [approve, test_public_wheel, release_assets]
+      needs: [release_assets]
       uses: ./.github/workflows/release_huggingface.yaml
       with:
           skip_approval: true
 
-  release_assets:
-      name: Release Assets
-      if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
-      secrets: inherit
-      needs: [approve, test_public_wheel]
-      uses: ./.github/workflows/release_assets.yaml
-      with:
-          skip_approval: true
-
+  # Website release verifies assets exist on S3 during import
   sync_public_website:
     name: Sync Public Website & Create Public Website PR
     secrets: inherit
-    if: ${{ inputs.target == 'prod' && !cancelled() && needs.test_public_wheel.result == 'success' && needs.approve.result != 'failure' }}
-    needs: [approve, test_public_wheel]
+    needs: [release_assets]
     uses: ./.github/workflows/release_website.yml
     with:
       source_branch_name: ${{ github.ref }}
