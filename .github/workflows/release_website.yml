@@ -40,10 +40,14 @@ on:
           required: false
           type: string
 
-        fast_test_mode:
-          description: Faster import that should be used only for testing.
-          type: boolean
-          default: false
+        import_mode:
+          description: Import mode.
+          type: choice
+          default: default
+          options:
+            - default
+            - no-verify
+            - no-verify-urls
 
     # Used by other workflows to trigger this workflow
     workflow_call:
@@ -76,9 +80,9 @@ on:
           required: false
           type: string
 
-        fast_test_mode:
-          type: boolean
-          default: false
+        import_mode:
+          type: string
+          default: default
 
       outputs:
         website_pr_url:
@@ -103,7 +107,7 @@ jobs:
           NODE_VERSION: 22.x
           PYTHON_VERSION: '3.10'
           VENV_PATH: build/ci-envs/release
-          FAST_TEST_MODE: ${{ inputs.fast_test_mode }}
+          IMPORT_MODE: ${{ inputs.import_mode }}
 
         steps:
           - uses: actions/checkout@v6
@@ -151,8 +155,8 @@ jobs:
               cp .env.local.example .env.local
               sed -i -e "s/DJANGO_API_TOKEN=/DJANGO_API_TOKEN=${{ secrets.HUB_USER_TOKEN_PROD }}/g" .env.local
               bash scripts/setup.sh
-              if [[ "${{ env.FAST_TEST_MODE }}" == "true" ]]; then
-                bash scripts/import-zoo.sh model --no-verify-jobs
+              if [[ "${{ env.IMPORT_MODE }}" != "default" ]]; then
+                bash scripts/import-zoo.sh model --${{ env.IMPORT_MODE }}
               else
                 bash scripts/import-zoo.sh model
               fi

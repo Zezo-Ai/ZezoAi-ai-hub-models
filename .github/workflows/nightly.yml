@@ -213,6 +213,7 @@ jobs:
      uses: ./.github/workflows/release_website.yml
      with:
        source_branch_name: ${{ github.ref_name }}
+       import_mode: no-verify-urls
 
     scorecard-integration-test:
       name: Scorecard Integration Test
