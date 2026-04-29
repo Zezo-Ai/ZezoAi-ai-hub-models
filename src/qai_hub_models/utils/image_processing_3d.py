@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import numpy as np
+import torch
 
 
 def project_to_image(pts_3d: np.ndarray, P: np.ndarray) -> np.ndarray:
@@ -134,3 +135,37 @@ def alpha2rot_y(alpha: np.ndarray, x: np.ndarray, cx: float, fx: float) -> np.nd
     rot_y[rot_y > np.pi] -= 2 * np.pi
     rot_y[rot_y < -np.pi] += 2 * np.pi
     return rot_y
+
+
+def rotation_matrix_to_euler(rot: torch.Tensor) -> torch.Tensor:
+    """
+    Convert a batch of rotation matrices to Euler angles (pitch-yaw-roll).
+
+    Parameters
+    ----------
+    rot
+        Batch of rotation matrices with shape [N, 3, 3].
+
+    Returns
+    -------
+    torch.Tensor
+        Euler angles in radians with shape [N, 3] as (pitch, yaw, roll).
+    """
+    batch = rot.shape[0]
+    R = rot
+    sy = torch.sqrt(R[:, 0, 0] ** 2 + R[:, 1, 0] ** 2).clamp(min=1e-12)
+    singular = (sy < 1e-6).float()
+
+    x = torch.atan2(R[:, 2, 1], R[:, 2, 2])
+    y = torch.atan2(-R[:, 2, 0], sy)
+    z = torch.atan2(R[:, 1, 0], R[:, 0, 0])
+
+    xs = torch.atan2(-R[:, 1, 2], R[:, 1, 1])
+    ys = torch.atan2(-R[:, 2, 0], sy)
+    zs = torch.zeros(batch, device=rot.device)
+
+    out = torch.zeros(batch, 3, device=rot.device)
+    out[:, 0] = x * (1 - singular) + xs * singular
+    out[:, 1] = y * (1 - singular) + ys * singular
+    out[:, 2] = z * (1 - singular) + zs * singular
+    return out

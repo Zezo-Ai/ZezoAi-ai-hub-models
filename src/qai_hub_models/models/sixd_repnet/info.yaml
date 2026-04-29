@@ -1,0 +1,37 @@
+
+name: SixDRepNet
+id: sixd_repnet
+status: pending
+status_reason: static banner is not available.
+headline: Head pose estimation using 6D rotation representation and RepVGG backbone.
+domain: Computer Vision
+description: 6DRepNet predicts head pose (pitch, yaw, roll) from a face image using a RepVGG-B1g2 backbone and a continuous 6D rotation representation, achieving robust and accurate head pose estimation.
+use_case: Pose Estimation
+tags:
+- real-time
+applicable_scenarios:
+- Driver Monitoring
+- Augmented Reality
+- Attention Tracking
+related_models:
+- rankpose
+- eyegaze
+- mediapipe_face
+form_factors:
+- Phone
+- Tablet
+- IoT
+has_static_banner: false
+has_animated_banner: false
+dataset:
+- 300w-lp
+- aflw2000
+technical_details:
+ Input resolution: 224x224
+ Number of parameters: 15.3M
+ Model size (float): 58.4 MB
+license_type: mit
+research_paper: https://arxiv.org/abs/2109.10948
+research_paper_title: "6D Rotation Representation for Unconstrained Head Pose Estimation"
+source_repo: https://github.com/thohemp/6DRepNet
+license: https://github.com/thohemp/6DRepNet/blob/master/LICENSE
