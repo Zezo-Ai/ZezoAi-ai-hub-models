@@ -233,7 +233,7 @@ jobs:
             issues: write
             actions: read
         env:
-            GH_TOKEN: ${{ github.token }}
+            GH_TOKEN: ${{ secrets.STAGING_GH_TOKEN }}
             VENV_PATH: build/ci-envs/qaihm-notify
 
         steps:
