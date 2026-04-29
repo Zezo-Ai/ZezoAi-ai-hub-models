@@ -79,11 +79,14 @@ def compile_model(
         graph_specs = all_input_specs[component_name]
         graph_compile_options = all_compile_options[component_name]
         compile_jobs[component_name] = {}
+        # Upload the source model once so every per-graph compile job reuses
+        # the same asset instead of re-uploading the .aimet / ONNX bundle.
+        uploaded_model = hub.upload_model(model_to_compile)  # type: ignore[arg-type]
         for graph_name, graph_input_spec in graph_specs.items():
             model_compile_options = graph_compile_options[graph_name]
             print(f"Optimizing model {component_name} to run on-device")
             submitted_compile_job = hub.submit_compile_job(
-                model=model_to_compile,
+                model=uploaded_model,
                 input_specs=to_hub_input_specs(graph_input_spec),
                 device=device,
                 name=f"{model_name}_{component_name}",
