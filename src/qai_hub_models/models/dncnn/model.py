@@ -97,9 +97,9 @@ class DnCNN(BaseModel):
                 shape=(1, 1, height, width),
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.GRAYSCALE,
-                    value_range=(0.0, 1.0),
                 ),
             ),
         }

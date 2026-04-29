@@ -457,3 +457,9 @@ def merge_output_metadata(
             target_spec.description = spec.description
         if spec.value_range != (float("-inf"), float("inf")):
             target_spec.value_range = spec.value_range
+        if spec.softmax_applied:
+            target_spec.softmax_applied = spec.softmax_applied
+        if spec.labels_file is not None:
+            target_spec.labels_file = spec.labels_file
+        if spec.image_metadata is not None:
+            target_spec.image_metadata = spec.image_metadata

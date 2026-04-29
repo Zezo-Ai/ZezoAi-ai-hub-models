@@ -108,9 +108,9 @@ class Mask2Former(BaseModel):
                 shape=(batch_size, 3, height, width),
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
-                    value_range=(0.0, 1.0),
                 ),
             ),
         }

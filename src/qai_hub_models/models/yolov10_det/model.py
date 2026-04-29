@@ -18,6 +18,12 @@ from qai_hub_models.models._shared.ultralytics.detect_patches import (
 )
 from qai_hub_models.models._shared.yolo.model import Yolo, yolo_detect_postprocess
 from qai_hub_models.models.common import Precision
+from qai_hub_models.utils.input_spec import (
+    BboxFormat,
+    BboxMetadata,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ASSET_VERSION = 2
 MODEL_ID = __name__.split(".")[-2]
@@ -108,12 +114,31 @@ class YoloV10Detector(Yolo):
 
         return boxes, scores, classes
 
+    # Overrides Yolo.get_output_spec(): YoloV10 returns "classes" (not "class_idx") — see forward()
+    @staticmethod
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "boxes": TensorSpec(
+                io_type=IoType.BBOX,
+                bbox_metadata=BboxMetadata(bbox_format=BboxFormat.XYXY),
+            ),
+            "scores": TensorSpec(
+                io_type=IoType.TENSOR,
+                softmax_applied=True,
+                labels_file="coco_labels.txt",
+            ),
+            "classes": TensorSpec(
+                io_type=IoType.TENSOR,
+                labels_file="coco_labels.txt",
+            ),
+        }
+
     @staticmethod
     def get_output_names(
         include_postprocessing: bool = True, split_output: bool = False
     ) -> list[str]:
         if include_postprocessing:
-            return ["boxes", "scores", "classes"]
+            return list(YoloV10Detector.get_output_spec().keys())
         if split_output:
             return ["boxes", "scores"]
         return ["detector_output"]

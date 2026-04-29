@@ -155,9 +155,9 @@ class SAM2Encoder(BaseModel, ABC):
                 shape=(batch_size, 3, encoder_img_height, encoder_img_width),
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
-                    value_range=(0.0, 1.0),
                 ),
             ),
             "unnorm_coords": TensorSpec(

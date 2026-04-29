@@ -19,6 +19,8 @@ from qai_hub_models.models.common import Precision
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.bounding_box_processing import box_xywh_to_xyxy
 from qai_hub_models.utils.input_spec import (
+    BboxFormat,
+    BboxMetadata,
     ColorFormat,
     ImageMetadata,
     InputSpec,
@@ -82,16 +84,28 @@ class UltralyticsSingleClassSegmentor(BaseModel):
                 shape=(batch_size, 3, height, width),
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
-                    value_range=(0.0, 1.0),
                 ),
             )
         }
 
     @staticmethod
-    def get_output_names() -> list[str]:
-        return ["boxes", "scores", "mask_coeffs", "mask_protos"]
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "boxes": TensorSpec(
+                io_type=IoType.BBOX,
+                bbox_metadata=BboxMetadata(bbox_format=BboxFormat.XYXY),
+            ),
+            "scores": TensorSpec(
+                io_type=IoType.TENSOR,
+                softmax_applied=True,
+                labels_file="coco_labels.txt",
+            ),
+            "mask_coeffs": TensorSpec(io_type=IoType.TENSOR),
+            "mask_protos": TensorSpec(io_type=IoType.TENSOR),
+        }
 
     @staticmethod
     def get_channel_last_inputs() -> list[str]:
@@ -129,16 +143,32 @@ class UltralyticsMulticlassSegmentor(BaseModel):
                 shape=(batch_size, 3, height, width),
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
-                    value_range=(0.0, 1.0),
                 ),
             )
         }
 
     @staticmethod
-    def get_output_names() -> list[str]:
-        return ["boxes", "scores", "mask_coeffs", "class_idx", "mask_protos"]
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "boxes": TensorSpec(
+                io_type=IoType.BBOX,
+                bbox_metadata=BboxMetadata(bbox_format=BboxFormat.XYXY),
+            ),
+            "scores": TensorSpec(
+                io_type=IoType.TENSOR,
+                softmax_applied=True,
+                labels_file="coco_labels.txt",
+            ),
+            "mask_coeffs": TensorSpec(io_type=IoType.TENSOR),
+            "class_idx": TensorSpec(
+                io_type=IoType.TENSOR,
+                labels_file="coco_labels.txt",
+            ),
+            "mask_protos": TensorSpec(io_type=IoType.TENSOR),
+        }
 
     @staticmethod
     def get_channel_last_inputs() -> list[str]:

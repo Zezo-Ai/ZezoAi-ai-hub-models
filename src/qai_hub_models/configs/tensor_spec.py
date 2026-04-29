@@ -61,27 +61,19 @@ class BboxFormat(Enum):
 # Metadata classes
 # ---------------------------------------------------------------------------
 class ImageMetadata(BaseQAIHMConfig):
-    """
-    Metadata specific to image tensor inputs.
-
-    This class groups image-related metadata fields like color format
-    and value range together.
-    """
+    """Metadata specific to image tensors (e.g. color format)."""
 
     color_format: ColorFormat = ColorFormat.RGB
-    value_range: tuple[float, float] = (0.0, 1.0)
 
 
 class BboxMetadata(BaseQAIHMConfig):
     """
     Metadata specific to bounding box tensor outputs.
 
-    This class groups bbox-related metadata fields like coordinate format
-    and value range (pixel space vs normalized).
+    This class groups bbox-related metadata fields like coordinate format.
     """
 
     bbox_format: BboxFormat = BboxFormat.XYXY
-    value_range: tuple[float, float] = (0.0, float("inf"))
 
 
 # ---------------------------------------------------------------------------
@@ -164,13 +156,18 @@ class TensorSpec(BaseQAIHMConfig):
         Semantic type: IMAGE for image tensors, BBOX for bounding box tensors,
         TENSOR for generic tensors.
     image_metadata
-        Image-specific metadata (color_format, value_range). Only used when
-        io_type is IMAGE.
+        Image-specific metadata (color_format, channel_mean, channel_std).
+        Only used when io_type is IMAGE.
     bbox_metadata
         Bbox-specific metadata (bbox_format). Only used when io_type is BBOX.
     value_range
-        Value range for generic tensors (not images). Default is (None, None)
-        meaning unbounded.
+        Expected value range for this tensor. Default is (-inf, inf)
+        meaning unbounded. For images, typically (0.0, 1.0) or (0.0, 255.0).
+    softmax_applied
+        Whether softmax/sigmoid has been applied to this tensor's values.
+    labels_file
+        Name of the labels file that maps indices to class names (e.g.,
+        "coco_labels.txt").
     """
 
     shape: tuple[int, ...] = ()
@@ -182,6 +179,8 @@ class TensorSpec(BaseQAIHMConfig):
     image_metadata: ImageMetadata | None = None
     bbox_metadata: BboxMetadata | None = None
     value_range: tuple[float, float] = (float("-inf"), float("inf"))
+    softmax_applied: bool = False
+    labels_file: str | None = None
 
     # -----------------------------------------------------------------------
     # Tuple-like behavior for backwards compatibility with InputSpec usage

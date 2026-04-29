@@ -43,9 +43,9 @@ class RepaintModel(BaseModel):
                 shape=(batch_size, 3, height, width),
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
-                    value_range=(0.0, 1.0),
                 ),
             ),
             "mask": TensorSpec(
@@ -55,8 +55,16 @@ class RepaintModel(BaseModel):
         }
 
     @staticmethod
-    def get_output_names() -> list[str]:
-        return ["painted_image"]
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "painted_image": TensorSpec(
+                io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
+                image_metadata=ImageMetadata(
+                    color_format=ColorFormat.RGB,
+                ),
+            ),
+        }
 
     @staticmethod
     def get_channel_last_inputs() -> list[str]:

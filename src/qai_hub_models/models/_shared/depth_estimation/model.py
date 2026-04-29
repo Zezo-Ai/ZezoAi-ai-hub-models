@@ -11,7 +11,7 @@ from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 
 class DepthEstimationModel(BaseModel):
@@ -24,8 +24,13 @@ class DepthEstimationModel(BaseModel):
         return ["depth_estimates"]
 
     @staticmethod
-    def get_output_names() -> list[str]:
-        return ["depth_estimates"]
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "depth_estimates": TensorSpec(
+                io_type=IoType.TENSOR,
+                description="Monocular depth map",
+            ),
+        }
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

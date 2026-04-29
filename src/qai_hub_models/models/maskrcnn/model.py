@@ -24,6 +24,8 @@ from qai_hub_models.utils.base_model import (
 )
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import (
+    BboxFormat,
+    BboxMetadata,
     ColorFormat,
     ImageMetadata,
     InputSpec,
@@ -152,9 +154,9 @@ class MaskRCNNProposalGenerator(BaseModel):
                 shape=(batch_size, 3, height, width),
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
-                    value_range=(0.0, 1.0),
                 ),
             ),
         }
@@ -361,8 +363,26 @@ class MaskRCNNROIHead(BaseModel):
         }
 
     @staticmethod
-    def get_output_names() -> list[str]:
-        return ["boxes", "scores", "classes", "masks"]
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "boxes": TensorSpec(
+                io_type=IoType.BBOX,
+                bbox_metadata=BboxMetadata(bbox_format=BboxFormat.XYXY),
+            ),
+            "scores": TensorSpec(
+                io_type=IoType.TENSOR,
+                softmax_applied=True,
+                labels_file="coco_labels.txt",
+            ),
+            "classes": TensorSpec(
+                io_type=IoType.TENSOR,
+                labels_file="coco_labels.txt",
+            ),
+            "masks": TensorSpec(
+                io_type=IoType.TENSOR,
+                description="Instance segmentation masks",
+            ),
+        }
 
     @staticmethod
     def get_channel_last_inputs() -> list[str]:

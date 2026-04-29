@@ -115,16 +115,21 @@ class ImagenetClassifier(BaseModel):
                 shape=(batch_size, 3, IMAGENET_DIM, IMAGENET_DIM),
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
-                    value_range=(0.0, 1.0),
                 ),
             )
         }
 
     @staticmethod
-    def get_output_names() -> list[str]:
-        return ["class_logits"]
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "class_logits": TensorSpec(
+                io_type=IoType.TENSOR,
+                labels_file="imagenet_labels.txt",
+            ),
+        }
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

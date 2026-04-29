@@ -155,7 +155,7 @@ class TestSharedFieldCoverage:
             TensorSpec,
             tensor_spec_pb2.TensorSpec.DESCRIPTOR,
             proto_only={"name"},
-            pydantic_only={"bbox_metadata"},
+            pydantic_only={"bbox_metadata", "softmax_applied", "labels_file"},
         )
 
     def test_quantization_parameters(self) -> None:
@@ -168,7 +168,6 @@ class TestSharedFieldCoverage:
         _check_coverage(
             ImageMetadata,
             tensor_spec_pb2.ImageMetadata.DESCRIPTOR,
-            pydantic_only={"value_range"},
         )
 
 

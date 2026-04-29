@@ -133,31 +133,34 @@ class CREStereo(BaseModel):
         shape_dw2 = (batch_size, 3, height // 2, width // 2)
         bgr_metadata = ImageMetadata(
             color_format=ColorFormat.BGR,
-            value_range=(0.0, 1.0),
         )
         return {
             "left_image": TensorSpec(
                 shape=shape,
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=bgr_metadata,
             ),
             "right_image": TensorSpec(
                 shape=shape,
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=bgr_metadata,
             ),
             "left_image_dw2": TensorSpec(
                 shape=shape_dw2,
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=bgr_metadata,
             ),
             "right_image_dw2": TensorSpec(
                 shape=shape_dw2,
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=bgr_metadata,
             ),
         }

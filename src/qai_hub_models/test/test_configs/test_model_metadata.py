@@ -256,9 +256,9 @@ def test_merge_input_metadata_image() -> None:
             shape=(1, 3, 224, 224),
             dtype="float32",
             io_type=IoType.IMAGE,
+            value_range=(0.0, 1.0),
             image_metadata=ImageMetadata(
                 color_format=ColorFormat.RGB,
-                value_range=(0.0, 1.0),
             ),
         )
     }
@@ -271,7 +271,7 @@ def test_merge_input_metadata_image() -> None:
     assert image_spec.io_type == IoType.IMAGE
     assert image_spec.image_metadata is not None
     assert image_spec.image_metadata.color_format == ColorFormat.RGB
-    assert image_spec.image_metadata.value_range == (0.0, 1.0)
+    assert image_spec.value_range == (0.0, 1.0)
 
 
 def test_merge_input_metadata_image_bgr() -> None:
@@ -286,9 +286,9 @@ def test_merge_input_metadata_image_bgr() -> None:
             shape=(1, 3, 224, 224),
             dtype="float32",
             io_type=IoType.IMAGE,
+            value_range=(0.0, 255.0),
             image_metadata=ImageMetadata(
                 color_format=ColorFormat.BGR,
-                value_range=(0.0, 255.0),
             ),
         )
     }
@@ -299,7 +299,7 @@ def test_merge_input_metadata_image_bgr() -> None:
     assert image_spec.io_type == IoType.IMAGE
     assert image_spec.image_metadata is not None
     assert image_spec.image_metadata.color_format == ColorFormat.BGR
-    assert image_spec.image_metadata.value_range == (0.0, 255.0)
+    assert image_spec.value_range == (0.0, 255.0)
 
 
 def test_merge_input_metadata_tensor() -> None:
@@ -426,9 +426,9 @@ def test_merge_input_metadata_empty_model_metadata() -> None:
             shape=(1, 3, 224, 224),
             dtype="float32",
             io_type=IoType.IMAGE,
+            value_range=(0.0, 1.0),
             image_metadata=ImageMetadata(
                 color_format=ColorFormat.RGB,
-                value_range=(0.0, 1.0),
             ),
         ),
     }
@@ -456,9 +456,9 @@ def test_merge_input_metadata_multiple_inputs() -> None:
             shape=(1, 3, 640, 640),
             dtype="float32",
             io_type=IoType.IMAGE,
+            value_range=(0.0, 1.0),
             image_metadata=ImageMetadata(
                 color_format=ColorFormat.RGB,
-                value_range=(0.0, 1.0),
             ),
         ),
         "prior_boxes": TensorSpec(
@@ -477,7 +477,7 @@ def test_merge_input_metadata_multiple_inputs() -> None:
     assert image_spec.io_type == IoType.IMAGE
     assert image_spec.image_metadata is not None
     assert image_spec.image_metadata.color_format == ColorFormat.RGB
-    assert image_spec.image_metadata.value_range == (0.0, 1.0)
+    assert image_spec.value_range == (0.0, 1.0)
 
     # Verify tensor input
     boxes_spec = file_metadata.inputs["prior_boxes"]
@@ -500,9 +500,9 @@ def test_merge_input_metadata_json_roundtrip() -> None:
             shape=(1, 3, 224, 224),
             dtype="float32",
             io_type=IoType.IMAGE,
+            value_range=(0.0, 255.0),  # Non-default (default is (-inf, inf))
             image_metadata=ImageMetadata(
                 color_format=ColorFormat.BGR,  # Non-default (default is RGB)
-                value_range=(0.0, 255.0),  # Non-default (default is (0.0, 1.0))
             ),
         )
     }
@@ -531,7 +531,7 @@ def test_merge_input_metadata_json_roundtrip() -> None:
         # Enums are serialized as their values
         assert input_spec_loaded["io_type"] == "image"
         assert input_spec_loaded["image_metadata"]["color_format"] == "bgr"
-        assert input_spec_loaded["image_metadata"]["value_range"] == [0.0, 255.0]
+        assert input_spec_loaded["value_range"] == [0.0, 255.0]
 
 
 def test_merge_input_metadata_tensor_io_type_in_yaml() -> None:
@@ -587,9 +587,9 @@ def test_merge_input_metadata_grayscale_image() -> None:
             shape=(1, 1, 480, 640),
             dtype="float32",
             io_type=IoType.IMAGE,
+            value_range=(0.0, 1.0),
             image_metadata=ImageMetadata(
                 color_format=ColorFormat.GRAYSCALE,
-                value_range=(0.0, 1.0),
             ),
         ),
     }
@@ -623,9 +623,9 @@ def test_merge_input_metadata_mixed_image_tensor_yaml_roundtrip() -> None:
             shape=(1, 3, 224, 224),
             dtype="float32",
             io_type=IoType.IMAGE,
+            value_range=(0.0, 1.0),
             image_metadata=ImageMetadata(
                 color_format=ColorFormat.RGB,
-                value_range=(0.0, 1.0),
             ),
         ),
         "text": TensorSpec(

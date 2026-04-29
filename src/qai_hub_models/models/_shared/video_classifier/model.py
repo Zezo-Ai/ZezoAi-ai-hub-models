@@ -101,9 +101,9 @@ class KineticsClassifier(BaseModel):
                 shape=(1, 3, num_frames, 112, 112),
                 dtype="float32",
                 io_type=IoType.IMAGE,
+                value_range=(0.0, 1.0),
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
-                    value_range=(0.0, 1.0),
                 ),
             ),
         }
@@ -119,8 +119,13 @@ class KineticsClassifier(BaseModel):
         return {"video": [input_tensor.numpy()]}
 
     @staticmethod
-    def get_output_names() -> list[str]:
-        return ["class_probs"]
+    def get_output_spec() -> dict[str, TensorSpec]:
+        return {
+            "class_probs": TensorSpec(
+                io_type=IoType.TENSOR,
+                softmax_applied=True,
+            ),
+        }
 
     @staticmethod
     def get_channel_last_inputs() -> list[str]:

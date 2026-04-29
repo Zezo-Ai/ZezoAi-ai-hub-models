@@ -259,6 +259,15 @@ class CollectionModel(Generic[ComponentT]):
 class HubModel(HubModelProtocol):
     """Base interface for AI Hub Workbench models."""
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if "get_output_spec" in cls.__dict__ and "get_output_names" not in cls.__dict__:
+
+            def _get_output_names() -> list[str]:
+                return list(cls.get_output_spec().keys())
+
+            cls.get_output_names = staticmethod(_get_output_names)
+
     def __init__(self) -> None:
         # If a child class implements _get_input_spec_for_instance(),
         # then calling `get_input_spec` on the instance will redirect to it.
