@@ -8,7 +8,11 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-import sounddevice as sd
+
+try:
+    import sounddevice as sd
+except ImportError:
+    sd = None
 import torch
 from scipy.signal import resample_poly
 from transformers.models.whisper import WhisperConfig
@@ -219,6 +223,11 @@ class HfWhisperApp:
         audio_chunk_size_seconds
             Number of seconds to record between each transcription attempt.
         """
+        if sd is None:
+            raise ValueError(
+                "Package sounddevice is not installed. Streaming is not supported."
+            )
+
         tokens: list[int] = []
 
         def callback(audio: np.ndarray, frames: int, time: Any, status: Any) -> None:

@@ -6,24 +6,19 @@ from __future__ import annotations
 
 import os
 import shutil
-from pathlib import Path
 
 import unidic
-from huggingface_hub import hf_hub_download
 from platformdirs import user_cache_path
 from unidic.download import download_version as _download_unidic
 
 from qai_hub_models.configs.model_metadata import ModelMetadata
-from qai_hub_models.models._shared.melotts.generate_bert_binary_rules import (
-    generate_bert_tokenizer_binary,
-)
-from qai_hub_models.models._shared.melotts.generate_unicode_bin import (
-    generate_unicode_binary,
-)
 from qai_hub_models.models._shared.melotts.meloTTS_metadata_json import (
     create_tts_metadata,
 )
-from qai_hub_models.models.common import TargetRuntime
+from qai_hub_models.models._shared.voiceai_tts.language import TTSLanguage
+from qai_hub_models.models._shared.voiceai_tts.tts_metadata import (
+    write_tts_supplementary_files,
+)
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 
 UNIDIC_CACHE_PATH = user_cache_path("unidic")
@@ -70,19 +65,11 @@ def download_unidic() -> None:
         ) from e
 
 
-# Language mappings used by app.py
-LANGUAGE_MAP = {"ENGLISH": "EN", "SPANISH": "ES", "CHINESE": "ZH"}
-BERT_MODEL_IDS = {
-    "ENGLISH": "bert-base-uncased",
-    "CHINESE": "bert-base-multilingual-uncased",
-    "SPANISH": "dccuchile/bert-base-spanish-wwm-uncased",
-}
-
-
 def write_melotts_supplementary_files(
-    language: str,
+    language: TTSLanguage,
     output_dir: str | os.PathLike,
     metadata: ModelMetadata,
+    sample_rate: int,
 ) -> None:
     """
     Write supplementary files for MeloTTS models.
@@ -95,35 +82,14 @@ def write_melotts_supplementary_files(
         Directory to write supplementary files to
     metadata
         Model metadata object to update with supplementary file info
+    sample_rate
+        Audio sample rate in Hz
     """
-    if metadata.runtime != TargetRuntime.VOICE_AI:
-        return
-    lang_code = LANGUAGE_MAP[language].lower()
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Tokenizer
-    tokenizer_bin_path = generate_bert_tokenizer_binary(
-        hf_hub_download(repo_id=BERT_MODEL_IDS[language], filename="tokenizer.json"),
-        output_dir / f"bert_{lang_code}_tokenizer.bin",
-    )
-    metadata.supplementary_files[tokenizer_bin_path.name] = (
-        f"tokenizer binary for BERT {language.capitalize()} uncased vocabulary"
-    )
-
-    # Unicode binary
-    normalizer_bin_path = output_dir / "bert_normalizer.bin"
-    generate_unicode_binary(normalizer_bin_path)
-    metadata.supplementary_files[normalizer_bin_path.name] = (
-        "optimized unicode binary for fast access"
-    )
-
-    # TTS metadata JSON
-    tts_metadata = create_tts_metadata(
-        language, tokenizer_bin_path.name, normalizer_bin_path.name, metadata
-    )
-    tts_metadata_path = output_dir / "config.json"
-    tts_metadata.to_json(tts_metadata_path, exclude_defaults=False)
-    metadata.supplementary_files[tts_metadata_path.name] = (
-        f"TTS metadata JSON for {language.capitalize()}"
+    write_tts_supplementary_files(
+        language=language,
+        output_dir=output_dir,
+        metadata=metadata,
+        create_metadata_fn=create_tts_metadata,
+        sample_rate=sample_rate,
+        metadata_description="TTS metadata JSON",
     )

@@ -12,6 +12,10 @@ from qai_hub_models.datasets.common import (
     BaseDataset,
     DatasetSplit,
 )
+from qai_hub_models.models._shared.voiceai_tts.language import (
+    LANG_CODE_MAP,
+    TTSLanguage,
+)
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.input_spec import InputSpec
 
@@ -27,10 +31,11 @@ CommonVoice_ASSET = CachedWebDatasetAsset.from_asset_store(
 class CommonVoiceText(BaseDataset):
     def __init__(
         self,
-        lang: str | Path = "EN",
+        lang: TTSLanguage | str | Path = "EN",
         split: DatasetSplit = DatasetSplit.TRAIN,
         input_spec: InputSpec | None = None,
     ) -> None:
+        lang = LANG_CODE_MAP[lang] if isinstance(lang, TTSLanguage) else str(lang)
         self.common_voice_text = CachedWebDatasetAsset.from_asset_store(
             "common_voice",
             CommonVoice_VERSION,

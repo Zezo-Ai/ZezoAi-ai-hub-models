@@ -15,18 +15,25 @@ from transformers import AutoTokenizer
 
 from qai_hub_models.datasets import DatasetSplit, get_dataset_from_name
 from qai_hub_models.models._shared.melotts.model import (
+    DEC_SEQ_OVERLAP,
+    MAX_BERT_TOKENS,
+    MAX_DEC_SEQ_LEN,
+    MAX_SEQ_LEN,
+    UPSAMPLE_FACTOR,
+    UPSAMPLED_MAX_SEQ_LEN,
     Decoder,
     Encoder,
     Flow,
+    MeloTTS,
     get_tts_object,
 )
-from qai_hub_models.models._shared.melotts.utils import (
+from qai_hub_models.models._shared.melotts.utils import download_unidic
+from qai_hub_models.models._shared.voiceai_tts.app_utils import generate_path
+from qai_hub_models.models._shared.voiceai_tts.language import (
     BERT_MODEL_IDS,
-    LANGUAGE_MAP,
-    download_unidic,
+    TTSLanguage,
 )
 from qai_hub_models.utils.base_app import CollectionAppProtocol
-from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.input_spec import InputSpec, get_batch_size
 from qai_hub_models.utils.qai_hub_helpers import make_hub_dataset_entries
@@ -34,51 +41,13 @@ from qai_hub_models.utils.qai_hub_helpers import make_hub_dataset_entries
 if TYPE_CHECKING:
     from melo.api import TTS
 
-MAX_SEQ_LEN = 512
-MAX_DEC_SEQ_LEN = 40
-DEC_SEQ_OVERLAP = 12
-UPSAMPLE_FACTOR = 512
-
-ENCODER_HIDDEN_DIM = 192
-DECODER_Z_TIME_DIM = 64
-MAX_BERT_TOKENS = 200
 DEFAULT_TEXTS = {
-    "ENGLISH": "This is an example of text to speech for English. How does it sound?",
-    "SPANISH": "Este es un ejemplo de texto a voz en inglés. ¿Cómo suena?",
-    "CHINESE": "中文是中国的语言文字。特指汉族的语言文字, 即汉语和汉字",
+    TTSLanguage.ENGLISH: "This is an example of text to speech for English. How does it sound?",
+    TTSLanguage.SPANISH: "Este es un ejemplo de texto a voz en inglés. ¿Cómo suena?",
+    TTSLanguage.CHINESE: "中文是中国的语言文字。特指汉族的语言文字, 即汉语和汉字",
 }
 CommonVoice_FOLDER_NAME = "common_voice"
 CommonVoice_VERSION = 1
-
-
-def generate_path(duration: Tensor, mask: Tensor) -> Tensor:
-    """
-    Parameters
-    ----------
-    duration
-        shape of [b, 1, t_x], duration time
-    mask
-        shape of [b, 1, t_y, t_x], attention mask
-
-    Returns
-    -------
-    attention : Tensor
-        the generated self attention
-    """
-    b, _, t_y, t_x = mask.shape
-    cum_duration = torch.cumsum(duration, -1)
-    cum_duration_flat = cum_duration.view(b * t_x)
-    x = torch.arange(
-        t_y, dtype=cum_duration_flat.dtype, device=cum_duration_flat.device
-    )
-    path = (x.unsqueeze(0) < cum_duration_flat.unsqueeze(1)).to(mask.dtype)
-    path = path.view(b, t_x, t_y)
-
-    layer = [[0, 0], [1, 0], [0, 0]][::-1]
-    pad_shape = [item for sublist in layer for item in sublist]
-
-    path = path - F.pad(path, pad_shape)[:, :-1]
-    return path.unsqueeze(1).transpose(2, 3) * mask
 
 
 def get_text_for_tts_infer(
@@ -97,7 +66,7 @@ class MeloTTSApp(CollectionAppProtocol):
         flow: Flow,
         decoder: Decoder,
         tts_object: "TTS",
-        language: str,
+        language: TTSLanguage,
     ) -> None:
         super().__init__()
         self.language = language
@@ -105,7 +74,20 @@ class MeloTTSApp(CollectionAppProtocol):
         self.flow = flow
         self.decoder = decoder
         self.tts_object = tts_object
-        self.speaker_id = next(iter(tts_object.hps.data.spk2id.values()))
+        # different speaker_id has different accent
+        # for example, myshell-ai/MeloTTS-English ckpt has 5 accents
+        """
+        "spk2id": {
+          "EN-US": 0,
+          "EN-BR": 1,
+          "EN_INDIA": 2,
+          "EN-AU": 3,
+          "EN-Default": 4
+        }
+        """
+        self.speaker_id = next(
+            iter(tts_object.hps.data.spk2id.values())
+        )  # csim speaker_id is 0 by default
 
     def predict(self, text: str) -> str:
         """
@@ -212,7 +194,7 @@ class MeloTTSApp(CollectionAppProtocol):
         x_lengths = torch.tensor([phone_len], dtype=torch.int64)
         sid = torch.tensor([speaker_id], dtype=torch.int64)
         tone = tones.unsqueeze(0)
-        language = lang_ids.unsqueeze(0)
+        language_ids = lang_ids.unsqueeze(0)
         bert = bert.unsqueeze(0)
         ja_bert = ja_bert.unsqueeze(0)
         sdp_ratio_pt = torch.tensor([sdp_ratio], dtype=torch.float32)
@@ -224,7 +206,7 @@ class MeloTTSApp(CollectionAppProtocol):
             x_lengths,
             tone,
             sid,
-            language,
+            language_ids,
             bert,
             ja_bert,
             sdp_ratio_pt,
@@ -233,7 +215,7 @@ class MeloTTSApp(CollectionAppProtocol):
         )
         # Flow input
         y_mask = torch.unsqueeze(
-            torch.arange(MAX_SEQ_LEN * 3) < y_lengths.unsqueeze(dim=-1), dim=1
+            torch.arange(UPSAMPLED_MAX_SEQ_LEN) < y_lengths.unsqueeze(dim=-1), dim=1
         ).to(torch.float32)
 
         attn_mask = x_mask.unsqueeze(dim=2) * y_mask.unsqueeze(dim=-1)
@@ -274,7 +256,7 @@ class MeloTTSApp(CollectionAppProtocol):
             audio = torch.cat([audio, audio_chunk])
             total_dec_seq_len += MAX_DEC_SEQ_LEN
 
-        length = int(y_lengths[0]) * 512
+        length = int(y_lengths[0]) * UPSAMPLE_FACTOR
 
         audio = audio.squeeze()[:length]
         sf.write(
@@ -290,7 +272,7 @@ class MeloTTSApp(CollectionAppProtocol):
     @classmethod
     def get_calibration_data(
         cls,
-        collection_model: PretrainedCollectionModel,
+        collection_model: MeloTTS,
         component_name: str,
         input_specs: dict[str, InputSpec] | None = None,
         num_samples: int | None = None,
@@ -299,19 +281,16 @@ class MeloTTSApp(CollectionAppProtocol):
         input_spec = (
             input_specs[component_name] if input_specs else model.get_input_spec()
         )
-        assert hasattr(collection_model, "language") and callable(
-            collection_model.language
-        )
-        language_ = collection_model.language()
+        language = collection_model.get_language()
         encoder_fpm = collection_model.components["encoder"]
         flow_fpm = collection_model.components["flow"]
         batch_size = get_batch_size(input_spec) or 1
         assert callable(encoder_fpm) and callable(flow_fpm)
         assert batch_size == 1, f"Batch size must be 1, found {batch_size}"
 
-        tts_object = get_tts_object(language_)
+        tts_object = get_tts_object(language)
         speaker_id = next(iter(tts_object.hps.data.spk2id.values()))
-        tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_IDS[language_])
+        tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_IDS[language])
         noise_scale = 0.667
         length_scale = 1.0
         noise_scale_w = 0.8
@@ -320,7 +299,7 @@ class MeloTTSApp(CollectionAppProtocol):
         dataset = get_dataset_from_name(
             cls.calibration_dataset_name(),
             DatasetSplit.TRAIN,
-            lang=LANGUAGE_MAP[language_],
+            lang=language,
         )
         num_samples = num_samples or dataset.default_samples_per_job()
         num_samples = (num_samples // batch_size) * batch_size
@@ -340,7 +319,7 @@ class MeloTTSApp(CollectionAppProtocol):
                 x_lengths = torch.tensor([phone_len], dtype=torch.int64)
                 sid = torch.tensor([speaker_id], dtype=torch.int64)
                 tone = tones.unsqueeze(0)
-                language = lang_ids.unsqueeze(0)
+                language_ids = lang_ids.unsqueeze(0)
                 bert = bert.unsqueeze(0)
                 ja_bert = ja_bert.unsqueeze(0)
                 sdp_ratio_pt = torch.tensor([sdp_ratio], dtype=torch.float32)
@@ -352,7 +331,7 @@ class MeloTTSApp(CollectionAppProtocol):
                     x_lengths,
                     tone,
                     sid,
-                    language,
+                    language_ids,
                     bert,
                     ja_bert,
                     sdp_ratio_pt,
@@ -361,7 +340,8 @@ class MeloTTSApp(CollectionAppProtocol):
                 )
 
                 y_mask = torch.unsqueeze(
-                    torch.arange(MAX_SEQ_LEN * 3) < y_lengths.unsqueeze(dim=-1), dim=1
+                    torch.arange(UPSAMPLED_MAX_SEQ_LEN) < y_lengths.unsqueeze(dim=-1),
+                    dim=1,
                 ).to(torch.float32)
                 attn_mask = x_mask.unsqueeze(dim=2) * y_mask.unsqueeze(dim=-1)
                 attn = generate_path(w_ceil, attn_mask)
@@ -386,7 +366,7 @@ class MeloTTSApp(CollectionAppProtocol):
                 x_lengths = torch.tensor([phone_len], dtype=torch.int64)
                 sid = torch.tensor([speaker_id], dtype=torch.int64)
                 tone = tones.unsqueeze(0)
-                language = lang_ids.unsqueeze(0)
+                language_ids = lang_ids.unsqueeze(0)
                 bert = bert.unsqueeze(0)
                 ja_bert = ja_bert.unsqueeze(0)
                 sdp_ratio_pt = torch.tensor([sdp_ratio], dtype=torch.float32)
@@ -398,7 +378,7 @@ class MeloTTSApp(CollectionAppProtocol):
                     x_lengths,
                     tone,
                     sid,
-                    language,
+                    language_ids,
                     bert,
                     ja_bert,
                     sdp_ratio_pt,
@@ -407,7 +387,8 @@ class MeloTTSApp(CollectionAppProtocol):
                 )
 
                 y_mask = torch.unsqueeze(
-                    torch.arange(MAX_SEQ_LEN * 3) < y_lengths.unsqueeze(dim=-1), dim=1
+                    torch.arange(UPSAMPLED_MAX_SEQ_LEN) < y_lengths.unsqueeze(dim=-1),
+                    dim=1,
                 ).to(torch.float32)
                 attn_mask = x_mask.unsqueeze(dim=2) * y_mask.unsqueeze(dim=-1)
                 attn = generate_path(w_ceil, attn_mask)

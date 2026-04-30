@@ -13,11 +13,11 @@ def main(is_test: bool = False) -> None:
     args = parser.parse_args([] if is_test else None)
     model = model_from_cli_args(MeloTTS_EN, args)
     app = MeloTTSApp(
-        model.encoder, model.flow, model.decoder, model.tts_object, model.language()
+        model.encoder, model.flow, model.decoder, model.tts_object, model.get_language()
     )
 
-    audio_path = app.predict(DEFAULT_TEXTS[model.language()])
-    print(f"{model.language()} Audio generated and saved to {audio_path}")
+    audio_path = app.predict(DEFAULT_TEXTS[model.get_language()])
+    print(f"{model.get_language()} Audio generated and saved to {audio_path}")
 
 
 if __name__ == "__main__":

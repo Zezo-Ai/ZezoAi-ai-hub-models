@@ -1,0 +1,461 @@
+# ---------------------------------------------------------------------
+# Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause
+# ---------------------------------------------------------------------
+import os
+from abc import abstractmethod
+from functools import lru_cache
+
+import torch
+from huggingface_hub import hf_hub_download
+from piper_train.vits.lightning import VitsModel
+from piper_train.vits.models import SynthesizerTrn
+from qai_hub.client import Device
+from torch import Tensor
+from typing_extensions import Self
+
+from qai_hub_models.configs.model_metadata import ModelMetadata
+from qai_hub_models.models._shared.pipertts.pipertts_metadata_json import (
+    write_pipertts_supplementary_files,
+)
+from qai_hub_models.models._shared.pipertts.util import (
+    build_model_from_onnx,
+)
+from qai_hub_models.models._shared.voiceai_tts.language import TTSLanguage
+from qai_hub_models.models._shared.voiceai_tts.t5_g2p import (
+    T5Decoder,
+    T5Encoder,
+)
+from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
+from qai_hub_models.utils.base_model import (
+    BaseModel,
+    Precision,
+    PretrainedCollectionModel,
+    TargetRuntime,
+)
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
+
+SAMPLE_RATE = 22050
+DEFAULT_NOISE_SCALE = 0.667
+ITALIAN_NOISE_SCALE = 0.8
+DEFAULT_LENGTH_SCALE = 1.0
+DEFAULT_NOISE_SCALE_W = 0.8
+ENCODER_HIDDEN_DIM = 192
+MAX_SEQ_LEN = 512
+DEC_SEQ_OVERLAP = 12
+MAX_DEC_SEQ_LEN = 40
+DEC_SEQ_LEN = MAX_DEC_SEQ_LEN + 2 * DEC_SEQ_OVERLAP
+UPSAMPLE_FACTOR = 256
+UPSAMPLED_MAX_SEQ_LEN = MAX_SEQ_LEN * 3
+
+hf_models = {
+    TTSLanguage.ITALIAN: "https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/paola/medium/it_IT-paola-medium.onnx",
+    TTSLanguage.ENGLISH: "https://huggingface.co/datasets/rhasspy/piper-checkpoints/resolve/main/en/en_US/kusal/medium/epoch%3D2652-step%3D1953828.ckpt",
+    TTSLanguage.GERMAN: "https://huggingface.co/datasets/rhasspy/piper-checkpoints/resolve/main/de/de_DE/thorsten/medium/epoch%3D3135-step%3D2702056.ckpt",
+}
+
+
+@lru_cache(maxsize=1)
+def get_model(language: TTSLanguage) -> SynthesizerTrn:
+    model_path = CachedWebModelAsset(
+        hf_models[language], "pipertts", 1, hf_models[language].split("/")[-1]
+    ).fetch()
+
+    if language == TTSLanguage.ITALIAN:
+        config_path = hf_hub_download(
+            repo_id="rhasspy/piper-voices",
+            filename="it/it_IT/paola/medium/it_IT-paola-medium.onnx.json",
+        )
+        model_g = build_model_from_onnx(model_path, config_path)
+    else:
+        model = VitsModel.load_from_checkpoint(
+            model_path, map_location="cpu", weights_only=False, dataset=None
+        )
+        model_g = model.model_g
+
+    model_g.eval()
+    return model_g
+
+
+class Encoder(BaseModel):
+    def __init__(self, gen: SynthesizerTrn) -> None:
+        super().__init__()
+        self.gen = gen
+
+    @staticmethod
+    def get_input_spec() -> InputSpec:
+        """
+        Returns the input specification (name -> (shape, type). This can be
+        used to submit compiling job on Qualcomm AI Hub Workbench.
+        """
+        return {
+            "x": TensorSpec(shape=(1, MAX_SEQ_LEN), dtype="int32"),
+            "x_lengths": TensorSpec(shape=(1,), dtype="int32"),
+        }
+
+    @staticmethod
+    def get_output_names() -> list[str]:
+        return ["x_encoded", "m_p", "logs_p", "x_mask"]
+
+    def forward(
+        self, x: Tensor, x_lengths: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        """
+        Parameters
+        ----------
+        x
+            the phones of input text, shape of (1, MAX_SEQ_LEN), i.e., [1, 512]
+        x_lengths
+            the length of phones, shape of [1]
+
+        Returns
+        -------
+        x_encoded : Tensor
+            shape of (1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN), i.e., [1, 192, 512]
+        m_p : Tensor
+            shape of (1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN), i.e., [1, 192, 512]
+        logs_p : Tensor
+            shape of (1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN), i.e., [1, 192, 512]
+        x_mask : Tensor
+            shape of (1, 1, MAX_SEQ_LEN), i.e., [1, 1, 512], mask of x_encoded
+        """
+        x_encoded, m_p, logs_p, x_mask = self.gen.enc_p(x, x_lengths)
+        return x_encoded, m_p, logs_p, x_mask
+
+    @classmethod
+    def from_pretrained(cls) -> Self:
+        return cls(get_model(PiperTTS.get_language()))
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        other_compile_options += " -O2 "
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io --qairt_version 2.43 "
+        compile_options = super().get_hub_compile_options(
+            target_runtime,
+            precision,
+            other_compile_options,
+            device,
+            context_graph_name="encoder",
+        )
+        if target_runtime != TargetRuntime.ONNX:
+            compile_options += " --truncate_64bit_tensors --truncate_64bit_io "
+        return compile_options
+
+    def get_hub_link_options(
+        self,
+        target_runtime: TargetRuntime,
+        other_link_options: str = "",
+    ) -> str:
+        return super().get_hub_link_options(
+            target_runtime,
+            other_link_options
+            + " --qairt_version 2.43 ",  # 2.45 will fail for link job
+        )
+
+
+class SDP(BaseModel):
+    """Wrapper for the Piper encoder and duration predictor with deterministic behavior."""
+
+    def __init__(self, gen: SynthesizerTrn, speed_adjustment: float = 1.0) -> None:
+        super().__init__()
+        self.gen = gen
+        # Generate deterministic noise pattern
+        self.register_buffer("sdp_noise_pattern", torch.ones(1, 2, MAX_SEQ_LEN) * 0.5)
+        self.scale = 1.0 / speed_adjustment
+
+    def forward(
+        self,
+        x_encoded: Tensor,
+        x_mask: Tensor,
+        length_scale: Tensor,
+        noise_scale_w: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        """
+        Parameters
+        ----------
+        x_encoded
+            encoded hidden representation from the Encoder, shape of (1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN), i.e., [1, 192, 512]
+        x_mask
+            mask of x_encoded, shape of (1, 1, MAX_SEQ_LEN), i.e., [1, 1, 512]
+        length_scale
+            scalar, scale of length
+        noise_scale_w
+            scalar, scale of noise
+
+        Returns
+        -------
+        y_lengths : Tensor
+            shape of [1]
+        w_ceil : Tensor
+            shape of (1, 1, MAX_SEQ_LEN), i.e., [1, 1, 512]
+        """
+        gen = self.gen
+        g = None
+
+        if gen.use_sdp:
+            dp = gen.dp
+            dp_x = dp.pre(torch.detach(x_encoded))
+
+            dp_x = dp.convs(dp_x, x_mask)
+            dp_x = dp.proj(dp_x) * x_mask
+
+            sdp_noise = self.sdp_noise_pattern[:, :, : x_encoded.shape[2]]  # type: ignore[index, unused-ignore]
+            z = (
+                sdp_noise.expand(x_encoded.size(0), -1, -1).to(x_encoded.device)
+                * noise_scale_w
+            )
+
+            flows = list(reversed(dp.flows))
+            flows = [*flows[:-2], flows[-1]]  # remove flows[-2] for speed
+
+            for flow in flows:
+                z = flow(z, x_mask, g=dp_x, reverse=True)
+            z0, _ = torch.split(z, [1, 1], 1)
+
+            logw = z0
+        else:
+            logw = gen.dp(x_encoded, x_mask, g=g)
+
+        # This is to add x_encoded in the graph, because other x_encoded are in the if else branch.
+        # If remove this line, it will cause the generated onnx eliminating x_encoded as an input.
+        logw = logw + x_encoded.sum() * 0
+        w = torch.exp(logw + torch.log(self.scale * length_scale)) * x_mask
+        w_ceil = torch.ceil(w)
+        y_lengths = torch.sum(torch.sum(w_ceil, dim=2), dim=1)
+        return y_lengths, w_ceil
+
+    @staticmethod
+    def get_input_spec() -> InputSpec:
+        """
+        Returns the input specification (name -> (shape, type). This can be
+        used to submit compiling job on Qualcomm AI Hub Workbench.
+        """
+        return {
+            "x_encoded": TensorSpec(
+                shape=(1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN), dtype="float32"
+            ),
+            "x_mask": TensorSpec(shape=(1, 1, MAX_SEQ_LEN), dtype="float32"),
+            "length_scale": TensorSpec(shape=(1,), dtype="float32"),
+            "noise_scale_w": TensorSpec(shape=(1,), dtype="float32"),
+        }
+
+    @staticmethod
+    def get_output_names() -> list[str]:
+        return ["y_lengths", "w_ceil"]
+
+    @classmethod
+    def from_pretrained(cls) -> Self:
+        return cls(get_model(PiperTTS.get_language()))
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io  "
+        return super().get_hub_compile_options(
+            target_runtime,
+            precision,
+            other_compile_options,
+            device,
+            context_graph_name="sdp",
+        )
+
+
+class Flow(BaseModel):
+    def __init__(self, gen: SynthesizerTrn) -> None:
+        super().__init__()
+        self.flow = gen.flow
+        hidden_channels = gen.hidden_channels
+        self.register_buffer(
+            "fixed_noise", torch.randn(1, hidden_channels, UPSAMPLED_MAX_SEQ_LEN) * 0.5
+        )
+
+    def forward(
+        self,
+        m_p: Tensor,
+        logs_p: Tensor,
+        y_mask: Tensor,
+        attn_squeezed: Tensor,
+        noise_scale: Tensor,
+    ) -> Tensor:
+        """
+        Parameters
+        ----------
+        m_p
+            shape of (1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN), i.e., [1, 192, 512]
+        logs_p
+            shape of (1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN), i.e., [1, 192, 512]
+        y_mask
+            shape of (1, 1, UPSAMPLED_MAX_SEQ_LEN), i.e., [1, 1, 1536]
+        attn_squeezed
+            shape of (1, UPSAMPLED_MAX_SEQ_LEN, MAX_SEQ_LEN), i.e., [1, 1536, 512]
+        noise_scale
+            scalar, scale of noise
+
+        Returns
+        -------
+        z: Tensor
+           the output of Flow module, shape of (1, ENCODER_HIDDEN_DIM, UPSAMPLED_MAX_SEQ_LEN), i.e., [1, 192, 1536]
+        """
+        m_p = torch.matmul(m_p, attn_squeezed.transpose(1, 2))
+        logs_p = torch.matmul(logs_p, attn_squeezed.transpose(1, 2))
+        z_p = m_p + self.fixed_noise * torch.exp(logs_p) * noise_scale  # type: ignore [operator]
+        return self.flow(z_p, y_mask, g=None, reverse=True)
+
+    @staticmethod
+    def get_input_spec() -> InputSpec:
+        """
+        Returns the input specification (name -> (shape, type). This can be
+        used to submit compiling job on Qualcomm AI Hub Workbench.
+        """
+        return {
+            "m_p": TensorSpec(
+                shape=(1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN), dtype="float32"
+            ),
+            "logs_p": TensorSpec(
+                shape=(1, ENCODER_HIDDEN_DIM, MAX_SEQ_LEN), dtype="float32"
+            ),
+            "y_mask": TensorSpec(shape=(1, 1, UPSAMPLED_MAX_SEQ_LEN), dtype="float32"),
+            "attn_squeezed": TensorSpec(
+                shape=(1, UPSAMPLED_MAX_SEQ_LEN, MAX_SEQ_LEN), dtype="float32"
+            ),
+            "noise_scale": TensorSpec(shape=(1,), dtype="float32"),
+        }
+
+    @staticmethod
+    def get_output_names() -> list[str]:
+        return ["z"]
+
+    @classmethod
+    def from_pretrained(cls) -> Self:
+        return cls(get_model(PiperTTS.get_language()))
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io  "
+        return super().get_hub_compile_options(
+            target_runtime,
+            precision,
+            other_compile_options,
+            device,
+            context_graph_name="flow",
+        )
+
+
+class Decoder(BaseModel):
+    def __init__(self, gen: SynthesizerTrn) -> None:
+        super().__init__()
+        self.dec = gen.dec
+
+    def forward(self, z: Tensor) -> Tensor:
+        """
+        Parameters
+        ----------
+        z
+            shape of (1, ENCODER_HIDDEN_DIM, DEC_SEQ_LEN), i.e., [1, 192, 64]
+
+        Returns
+        -------
+        Tensor
+           the synthesized audio clip array
+        """
+        return self.dec(z, g=None)
+
+    @staticmethod
+    def get_input_spec() -> InputSpec:
+        """
+        Returns the input specification (name -> (shape, type). This can be
+        used to submit compiling job on Qualcomm AI Hub Workbench.
+        """
+        return {
+            "z": TensorSpec(shape=(1, ENCODER_HIDDEN_DIM, DEC_SEQ_LEN), dtype="float32")
+        }
+
+    @staticmethod
+    def get_output_names() -> list[str]:
+        return ["audio"]
+
+    @classmethod
+    def from_pretrained(cls) -> Self:
+        return cls(get_model(PiperTTS.get_language()))
+
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+        context_graph_name: str | None = None,
+    ) -> str:
+        if target_runtime.qairt_version_changes_compilation:
+            other_compile_options += " --quantize_io  "
+        return super().get_hub_compile_options(
+            target_runtime,
+            precision,
+            other_compile_options,
+            device,
+            context_graph_name="decoder",
+        )
+
+
+class PiperTTS(PretrainedCollectionModel):
+    def __init__(
+        self,
+        encoder: Encoder,
+        sdp: SDP,
+        flow: Flow,
+        decoder: Decoder,
+        charsiu_encoder: T5Encoder,
+        charsiu_decoder: T5Decoder,
+    ) -> None:
+        super().__init__(encoder, sdp, flow, decoder, charsiu_encoder, charsiu_decoder)
+        self.encoder = encoder
+        self.sdp = sdp
+        self.flow = flow
+        self.decoder = decoder
+        self.charsiu_encoder = charsiu_encoder
+        self.charsiu_decoder = charsiu_decoder
+
+    @classmethod
+    @abstractmethod
+    def get_language(cls) -> TTSLanguage:
+        pass
+
+    @classmethod
+    def from_pretrained(cls) -> Self:
+        model_g = get_model(cls.get_language())
+        return cls(
+            Encoder(model_g),
+            SDP(model_g),
+            Flow(model_g),
+            Decoder(model_g),
+            T5Encoder.from_pretrained(),
+            T5Decoder.from_pretrained(),
+        )
+
+    @classmethod
+    def write_supplementary_files(
+        cls, output_dir: str | os.PathLike, metadata: ModelMetadata
+    ) -> None:
+        write_pipertts_supplementary_files(
+            cls.get_language(), output_dir, metadata, SAMPLE_RATE
+        )

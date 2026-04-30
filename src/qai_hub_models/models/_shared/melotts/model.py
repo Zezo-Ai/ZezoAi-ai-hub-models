@@ -2,7 +2,8 @@
 # Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
-import copy
+import os
+from abc import abstractmethod
 from collections.abc import Iterable
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
@@ -16,13 +17,11 @@ from torch.nn import Module
 from transformers import (
     AutoModelForMaskedLM,
     BertForMaskedLM,
-    T5ForConditionalGeneration,
 )
-from transformers.models.t5.modeling_t5 import T5Attention
 from typing_extensions import Self
 
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.models._shared.common import replace_module_recursively
-from qai_hub_models.models._shared.melotts.charsiu_model import T5AttentionMod
 from qai_hub_models.models._shared.melotts.meloTTS_encoder import (
     FFNMod,
     OptimizedDurationPredictor,
@@ -30,13 +29,24 @@ from qai_hub_models.models._shared.melotts.meloTTS_encoder import (
 )
 from qai_hub_models.models._shared.melotts.meloTTS_flow import OptimizedFlow
 from qai_hub_models.models._shared.melotts.utils import (
-    BERT_MODEL_IDS,
     download_unidic,
+    write_melotts_supplementary_files,
+)
+from qai_hub_models.models._shared.voiceai_tts.language import (
+    BERT_MODEL_IDS,
+    TTSLanguage,
+)
+from qai_hub_models.models._shared.voiceai_tts.t5_g2p import (
+    T5Decoder as _T5DecoderBase,
+)
+from qai_hub_models.models._shared.voiceai_tts.t5_g2p import (
+    T5Encoder as _T5EncoderBase,
 )
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.utils.base_model import (
     BaseModel,
     Precision,
+    PretrainedCollectionModel,
     TargetRuntime,
 )
 from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
@@ -44,28 +54,36 @@ from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 if TYPE_CHECKING:
     from melo.api import TTS
 
-NUM_BLOCKS = 4
+SAMPLE_RATE = 44100
 MAX_SEQ_LEN = 512
-MAX_NUM_INPUT_IDS = 50
 BERT_FEATURE_DIM = 1024
 ENCODER_HIDDEN_DIM = 192
 JA_BERT_FEATURE_DIM = 768
 SPEAKER_EMBED_DIM = 256
 FLOW_LENGTH_FACTOR = 3
 DECODER_Z_TIME_DIM = 64
+MAX_DEC_SEQ_LEN = 40
+DEC_SEQ_OVERLAP = 12
+UPSAMPLE_FACTOR = 512
+MAX_BERT_TOKENS = 200
 UPSAMPLED_MAX_SEQ_LEN = MAX_SEQ_LEN * FLOW_LENGTH_FACTOR
 
-MAP2 = {"ENGLISH": "EN_NEWEST", "SPANISH": "ES", "CHINESE": "ZH"}
+MELO_LANGUAGE_CONFIG = {
+    # TTSLanguage.ENGLISH: "EN_NEWEST", # the voice is loud and strong
+    TTSLanguage.ENGLISH: "EN",  # the voice is soft and peaceful
+    TTSLanguage.SPANISH: "ES",
+    TTSLanguage.CHINESE: "ZH",
+}
 
 
 @lru_cache(maxsize=1)
-def get_tts_object(language: str) -> "TTS":
+def get_tts_object(language: TTSLanguage) -> "TTS":
     download_unidic()
 
     import melo
     from melo.api import TTS
 
-    tts = TTS(MAP2[language], device="cpu")
+    tts = TTS(MELO_LANGUAGE_CONFIG[language], device="cpu")
 
     # Monkeypatch melo.attentions.FFN to replace torch.relu with torch.maximum.
     # This avoids the Conv2D+Relu op fusion bug in Qairt, which incorrectly converts
@@ -75,20 +93,6 @@ def get_tts_object(language: str) -> "TTS":
     replace_module_recursively(tts.model, melo.attentions.FFN, FFNMod)
 
     return tts
-
-
-@lru_cache(maxsize=1)
-def get_bert_model(language: str) -> BertForMaskedLM:
-    return (
-        AutoModelForMaskedLM.from_pretrained(BERT_MODEL_IDS[language]).to("cpu").eval()
-    )
-
-
-@lru_cache(maxsize=1)
-def get_t5model() -> T5ForConditionalGeneration:
-    return T5ForConditionalGeneration.from_pretrained(
-        "charsiu/g2p_multilingual_byT5_tiny_16_layers_100"
-    ).eval()
 
 
 class Encoder(BaseModel):
@@ -108,7 +112,7 @@ class Encoder(BaseModel):
         self.register_buffer(
             "indices", torch.arange(MAX_SEQ_LEN * 4, dtype=torch.float32)[None, None, :]
         )
-        self.upsample_factor = 512
+        self.upsample_factor = UPSAMPLE_FACTOR
         self.encoder = OptimizedTextEncoder(self.model.enc_p)
         self.dp = OptimizedDurationPredictor(self.model.dp)
         self.speaker_id = next(iter(tts_object.hps.data.spk2id.values()))
@@ -345,7 +349,7 @@ class Flow(BaseModel):
         self.symbol_to_id = tts_object.symbol_to_id
         assert isinstance(self.model.hidden_channels, int)
         h = self.model.hidden_channels
-        self.fixed_noise = torch.full([1, h, MAX_SEQ_LEN * 3], 0.5)
+        self.fixed_noise = torch.full([1, h, UPSAMPLED_MAX_SEQ_LEN], 0.5)
         self.flow = OptimizedFlow(self.model.flow)
 
     def forward(
@@ -523,107 +527,7 @@ class Decoder(BaseModel):
         return Precision.w8a16
 
 
-class T5Encoder(BaseModel):
-    def __init__(self, t5model: T5ForConditionalGeneration) -> None:
-        super().__init__()
-        self.model = t5model
-        self.embed_tokens = t5model.encoder.embed_tokens
-        self.block = t5model.encoder.block
-        self.final_layer_norm = t5model.encoder.final_layer_norm
-
-    def forward(
-        self, input_ids: Tensor, encoder_attention_mask: Tensor
-    ) -> list[Tensor]:
-        """
-        Parameters
-        ----------
-        input_ids
-            shape of (1, MAX_NUM_INPUT_IDS)
-        encoder_attention_mask
-            shape of (1, MAX_NUM_INPUT_IDS)
-
-        Returns
-        -------
-        list[Tensor]
-           a list of key value states
-        """
-        input_embeds = self.embed_tokens(input_ids)
-        extended_attention_mask = -10000.0 * (1 - encoder_attention_mask).unsqueeze(
-            0
-        ).unsqueeze(0)
-        position_bias = None
-        hidden_states = input_embeds
-
-        for layer_module in self.block:
-            layer_outputs = layer_module(
-                hidden_states,
-                attention_mask=extended_attention_mask,
-                position_bias=position_bias,
-            )
-            hidden_states = layer_outputs[0]
-            position_bias = layer_outputs[1]
-
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        outputs = []
-        assert isinstance(self.model.decoder, Module) and isinstance(
-            self.model.decoder.block, Iterable
-        )
-        for decoder_block in self.model.decoder.block:
-            cross_attn = decoder_block.layer[1].EncDecAttention
-            key_states = cross_attn.k(hidden_states)
-            key_states = key_states.view(
-                key_states.shape[0],
-                -1,
-                cross_attn.n_heads,
-                cross_attn.key_value_proj_dim,
-            ).transpose(1, 2)
-            value_states = cross_attn.v(hidden_states)
-            value_states = value_states.view(
-                value_states.shape[0],
-                -1,
-                cross_attn.n_heads,
-                cross_attn.key_value_proj_dim,
-            ).transpose(1, 2)
-            outputs.append(key_states)
-            outputs.append(value_states)
-
-        return outputs
-
-    @staticmethod
-    def get_input_spec() -> InputSpec:
-        """
-        Returns the input specification (name -> (shape, type). This can be
-        used to submit compiling job on Qualcomm AI Hub Workbench.
-        """
-        return {
-            "input_ids": TensorSpec(
-                shape=(1, MAX_NUM_INPUT_IDS),
-                dtype="int32",
-            ),
-            "encoder_attention_mask": TensorSpec(
-                shape=(1, MAX_NUM_INPUT_IDS),
-                dtype="int32",
-            ),
-        }
-
-    @staticmethod
-    def get_output_names() -> list[str]:
-        return [
-            "block_0_cross_key_states",
-            "block_0_cross_value_states",
-            "block_1_cross_key_states",
-            "block_1_cross_value_states",
-            "block_2_cross_key_states",
-            "block_2_cross_value_states",
-            "block_3_cross_key_states",
-            "block_3_cross_value_states",
-        ]
-
-    @classmethod
-    def from_pretrained(cls) -> Self:
-        return cls(get_t5model())
-
+class T5Encoder(_T5EncoderBase):
     def get_hub_compile_options(
         self,
         target_runtime: TargetRuntime,
@@ -647,186 +551,7 @@ class T5Encoder(BaseModel):
         return Precision.float
 
 
-def replace_submodules(module: Module) -> None:
-    for name, submodule in module.named_children():
-        if isinstance(submodule, T5Attention):
-            setattr(module, name, T5AttentionMod(submodule))
-        else:
-            replace_submodules(submodule)
-
-
-class T5Decoder(BaseModel):
-    def __init__(
-        self, t5model: T5ForConditionalGeneration, max_num_input_ids: int
-    ) -> None:
-        super().__init__()
-        self.model = t5model
-        self.embed_tokens = t5model.decoder.embed_tokens
-        self.block = t5model.decoder.block
-        self.final_layer_norm = t5model.decoder.final_layer_norm
-        self.max_num_input_ids = max_num_input_ids
-
-        n_heads = self.block[0].layer[0].SelfAttention.n_heads
-        position_bias_len = n_heads * max_num_input_ids
-        self.position_bias_embedding = torch.nn.Embedding(
-            max_num_input_ids, position_bias_len
-        )
-        position_bias_weight = torch.zeros(
-            [max_num_input_ids, position_bias_len], dtype=torch.float32
-        )
-        for idx in range(max_num_input_ids):
-            position_bias = self.compute_position_bias(idx + 1, max_num_input_ids)
-            position_bias_weight[idx, :] = position_bias.flatten()
-        self.position_bias_embedding.weight = torch.nn.Parameter(position_bias_weight)
-
-        replace_submodules(self.block)
-
-    def compute_position_bias(self, key_length: int, max_length: int) -> Tensor:
-        attn = self.block[0].layer[0].SelfAttention
-        position_bias = attn.compute_bias(key_length, key_length)[:, :, -1:, :]
-        position_bias_masked = torch.full(
-            [
-                position_bias.shape[0],
-                position_bias.shape[1],
-                position_bias.shape[2],
-                max_length,
-            ],
-            -10000.0,
-            dtype=torch.float32,
-        )
-        position_bias_masked[..., : key_length - 1] = position_bias[
-            ..., : key_length - 1
-        ]
-        position_bias_masked[..., -1] = position_bias[..., -1]
-        return position_bias_masked
-
-    def forward(
-        self,
-        input_ids: Tensor,
-        encoder_attention_mask: Tensor,
-        position: Tensor,
-        *past_key_values: Tensor,
-    ) -> tuple[Tensor, ...]:
-        """
-        Parameters
-        ----------
-        input_ids
-            shape of (1, 1)
-        encoder_attention_mask
-            shape of (1, q_len)
-        position
-            shape of (1, 1)
-        *past_key_values
-            a list of previous key-value states, each state is shape of
-            (batch_size, n_heads, q_len - 1, dim_per_head) or (batch_size, n_heads, q_len, dim_per_head)
-
-        Returns
-        -------
-        output : tuple[Tensor, ...]
-            logits
-                predicted logits
-            present_key_values
-                updated key values
-        """
-        input_embeds = self.embed_tokens(input_ids)
-        encoder_extended_attention_mask = -10000.0 * (
-            1 - encoder_attention_mask
-        ).unsqueeze(0).unsqueeze(0)
-        encoder_decoder_position_bias = encoder_extended_attention_mask
-        hidden_states = input_embeds
-        position_bias = None
-        # present_key_value_states = ()
-        if past_key_values is None:
-            past_key_values = [None] * len(self.block)
-
-        present_key_values = []
-
-        position_bias = self.position_bias_embedding(position).view(
-            1, self.block[0].layer[0].SelfAttention.n_heads, 1, -1
-        )
-
-        for i, layer_module in enumerate(self.block):
-            past_key_value = []
-            past_key_value.append(past_key_values[4 * i])
-            past_key_value.append(past_key_values[4 * i + 1])
-            past_key_value.append(past_key_values[4 * i + 2])
-            past_key_value.append(past_key_values[4 * i + 3])
-            layer_outputs = layer_module(
-                hidden_states,
-                position_bias=position_bias,
-                encoder_hidden_states=True,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                encoder_decoder_position_bias=encoder_decoder_position_bias,
-                layer_head_mask=None,
-                cross_attn_layer_head_mask=None,
-                past_key_value=past_key_value,
-                use_cache=True,
-                output_attentions=False,
-            )
-            hidden_states, present_key_value_state = layer_outputs[:2]
-            position_bias = layer_outputs[2]
-            # Return just new key and value projection for self attn
-            present_key_values.append(present_key_value_state[0])
-            present_key_values.append(present_key_value_state[1])
-
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        logits = self.model.lm_head(hidden_states)  # type: ignore[operator]
-        return logits, *present_key_values
-
-    @staticmethod
-    def get_input_spec() -> InputSpec:
-        """
-        Returns the input specification (name -> (shape, type). This can be
-        used to submit compiling job on Qualcomm AI Hub Workbench.
-        """
-        n_heads = 6
-        q_len = 50
-        dim_per_head = 64
-        specs: InputSpec = {
-            "input_ids": TensorSpec(shape=(1, 1), dtype="int32"),
-            "encoder_attention_mask": TensorSpec(shape=(1, q_len), dtype="int32"),
-            "position": TensorSpec(shape=(1, 1), dtype="int32"),
-        }
-        for i in range(NUM_BLOCKS):
-            specs[f"block_{i}_past_self_key_states"] = TensorSpec(
-                shape=(1, n_heads, q_len - 1, dim_per_head),
-                dtype="float32",
-            )
-            specs[f"block_{i}_past_self_value_states"] = TensorSpec(
-                shape=(1, n_heads, q_len - 1, dim_per_head),
-                dtype="float32",
-            )
-            specs[f"block_{i}_cross_key_states"] = TensorSpec(
-                shape=(1, n_heads, q_len, dim_per_head),
-                dtype="float32",
-            )
-            specs[f"block_{i}_cross_value_states"] = TensorSpec(
-                shape=(1, n_heads, q_len, dim_per_head),
-                dtype="float32",
-            )
-        return specs
-
-    @staticmethod
-    def get_output_names() -> list[str]:
-        return [
-            "logits",
-            "block_0_present_self_key_states",
-            "block_0_present_self_value_states",
-            "block_1_present_self_key_states",
-            "block_1_present_self_value_states",
-            "block_2_present_self_key_states",
-            "block_2_present_self_value_states",
-            "block_3_present_self_key_states",
-            "block_3_present_self_value_states",
-        ]
-
-    @classmethod
-    def from_pretrained(cls) -> Self:
-        # here the t5model is passed to T5Decoder by reference
-        # use deepcopy to prevent cached t5model being modified, so the cache can be reused
-        return cls(copy.deepcopy(get_t5model()), MAX_NUM_INPUT_IDS)
-
+class T5Decoder(_T5DecoderBase):
     def get_hub_compile_options(
         self,
         target_runtime: TargetRuntime,
@@ -859,6 +584,15 @@ class BertWrapper(BaseModel):
         self.embeddings = self.model.bert.embeddings
         self.encoder = self.model.bert.encoder
 
+    @classmethod
+    def from_pretrained(cls, language: TTSLanguage) -> Self:
+        bert_model: BertForMaskedLM = (
+            AutoModelForMaskedLM.from_pretrained(BERT_MODEL_IDS[language])
+            .to("cpu")
+            .eval()
+        )
+        return cls(bert_model)
+
     def forward(
         self, input_ids: Tensor, attention_mask: Tensor, token_type_ids: Tensor
     ) -> Tensor:
@@ -866,11 +600,11 @@ class BertWrapper(BaseModel):
         Parameters
         ----------
         input_ids
-            shape of (1, 200)
+            shape of (1, MAX_BERT_TOKENS)
         attention_mask
-            shape of (1, 200)
+            shape of (1, MAX_BERT_TOKENS)
         token_type_ids
-            shape of (1, 200)
+            shape of (1, MAX_BERT_TOKENS)
 
         Returns
         -------
@@ -909,9 +643,9 @@ class BertWrapper(BaseModel):
         used to submit compiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "input_ids": TensorSpec(shape=(1, 200), dtype="int32"),
-            "attention_mask": TensorSpec(shape=(1, 200), dtype="int32"),
-            "token_type_ids": TensorSpec(shape=(1, 200), dtype="int32"),
+            "input_ids": TensorSpec(shape=(1, MAX_BERT_TOKENS), dtype="int32"),
+            "attention_mask": TensorSpec(shape=(1, MAX_BERT_TOKENS), dtype="int32"),
+            "token_type_ids": TensorSpec(shape=(1, MAX_BERT_TOKENS), dtype="int32"),
         }
 
     @staticmethod
@@ -940,3 +674,31 @@ class BertWrapper(BaseModel):
     @staticmethod
     def component_precision() -> Precision:
         return Precision.float
+
+
+class MeloTTS(PretrainedCollectionModel):
+    def __init__(
+        self,
+        encoder: Encoder,
+        flow: Flow,
+        decoder: Decoder,
+        *extra_components: BaseModel,
+    ) -> None:
+        super().__init__(encoder, flow, decoder, *extra_components)
+        self.encoder = encoder
+        self.flow = flow
+        self.decoder = decoder
+        self.speaker_id = encoder.speaker_id
+        self.tts_object = get_tts_object(self.get_language())
+
+    @classmethod
+    @abstractmethod
+    def get_language(cls) -> TTSLanguage:
+        pass
+
+    def write_supplementary_files(
+        self, output_dir: str | os.PathLike, metadata: ModelMetadata
+    ) -> None:
+        write_melotts_supplementary_files(
+            self.get_language(), output_dir, metadata, SAMPLE_RATE
+        )
