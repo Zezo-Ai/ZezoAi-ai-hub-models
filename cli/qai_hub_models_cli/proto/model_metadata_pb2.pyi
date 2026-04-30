@@ -22,6 +22,7 @@ import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+from qai_hub_models_cli.proto import platform_pb2
 import shared.precision_pb2
 import shared.runtime_pb2
 import shared.tensor_spec_pb2
@@ -293,6 +294,7 @@ class ModelMetadata(google.protobuf.message.Message):
     MODEL_FILES_FIELD_NUMBER: builtins.int
     SUPPLEMENTARY_FILES_FIELD_NUMBER: builtins.int
     GENIE_FIELD_NUMBER: builtins.int
+    CHIPSET_ATTRIBUTES_FIELD_NUMBER: builtins.int
     aihm_version: builtins.str
     model_id: builtins.str
     model_name: builtins.str
@@ -315,6 +317,10 @@ class ModelMetadata(google.protobuf.message.Message):
     def genie(self) -> global___GenieMetadata:
         """Optional Genie SDK metadata for on-device deployment."""
 
+    @property
+    def chipset_attributes(self) -> platform_pb2.ChipsetInfo:
+        """Chipset attributes relevant to the compiled model asset (AoT only)."""
+
     def __init__(
         self,
         *,
@@ -327,9 +333,13 @@ class ModelMetadata(google.protobuf.message.Message):
         model_files: collections.abc.Iterable[global___ModelFileMetadata] | None = ...,
         supplementary_files: collections.abc.Iterable[global___SupplementaryFileMetadata] | None = ...,
         genie: global___GenieMetadata | None = ...,
+        chipset_attributes: platform_pb2.ChipsetInfo | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_genie", b"_genie", "genie", b"genie", "tool_versions", b"tool_versions"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_genie", b"_genie", "aihm_version", b"aihm_version", "genie", b"genie", "model_files", b"model_files", "model_id", b"model_id", "model_name", b"model_name", "precision", b"precision", "runtime", b"runtime", "supplementary_files", b"supplementary_files", "tool_versions", b"tool_versions"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_chipset_attributes", b"_chipset_attributes", "_genie", b"_genie", "chipset_attributes", b"chipset_attributes", "genie", b"genie", "tool_versions", b"tool_versions"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_chipset_attributes", b"_chipset_attributes", "_genie", b"_genie", "aihm_version", b"aihm_version", "chipset_attributes", b"chipset_attributes", "genie", b"genie", "model_files", b"model_files", "model_id", b"model_id", "model_name", b"model_name", "precision", b"precision", "runtime", b"runtime", "supplementary_files", b"supplementary_files", "tool_versions", b"tool_versions"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_chipset_attributes", b"_chipset_attributes"]) -> typing.Literal["chipset_attributes"] | None: ...
+    @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_genie", b"_genie"]) -> typing.Literal["genie"] | None: ...
 
 global___ModelMetadata = ModelMetadata

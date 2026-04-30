@@ -414,18 +414,24 @@ class TaskLibrary:
     def test_gpu_models_weekly(
         self, plan: Plan, step_id: str = "test_gpu_models_weekly"
     ) -> str:
+        model_names = os.environ.get("QAIHM_TEST_MODELS", "all")
         return plan.add_step(
             step_id,
-            GPUPyTestModelsTask(venv=self.venv_path),
+            GPUPyTestModelsTask(venv=self.venv_path, model_names=model_names),
         )
 
     @public_task("Run GPU nightly tests (only tests marked with @pytest.mark.nightly).")
     def test_gpu_models_nightly(
         self, plan: Plan, step_id: str = "test_gpu_models_nightly"
     ) -> str:
+        model_names = os.environ.get("QAIHM_TEST_MODELS", "all")
         return plan.add_step(
             step_id,
-            GPUPyTestModelsTask(venv=self.venv_path, nightly_only=True),
+            GPUPyTestModelsTask(
+                venv=self.venv_path,
+                model_names=model_names,
+                nightly_only=True,
+            ),
         )
 
     @public_task("Generate perf.yamls.")

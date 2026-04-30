@@ -16,7 +16,9 @@ Architecture:
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
+import os
 
 # isort: off
 # This verifies aimet is installed, and this must be included first.
@@ -31,8 +33,10 @@ import numpy as np
 import onnx
 import onnxruntime
 import torch
+from transformers import AutoConfig, AutoTokenizer
 from typing_extensions import Self
 
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.models._shared.llama3.model import (
     Llama3Base,
     Llama3Base_AIMETOnnx,
@@ -55,11 +59,16 @@ from qai_hub_models.models.common import (
 )
 from qai_hub_models.utils.base_model import (
     CollectionModel,
+    Device,
     MultiGraphBaseModel,
     MultiGraphPretrainedCollectionModel,
     TargetRuntime,
 )
 from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.llm_helpers import (
+    create_genie_config,
+    save_htp_config_for_genie_bundle,
+)
 from qai_hub_models.utils.onnx.helpers import ONNXBundle, mock_torch_onnx_inference
 from qai_hub_models.utils.printing import print_with_box
 
@@ -295,10 +304,15 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
         self,
         presplit: Llama3_2_1B_PreSplit | Llama3_2_1B_QuantizablePreSplit,
         precision: Precision = DEFAULT_PRECISION,
+        sequence_lengths: list[int] | None = None,
     ) -> None:
         super().__init__()
         self._presplit = presplit
         self._precision = precision
+        # Genie needs both ar128 (prompt) and ar1 (token) models in the bundle.
+        # The ONNX uses dynamic shapes so one export works for all seq_lens;
+        # compile_model/link_model already iterate over multiple graphs per Part.
+        self._sequence_lengths = sequence_lengths or [presplit.sequence_length]
         self._quant_sim: QuantizationSimModel | None = None
         self._fp_session: onnxruntime.InferenceSession | None = None
 
@@ -315,6 +329,7 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
         precision: Precision = DEFAULT_PRECISION,
         host_device: torch.device | None = None,
         _skip_quantsim_creation: bool = True,
+        sequence_lengths: list[int] | None = None,
         **kwargs: Any,
     ) -> Self:
         """Create Part by getting or creating the appropriate PreSplit (cached)."""
@@ -335,7 +350,7 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
                 host_device=host_device,
                 _skip_quantsim_creation=_skip_quantsim_creation,
             )
-        return cls(presplit, precision=precision)
+        return cls(presplit, precision=precision, sequence_lengths=sequence_lengths)
 
     @staticmethod
     def get_default_input_spec(
@@ -352,7 +367,7 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
             llm_io_type=llm_io_type,
         )
 
-    def _get_input_spec_for_instance(self) -> InputSpec:
+    def _get_input_spec_for_instance(self, seq_len: int | None = None) -> InputSpec:
         """Get input spec for this specific Part instance.
 
         Part 1 (embedding): only input_ids.
@@ -361,12 +376,15 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
                  part's KV cache layers.
 
         Names are read from the actual split ONNX model at runtime.
+        The ONNX uses dynamic shapes, so one export works for any seq_len;
+        only the concrete shapes in the spec differ.
         """
+        if seq_len is None:
+            seq_len = self._presplit.sequence_length
         if self.part_id == 1:
             # Embedding split: only input_ids
-            return {"input_ids": ((1, self._presplit.sequence_length), "int32")}
+            return {"input_ids": ((1, seq_len), "int32")}
 
-        seq_len = self._presplit.sequence_length
         context_length = self._presplit.context_length
         head_dim = HIDDEN_SIZE // NUM_ATTN_HEADS
         embed_dim = head_dim // 2
@@ -430,16 +448,22 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
         """Get sample inputs for this specific part only.
 
         Uses actual ONNX input names read from the split model at runtime.
+        When called from the multi-graph sample_inputs path, input_spec
+        carries the per-graph shapes so we derive seq_len from it.
         """
+        # Derive seq_len from input_spec when available (multi-graph path).
+        seq_len = self._presplit.sequence_length
+        if input_spec is not None and "input_ids" in input_spec:
+            seq_len = input_spec["input_ids"][0][1]  # shape (1, seq_len)
+
         full_inputs = self._presplit._sample_inputs_impl()
 
         if self.part_id == 1:
             # Embedding split: only input_ids
-            return {"input_ids": full_inputs["input_ids"]}
+            return {"input_ids": [np.zeros((1, seq_len), dtype=np.int32)]}
 
         # Parts 2+: read actual input names from ONNX and match them
         result: SampleInputsType = {}
-        seq_len = self._presplit.sequence_length
         onnx_input_names = self._get_onnx_input_names()
 
         for name in onnx_input_names:
@@ -570,6 +594,18 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
         )
         return str(out_dir)
 
+    def get_hub_compile_options(
+        self,
+        target_runtime: TargetRuntime,
+        precision: Precision,
+        other_compile_options: str = "",
+        device: Device | None = None,
+    ) -> dict[str, str]:
+        other_compile_options += " --quantize_full_type w8a16"
+        return super().get_hub_compile_options(
+            target_runtime, precision, other_compile_options, device
+        )
+
     def get_hub_profile_options(
         self,
         target_runtime: TargetRuntime,
@@ -595,11 +631,18 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
         )
 
     def get_input_spec(self) -> dict[str, InputSpec]:
-        seq_len = self._presplit.sequence_length
+        # Return one graph per sequence length so the genie bundle contains
+        # both ar128 (prompt processing) and ar1 (token generation) models.
+        # compile_model and link_model already iterate over multiple graphs.
         ctx_len = self._presplit.context_length
-        inst = "token" if seq_len == 1 else "prompt"
-        graph_name = f"{inst}_ar{seq_len}_cl{ctx_len}_{self.part_id}_of_{NUM_SPLITS}"
-        return {graph_name: self._get_input_spec_for_instance()}
+        specs: dict[str, InputSpec] = {}
+        for seq_len in self._sequence_lengths:
+            inst = "token" if seq_len == 1 else "prompt"
+            graph_name = (
+                f"{inst}_ar{seq_len}_cl{ctx_len}_{self.part_id}_of_{NUM_SPLITS}"
+            )
+            specs[graph_name] = self._get_input_spec_for_instance(seq_len)
+        return specs
 
 
 class Llama3_2_1B_Part1_Of_3(Llama3_2_1B_PartBase):
@@ -661,7 +704,7 @@ class Llama3_2_1B_Collection(MultiGraphPretrainedCollectionModel):
     def from_pretrained(
         cls,
         checkpoint: str | Path = "DEFAULT",
-        sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
+        sequence_length: int | list[int] = DEFAULT_SEQUENCE_LENGTH,
         context_length: int = DEFAULT_CONTEXT_LENGTH,
         precision: Precision = DEFAULT_PRECISION,
         host_device: torch.device | None = None,
@@ -677,7 +720,8 @@ class Llama3_2_1B_Collection(MultiGraphPretrainedCollectionModel):
             Path to checkpoint with ONNX + encodings, or ``"DEFAULT"``
             to create from HuggingFace.
         sequence_length
-            Sequence length for the model.
+            Sequence length(s) for the model. Pass a list (e.g. [128, 1])
+            to produce multiple graphs per Part (prompt + token).
         context_length
             Context length for the model.
         precision
@@ -695,16 +739,87 @@ class Llama3_2_1B_Collection(MultiGraphPretrainedCollectionModel):
         Self
             The Collection with all 3 Parts.
         """
+        # Normalize to a list so callers can pass a single int or a list.
+        # The ONNX uses dynamic shapes, so one export covers all seq_lens;
+        # we use max() for the presplit instantiation (largest shape for ONNX
+        # export) and pass the full list to each Part so get_input_spec()
+        # emits one graph per seq_len (ar128 + ar1 for the genie bundle).
+        if isinstance(sequence_length, int):
+            sequence_lengths = [sequence_length]
+        else:
+            sequence_lengths = list(sequence_length)
+        presplit_seq_len = max(sequence_lengths)
+
         part_kwargs = dict(
             checkpoint=checkpoint,
-            sequence_length=sequence_length,
+            sequence_length=presplit_seq_len,
             context_length=context_length,
             precision=precision,
             host_device=host_device,
             _skip_quantsim_creation=_skip_quantsim_creation,
+            sequence_lengths=sequence_lengths,
         )
         parts = [
             part_cls.from_pretrained(**part_kwargs)
             for part_cls in cls.component_classes.values()
         ]
         return cls(*parts)
+
+    def write_supplementary_files(
+        self,
+        output_dir: str | os.PathLike,
+        metadata: ModelMetadata,
+    ) -> None:
+        output_path = Path(output_dir)
+
+        # Save tokenizer and config from HuggingFace (skip if already present)
+        if not (output_path / "tokenizer.json").exists():
+            tokenizer = AutoTokenizer.from_pretrained(HF_REPO_NAME)
+            tokenizer.save_pretrained(output_path)
+        if not (output_path / "config.json").exists():
+            llm_config = AutoConfig.from_pretrained(HF_REPO_NAME)
+            llm_config.save_pretrained(output_path)
+        else:
+            llm_config = AutoConfig.from_pretrained(str(output_path))
+
+        # Derive context_length from the first part
+        first_part = next(iter(self.components.values()))
+        assert isinstance(first_part, Llama3_2_1B_PartBase)
+        context_length: int = first_part._presplit.context_length
+
+        # Build genie_config.json
+        model_list = list(metadata.model_files.keys())
+        config = create_genie_config(context_length, llm_config, "rope", model_list)
+        with open(output_path / "genie_config.json", "w") as f:
+            json.dump(config, f, indent=4)
+
+        # Build htp_backend_ext_config.json from chipset attributes
+        device_info: dict[str, str] = {}
+        if metadata.chipset_attributes:
+            ca = metadata.chipset_attributes
+            if ca.htp_version is not None:
+                device_info["hexagon"] = f"v{ca.htp_version}"
+            if ca.soc_model is not None:
+                device_info["soc-model"] = str(ca.soc_model)
+        if save_htp_config_for_genie_bundle(device_info, output_path):
+            metadata.supplementary_files["htp_backend_ext_config.json"] = (
+                "HTP backend configuration for the target device."
+            )
+
+        # Write sample_prompt.txt for on-device genie-t2t-run
+        tokenizer = AutoTokenizer.from_pretrained(str(output_path))
+        sample_prompt = Llama3_2_1B_PreSplit.get_input_prompt_with_tags(
+            tokenizer=tokenizer
+        )
+        with open(output_path / "sample_prompt.txt", "w") as f:
+            f.write(sample_prompt)
+
+        metadata.supplementary_files["genie_config.json"] = (
+            "Genie SDK configuration for on-device LLM inference."
+        )
+        metadata.supplementary_files["sample_prompt.txt"] = (
+            "Sample prompt for on-device inference."
+        )
+        metadata.supplementary_files["tokenizer.json"] = (
+            "Tokenizer for encoding/decoding text."
+        )

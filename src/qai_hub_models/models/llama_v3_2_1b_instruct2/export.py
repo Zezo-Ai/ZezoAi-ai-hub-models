@@ -18,6 +18,7 @@ import qai_hub as hub
 
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.configs.model_metadata import (
+    ChipsetAttributes,
     ModelFileMetadata,
     ModelMetadata,
     merge_input_metadata,
@@ -60,6 +61,7 @@ def compile_model(
     model_name: str,
     device: hub.Device,
     target_runtime: TargetRuntime,
+    precision: Precision,
     output_path: Path,
     input_specs: dict[str, dict[str, InputSpec]] | None = None,
     components: list[str] | None = None,
@@ -68,7 +70,7 @@ def compile_model(
     compile_jobs: dict[str, dict[str, hub.client.CompileJob]] = {}
     all_input_specs = input_specs or model.get_input_spec()
     all_compile_options = model.get_hub_compile_options(
-        target_runtime, Precision.w4, extra_options, device
+        target_runtime, precision, extra_options, device
     )
     for component_name in components or Model.component_class_names:
         component = model.components[component_name]
@@ -187,6 +189,7 @@ def download_model(
     tool_versions: ToolVersions,
     target_models: dict[str, hub.Model],
     zip_assets: bool,
+    hub_device: hub.Device | None = None,
 ) -> Path:
     output_folder_name = os.path.basename(output_dir)
     output_path = get_next_free_path(output_dir)
@@ -227,6 +230,9 @@ def download_model(
             precision=precision,
             tool_versions=tool_versions,
             model_files=model_file_metadata,
+            chipset_attributes=ChipsetAttributes.from_hub_device(hub_device)
+            if runtime.is_aot_compiled
+            else None,
         )
 
         # Dump supplementary files into the model folder
@@ -380,6 +386,7 @@ def export_model(
         model_name,
         device,
         target_runtime,
+        precision=precision,
         output_path=output_path,
         input_specs=input_specs,
         components=components,
@@ -476,6 +483,7 @@ def export_model(
             tool_versions,
             target_models,
             zip_assets,
+            hub_device=hub_device,
         )
 
     # 7. Summarizes the results from profiling and inference

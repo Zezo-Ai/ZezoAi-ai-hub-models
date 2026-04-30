@@ -214,6 +214,7 @@ class ChipsetYaml(BaseQAIHMConfig):
     htp_version: int
     soc_model: int
     reference_device: str
+    supports_weight_sharing: bool = False
 
     @staticmethod
     def from_device(device: ScorecardDevice) -> ChipsetYaml:
@@ -226,6 +227,7 @@ class ChipsetYaml(BaseQAIHMConfig):
             htp_version=device.hexagon_version,
             soc_model=device.soc_model,
             reference_device=device.reference_device_name,
+            supports_weight_sharing=device.supports_weight_sharing,
         )
 
     def to_proto(self, name: str) -> platform_pb2.ChipsetInfo:

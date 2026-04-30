@@ -400,40 +400,48 @@ def copy_qairt_files_for_genie_bundle(
 
 
 def save_htp_config_for_genie_bundle(
-    hub_device: qai_hub.Device, output_path: Path
-) -> None:
-    """Saves the htp_backend_ext_config.json to the genie_bundle directory."""
-    hexagon_arch, soc_model = None, None
-    for attr in hub_device.attributes:
-        if "hexagon" in attr:
-            hexagon_arch = attr.removeprefix("hexagon:")
-        if "soc-model" in attr:
-            soc_model = attr.removeprefix("soc-model:")
-    if hexagon_arch is not None and soc_model is not None:
-        htp_config = {
-            "devices": [
-                {
-                    "soc_model": int(soc_model),
-                    "dsp_arch": hexagon_arch,
-                    "cores": [
-                        {
-                            "core_id": 0,
-                            "perf_profile": "burst",
-                            "rpc_control_latency": 100,
-                        }
-                    ],
-                }
-            ],
-            "memory": {"mem_type": "shared_buffer"},
-            "context": {"weight_sharing_enabled": True},
-        }
+    device_info: dict[str, str], output_path: Path
+) -> bool:
+    """Saves the htp_backend_ext_config.json to the genie_bundle directory.
 
-        with open(output_path / "htp_backend_ext_config.json", "w") as f:
-            json.dump(htp_config, f)
-    else:
+    Returns True if the file was written, False if device info was insufficient.
+    """
+    hexagon_arch = device_info.get("hexagon")
+    soc_model = device_info.get("soc-model")
+    if hexagon_arch is None or soc_model is None:
         print(
             f"Could not add 'htp_backend_ext_config.json' to the genie_bundle ({output_path})"
         )
+        return False
+
+    try:
+        soc_model_int = int(soc_model)
+    except (ValueError, TypeError):
+        raise ValueError(
+            f"Expected numeric soc-model device attribute, got: {soc_model!r}"
+        ) from None
+
+    htp_config = {
+        "devices": [
+            {
+                "soc_model": soc_model_int,
+                "dsp_arch": hexagon_arch,
+                "cores": [
+                    {
+                        "core_id": 0,
+                        "perf_profile": "burst",
+                        "rpc_control_latency": 100,
+                    }
+                ],
+            }
+        ],
+        "memory": {"mem_type": "shared_buffer"},
+        "context": {"weight_sharing_enabled": True},
+    }
+
+    with open(output_path / "htp_backend_ext_config.json", "w") as f:
+        json.dump(htp_config, f)
+    return True
 
 
 def get_kv_cache_names(start: int, end: int) -> list[str]:

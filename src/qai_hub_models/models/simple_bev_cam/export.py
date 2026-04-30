@@ -19,6 +19,7 @@ import torch
 
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.configs.model_metadata import (
+    ChipsetAttributes,
     ModelFileMetadata,
     ModelMetadata,
     merge_input_metadata,
@@ -184,6 +185,7 @@ def download_model(
     target_model: hub.Model,
     model_name: str,
     zip_assets: bool,
+    hub_device: hub.Device | None = None,
 ) -> Path:
     output_folder_name = os.path.basename(output_dir)
     output_path = get_next_free_path(output_dir)
@@ -214,6 +216,9 @@ def download_model(
             precision=precision,
             tool_versions=tool_versions,
             model_files={model_file_name: file_metadata},
+            chipset_attributes=ChipsetAttributes.from_hub_device(hub_device)
+            if runtime.is_aot_compiled
+            else None,
         )
 
         # Dump supplementary files into the model folder
@@ -477,6 +482,7 @@ def export_model(
             target_model,
             MODEL_ID,
             zip_assets,
+            hub_device=hub_device,
         )
 
     # 8. Summarizes the results from profiling and inference

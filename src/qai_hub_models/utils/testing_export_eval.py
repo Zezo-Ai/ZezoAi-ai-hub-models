@@ -37,6 +37,9 @@ from qai_hub_models.scorecard.envvars import (
     IgnoreDeviceJobCacheEnvvar,
     S3ArtifactsDirEnvvar,
 )
+from qai_hub_models.scorecard.execution_helpers import (
+    get_async_job_cache_name,
+)
 from qai_hub_models.scorecard.results.yaml import (
     INFERENCE_YAML_BASE,
     INTERMEDIATES_DIR,
@@ -239,6 +242,37 @@ def patch_hub_with_cached_jobs(
     profile_jobs_to_patch: list[hub.ProfileJob] = []
     inference_jobs_to_patch: list[hub.InferenceJob] = []
 
+    # For multi-graph models, resolve graph names from the compile cache so
+    # that lookups use the full (component + graph_name) cache key.
+    # Used for compile, profile, and inference (which all key by graph_name).
+    # Link and quantize jobs do not use graph_name in their keys.
+    multi_graph_component_names: list[str] | dict[str, list[str] | None] | None = (
+        component_names
+    )
+    if (
+        component_names
+        and isinstance(component_names, list)
+        and QAIHMModelCodeGen.from_model(model_id).has_multi_graph
+    ):
+        compile_cache_path = get_async_test_job_cache_path(hub.JobType.COMPILE)
+        if compile_cache_path.exists():
+            compile_yaml_data = load_yaml(compile_cache_path)
+            resolved: dict[str, list[str] | None] = {}
+            for comp in component_names:
+                if path:
+                    base_key = get_async_job_cache_name(
+                        path, model_id, device, precision, comp
+                    )
+                    graph_names = [
+                        k[len(base_key) + 1 :]
+                        for k in compile_yaml_data
+                        if k.startswith(base_key + "_")
+                    ]
+                    resolved[comp] = graph_names if graph_names else None
+                else:
+                    resolved[comp] = None
+            multi_graph_component_names = resolved
+
     # Submit all fetch_async_test_jobs calls in parallel
     quantize_future: Future | None = None
     compile_future: Future | None = None
@@ -268,7 +302,7 @@ def patch_hub_with_cached_jobs(
                 precision,
                 path,
                 device,
-                component_names,
+                multi_graph_component_names,
                 raise_if_not_successful=True,
             )
 
@@ -294,7 +328,7 @@ def patch_hub_with_cached_jobs(
                 precision,
                 path,
                 device,
-                component_names,
+                multi_graph_component_names,
                 raise_if_not_successful=True,
             )
 
@@ -307,7 +341,7 @@ def patch_hub_with_cached_jobs(
                 precision,
                 path,
                 device,
-                component_names,
+                multi_graph_component_names,
                 raise_if_not_successful=True,
             )
 
@@ -660,16 +694,28 @@ def compile_via_export(
         Whether the model uses local aimet encodings during compilation.
     """
     has_components = isinstance(model, CollectionModel)
+    has_multi_graph = isinstance(model, MultiGraphPretrainedCollectionModel)
     if is_aimet:
         with tempfile.TemporaryDirectory() as tmpdir:
-            compile_output = compile_model(
-                model,
-                model_id,
-                device.execution_device,
-                scorecard_path.runtime,
-                tmpdir,
-                extra_options=scorecard_path.get_compile_options(),
-            )
+            if has_multi_graph:
+                compile_output = compile_model(
+                    model,
+                    model_id,
+                    device.execution_device,
+                    scorecard_path.runtime,
+                    precision,
+                    tmpdir,
+                    extra_options=scorecard_path.get_compile_options(),
+                )
+            else:
+                compile_output = compile_model(
+                    model,
+                    model_id,
+                    device.execution_device,
+                    scorecard_path.runtime,
+                    tmpdir,
+                    extra_options=scorecard_path.get_compile_options(),
+                )
     else:
         quantize_jobs = fetch_async_test_jobs(
             hub.JobType.QUANTIZE,

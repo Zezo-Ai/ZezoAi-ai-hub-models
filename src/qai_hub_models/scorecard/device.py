@@ -457,6 +457,14 @@ class ScorecardDevice:
 
         return "htp-supports-fp16:true" in self.reference_device.attributes
 
+    @cached_property
+    def supports_weight_sharing(self) -> bool:
+        """Whether this device's NPU supports FP16 inference."""
+        if self.mirror_device:
+            return self.mirror_device.supports_weight_sharing
+
+        return "htp-supports-weight-sharing:true" in self.reference_device.attributes
+
     def npu_supports_precision(self, precision: Precision) -> bool:
         """Whether this device's NPU supports the given quantization spec."""
         if self.mirror_device:

@@ -15,8 +15,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from qai_hub_models_cli.proto import model_metadata_pb2
+from qai_hub_models_cli.proto import model_metadata_pb2, platform_pb2
 
+from qai_hub_models.configs.devices_and_chipsets_yaml import ChipsetYaml
 from qai_hub_models.configs.proto_helpers import precision_to_proto, runtime_to_proto
 from qai_hub_models.configs.tensor_spec import (
     QuantizationParameters,
@@ -24,6 +25,7 @@ from qai_hub_models.configs.tensor_spec import (
 )
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.common import Precision, TargetRuntime
+from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
 
 if TYPE_CHECKING:
@@ -257,6 +259,32 @@ class GenieMetadata(BaseQAIHMConfig):
         )
 
 
+class ChipsetAttributes(ChipsetYaml):
+    name: str
+
+    def to_proto(self) -> platform_pb2.ChipsetInfo:
+        return super().to_proto(self.name)
+
+    @staticmethod
+    def from_hub_device(hub_device: hub.Device | None) -> ChipsetAttributes | None:
+        if not hub_device:
+            return None
+
+        device = ScorecardDevice.get(hub_device.name, return_unregistered=True)
+        csa = ChipsetAttributes.from_device(device)
+        return ChipsetAttributes(
+            name=device.chipset,
+            aliases=csa.aliases,
+            marketing_name=csa.marketing_name,
+            world=csa.world,
+            supports_fp16=csa.supports_fp16,
+            htp_version=csa.htp_version,
+            soc_model=csa.soc_model,
+            reference_device=csa.reference_device,
+            supports_weight_sharing=csa.supports_weight_sharing,
+        )
+
+
 class ModelMetadata(BaseQAIHMConfig):
     """
     Metadata for a model that may have multiple model files.
@@ -293,6 +321,9 @@ class ModelMetadata(BaseQAIHMConfig):
         additional files included in the export that are not model files (e.g., labels, config files).
     genie
         Optional Genie SDK metadata for on-device deployment (chat template, pipeline topology, etc.).
+    chipset_attributes
+        Hardware attributes relevant to the compiled model asset.
+        Only populated for AoT-compiled models; None for JIT runtimes.
     """
 
     model_id: str = ""
@@ -303,6 +334,7 @@ class ModelMetadata(BaseQAIHMConfig):
     model_files: dict[str, ModelFileMetadata]
     supplementary_files: dict[str, str] = {}
     genie: GenieMetadata | None = None
+    chipset_attributes: ChipsetAttributes | None = None
 
     def to_yaml(
         self,
@@ -350,6 +382,9 @@ class ModelMetadata(BaseQAIHMConfig):
             model_files=model_files,
             supplementary_files=supplementary_files,
             genie=self.genie.to_proto() if self.genie else None,
+            chipset_attributes=self.chipset_attributes.to_proto()
+            if self.chipset_attributes
+            else None,
         )
 
 

@@ -87,7 +87,7 @@ from qai_hub_models.utils.version_helpers import (
 )
 {%- endif %}
 {% if not is_precompiled %}
-from qai_hub_models.configs.model_metadata import ModelFileMetadata, ModelMetadata, merge_input_metadata, merge_output_metadata
+from qai_hub_models.configs.model_metadata import ChipsetAttributes, ModelFileMetadata, ModelMetadata, merge_input_metadata, merge_output_metadata
 {% endif %}
 
 {%- if can_use_quantize_job %}
@@ -159,6 +159,8 @@ def compile_model(
     {%- if can_use_quantize_job %}
     precision: Precision,
     source_model{{ optional_s }}: {{ "dict[str, hub.Model] | None" if is_collection_model else "hub.Model | None" }} = None,
+    {%- elif has_multi_graph %}
+    precision: Precision,
     {%- endif %}
     {%- if is_aimet %}
     output_path: Path,
@@ -183,7 +185,7 @@ def compile_model(
     {%- if has_multi_graph %}
     compile_jobs : dict[str, dict[str, hub.client.CompileJob]] = {}
     all_input_specs = input_specs or model.get_input_spec()
-    all_compile_options = model.get_hub_compile_options(target_runtime, {{ "precision" if can_use_quantize_job else "Precision." + default_aihub_job_precision }}, extra_options, device)
+    all_compile_options = model.get_hub_compile_options(target_runtime, precision, extra_options, device)
     {%- else %}
     compile_jobs : dict[str, hub.client.CompileJob] = {}
     {%- endif %}
@@ -241,7 +243,7 @@ def compile_model(
     compile_jobs[component_name] = {}
     {%- else %}
     graph_specs = {{ model_var }}.get_input_spec()
-    graph_compile_options = {{ model_var }}.get_hub_compile_options(target_runtime, {{ "precision" if can_use_quantize_job else "Precision." + default_aihub_job_precision }}, extra_options, device)
+    graph_compile_options = {{ model_var }}.get_hub_compile_options(target_runtime, precision, extra_options, device)
     compile_jobs: dict[str, hub.client.CompileJob] = {}
     {%- endif %}
     # Upload the source model once so every per-graph compile job reuses
@@ -542,6 +544,7 @@ def download_model(
     model_name: str,
     {%- endif %}
     zip_assets: bool,
+    hub_device: hub.Device | None = None,
 ) -> Path:
     output_folder_name = os.path.basename(output_dir)
     output_path = get_next_free_path(output_dir)
@@ -583,13 +586,13 @@ def download_model(
         # Extract and save metadata alongside downloaded model
         metadata_path = dst_path / "metadata.json"
         {%- if is_collection_model %}
-        model_metadata = ModelMetadata(model_id=MODEL_ID, model_name="{{ model_display_name }}", runtime=runtime, precision=precision, tool_versions=tool_versions, model_files=model_file_metadata)
+        model_metadata = ModelMetadata(model_id=MODEL_ID, model_name="{{ model_display_name }}", runtime=runtime, precision=precision, tool_versions=tool_versions, model_files=model_file_metadata, chipset_attributes=ChipsetAttributes.from_hub_device(hub_device) if runtime.is_aot_compiled else None)
         {%- else %}
         file_metadata = ModelFileMetadata.from_hub_model(target_model)
         # Merge semantic metadata from get_input_spec()
         merge_input_metadata(file_metadata, model.get_input_spec())
         merge_output_metadata(file_metadata, model.get_output_spec())
-        model_metadata = ModelMetadata(model_id=MODEL_ID, model_name="{{ model_display_name }}", runtime=runtime, precision=precision, tool_versions=tool_versions, model_files={model_file_name: file_metadata})
+        model_metadata = ModelMetadata(model_id=MODEL_ID, model_name="{{ model_display_name }}", runtime=runtime, precision=precision, tool_versions=tool_versions, model_files={model_file_name: file_metadata}, chipset_attributes=ChipsetAttributes.from_hub_device(hub_device) if runtime.is_aot_compiled else None)
         {%- endif %}
 
         # Dump supplementary files into the model folder
@@ -934,6 +937,8 @@ def export_model(
         {%- if can_use_quantize_job %}
         precision,
         quantized_model{{ optional_s }},
+        {%- elif has_multi_graph %}
+        precision=precision,
         {%- endif %}
         {%- if is_aimet %}
         output_path=output_path,
@@ -1169,7 +1174,8 @@ def export_model(
             precision,
             tool_versions,
             {{ "target_models" if is_collection_model else "target_model" }}{{ "" if is_collection_model else ", MODEL_ID" }},
-            zip_assets
+            zip_assets,
+            hub_device=hub_device,
         )
         {%- else %}
         downloaded_model_path = save_model(model_directory, tool_versions, model, {{ "components, " if is_collection_model else "" }}zip_assets)

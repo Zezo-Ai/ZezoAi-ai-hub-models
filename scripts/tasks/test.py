@@ -164,6 +164,9 @@ class GPUPyTestModelsTask(CompositeTask):
                 # Only run llama_v2_7b_chat on weekly runs so nightly takes less time.
                 if not nightly_only and model_name == "llama_v2_7b_chat":
                     models_to_test.append(model_name)
+        if model_names != "all":
+            requested = {m.strip() for m in model_names.split(",") if m.strip()}
+            models_to_test = [m for m in models_to_test if m in requested]
         # Run llama_v2_7b_chat last to avoid resource contention or conflicts with other models.
         if "llama_v2_7b_chat" in models_to_test:
             models_to_test.sort(key=lambda x: x == "llama_v2_7b_chat")
@@ -213,6 +216,8 @@ class GPUPyTestModelsTask(CompositeTask):
             if has_gpu_reqs:
                 install_cmds.append("pip uninstall -y onnxruntime")
                 install_cmds.append(f"pip install -r {gpu_req_rel_path}")
+                # aimet_onnx transitively re-installs onnxruntime via onnxruntime-extensions
+                install_cmds.append("pip uninstall -y onnxruntime")
             tasks.append(
                 RunCommandsWithVenvTask(
                     group_name=f"Install GPU Dependencies For Model {model_name}",
@@ -739,6 +744,8 @@ class CollectLLMPerfTask(CompositeTask):
             if has_gpu_reqs:
                 install_cmds.append("pip uninstall -y onnxruntime")
                 install_cmds.append(f"pip install -r {gpu_req_rel_path}")
+                # aimet_onnx transitively re-installs onnxruntime via onnxruntime-extensions
+                install_cmds.append("pip uninstall -y onnxruntime")
             tasks.append(
                 RunCommandsWithVenvTask(
                     group_name=f"Install GPU Dependencies For Model {model_name}",

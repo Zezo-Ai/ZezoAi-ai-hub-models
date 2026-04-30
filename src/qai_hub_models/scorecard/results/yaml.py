@@ -156,6 +156,7 @@ class ScorecardJobYaml(
         device: ScorecardDevice,
         precision: Precision = Precision.float,
         component: str | None = None,
+        graph_name: str | None = None,
     ) -> str | None:
         """
         Get the ID of this job in the YAML that stores asyncronously-ran scorecard jobs.
@@ -173,6 +174,8 @@ class ScorecardJobYaml(
             The precision in which this model is running
         component
             The name of the model component being tested, if applicable
+        graph_name
+            The name of the graph being executed (for multi-graph models)
 
         Returns
         -------
@@ -186,6 +189,7 @@ class ScorecardJobYaml(
                 device.mirror_device or device,
                 precision,
                 component,
+                graph_name,
             )
         )
 
@@ -277,6 +281,7 @@ class ScorecardJobYaml(
             device,
             precision,
             component,
+            graph_name,
         )
         jn = component or model_id
         return self.scorecard_job_type(
@@ -392,6 +397,7 @@ class CompileScorecardJobYaml(
         device: ScorecardDevice,
         precision: Precision = Precision.float,
         component: str | None = None,
+        graph_name: str | None = None,
     ) -> str | None:
         """
         Get the ID of this job in the YAML that stores asyncronously-ran scorecard jobs.
@@ -409,6 +415,8 @@ class CompileScorecardJobYaml(
             The precision in which this model is running
         component
             The name of the model component being tested, if applicable
+        graph_name
+            The name of the graph being executed (for multi-graph models)
 
         Returns
         -------
@@ -419,7 +427,9 @@ class CompileScorecardJobYaml(
             # Get the compile job used with this profile path.
             path = path.compile_path
 
-        if x := super().get_job_id(path, model_id, device, precision, component):
+        if x := super().get_job_id(
+            path, model_id, device, precision, component, graph_name
+        ):
             return x
 
         # For compilation, fallback to the "universal" device if no path is found.
@@ -431,6 +441,7 @@ class CompileScorecardJobYaml(
                     cs_universal,
                     precision,
                     component,
+                    graph_name,
                 )
             )
 

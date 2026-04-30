@@ -234,6 +234,7 @@ class ChipsetInfo(google.protobuf.message.Message):
     HTP_VERSION_FIELD_NUMBER: builtins.int
     SOC_MODEL_FIELD_NUMBER: builtins.int
     REFERENCE_DEVICE_FIELD_NUMBER: builtins.int
+    SUPPORTS_WEIGHT_SHARING_FIELD_NUMBER: builtins.int
     name: builtins.str
     marketing_name: builtins.str
     world: global___WebsiteWorld.ValueType
@@ -241,6 +242,7 @@ class ChipsetInfo(google.protobuf.message.Message):
     htp_version: builtins.int
     soc_model: builtins.int
     reference_device: builtins.str
+    supports_weight_sharing: builtins.bool
     @property
     def aliases(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
     def __init__(
@@ -254,8 +256,9 @@ class ChipsetInfo(google.protobuf.message.Message):
         htp_version: builtins.int = ...,
         soc_model: builtins.int = ...,
         reference_device: builtins.str = ...,
+        supports_weight_sharing: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["aliases", b"aliases", "htp_version", b"htp_version", "marketing_name", b"marketing_name", "name", b"name", "reference_device", b"reference_device", "soc_model", b"soc_model", "supports_fp16", b"supports_fp16", "world", b"world"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["aliases", b"aliases", "htp_version", b"htp_version", "marketing_name", b"marketing_name", "name", b"name", "reference_device", b"reference_device", "soc_model", b"soc_model", "supports_fp16", b"supports_fp16", "supports_weight_sharing", b"supports_weight_sharing", "world", b"world"]) -> None: ...
 
 global___ChipsetInfo = ChipsetInfo
 

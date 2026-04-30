@@ -803,6 +803,7 @@ class QuantizablePreSplitMixin(
         precision: Precision | None = None,
         fp_model: FPModelT | None = None,
         _skip_quantsim_creation: bool = True,
+        use_dynamic_shapes: bool = True,
     ) -> Self:
         """
         Load or return a cached Quantizable PreSplit.
@@ -830,6 +831,8 @@ class QuantizablePreSplitMixin(
             with ``"DEFAULT"``, one is created automatically.
         _skip_quantsim_creation
             Skip QuantSim creation (for testing).
+        use_dynamic_shapes
+            Whether to export with dynamic sequence/context dimensions.
 
         Returns
         -------
@@ -880,7 +883,7 @@ class QuantizablePreSplitMixin(
             precision=precision,
             fp_model=fp_model,
             _skip_quantsim_creation=_skip_quantsim_creation,
-            use_dynamic_shapes=True,
+            use_dynamic_shapes=use_dynamic_shapes,
         )
 
         # Store precision on instance
@@ -2298,7 +2301,13 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
                     output_path / name,
                 )
         # Save the HTP config
-        save_htp_config_for_genie_bundle(hub_device, output_path)
+        device_info: dict[str, str] = {}
+        attrs = hub_device.attributes
+        for attr in [attrs] if isinstance(attrs, str) else attrs:
+            if ":" in attr:
+                key, value = attr.split(":", 1)
+                device_info[key] = value
+        save_htp_config_for_genie_bundle(device_info, output_path)
         # Save the genie config
         config = create_genie_config(context_length, llm_config, "rope", model_list)
         with open(output_path / "genie_config.json", "w") as f:

@@ -16,6 +16,7 @@ from qai_hub_models.models._shared.llm.model import (
     DEFAULT_CONTEXT_LENGTH,
     LLM_AIMETOnnx,
     LLMBase,
+    QuantizablePreSplitMixin,
 )
 from qai_hub_models.models.common import Precision
 from qai_hub_models.utils.args import get_quantize_action_with_default
@@ -59,8 +60,12 @@ def quantize(
         sequence_length=seq_len,
         context_length=context_length,
     )
-    if checkpoint:
-        extra["checkpoint"] = checkpoint
+    # DEFAULT* checkpoints are resolved by QuantizablePreSplitMixin, not the FP model.
+    fp_checkpoint = checkpoint
+    if isinstance(checkpoint, str) and checkpoint.startswith("DEFAULT"):
+        fp_checkpoint = None
+    if fp_checkpoint:
+        extra["checkpoint"] = fp_checkpoint
 
     fp_model = fp_model_cls.from_pretrained(**extra).to(torch.device("cpu")).eval()
     torch.cuda.empty_cache()
@@ -69,10 +74,11 @@ def quantize(
         context_length=context_length,
         sequence_length=seq_len,
         precision=precision,
-        checkpoint=None,
+        checkpoint=checkpoint,
         host_device=device,
         fp_model=fp_model,
         use_dynamic_shapes=use_dynamic_shapes,
+        _skip_quantsim_creation=False,
     )
 
     # Determine how many samples we need
@@ -106,9 +112,11 @@ def quantize(
         ada_scale_num_iterations=ada_scale_num_iterations,
     )
 
-    model_quant.save_calibrated_checkpoint(
-        output_dir, fp_model=fp_model, use_dynamic_shapes=use_dynamic_shapes
-    )
+    save_kwargs: dict[str, Any] = dict(fp_model=fp_model)
+    # PreSplit models always use dynamic shapes; the mixin handles it internally.
+    if not issubclass(quantized_model_cls, QuantizablePreSplitMixin):
+        save_kwargs["use_dynamic_shapes"] = use_dynamic_shapes
+    model_quant.save_calibrated_checkpoint(output_dir, **save_kwargs)
     model_quant = model_quant.to("cpu")
     del model_quant
     fp_model = fp_model.to("cpu")

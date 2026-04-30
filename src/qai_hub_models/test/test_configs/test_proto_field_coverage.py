@@ -34,6 +34,7 @@ from qai_hub_models.configs.devices_and_chipsets_yaml import (
 )
 from qai_hub_models.configs.info_yaml import NumericsAccuracyBenchmark, QAIHMModelInfo
 from qai_hub_models.configs.model_metadata import (
+    ChipsetAttributes,
     GenieChatTemplate,
     GenieMetadata,
     GeniePipeline,
@@ -92,6 +93,13 @@ class TestModelMetadataFieldCoverage:
             ModelMetadata,
             model_metadata_pb2.ModelMetadata.DESCRIPTOR,
             proto_only={"aihm_version"},
+        )
+
+    def test_chipset_attributes(self) -> None:
+        _check_coverage(
+            ChipsetAttributes,
+            platform_pb2.ChipsetInfo.DESCRIPTOR,
+            proto_only={"aliases", "marketing_name", "world", "reference_device"},
         )
 
     def test_model_file_metadata(self) -> None:
