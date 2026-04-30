@@ -221,5 +221,18 @@ WORD_ERROR_RATE = _register_metric(
     )
 )
 
+HOMOGRAPHY_ACCURACY = _register_metric(
+    MetricMetadata(
+        name="Homography Estimation @3px",
+        unit="correctness@3px",
+        description=(
+            "Fraction of HPatches pairs where the RANSAC-estimated homography "
+            "has mean corner reprojection error < 3 px."
+        ),
+        range=(0.0, 100.0),
+        float_vs_device_threshold=5.0,
+    )
+)
+
 # Freeze the valid pairs set now that all metrics are registered.
 VALID_METRIC_PAIRS: frozenset[tuple[str, str]] = frozenset(_VALID_METRIC_PAIRS)
