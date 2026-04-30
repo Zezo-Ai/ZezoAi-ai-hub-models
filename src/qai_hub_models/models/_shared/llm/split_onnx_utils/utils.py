@@ -423,10 +423,15 @@ def split_onnx(
     num_layers_per_split: int | None = None,
     output_dir: PathLike = ".",
     split_embedding: bool = False,
+    split_lm_head: bool = False,
     using_qairt_workflow: bool = False,
 ) -> list[onnx_ret_t]:
     """
     Split ONNX by the given number of splits.
+
+    When split_lm_head is True, the LM head is separated into its own
+    final part. This reduces the compute packed into the last CL part.
+    The total number of output parts increases by one (the extra LM head part).
 
     Returns list[
         Path to an ONNX bundle or an ONNX Graph file for each split.
@@ -503,18 +508,22 @@ def split_onnx(
 
     num_layers = len(output_tensor_list)
 
-    computed_num_layers_per_split = (
-        math.ceil((num_layers - 1) / num_splits)
-        if split_embedding
-        else math.ceil(num_layers / num_splits)
+    # When splitting the LM head, one of the num_splits is reserved for it
+    min_splits = 1 + int(split_embedding) + int(split_lm_head)
+    assert num_splits >= min_splits, (
+        f"num_splits must be >= {min_splits} (split_embedding={split_embedding}, "
+        f"split_lm_head={split_lm_head}), got {num_splits}"
     )
+    num_transformer_block_splits = (
+        num_splits - int(split_embedding) - int(split_lm_head)
+    )
+
+    computed_num_layers_per_split = math.ceil(num_layers / num_transformer_block_splits)
 
     if num_layers_per_split is None:
         num_layers_per_split = computed_num_layers_per_split
 
-    effective_num_splits = num_splits - 1 if split_embedding else num_splits
-    effective_num_layers = num_layers - 1 if split_embedding else num_layers
-    if effective_num_splits != math.ceil(effective_num_layers / num_layers_per_split):
+    if num_transformer_block_splits != math.ceil(num_layers / num_layers_per_split):
         print(
             f"Warning: specified num_layers_per_split ({num_layers_per_split}) is not compatible with model. Overwriting with {computed_num_layers_per_split}"
         )
@@ -531,10 +540,22 @@ def split_onnx(
             outputs += past_key_values[layer]
         names_to_split.append(",".join(outputs))
 
-    names_to_split = names_to_split[: num_splits - 1]
-    assert num_splits == len(names_to_split) + 1, (
-        f"Failed to split into {num_splits} pieces!"
-    )
+    if split_lm_head:
+        last_cl_outputs = [output_tensor_list[-1]]
+        last_split_layer_start = (
+            num_transformer_block_splits - 1
+        ) * num_layers_per_split
+        for layer in range(last_split_layer_start, num_layers):
+            last_cl_outputs += past_key_values[layer]
+        names_to_split.append(",".join(last_cl_outputs))
+
+    expected_split_points = num_splits - 1
+    if len(names_to_split) != expected_split_points:
+        raise ValueError(
+            f"Expected {expected_split_points} split points for {num_splits} splits, "
+            f"but got {len(names_to_split)}. Check num_splits, num_layers_per_split, "
+            f"split_embedding={split_embedding}, split_lm_head={split_lm_head}."
+        )
     return split_onnx_by_names(
         onnxfile,
         modelname,

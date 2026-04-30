@@ -550,6 +550,7 @@ class PreSplitOnnxMixin:
         split_model_name: str  -- basename for split files
         num_splits: int        -- number of ONNX splits
         num_layers_per_split: int -- layers per split
+        split_lm_head: bool    -- separate LM head into its own part
     """
 
     split_model_name: str = ""
@@ -557,6 +558,7 @@ class PreSplitOnnxMixin:
     num_layers_per_split: int = 0
     # VLM models feed inputs_embeds directly and have no embedding split.
     split_embedding: bool = True
+    split_lm_head: bool = False
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -602,6 +604,7 @@ class PreSplitOnnxMixin:
             num_layers_per_split=self.num_layers_per_split,
             output_dir=str(split_output_dir),
             split_embedding=self.split_embedding,
+            split_lm_head=self.split_lm_head,
         )
 
         for i, bundle in enumerate(split_bundles):
@@ -1590,6 +1593,8 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
 
     # Whether the model supports thinking mode (e.g., Qwen3 models).
     supports_thinking: bool = False
+
+    split_lm_head: bool = False
 
     @classmethod
     def get_chat_template(cls) -> dict[str, str]:

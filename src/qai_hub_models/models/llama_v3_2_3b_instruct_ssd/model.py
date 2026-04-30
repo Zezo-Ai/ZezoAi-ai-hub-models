@@ -36,7 +36,7 @@ DEFAULT_EXPORT_CONTEXT_LENGTHS = GLOBAL_DEFAULT_EXPORT_CONTEXT_LENGTHS
 DEFAULT_EXPORT_SEQUENCE_LENGTHS = [128, 32]
 
 NUM_LAYERS = 28
-NUM_SPLITS = 3
+NUM_SPLITS = 4
 NUM_LAYERS_PER_SPLIT = 14
 HIDDEN_SIZE = 3072
 NUM_KEY_VALUE_HEADS = 8
@@ -59,6 +59,7 @@ DEFAULT_CHECKPOINT = {
 
 class Llama3_2_3B_SSD(LLM_SSD_Base, Llama3Base):
     min_memory_recommended = MIN_MEMORY_RECOMMENDED
+    split_lm_head = True
 
     def __init__(
         self,
@@ -150,6 +151,7 @@ class Llama3_2_3B_SSD(LLM_SSD_Base, Llama3Base):
 
 class Llama3_2_3B_SSD_AIMETOnnx(LLM_SSD_AIMETOnnx, Llama3Base_AIMETOnnx):
     FPModel = Llama3_2_3B_SSD
+    split_lm_head = True
 
     def __init__(
         self, checkpoint: str | os.PathLike | Path | None, *args: Any, **kwargs: Any

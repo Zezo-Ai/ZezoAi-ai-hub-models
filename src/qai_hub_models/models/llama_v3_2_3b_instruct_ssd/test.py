@@ -24,6 +24,7 @@ from qai_hub_models.models._shared.llm.perf_collection import (
     get_llm_perf_parametrization,
 )
 from qai_hub_models.models._shared.llm.test import CompileJobCache
+from qai_hub_models.models._shared.llm_ssd.model import apply_ssd_engine_overrides
 from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.models.llama_v3_2_3b_instruct_ssd import (
     MODEL_ID,
@@ -67,9 +68,11 @@ DEFAULT_EVAL_SEQLEN = 2048
 def test_create_genie_config() -> None:
     context_length = 1024
     llm_config = AutoConfig.from_pretrained(HF_REPO_NAME)
-    model_list = [f"llama_v3_2_3b_instruct_ssd_part_{i}_of_3.bin" for i in range(1, 4)]
+    model_list = [
+        f"llama_v3_2_3b_instruct_ssd_part_{i}_of_{NUM_SPLITS}.bin"
+        for i in range(1, NUM_SPLITS + 1)
+    ]
     actual_config = create_genie_config(context_length, llm_config, "rope", model_list)
-    # SSD fields are applied separately after create_genie_config (in LLM_SSD_AIMETOnnx.prepare_genie_assets)
     actual_config["dialog"]["type"] = "ssd-q1"
     actual_config["dialog"]["ssd-q1"] = {
         "version": 1,
@@ -81,6 +84,7 @@ def test_create_genie_config() -> None:
         "n-streams": 1,
         "p-threshold": 0.0,
     }
+    apply_ssd_engine_overrides(actual_config["dialog"]["engine"])
     expected_config: dict[str, Any] = {
         "dialog": {
             "version": 1,
@@ -102,7 +106,7 @@ def test_create_genie_config() -> None:
             "tokenizer": {"version": 1, "path": "tokenizer.json"},
             "engine": {
                 "version": 1,
-                "n-threads": 3,
+                "n-threads": 0,
                 "backend": {
                     "version": 1,
                     "type": "QnnHtp",
@@ -110,11 +114,11 @@ def test_create_genie_config() -> None:
                         "version": 1,
                         "use-mmap": True,
                         "spill-fill-bufsize": 0,
-                        "mmap-budget": 0,
+                        "mmap-budget": 40,
                         "poll": True,
                         "cpu-mask": "0xe0",
                         "kv-dim": 128,
-                        "allow-async-init": False,
+                        "allow-async-init": True,
                     },
                     "extensions": "htp_backend_ext_config.json",
                 },

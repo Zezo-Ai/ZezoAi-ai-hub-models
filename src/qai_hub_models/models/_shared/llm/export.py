@@ -397,6 +397,7 @@ def export_model(
                 num_layers_per_split=num_layers_per_split,
                 output_dir=model_artifact,
                 split_embedding=True,
+                split_lm_head=bool(model.split_lm_head),
                 using_qairt_workflow=True,
             )
 

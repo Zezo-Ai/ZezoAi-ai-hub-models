@@ -26,6 +26,18 @@ with contextlib.suppress(ImportError):
 GENIE_CONFIG_JSON = "genie_config.json"
 
 
+def apply_ssd_engine_overrides(engine: dict[str, Any]) -> None:
+    """Apply SSD-specific engine overrides to an engine config dict in-place."""
+    engine["n-threads"] = 0
+    qnn_htp = engine.get("backend", {}).get("QnnHtp")
+    assert qnn_htp is not None, (
+        "Engine config missing expected 'backend.QnnHtp' key. "
+        f"Got keys: {list(engine.get('backend', {}).keys())}"
+    )
+    qnn_htp["mmap-budget"] = 40
+    qnn_htp["allow-async-init"] = True
+
+
 def _quantize_kv_cache(f: Any, encoding: Any, bw: int = 8) -> Any:
     def _round(x: Any) -> Any:
         sign = np.where(x < 0, -1, 1).astype(np.float32)
@@ -246,5 +258,19 @@ class LLM_SSD_AIMETOnnx(LLM_AIMETOnnx):
             "n-streams": 1,
             "p-threshold": 0.0,
         }
+        apply_ssd_engine_overrides(genie_config["dialog"]["engine"])
         with open(output_path / GENIE_CONFIG_JSON, "w") as f:
             json.dump(genie_config, f, indent=4)
+
+        # Apply the same SSD-specific overrides to text-generator.json
+        text_gen_path = output_path / "text-generator.json"
+        if text_gen_path.exists():
+            with open(text_gen_path) as f:
+                text_gen_config = json.load(f)
+            apply_ssd_engine_overrides(text_gen_config["text-generator"]["engine"])
+            with open(text_gen_path, "w") as f:
+                json.dump(text_gen_config, f, indent=4)
+        else:
+            print(
+                f"No text-generator.json found at {output_path}, skipping SSD engine overrides for it"
+            )
