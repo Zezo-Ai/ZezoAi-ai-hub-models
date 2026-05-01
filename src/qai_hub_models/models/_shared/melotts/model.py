@@ -2,6 +2,7 @@
 # Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
+import math
 import os
 from abc import abstractmethod
 from collections.abc import Iterable
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from melo import modules
 from qai_hub.client import Device
 from torch import Tensor
@@ -34,6 +36,7 @@ from qai_hub_models.models._shared.melotts.utils import (
 )
 from qai_hub_models.models._shared.voiceai_tts.language import (
     BERT_MODEL_IDS,
+    LANG_CODE_MAP,
     TTSLanguage,
 )
 from qai_hub_models.models._shared.voiceai_tts.t5_g2p import (
@@ -68,13 +71,6 @@ UPSAMPLE_FACTOR = 512
 MAX_BERT_TOKENS = 200
 UPSAMPLED_MAX_SEQ_LEN = MAX_SEQ_LEN * FLOW_LENGTH_FACTOR
 
-MELO_LANGUAGE_CONFIG = {
-    # TTSLanguage.ENGLISH: "EN_NEWEST", # the voice is loud and strong
-    TTSLanguage.ENGLISH: "EN",  # the voice is soft and peaceful
-    TTSLanguage.SPANISH: "ES",
-    TTSLanguage.CHINESE: "ZH",
-}
-
 
 @lru_cache(maxsize=1)
 def get_tts_object(language: TTSLanguage) -> "TTS":
@@ -83,7 +79,7 @@ def get_tts_object(language: TTSLanguage) -> "TTS":
     import melo
     from melo.api import TTS
 
-    tts = TTS(MELO_LANGUAGE_CONFIG[language], device="cpu")
+    tts = TTS(LANG_CODE_MAP[language], device="cpu")
 
     # Monkeypatch melo.attentions.FFN to replace torch.relu with torch.maximum.
     # This avoids the Conv2D+Relu op fusion bug in Qairt, which incorrectly converts
@@ -314,7 +310,91 @@ class Encoder(BaseModel):
     ) -> Tensor:
         half_channels = flow.half_channels
         x0, x1 = torch.split(z, [half_channels, half_channels], dim=1)
-        return torch.cat([x0, x1], dim=1) * x_mask
+
+        h = flow.pre(x0)
+        h = flow.convs(h, x_mask)
+        h = flow.proj(h) * x_mask
+
+        b, _c_h, t = h.shape
+        h = h.reshape(b, half_channels, -1, t).permute(0, 1, 3, 2)
+
+        unnormalized_widths = h[..., : flow.num_bins] / math.sqrt(flow.filter_channels)
+        unnormalized_heights = h[..., flow.num_bins : 2 * flow.num_bins] / math.sqrt(
+            flow.filter_channels
+        )
+
+        x1_transformed = self.spline(
+            x1,
+            unnormalized_widths,
+            unnormalized_heights,
+            inverse=True,
+        )
+        return torch.cat([x0, x1_transformed], dim=1) * x_mask
+
+    def spline(
+        self,
+        inputs: Tensor,
+        unnormalized_widths: Tensor,
+        unnormalized_heights: Tensor,
+        inverse: bool = False,
+        tail_bound: float = 1.0,
+    ) -> Tensor:
+        num_bins = unnormalized_widths.shape[-1]
+        widths = F.softmax(unnormalized_widths, dim=-1)
+        heights = F.softmax(unnormalized_heights, dim=-1)
+
+        triu_mask = torch.triu(torch.ones(num_bins, num_bins, device=widths.device))
+        cumwidths = torch.matmul(widths.unsqueeze(-2), triu_mask).squeeze(-2)
+        cumheights = torch.matmul(heights.unsqueeze(-2), triu_mask).squeeze(-2)
+
+        cumwidths = (2 * tail_bound) * cumwidths - tail_bound
+        cumheights = (2 * tail_bound) * cumheights - tail_bound
+
+        cumwidths = torch.cat(
+            [
+                torch.full_like(cumwidths[..., :1], -tail_bound),
+                cumwidths,
+                torch.full_like(cumwidths[..., :1], tail_bound),
+            ],
+            dim=-1,
+        )
+        cumheights = torch.cat(
+            [
+                torch.full_like(cumheights[..., :1], -tail_bound),
+                cumheights,
+                torch.full_like(cumheights[..., :1], tail_bound),
+            ],
+            dim=-1,
+        )
+
+        if inverse:
+            bin_idx = self.searchsorted(cumheights, inputs)
+            bin_idx = torch.clamp(bin_idx, 0, num_bins - 2).unsqueeze(-1)
+            input_cum_lower = torch.gather(cumheights, -1, bin_idx).squeeze(-1)
+            input_cum_upper = torch.gather(
+                cumheights, -1, torch.clamp(bin_idx + 1, max=cumheights.shape[-1] - 1)
+            ).squeeze(-1)
+            input_width_lower = torch.gather(cumwidths, -1, bin_idx).squeeze(-1)
+            input_width_upper = torch.gather(
+                cumwidths, -1, torch.clamp(bin_idx + 1, max=cumwidths.shape[-1] - 1)
+            ).squeeze(-1)
+            t = (inputs - input_cum_lower) / (input_cum_upper - input_cum_lower + 1e-7)
+            return input_width_lower + t * (input_width_upper - input_width_lower)
+        bin_idx = self.searchsorted(cumwidths, inputs)
+        bin_idx = torch.clamp(bin_idx, 0, num_bins - 2).unsqueeze(-1)
+        input_cum_lower = torch.gather(cumwidths, -1, bin_idx).squeeze(-1)
+        input_cum_upper = torch.gather(
+            cumwidths, -1, torch.clamp(bin_idx + 1, max=cumwidths.shape[-1] - 1)
+        ).squeeze(-1)
+        input_height_lower = torch.gather(cumheights, -1, bin_idx).squeeze(-1)
+        input_height_upper = torch.gather(
+            cumheights, -1, torch.clamp(bin_idx + 1, max=cumheights.shape[-1] - 1)
+        ).squeeze(-1)
+        t = (inputs - input_cum_lower) / (input_cum_upper - input_cum_lower + 1e-7)
+        return input_height_lower + t * (input_height_upper - input_height_lower)
+
+    def searchsorted(self, bin_locations: Tensor, inputs: Tensor) -> Tensor:
+        return torch.sum(inputs.unsqueeze(-1) >= bin_locations, dim=-1) - 2
 
     def get_hub_compile_options(
         self,
@@ -347,9 +427,13 @@ class Flow(BaseModel):
         self.language = tts_object.language
         self.hps = tts_object.hps
         self.symbol_to_id = tts_object.symbol_to_id
-        assert isinstance(self.model.hidden_channels, int)
-        h = self.model.hidden_channels
-        self.fixed_noise = torch.full([1, h, UPSAMPLED_MAX_SEQ_LEN], 0.5)
+        assert isinstance(self.model.inter_channels, int)
+        gen = torch.Generator()
+        gen.manual_seed(0)
+        self.register_buffer(
+            "fixed_noise",
+            torch.randn(1, self.model.inter_channels, MAX_SEQ_LEN * 3, generator=gen),
+        )
         self.flow = OptimizedFlow(self.model.flow)
 
     def forward(
@@ -385,7 +469,10 @@ class Flow(BaseModel):
         """
         m_p = torch.matmul(m_p, attn_squeezed.transpose(1, 2))
         logs_p = torch.matmul(logs_p, attn_squeezed.transpose(1, 2))
-        z_p = m_p + self.fixed_noise * torch.exp(logs_p) * noise_scale
+        seq_len = m_p.size(2)
+        assert isinstance(self.fixed_noise, Tensor)
+        noise = self.fixed_noise[:, : m_p.size(1), :seq_len]
+        z_p = m_p + noise * torch.exp(logs_p) * noise_scale
         return self.flow.forward(z_p, y_mask, g, reverse=True)
 
     @staticmethod

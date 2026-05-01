@@ -15,7 +15,3 @@ def test_synthesized_audio() -> None:
 
 def test_demo() -> None:
     demo_main(is_test=True)
-
-
-if __name__ == "__main__":
-    test_synthesized_audio()

@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 DEFAULT_TEXTS = {
     TTSLanguage.ENGLISH: "This is an example of text to speech for English. How does it sound?",
     TTSLanguage.SPANISH: "Este es un ejemplo de texto a voz en inglés. ¿Cómo suena?",
-    TTSLanguage.CHINESE: "中文是中国的语言文字。特指汉族的语言文字, 即汉语和汉字",
+    TTSLanguage.CHINESE: "中文是中国的语言文字, 特指汉族的语言文字, 包括汉语和汉字",
 }
 CommonVoice_FOLDER_NAME = "common_voice"
 CommonVoice_VERSION = 1
