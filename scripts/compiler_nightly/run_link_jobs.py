@@ -85,15 +85,12 @@ def submit_single_link_job(
             )
 
         # Get device and options from link config
-        if link_by_model:
-            if model_name not in link_by_model:
-                logger.debug(f"{model_name}: Not in link config, skipping")
-                return model_name, None, None  # Skip entirely
+        if link_by_model and model_name in link_by_model:
             link_spec = link_by_model[model_name]
             device = Device(link_spec["device"])
             base_options = link_spec.get("options", "")
         else:
-            # No link config - use device from compile job
+            # No link config or model not in config - use device from compile job
             device = compile_job.device
             base_options = ""
 
@@ -138,13 +135,10 @@ def submit_link_jobs(
     )
 
     # Build a map from model_name (without device) to link spec
-    # Link config keys are "model_name_QNN_CONTEXT_BINARY-device", compile_jobs keys are "model_name_QNN_DLC"
     link_by_model = {}
     if link_config:
         for key, spec in link_config.items():
             model_name_only = strip_device_suffix(key)
-            # Replace QNN_CONTEXT_BINARY with QNN_DLC to match compile job keys
-            model_name_only = model_name_only.replace("_QNN_CONTEXT_BINARY", "_QNN_DLC")
             link_by_model[model_name_only] = spec
 
     if extra_link_options:
