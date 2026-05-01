@@ -2,33 +2,33 @@
 
 from __future__ import annotations
 
-import os
-import threading
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+from filelock import FileLock
 
 from qai_hub_models.utils.external_repo import (
     IS_PIP_PACKAGE,
-    RepoConfig,
     get_repo_cache_paths,
-    setup_external_repos_impl,
+    setup_external_repos,
 )
 
-MODEL_ID = "{{ model_name }}"
-EXTERNAL_REPOS_DIR = os.path.dirname(os.path.normpath(__file__))
-LOCK = threading.Lock()
-
-REPO_CONFIGS: dict[str, RepoConfig] = {
-{%- for repo_name, repo_config in external_repos.items() %}
-    "{{ repo_name }}": RepoConfig(
-        repo_url="{{ repo_config.repo_url }}",
-        commit_sha="{{ repo_config.commit_sha }}",
-        patches_filename={{ '"%s"' % repo_config.patches_filename if repo_config.patches_filename else "None" }},
-    ),
-{%- endfor %}
-}
+{% if shared_name is defined %}
+MODEL_ID = "{{ shared_name }}"
+{% else %}
+MODEL_ID = "{{ model_id }}"
+{% endif %}
 
 if not TYPE_CHECKING:
-    with LOCK:
-        setup_external_repos_impl(MODEL_ID, REPO_CONFIGS, EXTERNAL_REPOS_DIR)
+    with FileLock(Path(__file__).resolve().parent / ".setup.lock"):
+{% if shared_name is defined %}
+        setup_external_repos(MODEL_ID, shared=True)
+{% else %}
+        setup_external_repos(MODEL_ID)
+{% endif %}
     if IS_PIP_PACKAGE:
-        __path__ = get_repo_cache_paths(MODEL_ID, REPO_CONFIGS, EXTERNAL_REPOS_DIR)
+{% if shared_name is defined %}
+        __path__ = [str(p) for p in get_repo_cache_paths(MODEL_ID, shared=True)]
+{% else %}
+        __path__ = [str(p) for p in get_repo_cache_paths(MODEL_ID)]
+{% endif %}

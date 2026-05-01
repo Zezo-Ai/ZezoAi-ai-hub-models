@@ -53,6 +53,7 @@ exclude = 'src/qai_hub_models/extern/.*|src/qai_hub_models/models/llama_v2_7b_ch
 [tool.mypy]
 ignore_missing_imports = true
 warn_unused_ignores = true
+exclude = ["models/.*/external_repos/.*/", "models/_shared/.*/external_repos/.*/"]
 
 [tool.pytest.ini_options]
 tmp_path_retention_policy = "failed"

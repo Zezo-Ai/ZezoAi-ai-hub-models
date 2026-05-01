@@ -5,9 +5,6 @@
 
 from __future__ import annotations
 
-import os
-import sys
-from functools import partial
 from typing import cast
 
 import torch
@@ -15,8 +12,13 @@ from qai_hub.client import Device
 from torch import nn
 from typing_extensions import Self
 
+from qai_hub_models.models._shared.centernet.external_repos.centernet.src.lib.models.networks.DCNv2.dcn_v2 import (
+    DCN,
+)
+from qai_hub_models.models._shared.centernet.external_repos.centernet.src.lib.models.networks.pose_dla_dcn import (
+    get_pose_net,
+)
 from qai_hub_models.models._shared.centernet.model_patches import custom_dcn_forward
-from qai_hub_models.utils.asset_loaders import SourceAsRoot, find_replace_in_repo
 from qai_hub_models.utils.base_model import BaseModel, Precision, TargetRuntime
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
@@ -26,14 +28,6 @@ from qai_hub_models.utils.input_spec import (
     TensorSpec,
 )
 
-CenterNetAsRoot = partial(
-    SourceAsRoot,
-    "https://github.com/xingyizhou/CenterNet.git",
-    "4c50fd3a46bdf63dbf2082c5cbb3458d39579e6c",
-    "centernet",
-    1,
-)
-
 
 class CenterNet(BaseModel):
     def __init__(self) -> None:
@@ -41,27 +35,14 @@ class CenterNet(BaseModel):
 
     @classmethod
     def from_pretrained(cls, ckpt_path: str, heads: dict) -> Self:
-        with CenterNetAsRoot() as repo_path:
-            sys.path.insert(0, os.path.join(repo_path, "src", "lib"))
-            # Removed cuda ops dependencies
-            find_replace_in_repo(
-                repo_path,
-                "src/lib/models/networks/DCNv2/dcn_v2_func.py",
-                "from ._ext import dcn_v2 as _backend",
-                "# from ._ext import dcn_v2 as _backend",
-            )
-
-            from models.networks.DCNv2.dcn_v2 import DCN
-            from models.networks.pose_dla_dcn import get_pose_net
-
-            DCN.forward = custom_dcn_forward
-            model = get_pose_net(
-                num_layers=34,
-                heads=heads,
-                head_conv=256,
-            )
-            model = cast(Self, load_model(model, ckpt_path))
-            model.eval()
+        DCN.forward = custom_dcn_forward
+        model = get_pose_net(
+            num_layers=34,
+            heads=heads,
+            head_conv=256,
+        )
+        model = cast(Self, load_model(model, ckpt_path))
+        model.eval()
         return model
 
     def get_hub_compile_options(

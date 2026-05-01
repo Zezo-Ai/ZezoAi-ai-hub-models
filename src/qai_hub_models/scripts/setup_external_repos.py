@@ -19,12 +19,10 @@ from __future__ import annotations
 import argparse
 import sys
 
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
-from qai_hub_models.utils.external_repo import (
-    RepoConfig,
-    setup_external_repos_impl,
-)
+from qai_hub_models.utils.external_repo import setup_external_repos
 from qai_hub_models.utils.path_helpers import MODEL_IDS, QAIHM_MODELS_ROOT
+
+SHARED_DIR = QAIHM_MODELS_ROOT / "_shared"
 
 
 def main() -> None:
@@ -41,30 +39,28 @@ def main() -> None:
         "--all",
         "-a",
         action="store_true",
-        help="Setup external repos for all models.",
+        help="Setup external repos for all models and shared repos.",
     )
     args = parser.parse_args()
-    models = args.models if args.models else MODEL_IDS
 
     failed = []
+
+    if args.all and SHARED_DIR.exists():
+        for shared_folder in sorted(SHARED_DIR.iterdir()):
+            if not (shared_folder / "code-gen.yaml").exists():
+                continue
+            print(f"Setting up shared external repo: {shared_folder.name}...")
+            try:
+                setup_external_repos(shared_folder.name, shared=True)
+            except Exception as e:
+                print(f"  FAILED: {e}")
+                failed.append(f"_shared/{shared_folder.name}")
+
+    models = args.models if args.models else MODEL_IDS
     for model_id in models:
-        config = QAIHMModelCodeGen.from_model(model_id)
-        if not config.external_repos:
-            continue
-
-        external_repos_dir = str(QAIHM_MODELS_ROOT / model_id / "external_repos")
-        repo_configs = {
-            name: RepoConfig(
-                repo_url=cfg.repo_url,
-                commit_sha=cfg.commit_sha,
-                patches_filename=cfg.patches_filename,
-            )
-            for name, cfg in config.external_repos.items()
-        }
-
         print(f"Setting up external repos for {model_id}...")
         try:
-            setup_external_repos_impl(model_id, repo_configs, external_repos_dir)
+            setup_external_repos(model_id)
         except Exception as e:
             print(f"  FAILED: {e}")
             failed.append(model_id)

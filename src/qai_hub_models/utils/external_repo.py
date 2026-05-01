@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
-import os
 import platform
+import re
 import shutil
 import tempfile
+from pathlib import Path
 
 try:
     import git  # noqa: TID251
@@ -23,165 +24,24 @@ except ImportError as e:
 from qai_hub_models.utils.asset_loaders import (
     EXECUTING_IN_CI_ENVIRONMENT,
     LOCAL_STORE_DEFAULT_PATH,
+    load_yaml,
     query_yes_no,
 )
+from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
 
-EXTERNAL_REPOS_CACHE_DIR = os.path.join(LOCAL_STORE_DEFAULT_PATH, "external_repos")
+EXTERNAL_REPOS_CACHE_DIR = Path(LOCAL_STORE_DEFAULT_PATH) / "external_repos"
 USE_SYMLINK_CACHE = platform.system() != "Windows"
-IS_PIP_PACKAGE = "site-packages" in os.path.normpath(__file__).split(os.sep)
+IS_PIP_PACKAGE = "site-packages" in Path(__file__).resolve().parts
 MYPY_IGNORE = "# mypy: ignore-errors\n"
 
-
-def compute_content_hash(
-    repo_url: str,
-    commit_sha: str,
-    patch_contents: str = "",
-) -> str:
-    """Compute a hash of the repo configuration that produces the clone."""
-    data = repo_url + "\n" + commit_sha + "\n" + patch_contents
-    return hashlib.shake_256(data.encode()).hexdigest(8)
+# Bump this when postprocess_repo behavior changes (e.g. import rewriting logic).
+# This invalidates all cached clones so they get re-cloned with the new postprocessing.
+POSTPROCESS_VERSION = "1"
 
 
-def get_cache_dir(model_id: str, repo_name: str, content_hash: str) -> str:
-    """Return the cache directory path for a given repo."""
-    return os.path.join(EXTERNAL_REPOS_CACHE_DIR, model_id, repo_name, content_hash)
-
-
-def _shallow_clone(url: str, commit_sha: str, target: str) -> None:
-    """Shallow-fetch a single commit into a target directory.
-
-    Falls back to a full clone if the remote doesn't support shallow fetch
-    of arbitrary SHAs.
-    """
-    repo = git.Repo.init(target)
-    try:
-        repo.git.fetch(url, commit_sha, depth=1)
-    except git.GitCommandError:
-        # Remote doesn't support shallow fetch of arbitrary SHAs — full fetch
-        repo.git.fetch(url, commit_sha)
-    repo.git.checkout("FETCH_HEAD")
-
-
-def _apply_patch(target: str, patch_path: str) -> None:
-    """Apply a patch file to a cloned repo."""
-    repo = git.Repo(target)
-    if platform.system() == "Windows":
-        repo.git.apply(patch_path, ignore_space_change=True)
-    else:
-        repo.git.apply(patch_path)
-
-
-def postprocess_repo(directory: str) -> None:
-    """Walk a directory tree, create missing __init__.py, and add mypy ignore to all .py files."""
-    for dirpath, dirnames, filenames in os.walk(directory):
-        # Skip hidden directories (like .git)
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-        if "__init__.py" not in filenames:
-            init_path = os.path.join(dirpath, "__init__.py")
-            with open(init_path, "w") as f:
-                f.write(MYPY_IGNORE)
-        for fn in filenames:
-            if not fn.endswith(".py"):
-                continue
-            fpath = os.path.join(dirpath, fn)
-            with open(fpath) as f:
-                content = f.read()
-            if not content.startswith(MYPY_IGNORE):
-                with open(fpath, "w") as f:
-                    f.write(MYPY_IGNORE + content)
-
-
-def clone_and_patch(
-    url: str,
-    commit_sha: str,
-    target: str,
-    patch_path: str | None = None,
-) -> None:
-    """Clone a repo at a pinned commit and optionally apply a patch."""
-    _shallow_clone(url, commit_sha, target)
-    if patch_path and os.path.exists(patch_path):
-        _apply_patch(target, patch_path)
-    postprocess_repo(target)
-
-
-def clone_and_link_repo(
-    model_id: str,
-    repo_name: str,
-    repo_url: str,
-    commit_sha: str,
-    content_hash: str,
-    external_repos_dir: str,
-    patch_path: str | None = None,
-    ask_to_clone: bool = not EXECUTING_IN_CI_ENVIRONMENT,
-) -> None:
-    """
-    Ensures a single repo is cloned and available.
-
-    Three modes:
-    - Pip (any OS): clones into cache, caller uses __path__ redirect.
-    - Dev + symlinks (unix): clones into cache, symlinks into source tree.
-    - Dev + no symlinks (Windows): clones directly into source tree, no cache.
-
-    Crash safety: clones into a temp directory, then renames atomically.
-    """
-    is_pip = IS_PIP_PACKAGE
-    use_cache = is_pip or USE_SYMLINK_CACHE
-    cache_dir = get_cache_dir(model_id, repo_name, content_hash)
-    repo_in_cache = os.path.join(cache_dir, repo_name)
-    local_dir = os.path.join(external_repos_dir, repo_name)
-
-    if use_cache:
-        # Fast path: cache already populated
-        if os.path.isdir(repo_in_cache):
-            # Dev unix: ensure symlink exists
-            if not is_pip and not os.path.exists(local_dir):
-                os.symlink(repo_in_cache, local_dir)
-            return
-    # Windows dev: repo lives directly in source tree
-    elif os.path.isdir(local_dir):
-        return
-
-    # Prompt user if needed
-    if ask_to_clone:
-        should_clone = query_yes_no(
-            f"Model {model_id} requires external repo {repo_url}. Ok to clone?",
-            timeout=60,
-        )
-        if not should_clone:
-            raise RuntimeError(
-                f"Unable to load {model_id} without its required repository {repo_url}."
-            )
-
-    print(f"Cloning {repo_url} ({commit_sha[:8]}) for {model_id}/{repo_name}...")
-
-    # dir= ensures temp dir is on the same filesystem for atomic rename.
-    # ignore_cleanup_errors=True because on success we rename the dir away
-    # before the context manager tries to clean it up.
-    if use_cache:
-        parent = os.path.dirname(cache_dir)
-        os.makedirs(parent, exist_ok=True)
-        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True, dir=parent) as tmp:
-            clone_and_patch(
-                repo_url, commit_sha, os.path.join(tmp, repo_name), patch_path
-            )
-            if os.path.exists(cache_dir):
-                shutil.rmtree(cache_dir)
-            os.rename(tmp, cache_dir)
-
-        # Dev unix: create symlink
-        if not is_pip and not os.path.exists(local_dir):
-            os.symlink(repo_in_cache, local_dir)
-    else:
-        # Dev Windows: clone directly into source tree
-        with tempfile.TemporaryDirectory(
-            ignore_cleanup_errors=True, dir=external_repos_dir
-        ) as tmp:
-            clone_and_patch(repo_url, commit_sha, tmp, patch_path)
-            if os.path.exists(local_dir):
-                shutil.rmtree(local_dir)
-            os.rename(tmp, local_dir)
-
-    print("Done")
+# ---------------------------------------------------------------------------
+# Data structures
+# ---------------------------------------------------------------------------
 
 
 @dataclasses.dataclass(frozen=True)
@@ -193,96 +53,659 @@ class RepoConfig:
     patches_filename: str | None = None
 
 
-def get_patch_contents(config: RepoConfig, external_repos_dir: str) -> str:
-    """Read patch file contents for a repo config, or return empty string."""
+# ---------------------------------------------------------------------------
+# Config loading and path resolution
+# ---------------------------------------------------------------------------
+
+
+def _load_repo_configs(
+    codegen_path: Path, external_repos_path: Path
+) -> dict[str, RepoConfig]:
+    """Read code-gen.yaml and return RepoConfig dict.
+
+    Parameters
+    ----------
+    codegen_path
+        Path to the code-gen.yaml file.
+    external_repos_path
+        Path to the external_repos directory (for resolving patch files).
+
+    Returns
+    -------
+    dict[str, RepoConfig]
+        Mapping of repo name to configuration, or empty dict if no external repos.
+    """
+    if not codegen_path.exists():
+        return {}
+    config = load_yaml(codegen_path)
+    external_repos = config.get("external_repos")
+    if not external_repos:
+        return {}
+    return {
+        name: RepoConfig(
+            repo_url=cfg["repo_url"],
+            commit_sha=cfg["commit_sha"],
+            patches_filename=cfg.get("patches_filename"),
+        )
+        for name, cfg in external_repos.items()
+    }
+
+
+def _resolve_external_repos(
+    name: str, shared: bool = False
+) -> tuple[dict[str, RepoConfig], Path]:
+    """Resolve repo configs and external_repos path from a model or shared name."""
+    if shared:
+        base_dir = QAIHM_MODELS_ROOT / "_shared" / name
+    else:
+        base_dir = QAIHM_MODELS_ROOT / name
+    external_repos_path = base_dir / "external_repos"
+    codegen_path = base_dir / "code-gen.yaml"
+    return _load_repo_configs(codegen_path, external_repos_path), external_repos_path
+
+
+# ---------------------------------------------------------------------------
+# Hashing and caching
+# ---------------------------------------------------------------------------
+
+
+def compute_content_hash(
+    repo_url: str,
+    commit_sha: str,
+    patch_contents: str = "",
+) -> str:
+    """Compute a hash of the repo configuration that produces the clone.
+
+    Parameters
+    ----------
+    repo_url
+        Git repository URL.
+    commit_sha
+        Pinned commit SHA.
+    patch_contents
+        Contents of the patch file to apply, or empty string.
+
+    Returns
+    -------
+    str
+        A 16-character hex hash.
+    """
+    data = (
+        repo_url
+        + "\n"
+        + commit_sha
+        + "\n"
+        + patch_contents
+        + "\n"
+        + POSTPROCESS_VERSION
+    )
+    return hashlib.shake_256(data.encode()).hexdigest(8)
+
+
+def _cache_namespace(external_repos_path: Path) -> str:
+    """Derive a cache namespace from the external repos path.
+
+    Parameters
+    ----------
+    external_repos_path
+        Absolute path to the external_repos directory, e.g.
+        ``.../models/gkt/external_repos`` or ``.../_shared/centernet/external_repos``.
+
+    Returns
+    -------
+    str
+        Cache namespace, e.g. ``"models/gkt"`` or ``"shared/centernet"``.
+
+    Raises
+    ------
+    ValueError
+        If the path does not contain ``external_repos``.
+    """
+    parts = external_repos_path.parts
+    if "external_repos" not in parts:
+        raise ValueError(
+            f"Cannot derive cache namespace from {external_repos_path}. "
+            "Expected path to contain 'external_repos'."
+        )
+    idx = parts.index("external_repos")
+    parent = parts[idx - 1]
+    is_shared = idx >= 2 and parts[idx - 2] == "_shared"
+    return str(Path("shared" if is_shared else "models", parent))
+
+
+def get_cache_dir(external_repos_path: Path, repo_name: str, content_hash: str) -> Path:
+    """Return the cache directory path for a given repo.
+
+    Parameters
+    ----------
+    external_repos_path
+        Path to the external_repos directory.
+    repo_name
+        Name of the repo.
+    content_hash
+        Content hash of the repo configuration.
+
+    Returns
+    -------
+    Path
+        Absolute path to the cache directory.
+    """
+    return (
+        EXTERNAL_REPOS_CACHE_DIR
+        / _cache_namespace(external_repos_path)
+        / repo_name
+        / content_hash
+    )
+
+
+def get_patch_contents(config: RepoConfig, external_repos_path: Path) -> str:
+    """Read patch file contents for a repo config.
+
+    Parameters
+    ----------
+    config
+        Repo configuration with optional ``patches_filename``.
+    external_repos_path
+        Path to the directory containing the patch file.
+
+    Returns
+    -------
+    str
+        Contents of the patch file, or empty string if none.
+    """
     if config.patches_filename:
-        patch_path = os.path.join(external_repos_dir, config.patches_filename)
-        if os.path.exists(patch_path):
-            with open(patch_path) as f:
-                return f.read()
+        patch_path = external_repos_path / config.patches_filename
+        if not patch_path.exists():
+            raise FileNotFoundError(
+                f"Patch file '{config.patches_filename}' not found at {patch_path}"
+            )
+        return patch_path.read_text()
     return ""
 
 
 def compute_repo_hashes(
     repo_configs: dict[str, RepoConfig],
-    external_repos_dir: str,
+    external_repos_path: Path,
 ) -> dict[str, str]:
-    """Compute content hash for each configured repo."""
+    """Compute content hash for each configured repo.
+
+    Parameters
+    ----------
+    repo_configs
+        Mapping of repo name to configuration.
+    external_repos_path
+        Path to the external_repos directory (for reading patch files).
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping of repo name to content hash.
+    """
     return {
         repo_name: compute_content_hash(
             config.repo_url,
             config.commit_sha,
-            get_patch_contents(config, external_repos_dir),
+            get_patch_contents(config, external_repos_path),
         )
         for repo_name, config in repo_configs.items()
     }
 
 
-def get_repo_cache_paths(
-    model_id: str,
-    repo_configs: dict[str, RepoConfig],
-    external_repos_dir: str,
-) -> list[str]:
-    """Return cache directory paths for all external repos (for __path__ redirect)."""
-    return [
-        get_cache_dir(model_id, repo_name, content_hash)
-        for repo_name, content_hash in compute_repo_hashes(
-            repo_configs, external_repos_dir
-        ).items()
-    ]
+# ---------------------------------------------------------------------------
+# Clone, patch, and postprocess
+# ---------------------------------------------------------------------------
+
+
+def _shallow_clone(url: str, commit_sha: str, target: Path) -> None:
+    """Shallow-fetch a single commit into a target directory.
+
+    Falls back to a full fetch if the remote doesn't support shallow fetch
+    of arbitrary SHAs.
+
+    Parameters
+    ----------
+    url
+        Git repository URL.
+    commit_sha
+        Commit SHA to fetch.
+    target
+        Local directory to clone into.
+    """
+    repo = git.Repo.init(target)
+    try:
+        repo.git.fetch(url, commit_sha, depth=1)
+    except git.GitCommandError:
+        repo.git.fetch(url, commit_sha)
+    repo.git.checkout("FETCH_HEAD")
+
+
+def _apply_patch(target: Path, patch_path: Path) -> None:
+    """Apply a patch file to a cloned repo.
+
+    Parameters
+    ----------
+    target
+        Path to the cloned repo directory.
+    patch_path
+        Absolute path to the ``.diff`` patch file.
+    """
+    repo = git.Repo(target)
+    repo.git.apply(patch_path, ignore_whitespace=True)
+
+
+def _derive_package_path(repo_path: Path) -> str:
+    """Derive the full Python package path for a cloned repo.
+
+    Parameters
+    ----------
+    repo_path
+        Absolute path to the repo directory,
+        e.g. ``/home/user/src/qai_hub_models/models/gkt/external_repos/gkt``.
+
+    Returns
+    -------
+    str
+        Dotted package path, e.g. ``"qai_hub_models.models.gkt.external_repos.gkt"``.
+
+    Raises
+    ------
+    ValueError
+        If ``qai_hub_models`` is not in the resolved path.
+    """
+    parts = repo_path.resolve().parts
+    if "qai_hub_models" not in parts:
+        raise ValueError(
+            f"Cannot derive package path from {repo_path}. "
+            "Expected 'qai_hub_models' in the path."
+        )
+    idx = parts.index("qai_hub_models")
+    return ".".join(parts[idx:])
+
+
+def _get_top_level_packages(path: Path) -> set[str]:
+    """Return names of top-level directories and .py modules in the repo root.
+
+    Parameters
+    ----------
+    path
+        Path to the cloned repo root.
+
+    Returns
+    -------
+    set[str]
+        Set of top-level package/module names (without ``.py`` extension).
+    """
+    top_level = set()
+    for entry in path.iterdir():
+        if entry.name.startswith("."):
+            continue
+        if entry.is_dir():
+            top_level.add(entry.name)
+        elif entry.suffix == ".py" and entry.name != "__init__.py":
+            top_level.add(entry.stem)
+    return top_level
+
+
+def _rewrite_import_line(
+    line: str, top_level: set[str], package_path: str
+) -> str | None:
+    """Rewrite a single import line if it references a repo-internal module.
+
+    Parameters
+    ----------
+    line
+        A single line of source code (with original indentation and newline).
+    top_level
+        Set of top-level package names in the repo.
+    package_path
+        Full dotted package path prefix to prepend.
+
+    Returns
+    -------
+    str | None
+        The rewritten line (preserving indentation), or None if no match.
+    """
+    stripped = line.lstrip()
+    indent = line[: len(line) - len(stripped)]
+
+    # from <pkg> import ... or from <pkg>.something import ...
+    match = re.match(r"from (\w[\w.]*) import ", stripped)
+    if match:
+        module_path = match.group(1)
+        if module_path.split(".")[0] in top_level:
+            rest = stripped[match.end() :]
+            return f"{indent}from {package_path}.{module_path} import {rest}"
+
+    # import <pkg>.something — rewrite to from <full_parent> import <leaf>
+    match = re.match(r"import (\w[\w.]+)", stripped)
+    if not match:
+        return None
+    module_path = match.group(1)
+    if "." not in module_path or module_path.split(".")[0] not in top_level:
+        return None
+    rest = stripped[match.end() :]
+    parent, leaf = module_path.rsplit(".", 1)
+    return f"{indent}from {package_path}.{parent} import {leaf}{rest}"
+
+
+def _rewrite_absolute_imports(actual_path: Path, canonical_path: Path) -> None:
+    """
+    Many imports in the repo will be done relative to the external repo root.
+
+    These would work when cloning the repo standalone and running commands
+    from the repo root, but since we're not doing that, we need to change these
+    import paths to be done relative to the qai_hub_models path.
+
+    For example, an external repo might have a module src/models/yolo.py that it
+    tries to import else where using ``from src.models.yolo import ...``
+
+    This would change to something like
+    ``from qai_hub_models.models.yolov8_det.external_repos.yolo.src.models.yolo import``
+
+    To fix this, we first identify all top-level directories and python modules in the
+    external repo, then grep for all files trying to import from any of these and replace
+    with the longer import statement.
+
+    Parameters
+    ----------
+    actual_path
+        Path where the cloned files actually live.
+    canonical_path
+        The final package path used for deriving the dotted import prefix.
+    """
+    package_path = _derive_package_path(canonical_path)
+    top_level = _get_top_level_packages(actual_path)
+    if not top_level:
+        return
+
+    for py_file in actual_path.rglob("*.py"):
+        if py_file.is_symlink() and not py_file.exists():
+            continue
+        with open(py_file) as f:
+            lines = f.readlines()
+        changed = False
+        for i, line in enumerate(lines):
+            rewritten = _rewrite_import_line(line, top_level, package_path)
+            if rewritten is not None:
+                lines[i] = rewritten
+                changed = True
+        if changed:
+            with open(py_file, "w") as f:
+                f.writelines(lines)
+
+
+def _make_package(path: Path) -> None:
+    """Recursively prepare a directory tree for Python import.
+
+    For each directory (skipping hidden ones like ``.git``):
+    - Prepends ``# mypy: ignore-errors`` to all ``.py`` files that lack it.
+    - Creates an ``__init__.py`` if one doesn't exist.
+
+    Parameters
+    ----------
+    path
+        Root directory to process.
+    """
+    for entry in path.iterdir():
+        if entry.name.startswith("."):
+            continue
+        if entry.is_dir():
+            _make_package(entry)
+        elif entry.suffix == ".py":
+            if entry.is_symlink() and not entry.exists():
+                continue
+            content = entry.read_text()
+            if not content.startswith(MYPY_IGNORE):
+                entry.write_text(MYPY_IGNORE + content)
+    if not (path / "__init__.py").exists():
+        (path / "__init__.py").write_text(MYPY_IGNORE)
+
+
+def postprocess_repo(actual_path: Path, canonical_path: Path) -> None:
+    """Walk a cloned repo and make it importable as a Python package.
+
+    1. Creates missing ``__init__.py`` files in every directory.
+    2. Prepends ``# mypy: ignore-errors`` to all ``.py`` files.
+    3. Rewrites absolute imports of repo-internal modules to use the full
+       ``qai_hub_models.models.<model>.external_repos.<repo>.*`` package path.
+
+    Parameters
+    ----------
+    actual_path
+        Path where the cloned files actually live (may be a temp dir during clone).
+    canonical_path
+        The final package path used for import rewriting, e.g.
+        ``<external_repos_dir>/<repo_name>``.
+    """
+    _make_package(actual_path)
+    _rewrite_absolute_imports(actual_path, canonical_path)
+
+
+def clone_and_patch(
+    url: str,
+    commit_sha: str,
+    target: Path,
+    external_repos_path: Path,
+    repo_name: str,
+    patch_path: Path | None = None,
+) -> None:
+    """Clone a repo at a pinned commit, apply patches, and postprocess.
+
+    Parameters
+    ----------
+    url
+        Git repository URL.
+    commit_sha
+        Pinned commit SHA.
+    target
+        Local directory to clone into.
+    external_repos_path
+        Path to the external_repos directory (used to derive package path).
+    repo_name
+        Name of the repo subdirectory.
+    patch_path
+        Path to the ``.diff`` patch file, or None.
+    """
+    _shallow_clone(url, commit_sha, target)
+    if patch_path and patch_path.exists():
+        _apply_patch(target, patch_path)
+    postprocess_repo(target, external_repos_path / repo_name)
+
+
+def clone_and_link_repo(
+    repo_name: str,
+    repo_url: str,
+    commit_sha: str,
+    content_hash: str,
+    external_repos_path: Path,
+    patch_path: Path | None = None,
+    ask_to_clone: bool = not EXECUTING_IN_CI_ENVIRONMENT,
+) -> None:
+    """Clone a single repo and make it available locally.
+
+    Operates in one of three modes:
+
+    - **Pip** (any OS): clones into cache; caller uses ``__path__`` redirect.
+    - **Dev + symlinks** (unix): clones into cache; symlinks into source tree.
+    - **Dev + no symlinks** (Windows): clones directly into source tree.
+
+    Crash safety: clones into a temp directory, then renames atomically.
+
+    Parameters
+    ----------
+    repo_name
+        Name of the repo (used as subdirectory name and display name).
+    repo_url
+        Git repository URL.
+    commit_sha
+        Pinned commit SHA.
+    content_hash
+        Content hash of the repo configuration (used for cache path).
+    external_repos_path
+        Path to the external_repos directory.
+    patch_path
+        Path to the ``.diff`` patch file, or None.
+    ask_to_clone
+        Whether to prompt the user before cloning. Defaults to True
+        outside CI.
+    """
+    use_cache = IS_PIP_PACKAGE or USE_SYMLINK_CACHE
+    cache_dir = get_cache_dir(external_repos_path, repo_name, content_hash)
+    repo_in_cache = cache_dir / repo_name
+    local_dir = external_repos_path / repo_name
+
+    if use_cache:
+        if repo_in_cache.is_dir():
+            if not IS_PIP_PACKAGE and not local_dir.exists():
+                local_dir.symlink_to(repo_in_cache)
+            return
+    elif local_dir.is_dir():
+        return
+
+    if ask_to_clone:
+        should_clone = query_yes_no(
+            f"{repo_name} requires external repo {repo_url}. Ok to clone?",
+            timeout=60,
+        )
+        if not should_clone:
+            raise RuntimeError(
+                f"Unable to load without required repository {repo_url}."
+            )
+
+    print(f"Cloning {repo_url} ({commit_sha[:8]}) for {repo_name}...")
+
+    if use_cache:
+        cache_dir.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            ignore_cleanup_errors=True, dir=cache_dir.parent
+        ) as tmp:
+            clone_and_patch(
+                repo_url,
+                commit_sha,
+                Path(tmp) / repo_name,
+                external_repos_path,
+                repo_name,
+                patch_path,
+            )
+            if cache_dir.exists():
+                shutil.rmtree(cache_dir)
+            Path(tmp).rename(cache_dir)
+
+        if not IS_PIP_PACKAGE and not local_dir.exists():
+            local_dir.symlink_to(repo_in_cache)
+    else:
+        with tempfile.TemporaryDirectory(
+            ignore_cleanup_errors=True, dir=external_repos_path
+        ) as tmp:
+            clone_and_patch(
+                repo_url,
+                commit_sha,
+                Path(tmp) / repo_name,
+                external_repos_path,
+                repo_name,
+                patch_path,
+            )
+            if local_dir.exists():
+                shutil.rmtree(local_dir)
+            (Path(tmp) / repo_name).rename(local_dir)
+
+    print("Done")
+
+
+# ---------------------------------------------------------------------------
+# High-level orchestration
+# ---------------------------------------------------------------------------
 
 
 def setup_external_repos_impl(
-    model_id: str,
     repo_configs: dict[str, RepoConfig],
-    external_repos_dir: str,
+    external_repos_path: Path,
 ) -> None:
-    """
-    Clone all external repos for a model if needed.
+    """Clone all external repos if needed.
 
-    Pip mode: cache dir existence is sufficient (hash is in the path).
-    Dev mode: each repo has a <repo_name>_hash.txt in external_repos/.
-        Hashes are computed live. If the hash file matches, skip.
-        On mismatch or missing, re-clone and write hash file.
+    In pip mode, cache directory existence is sufficient validation
+    (the content hash is embedded in the path). In dev mode, each repo
+    has a ``<repo_name>_hash.txt`` file; hashes are computed live and
+    compared. On mismatch or missing, the repo is re-cloned.
+
+    Parameters
+    ----------
+    repo_configs
+        Mapping of repo name to configuration.
+    external_repos_path
+        Path to the external_repos directory.
     """
-    is_pip = IS_PIP_PACKAGE
-    per_repo_hashes = compute_repo_hashes(repo_configs, external_repos_dir)
+    per_repo_hashes = compute_repo_hashes(repo_configs, external_repos_path)
     for repo_name, config in repo_configs.items():
         content_hash = per_repo_hashes[repo_name]
 
-        if not is_pip:
-            hash_file = os.path.join(external_repos_dir, f"{repo_name}_hash.txt")
-            local_dir = os.path.join(external_repos_dir, repo_name)
+        if not IS_PIP_PACKAGE:
+            hash_file = external_repos_path / f"{repo_name}_hash.txt"
+            local_dir = external_repos_path / repo_name
 
-            # Fast path: hash file matches and local dir exists
-            stored_hash = None
-            if os.path.exists(hash_file):
-                with open(hash_file) as f:
-                    stored_hash = f.read().strip()
-            if stored_hash == content_hash and os.path.exists(local_dir):
+            stored_hash = hash_file.read_text().strip() if hash_file.exists() else None
+            if stored_hash == content_hash and local_dir.exists():
                 continue
-            # Stale or incomplete — clean up so we re-clone
-            if os.path.exists(hash_file):
-                os.remove(hash_file)
-            if os.path.islink(local_dir):
-                os.remove(local_dir)
-            elif os.path.isdir(local_dir):
+            if hash_file.exists():
+                hash_file.unlink()
+            if local_dir.is_symlink():
+                local_dir.unlink()
+            elif local_dir.is_dir():
                 shutil.rmtree(local_dir)
 
         patch_path = None
         if config.patches_filename:
-            patch_path = os.path.join(external_repos_dir, config.patches_filename)
+            patch_path = (external_repos_path / config.patches_filename).resolve()
         clone_and_link_repo(
-            model_id=model_id,
             repo_name=repo_name,
             repo_url=config.repo_url,
             commit_sha=config.commit_sha,
             content_hash=content_hash,
-            external_repos_dir=external_repos_dir,
+            external_repos_path=external_repos_path,
             patch_path=patch_path,
         )
 
-        # Dev mode: write hash file after successful setup
-        if not is_pip:
-            with open(hash_file, "w") as f:
-                f.write(content_hash)
+        if not IS_PIP_PACKAGE:
+            hash_file.write_text(content_hash)
+
+
+def get_repo_cache_paths(name: str, shared: bool = False) -> list[Path]:
+    """Return cache directory paths for all external repos.
+
+    Used to set ``__path__`` for pip installs so sub-imports resolve
+    from the cache.
+
+    Parameters
+    ----------
+    name
+        Model ID (e.g. ``"gkt"``) or shared folder name (e.g. ``"centernet"``).
+    shared
+        If True, looks in ``_shared/<name>/`` instead of ``models/<name>/``.
+
+    Returns
+    -------
+    list[Path]
+        List of cache directory paths.
+    """
+    repo_configs, external_repos_path = _resolve_external_repos(name, shared)
+    return [
+        get_cache_dir(external_repos_path, repo_name, content_hash)
+        for repo_name, content_hash in compute_repo_hashes(
+            repo_configs, external_repos_path
+        ).items()
+    ]
+
+
+def setup_external_repos(name: str, shared: bool = False) -> None:
+    """Setup external repos by reading code-gen.yaml and cloning if needed.
+
+    Parameters
+    ----------
+    name
+        Model ID (e.g. ``"gkt"``) or shared folder name (e.g. ``"centernet"``).
+    shared
+        If True, looks in ``_shared/<name>/`` instead of ``models/<name>/``.
+    """
+    repo_configs, external_repos_path = _resolve_external_repos(name, shared)
+    if repo_configs:
+        setup_external_repos_impl(repo_configs, external_repos_path)

@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import os
-import sys
 from collections.abc import Callable
 
 import numpy as np
@@ -16,7 +14,10 @@ from typing_extensions import Self
 
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.evaluators.centernet_pose_evaluator import CenternetPoseEvaluator
-from qai_hub_models.models._shared.centernet.model import CenterNet, CenterNetAsRoot
+from qai_hub_models.models._shared.centernet.external_repos.centernet.src.lib.models.decode import (
+    multi_pose_decode,
+)
+from qai_hub_models.models._shared.centernet.model import CenterNet
 from qai_hub_models.models.common import SampleInputsType
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.image_processing import pre_process_with_affine
@@ -86,9 +87,7 @@ class CenterNetPose(CenterNet):
         if ckpt_path == "default":
             ckpt_path = str(DEFAULT_WEIGHTS.fetch())
         model = super().from_pretrained(ckpt_path, heads)
-        with CenterNetAsRoot() as repo_path:
-            sys.path.insert(0, os.path.join(repo_path, "src", "lib"))
-            from models.decode import multi_pose_decode
+
         return cls(model, multi_pose_decode)
 
     def forward(

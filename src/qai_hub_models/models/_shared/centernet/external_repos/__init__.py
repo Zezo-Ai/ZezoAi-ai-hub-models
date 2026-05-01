@@ -18,12 +18,12 @@ from qai_hub_models.utils.external_repo import (
 )
 
 
-MODEL_ID = "gkt"
+MODEL_ID = "centernet"
 
 
 if not TYPE_CHECKING:
     with FileLock(Path(__file__).resolve().parent / ".setup.lock"):
-        setup_external_repos(MODEL_ID)
+        setup_external_repos(MODEL_ID, shared=True)
 
     if IS_PIP_PACKAGE:
-        __path__ = [str(p) for p in get_repo_cache_paths(MODEL_ID)]
+        __path__ = [str(p) for p in get_repo_cache_paths(MODEL_ID, shared=True)]
