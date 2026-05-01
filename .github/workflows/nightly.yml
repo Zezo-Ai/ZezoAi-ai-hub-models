@@ -179,7 +179,9 @@ jobs:
                 [ -d "$dir" ] || continue
                 prefix=$(basename "$dir")
                 for f in "$dir"*.xml "$dir"*.json; do
-                  [ -f "$f" ] && cp "$f" "build/combined-test-results/${prefix}-$(basename "$f")"
+                  if [ -f "$f" ]; then
+                    cp "$f" "build/combined-test-results/${prefix}-$(basename "$f")"
+                  fi
                 done
               done
             fi
@@ -298,11 +300,9 @@ jobs:
             fi
 
             # Write URLs to GITHUB_OUTPUT for Slack step
-            {
-              echo "issue_urls<<EOF_ISSUE_URLS"
-              echo "$ISSUE_URLS"
-              echo "EOF_ISSUE_URLS"
-            } >> "$GITHUB_OUTPUT"
+            # Use single-line format with literal \n to avoid breaking YAML
+            # block scalars when substituted into the Slack payload.
+            echo "issue_urls=${ISSUE_URLS//$'\n'/\\n}" >> "$GITHUB_OUTPUT"
 
         # Send result to Slack channel #ai-hub-models
         - name: Send Slack Notification
@@ -313,10 +313,4 @@ jobs:
             token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
             payload: |
               channel: "C05LEEK0N8J"
-              text: |-
-                🚨 QAI Hub Models Nightly Failed
-
-                Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
-
-                GitHub Issues:
-                ${{ steps.create-github-issues.outputs.issue_urls }}
+              text: "🚨 QAI Hub Models Nightly Failed\n\nWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}\n\nGitHub Issues:\n${{ steps.create-github-issues.outputs.issue_urls }}"
