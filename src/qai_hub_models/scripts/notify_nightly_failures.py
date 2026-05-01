@@ -125,7 +125,7 @@ def main() -> None:
     # Workbench issue
     failed_aihub_jobs = load_failed_jobs_json(args.failed_jobs_json)
     if workbench_failures:
-        title = f"[Nightly] Workbench Job Failures - {today}"
+        title = f"[QAIHM Nightly] Workbench Job Failures - {today}"
         body = render_issue_body(
             "workbench_issue.j2",
             today=today,
@@ -141,7 +141,7 @@ def main() -> None:
 
     # General issue
     if general_failures:
-        title = f"[Nightly] Test Failures - {today}"
+        title = f"[QAIHM Nightly] Test Failures - {today}"
         body = render_issue_body(
             "general_issue.j2",
             today=today,

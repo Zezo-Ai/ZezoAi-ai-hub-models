@@ -171,15 +171,15 @@ jobs:
               --name "Scorecard Integration Test" --junit-xml build/all-test-results/scorecard/qaihm-scorecard-integration-test-junit.xml \
               --output build/combined-test-results/summary.md
 
-        - name: Copy XML Files to Combined Results
+        - name: Copy Test Results to Combined Directory
           run: |
             mkdir -p build/combined-test-results
             if [ -d build/all-test-results ]; then
               for dir in build/all-test-results/*/; do
                 [ -d "$dir" ] || continue
                 prefix=$(basename "$dir")
-                for xml in "$dir"*.xml; do
-                  [ -f "$xml" ] && cp "$xml" "build/combined-test-results/${prefix}-$(basename "$xml")"
+                for f in "$dir"*.xml "$dir"*.json; do
+                  [ -f "$f" ] && cp "$f" "build/combined-test-results/${prefix}-$(basename "$f")"
                 done
               done
             fi
@@ -226,7 +226,7 @@ jobs:
     notify_failure:
         if: ${{ failure() && github.event_name == 'schedule' }}
         name: Notify Failure
-        needs: [run-tests310, run-tests311, run-tests312, run-tests313, scorecard-integration-test, run-sync-public-website]
+        needs: [run-tests310, run-tests311, run-tests312, run-tests313, scorecard-integration-test, run-sync-public-website, generate_test_summary]
         runs-on: [tetra-ubuntu-2204, self-hosted]
         permissions:
             contents: read
@@ -245,13 +245,13 @@ jobs:
           with:
             venv-path: ${{ env.VENV_PATH }}
 
-        - name: Download Workbench Verification Results
-          id: download-workbench-results
+        - name: Download Combined Test Results
+          id: download-test-results
           uses: actions/download-artifact@v8
           continue-on-error: true
           with:
-            name: test-results-workbench-jobs-py3.10
-            path: build/workbench-results
+            name: nightly-test-results
+            path: build/nightly-test-results
 
         - name: Generate Issue Bodies
           id: generate-issues
@@ -270,7 +270,7 @@ jobs:
               --repository "${{ github.repository }}" \
               --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}" \
               --ref-name "${{ github.ref_name }}" \
-              --failed-jobs-json "build/workbench-results/failed-workbench-jobs.json"
+              --failed-jobs-json "build/nightly-test-results/py310-failed-workbench-jobs.json"
 
         - name: Create GitHub Issues
           id: create-github-issues
@@ -282,8 +282,7 @@ jobs:
                 --repo qcom-ai-hub/tetracode \
                 --title "$(cat build/nightly-issues/workbench_title.txt)" \
                 --body-file build/nightly-issues/workbench_issue.md \
-                --label p0 --label ai-hub-models \
-                --assignee baarts_QCOM --assignee brtal_QCOM)
+                --label p0 --label ai-hub-models)
               echo "Created workbench issue: $URL"
               ISSUE_URLS="$URL"
             fi

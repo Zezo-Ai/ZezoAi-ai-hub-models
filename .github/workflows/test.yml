@@ -463,11 +463,11 @@ jobs:
             "${TEST_ARGS[@]}" \
             --output build/combined-test-results/summary.md
 
-      - name: Copy XML Files to Combined Results
+      - name: Copy Test Results to Combined Directory
         run: |
           mkdir -p build/combined-test-results
           if [ -d build/all-test-results ]; then
-            find build/all-test-results -name "*.xml" -exec cp {} build/combined-test-results/ \; || true
+            find build/all-test-results \( -name "*.xml" -o -name "*.json" \) -exec cp {} build/combined-test-results/ \; || true
           fi
 
       - name: Upload Combined Test Results
