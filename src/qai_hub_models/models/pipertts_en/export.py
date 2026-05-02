@@ -324,7 +324,7 @@ def export_model(
     skip_downloading: bool = False,
     skip_summary: bool = False,
     output_dir: str | None = None,
-    target_runtime: TargetRuntime = TargetRuntime.VOICE_AI,
+    target_runtime: TargetRuntime = TargetRuntime.QNN_CONTEXT_BINARY,
     compile_options: str = "",
     quantize_options: str = "",
     profile_options: str = "",
@@ -645,11 +645,7 @@ def main() -> None:
     warnings.filterwarnings("ignore")
     if not check_unpublished_model_warning():
         return
-    supported_precision_runtimes: dict[Precision, list[TargetRuntime]] = {
-        Precision.w8a16: [
-            TargetRuntime.VOICE_AI,
-        ],
-    }
+    supported_precision_runtimes: dict[Precision, list[TargetRuntime]] = {}
 
     parser = export_parser(
         model_cls=Model,

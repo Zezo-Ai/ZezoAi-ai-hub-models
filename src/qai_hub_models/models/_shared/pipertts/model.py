@@ -148,17 +148,6 @@ class Encoder(BaseModel):
             compile_options += " --truncate_64bit_tensors --truncate_64bit_io "
         return compile_options
 
-    def get_hub_link_options(
-        self,
-        target_runtime: TargetRuntime,
-        other_link_options: str = "",
-    ) -> str:
-        return super().get_hub_link_options(
-            target_runtime,
-            other_link_options
-            + " --qairt_version 2.43 ",  # 2.45 will fail for link job
-        )
-
 
 class SDP(BaseModel):
     """Wrapper for the Piper encoder and duration predictor with deterministic behavior."""
