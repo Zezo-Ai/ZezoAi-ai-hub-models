@@ -23,6 +23,7 @@ from qai_hub_models.models._shared.voiceai_tts.generate_unicode_bin import (
 from qai_hub_models.models._shared.voiceai_tts.language import (
     BERT_MODEL_IDS,
     LANG_CODE_MAP,
+    LANG_ID_MAP,
     TTSLanguage,
 )
 from qai_hub_models.models.common import TargetRuntime
@@ -139,6 +140,7 @@ class TTSMetadata(BaseQAIHMConfig):
                 description=f"Default voice for {lang_name}",
                 capabilities=TTSCapabilities(),
                 sample_rate=sample_rate,
+                language_code=LANG_ID_MAP[language],
             )
         ]
 
