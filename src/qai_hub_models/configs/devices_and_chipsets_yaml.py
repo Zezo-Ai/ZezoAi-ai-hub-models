@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum, unique
+from functools import cache
 
 import qai_hub as hub
 from pydantic import Field
@@ -14,13 +15,14 @@ from qai_hub_models_cli.proto import platform_pb2
 from typing_extensions import assert_never
 
 from qai_hub_models.configs.proto_helpers import form_factor_to_proto, runtime_to_proto
-from qai_hub_models.scorecard.device import ScorecardDevice
+from qai_hub_models.scorecard.device import ScorecardDevice, sanitize_chipset_name
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
 from qai_hub_models.utils.path_helpers import QAIHM_PACKAGE_ROOT
 from qai_hub_models.utils.qai_hub_helpers import get_device_and_chipset_name
 
 SCORECARD_DEVICE_YAML_PATH = QAIHM_PACKAGE_ROOT / "devices_and_chipsets.yaml"
+SIMILAR_DEVICES_YAML_PATH = QAIHM_PACKAGE_ROOT / "similar_devices.yaml"
 
 
 @unique
@@ -177,6 +179,7 @@ class DeviceDetailsYaml(BaseQAIHMConfig):
     icon: WebsiteIcon
     npu_count: int = 1
     enabled_in_scorecard: bool = False
+    available_in_workbench: bool = True
 
     @staticmethod
     def from_device(device: ScorecardDevice) -> DeviceDetailsYaml:
@@ -203,7 +206,49 @@ class DeviceDetailsYaml(BaseQAIHMConfig):
             vendor=self.vendor,
             icon=_WEBSITE_ICON_TO_PROTO[self.icon.value],
             enabled_in_scorecard=self.enabled_in_scorecard,
+            available_in_workbench=self.available_in_workbench,
         )
+
+
+class _SimilarDevicesYaml(BaseQAIHMConfig):
+    devices: dict[str, DeviceDetailsYaml] = Field(default_factory=dict)
+
+
+@cache
+def _load_similar_devices_raw() -> dict[str, DeviceDetailsYaml]:
+    """Load the similar devices YAML as typed DeviceDetailsYaml entries."""
+    return _SimilarDevicesYaml.from_yaml(SIMILAR_DEVICES_YAML_PATH).devices
+
+
+@cache
+def load_similar_devices() -> dict[str, list[str]]:
+    """
+    Load the similar devices mapping, resolving chipsets to device names.
+
+    Matches the entry's chipset, plus any chipset that normalizes to the same
+    value via sanitize_chipset_name (e.g. 8-elite-for-galaxy -> 8-elite).
+
+    Returns unsupported_device_name -> list of supported device names.
+    """
+    raw = _load_similar_devices_raw()
+    similar_names = set(raw.keys())
+
+    dc = DevicesAndChipsetsYaml.load()
+
+    sanitized_to_devices: dict[str, list[str]] = {}
+    for name, details in dc.devices.items():
+        if name in similar_names:
+            continue
+        key = sanitize_chipset_name(details.chipset)
+        if key not in sanitized_to_devices:
+            sanitized_to_devices[key] = []
+        sanitized_to_devices[key].append(name)
+
+    resolved: dict[str, list[str]] = {}
+    for unsupported_name, entry in raw.items():
+        key = sanitize_chipset_name(entry.chipset)
+        resolved[unsupported_name] = sanitized_to_devices.get(key, [])
+    return resolved
 
 
 class ChipsetYaml(BaseQAIHMConfig):
@@ -358,6 +403,12 @@ class DevicesAndChipsetsYaml(BaseQAIHMConfig):
         # Use the scorecard device for the reference device, if one exists.
         for device in ScorecardDevice.all_devices():
             out.chipsets[device.chipset].reference_device = device.reference_device.name
+
+        # Add similar (unsupported) devices with their own explicit metadata.
+        for unsupported_name, entry in _load_similar_devices_raw().items():
+            if unsupported_name not in out.devices:
+                entry.available_in_workbench = False
+                out.devices[unsupported_name] = entry
 
         return out
 

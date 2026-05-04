@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -158,6 +159,71 @@ class QAIHMModelPerf(BaseQAIHMConfig):
             and not self.supported_devices
             and not self.precisions
         )
+
+    def apply_similar_devices(self, mapping: dict[str, list[str]]) -> None:
+        """
+        Duplicate performance entries from supported devices to similar unsupported devices.
+
+        Parameters
+        ----------
+        mapping
+            Dict of unsupported_device_name -> list of similar supported device names.
+            The first matching device with results is used.
+        """
+        similar_device_objs = {
+            name: ScorecardDevice(name, name, register=False) for name in mapping
+        }
+
+        # Tracks which unsupported names already have perf data (from a prior apply or earlier component).
+        placed: set[str] = set()
+
+        for precision_details in self.precisions.values():
+            for component in precision_details.components.values():
+                existing_devices = {str(d): d for d in component.performance_metrics}
+                existing_asset_devices = {str(d): d for d in component.device_assets}
+
+                for unsupported_name, similar_names in mapping.items():
+                    if unsupported_name in existing_devices:
+                        placed.add(unsupported_name)
+                        continue
+
+                    for name in similar_names:
+                        if name in existing_devices:
+                            component.performance_metrics[
+                                similar_device_objs[unsupported_name]
+                            ] = copy.copy(
+                                component.performance_metrics[existing_devices[name]]
+                            )
+                            if name in existing_asset_devices:
+                                component.device_assets[
+                                    similar_device_objs[unsupported_name]
+                                ] = copy.copy(
+                                    component.device_assets[
+                                        existing_asset_devices[name]
+                                    ]
+                                )
+                            placed.add(unsupported_name)
+                            break
+
+        # Build reverse lookup: supported_device_name -> [unsupported_names]
+        supported_to_similar: dict[str, list[str]] = {}
+        for unsupported_name, similar_names in mapping.items():
+            for name in similar_names:
+                supported_to_similar.setdefault(name, []).append(unsupported_name)
+
+        existing_names = {str(d) for d in self.supported_devices}
+        new_devices: list[ScorecardDevice] = []
+        inserted: set[str] = set()
+        for device in self.supported_devices:
+            new_devices.append(device)
+            for unsupported_name in supported_to_similar.get(str(device), []):
+                if (
+                    unsupported_name not in existing_names
+                    and unsupported_name not in inserted
+                ):
+                    new_devices.append(similar_device_objs[unsupported_name])
+                    inserted.add(unsupported_name)
+        self.supported_devices = new_devices
 
     def for_each_entry(
         self,

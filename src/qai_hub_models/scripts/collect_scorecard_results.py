@@ -18,6 +18,7 @@ import ruamel.yaml
 from qai_hub import JobType
 
 from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.devices_and_chipsets_yaml import load_similar_devices
 from qai_hub_models.configs.info_yaml import QAIHMModelInfo
 from qai_hub_models.configs.perf_yaml import QAIHMModelPerf
 from qai_hub_models.models.common import Precision
@@ -551,6 +552,9 @@ def process_e2e_recipe_model(
             )
         else:
             model_card_without_failures = None
+
+        if model_card_without_failures:
+            model_card_without_failures.apply_similar_devices(load_similar_devices())
 
         # Load old model card and write new model card
         prev_model_card = QAIHMModelPerf.from_model(model_id, not_exists_ok=True)
