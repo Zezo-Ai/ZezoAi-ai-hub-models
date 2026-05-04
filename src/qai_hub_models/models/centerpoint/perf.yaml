@@ -1,10 +1,12 @@
 supported_devices:
 - Snapdragon 8 Elite Gen 5 QRD
 - Samsung Galaxy S25
+- Dragonwing Q-8750
 - Samsung Galaxy S25 Ultra
 - Samsung Galaxy S25+
 - Snapdragon X2 Elite CRD
 - Snapdragon X Elite CRD
+- Dragonwing IQ-X7181
 - Samsung Galaxy S24
 - Samsung Galaxy S24 Ultra
 - Samsung Galaxy S24+
@@ -20,6 +22,7 @@ supported_devices:
 - Samsung Galaxy S21
 - Samsung Galaxy S21 Ultra
 - Snapdragon X Plus 8-Core CRD
+- Dragonwing IQ-X5121
 - QCS8275 (Proxy)
 - QCS8550 (Proxy)
 - QCS8450 (Proxy)
@@ -261,6 +264,47 @@ precisions:
               job_id: jp3qn4y35
               job_status: Passed
               inference_time_milliseconds: 185.25
+              estimated_peak_memory_range_mb:
+                min: 2
+                max: 2
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 150
+                npu: 150
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          Dragonwing Q-8750:
+            tflite:
+              job_id: jpxe97w35
+              job_status: Passed
+              inference_time_milliseconds: 2623.124
+              estimated_peak_memory_range_mb:
+                min: 1853
+                max: 1862
+              primary_compute_unit: CPU
+              layer_counts:
+                total: 123
+                cpu: 123
+              tool_versions:
+                litert: 1.4.3
+            qnn_dlc:
+              job_id: j5q907jnp
+              job_status: Passed
+              inference_time_milliseconds: 210.365
+              estimated_peak_memory_range_mb:
+                min: 0
+                max: 462
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 150
+                npu: 150
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          Dragonwing IQ-X7181:
+            qnn_dlc:
+              job_id: j56q23k6g
+              job_status: Passed
+              inference_time_milliseconds: 323.28
               estimated_peak_memory_range_mb:
                 min: 2
                 max: 2

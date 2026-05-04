@@ -1,7 +1,8 @@
 supported_devices:
-  - Snapdragon 8 Elite QRD
+- Snapdragon 8 Elite QRD
+- Dragonwing Q-8750
 supported_chipsets:
-  - qualcomm-snapdragon-8-elite
+- qualcomm-snapdragon-8-elite
 precisions:
   w4a16:
     components:
@@ -10,8 +11,16 @@ precisions:
           Snapdragon 8 Elite QRD:
             qnn_context_binary:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 238.231
-                    max: 3811.696
-                  tokens_per_second: 13.33
+              - context_length: 4096
+                tokens_per_second: 13.33
+                time_to_first_token_range_milliseconds:
+                  min: 238.231
+                  max: 3811.696
+          Dragonwing Q-8750:
+            qnn_context_binary:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 13.33
+                time_to_first_token_range_milliseconds:
+                  min: 238.231
+                  max: 3811.696

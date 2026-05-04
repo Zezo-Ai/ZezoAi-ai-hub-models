@@ -1,10 +1,12 @@
 supported_devices:
 - Snapdragon 8 Elite Gen 5 QRD
 - Samsung Galaxy S25
+- Dragonwing Q-8750
 - Samsung Galaxy S25 Ultra
 - Samsung Galaxy S25+
 - Snapdragon X2 Elite CRD
 - Snapdragon X Elite CRD
+- Dragonwing IQ-X7181
 - Samsung Galaxy S24
 - Samsung Galaxy S24 Ultra
 - Samsung Galaxy S24+
@@ -20,9 +22,12 @@ supported_devices:
 - Samsung Galaxy S21
 - Samsung Galaxy S21 Ultra
 - Snapdragon X Plus 8-Core CRD
+- Dragonwing IQ-X5121
 - QCS8275 (Proxy)
 - QCS8550 (Proxy)
 - SA8775P ADP
+- SA8255P ADP
+- SA8650P ADP
 - QCS8450 (Proxy)
 - XR2 Gen 2 (Proxy)
 - Dragonwing IQ-9075 EVK
@@ -292,6 +297,75 @@ precisions:
                 cpu: 423
               tool_versions:
                 onnx_runtime: 1.24.3
+          SA8255P ADP:
+            tflite:
+              job_id: j5wmwdr6g
+              job_status: Passed
+              inference_time_milliseconds: 2488.685
+              estimated_peak_memory_range_mb:
+                min: 127
+                max: 138
+              primary_compute_unit: CPU
+              layer_counts:
+                total: 481
+                cpu: 481
+              tool_versions:
+                litert: 1.4.3
+          SA8650P ADP:
+            tflite:
+              job_id: j5wmwdr6g
+              job_status: Passed
+              inference_time_milliseconds: 2488.685
+              estimated_peak_memory_range_mb:
+                min: 127
+                max: 138
+              primary_compute_unit: CPU
+              layer_counts:
+                total: 481
+                cpu: 481
+              tool_versions:
+                litert: 1.4.3
+          Dragonwing Q-8750:
+            tflite:
+              job_id: jpvzq1mjg
+              job_status: Passed
+              inference_time_milliseconds: 1232.282
+              estimated_peak_memory_range_mb:
+                min: 108
+                max: 121
+              primary_compute_unit: CPU
+              layer_counts:
+                total: 481
+                cpu: 481
+              tool_versions:
+                litert: 1.4.3
+            onnx:
+              job_id: jp8w23kkp
+              job_status: Passed
+              inference_time_milliseconds: 1382.282
+              estimated_peak_memory_range_mb:
+                min: 247
+                max: 259
+              primary_compute_unit: CPU
+              layer_counts:
+                total: 423
+                cpu: 423
+              tool_versions:
+                onnx_runtime: 1.24.3
+          Dragonwing IQ-X7181:
+            onnx:
+              job_id: j5q907dnp
+              job_status: Passed
+              inference_time_milliseconds: 660.577
+              estimated_peak_memory_range_mb:
+                min: 732
+                max: 732
+              primary_compute_unit: CPU
+              layer_counts:
+                total: 423
+                cpu: 423
+              tool_versions:
+                onnx_runtime: 1.24.3
   w8a16_mixed_fp16:
     components:
       BEVDet:
@@ -393,6 +467,34 @@ precisions:
               estimated_peak_memory_range_mb:
                 min: 709
                 max: 709
+              primary_compute_unit: CPU
+              layer_counts:
+                total: 972
+                cpu: 972
+              tool_versions:
+                onnx_runtime: 1.24.3
+          Dragonwing Q-8750:
+            onnx:
+              job_id: jgnr09dk5
+              job_status: Passed
+              inference_time_milliseconds: 1531.756
+              estimated_peak_memory_range_mb:
+                min: 325
+                max: 338
+              primary_compute_unit: CPU
+              layer_counts:
+                total: 972
+                cpu: 972
+              tool_versions:
+                onnx_runtime: 1.24.3
+          Dragonwing IQ-X7181:
+            onnx:
+              job_id: jp23x7qrg
+              job_status: Passed
+              inference_time_milliseconds: 953.675
+              estimated_peak_memory_range_mb:
+                min: 1238
+                max: 1238
               primary_compute_unit: CPU
               layer_counts:
                 total: 972

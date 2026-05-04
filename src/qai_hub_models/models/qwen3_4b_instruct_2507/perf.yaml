@@ -1,7 +1,9 @@
 supported_devices:
 - Snapdragon X Elite CRD
+- Dragonwing IQ-X7181
 - Snapdragon X2 Elite CRD
 - Snapdragon 8 Elite QRD
+- Dragonwing Q-8750
 - Samsung Galaxy S25
 - Samsung Galaxy S25 Ultra
 - Samsung Galaxy S25+
@@ -58,3 +60,19 @@ precisions:
                 time_to_first_token_range_milliseconds:
                   min: 101.79260000000001
                   max: 3257.3632000000002
+          Dragonwing Q-8750:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 27.311995697021484
+                time_to_first_token_range_milliseconds:
+                  min: 67.7441
+                  max: 2167.8112
+          Dragonwing IQ-X7181:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 15.663029289245605
+                time_to_first_token_range_milliseconds:
+                  min: 116.5181
+                  max: 3728.5792

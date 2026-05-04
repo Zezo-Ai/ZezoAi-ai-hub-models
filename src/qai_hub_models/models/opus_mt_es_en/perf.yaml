@@ -1,10 +1,12 @@
 supported_devices:
 - Snapdragon 8 Elite Gen 5 QRD
 - Samsung Galaxy S25
+- Dragonwing Q-8750
 - Samsung Galaxy S25 Ultra
 - Samsung Galaxy S25+
 - Snapdragon X2 Elite CRD
 - Snapdragon X Elite CRD
+- Dragonwing IQ-X7181
 - Samsung Galaxy S24
 - Samsung Galaxy S24 Ultra
 - Samsung Galaxy S24+
@@ -20,9 +22,12 @@ supported_devices:
 - Samsung Galaxy S21
 - Samsung Galaxy S21 Ultra
 - Snapdragon X Plus 8-Core CRD
+- Dragonwing IQ-X5121
 - QCS8275 (Proxy)
 - QCS8550 (Proxy)
 - SA8775P ADP
+- SA8255P ADP
+- SA8650P ADP
 - QCS8450 (Proxy)
 - XR2 Gen 2 (Proxy)
 - Dragonwing IQ-9075 EVK
@@ -108,6 +113,26 @@ precisions:
           QCS8450 (Proxy):
             voice_ai:
               model_id: mq2wjpvjq
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          SA8255P ADP:
+            voice_ai:
+              model_id: mn7263w4m
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          SA8650P ADP:
+            voice_ai:
+              model_id: mn7263w4m
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          Dragonwing Q-8750:
+            voice_ai:
+              model_id: mqvl096lm
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          Dragonwing IQ-X7181:
+            voice_ai:
+              model_id: mnlew16oq
               tool_versions:
                 qairt: 2.45.0.260326154327
         performance_metrics:
@@ -279,6 +304,62 @@ precisions:
                 npu: 256
               tool_versions:
                 qairt: 2.45.0.260326154327
+          SA8255P ADP:
+            voice_ai:
+              job_id: jpxek3r95
+              job_status: Passed
+              inference_time_milliseconds: 4.756
+              estimated_peak_memory_range_mb:
+                min: 0
+                max: 9
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 256
+                npu: 256
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          SA8650P ADP:
+            voice_ai:
+              job_id: jpxek3r95
+              job_status: Passed
+              inference_time_milliseconds: 4.756
+              estimated_peak_memory_range_mb:
+                min: 0
+                max: 9
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 256
+                npu: 256
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          Dragonwing Q-8750:
+            voice_ai:
+              job_id: jglevolep
+              job_status: Passed
+              inference_time_milliseconds: 2.228
+              estimated_peak_memory_range_mb:
+                min: 0
+                max: 13
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 256
+                npu: 256
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          Dragonwing IQ-X7181:
+            voice_ai:
+              job_id: jgjkvo785
+              job_status: Passed
+              inference_time_milliseconds: 3.916
+              estimated_peak_memory_range_mb:
+                min: 0
+                max: 0
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 256
+                npu: 256
+              tool_versions:
+                qairt: 2.45.0.260326154327
       decoder:
         device_assets:
           Samsung Galaxy S25:
@@ -339,6 +420,26 @@ precisions:
           QCS8450 (Proxy):
             voice_ai:
               model_id: mqplg67om
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          SA8255P ADP:
+            voice_ai:
+              model_id: mnwlypdrm
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          SA8650P ADP:
+            voice_ai:
+              model_id: mnwlypdrm
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          Dragonwing Q-8750:
+            voice_ai:
+              model_id: mnjepr4dm
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          Dragonwing IQ-X7181:
+            voice_ai:
+              model_id: mmdedlg3q
               tool_versions:
                 qairt: 2.45.0.260326154327
         performance_metrics:
@@ -501,6 +602,62 @@ precisions:
               job_id: jp4jlmylp
               job_status: Passed
               inference_time_milliseconds: 2.237
+              estimated_peak_memory_range_mb:
+                min: 12
+                max: 12
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 325
+                npu: 325
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          SA8255P ADP:
+            voice_ai:
+              job_id: j5mvnokq5
+              job_status: Passed
+              inference_time_milliseconds: 4.249
+              estimated_peak_memory_range_mb:
+                min: 12
+                max: 20
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 325
+                npu: 325
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          SA8650P ADP:
+            voice_ai:
+              job_id: j5mvnokq5
+              job_status: Passed
+              inference_time_milliseconds: 4.249
+              estimated_peak_memory_range_mb:
+                min: 12
+                max: 20
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 325
+                npu: 325
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          Dragonwing Q-8750:
+            voice_ai:
+              job_id: j56qyrwvg
+              job_status: Passed
+              inference_time_milliseconds: 2.441
+              estimated_peak_memory_range_mb:
+                min: 0
+                max: 9
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 325
+                npu: 325
+              tool_versions:
+                qairt: 2.45.0.260326154327
+          Dragonwing IQ-X7181:
+            voice_ai:
+              job_id: jpe4d8z05
+              job_status: Passed
+              inference_time_milliseconds: 3.046
               estimated_peak_memory_range_mb:
                 min: 12
                 max: 12

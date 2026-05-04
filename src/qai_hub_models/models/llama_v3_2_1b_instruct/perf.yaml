@@ -1,12 +1,16 @@
 supported_devices:
 - Snapdragon 8 Elite Gen 5 QRD
 - Snapdragon 8 Elite QRD
+- Dragonwing Q-8750
 - Samsung Galaxy S25
 - Samsung Galaxy S25 Ultra
 - Samsung Galaxy S25+
 - Snapdragon X2 Elite CRD
 - Snapdragon X Elite CRD
+- Dragonwing IQ-X7181
 - SA8775P ADP
+- SA8255P ADP
+- SA8650P ADP
 - Dragonwing IQ-9075 EVK
 - SA8295P ADP
 supported_chipsets:
@@ -70,6 +74,22 @@ precisions:
                 time_to_first_token_range_milliseconds:
                   min: 72.52210000000001
                   max: 2320.7072000000003
+          Dragonwing Q-8750:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 32.220094871521
+                time_to_first_token_range_milliseconds:
+                  min: 72.52210000000001
+                  max: 2320.7072000000003
+          Dragonwing IQ-X7181:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 13.535644435882569
+                time_to_first_token_range_milliseconds:
+                  min: 144.9255
+                  max: 4637.616
   w4a16:
     components:
       Llama-v3.2-1B-Instruct:
@@ -122,3 +142,35 @@ precisions:
                 time_to_first_token_range_milliseconds:
                   min: 38.207
                   max: 1222.624
+          SA8255P ADP:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 32.61
+                time_to_first_token_range_milliseconds:
+                  min: 67.938
+                  max: 2174.016
+          SA8650P ADP:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 32.61
+                time_to_first_token_range_milliseconds:
+                  min: 67.938
+                  max: 2174.016
+          Dragonwing Q-8750:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 58.379512786865234
+                time_to_first_token_range_milliseconds:
+                  min: 38.207
+                  max: 1222.624
+          Dragonwing IQ-X7181:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 24.226713943481446
+                time_to_first_token_range_milliseconds:
+                  min: 78.2621
+                  max: 2504.3872

@@ -1,10 +1,12 @@
 supported_devices:
 - Snapdragon 8 Elite Gen 5 QRD
 - Samsung Galaxy S25
+- Dragonwing Q-8750
 - Samsung Galaxy S25 Ultra
 - Samsung Galaxy S25+
 - Snapdragon X2 Elite CRD
 - Snapdragon X Elite CRD
+- Dragonwing IQ-X7181
 - Samsung Galaxy S24
 - Samsung Galaxy S24 Ultra
 - Samsung Galaxy S24+
@@ -20,6 +22,7 @@ supported_devices:
 - Samsung Galaxy S21
 - Samsung Galaxy S21 Ultra
 - Snapdragon X Plus 8-Core CRD
+- Dragonwing IQ-X5121
 - QCS8550 (Proxy)
 - Dragonwing IQ-9075 EVK
 supported_chipsets:
@@ -143,6 +146,36 @@ precisions:
               estimated_peak_memory_range_mb:
                 min: 148
                 max: 148
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 820
+                npu: 820
+              tool_versions:
+                qairt: 2.42.0.251225135753_193295
+                onnx_runtime: 1.24.3
+          Dragonwing Q-8750:
+            onnx:
+              job_id: jg99l6x8g
+              job_status: Passed
+              inference_time_milliseconds: 785.197
+              estimated_peak_memory_range_mb:
+                min: 12
+                max: 2542
+              primary_compute_unit: NPU
+              layer_counts:
+                total: 821
+                npu: 821
+              tool_versions:
+                qairt: 2.42.0.251225135753_193295
+                onnx_runtime: 1.24.3
+          Dragonwing IQ-X7181:
+            onnx:
+              job_id: j57vyq795
+              job_status: Passed
+              inference_time_milliseconds: 1093.749
+              estimated_peak_memory_range_mb:
+                min: 146
+                max: 146
               primary_compute_unit: NPU
               layer_counts:
                 total: 820

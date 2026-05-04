@@ -1,12 +1,16 @@
 supported_devices:
 - Snapdragon 8 Elite Gen 5 QRD
 - Snapdragon 8 Elite QRD
+- Dragonwing Q-8750
 - Samsung Galaxy S25
 - Samsung Galaxy S25 Ultra
 - Samsung Galaxy S25+
 - Snapdragon X2 Elite CRD
 - Snapdragon X Elite CRD
+- Dragonwing IQ-X7181
 - SA8775P ADP
+- SA8255P ADP
+- SA8650P ADP
 - Dragonwing IQ-9075 EVK
 - SA8295P ADP
 supported_chipsets:
@@ -70,6 +74,38 @@ precisions:
                 time_to_first_token_range_milliseconds:
                   min: 82.1426
                   max: 2628.5632
+          SA8255P ADP:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 17.47
+                time_to_first_token_range_milliseconds:
+                  min: 109.614
+                  max: 3507.648
+          SA8650P ADP:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 17.47
+                time_to_first_token_range_milliseconds:
+                  min: 109.614
+                  max: 3507.648
+          Dragonwing Q-8750:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 28.099240112304688
+                time_to_first_token_range_milliseconds:
+                  min: 82.1426
+                  max: 2628.5632
+          Dragonwing IQ-X7181:
+            genie:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 16.657778549194337
+                time_to_first_token_range_milliseconds:
+                  min: 119.9063
+                  max: 3837.0016
   w4:
     components:
       Llama-v3.2-3B-Instruct:

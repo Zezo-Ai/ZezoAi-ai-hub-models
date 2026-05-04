@@ -1,8 +1,9 @@
 supported_devices:
-    - Snapdragon X Elite CRD
+- Snapdragon X Elite CRD
+- Dragonwing IQ-X7181
 supported_chipsets:
-  - qualcomm-snapdragon-8-elite
-  - qualcomm-snapdragon-x-elite
+- qualcomm-snapdragon-8-elite
+- qualcomm-snapdragon-x-elite
 precisions:
   w4a16:
     components:
@@ -11,16 +12,32 @@ precisions:
           Snapdragon 8 Elite QRD:
             qnn_context_binary:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 196.7925
-                    max: 6297.36
-                  tokens_per_second: 11.01293
+              - context_length: 4096
+                tokens_per_second: 11.01293
+                time_to_first_token_range_milliseconds:
+                  min: 196.7925
+                  max: 6297.36
           Snapdragon X Elite CRD:
             qnn_context_binary:
               llm_metrics:
-                - context_length: 4096
-                  time_to_first_token_range_milliseconds:
-                    min: 295.3902
-                    max: 9452.4864
-                  tokens_per_second: 8.01724
+              - context_length: 4096
+                tokens_per_second: 8.01724
+                time_to_first_token_range_milliseconds:
+                  min: 295.3902
+                  max: 9452.4864
+          Dragonwing Q-8750:
+            qnn_context_binary:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 11.01293
+                time_to_first_token_range_milliseconds:
+                  min: 196.7925
+                  max: 6297.36
+          Dragonwing IQ-X7181:
+            qnn_context_binary:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 8.01724
+                time_to_first_token_range_milliseconds:
+                  min: 295.3902
+                  max: 9452.4864
