@@ -342,9 +342,6 @@ and many more.
 | [MeloTTS-EN](https://aihub.qualcomm.com/models/melotts_en) | `qai_hub_models.models.melotts_en` |
 | [MeloTTS-ES](https://aihub.qualcomm.com/models/melotts_es) | `qai_hub_models.models.melotts_es` |
 | [MeloTTS-ZH](https://aihub.qualcomm.com/models/melotts_zh) | `qai_hub_models.models.melotts_zh` |
-| [PiperTTS-DE](https://aihub.qualcomm.com/models/pipertts_de) | `qai_hub_models.models.pipertts_de` |
-| [PiperTTS-EN](https://aihub.qualcomm.com/models/pipertts_en) | `qai_hub_models.models.pipertts_en` |
-| [PiperTTS-IT](https://aihub.qualcomm.com/models/pipertts_it) | `qai_hub_models.models.pipertts_it` |
 
 ### Generative AI
 
