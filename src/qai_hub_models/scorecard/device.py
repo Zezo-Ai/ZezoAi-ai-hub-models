@@ -625,6 +625,13 @@ cs_8_elite = ScorecardDevice(
     is_default=True,
 )
 
+cs_8_elite_qrd = ScorecardDevice(
+    name="cs_8_elite_qrd",
+    reference_device_name="Snapdragon 8 Elite QRD",
+    compile_paths=[ScorecardCompilePath.GENIE],
+    profile_paths=[ScorecardProfilePath.GENIE],
+)
+
 cs_7_gen_4 = ScorecardDevice(
     name="cs_7_gen_4",
     reference_device_name="Snapdragon 7 Gen 4 QRD",

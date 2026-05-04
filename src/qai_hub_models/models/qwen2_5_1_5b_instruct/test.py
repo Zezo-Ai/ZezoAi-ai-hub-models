@@ -51,7 +51,7 @@ from qai_hub_models.scorecard import (
     ScorecardCompilePath,
     ScorecardDevice,
 )
-from qai_hub_models.scorecard.device import cs_8_elite
+from qai_hub_models.scorecard.device import cs_8_elite_qrd
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.llm_helpers import (
     create_genie_config,
@@ -298,7 +298,7 @@ def test_demo_quantized(capsys: pytest.CaptureFixture[str]) -> None:
 @pytest.mark.parametrize(
     ("precision", "scorecard_path", "device"),
     [
-        (Precision.w4, ScorecardCompilePath.GENIE, cs_8_elite),
+        (Precision.w4, ScorecardCompilePath.GENIE, cs_8_elite_qrd),
     ],
 )
 @pytest.mark.compile_ram_intensive
@@ -348,10 +348,10 @@ def test_compile(
 def _get_llm_perf_params() -> list[tuple[Precision, ScorecardDevice]]:
     params = get_llm_perf_parametrization(
         MODEL_ID,
-        default_devices=[cs_8_elite],
+        default_devices=[cs_8_elite_qrd],
         default_precisions=[Precision.w4],
     )
-    return params if params else [(Precision.w4, cs_8_elite)]
+    return params if params else [(Precision.w4, cs_8_elite_qrd)]
 
 
 @pytest.mark.llm_perf
@@ -403,7 +403,7 @@ def test_llm_perf(
 @pytest.mark.parametrize(
     ("precision", "scorecard_path", "device"),
     [
-        (Precision.w4, ScorecardCompilePath.GENIE, cs_8_elite),
+        (Precision.w4, ScorecardCompilePath.GENIE, cs_8_elite_qrd),
     ],
 )
 @pytest.mark.qdc

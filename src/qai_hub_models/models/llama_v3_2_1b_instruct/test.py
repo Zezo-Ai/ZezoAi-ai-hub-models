@@ -51,7 +51,7 @@ from qai_hub_models.scorecard import (
     ScorecardCompilePath,
     ScorecardDevice,
 )
-from qai_hub_models.scorecard.device import cs_8_elite, cs_x_elite
+from qai_hub_models.scorecard.device import cs_8_elite_qrd, cs_x_elite
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.checkpoint import CheckpointSpec
 from qai_hub_models.utils.llm_helpers import (
@@ -367,7 +367,7 @@ def test_demo_default(
 @pytest.mark.parametrize(
     ("precision", "scorecard_path", "device", "checkpoint"),
     [
-        (Precision.w4, ScorecardCompilePath.GENIE, cs_8_elite, "DEFAULT_W4"),
+        (Precision.w4, ScorecardCompilePath.GENIE, cs_8_elite_qrd, "DEFAULT_W4"),
         (Precision.w4a16, ScorecardCompilePath.GENIE, cs_x_elite, "DEFAULT_W4A16"),
     ],
 )
@@ -426,7 +426,7 @@ def test_compile(
     ("precision", "scorecard_path", "device"),
     [
         (Precision.w4a16, ScorecardCompilePath.GENIE, cs_x_elite),
-        (Precision.w4, ScorecardCompilePath.GENIE, cs_8_elite),
+        (Precision.w4, ScorecardCompilePath.GENIE, cs_8_elite_qrd),
     ],
 )
 @pytest.mark.qdc
@@ -473,10 +473,10 @@ def test_qdc(
 def _get_llm_perf_params() -> list[tuple[Precision, ScorecardDevice]]:
     params = get_llm_perf_parametrization(
         MODEL_ID,
-        default_devices=[cs_8_elite],
+        default_devices=[cs_8_elite_qrd],
         default_precisions=[Precision.w4],
     )
-    return params if params else [(Precision.w4, cs_8_elite)]
+    return params if params else [(Precision.w4, cs_8_elite_qrd)]
 
 
 @pytest.mark.llm_perf
