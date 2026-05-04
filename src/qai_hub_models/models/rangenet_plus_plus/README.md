@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [RangeNet++: Real-time LiDAR point cloud semantic segmentation using range images](https://aihub.qualcomm.com/models/rangenet_plus_plus)
 
 RangeNet++ projects a LiDAR point cloud onto a 5-channel range image (depth, x, y, z, intensity) and applies a DarkNet-53 encoder with a decoder head to predict per-point semantic class labels in real time.

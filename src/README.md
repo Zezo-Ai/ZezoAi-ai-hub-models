@@ -279,6 +279,7 @@ and many more.
 | [MediaPipe-Pose-Estimation](https://aihub.qualcomm.com/models/mediapipe_pose) | `qai_hub_models.models.mediapipe_pose` |
 | [Posenet-Mobilenet](https://aihub.qualcomm.com/models/posenet_mobilenet) | `qai_hub_models.models.posenet_mobilenet` |
 | [RTMPose-Body2d](https://aihub.qualcomm.com/models/rtmpose_body2d) | `qai_hub_models.models.rtmpose_body2d` |
+| [SixDRepNet](https://aihub.qualcomm.com/models/sixd_repnet) | `qai_hub_models.models.sixd_repnet` |
 | | |
 | **Gaze Estimation**
 | [EyeGaze](https://aihub.qualcomm.com/models/eyegaze) | `qai_hub_models.models.eyegaze` |
@@ -298,6 +299,7 @@ and many more.
 | [CenterNet-3D](https://aihub.qualcomm.com/models/centernet_3d) | `qai_hub_models.models.centernet_3d` |
 | [CenterPoint](https://aihub.qualcomm.com/models/centerpoint) | `qai_hub_models.models.centerpoint` |
 | [GKT](https://aihub.qualcomm.com/models/gkt) | `qai_hub_models.models.gkt` |
+| [RangeNet++](https://aihub.qualcomm.com/models/rangenet_plus_plus) | `qai_hub_models.models.rangenet_plus_plus` |
 | [StateTransformer](https://aihub.qualcomm.com/models/statetransformer) | `qai_hub_models.models.statetransformer` |
 | | |
 | **Robotics**
@@ -324,6 +326,7 @@ and many more.
 | | |
 | **Speech Recognition**
 | [Distil-Whisper](https://aihub.qualcomm.com/models/distil_whisper) | `qai_hub_models.models.distil_whisper` |
+| [HuggingFace-WavLM-Base-Plus](https://aihub.qualcomm.com/models/huggingface_wavlm_base_plus) | `qai_hub_models.models.huggingface_wavlm_base_plus` |
 | [Whisper-Base](https://aihub.qualcomm.com/models/whisper_base) | `qai_hub_models.models.whisper_base` |
 | [Whisper-Large-V3-Turbo](https://aihub.qualcomm.com/models/whisper_large_v3_turbo) | `qai_hub_models.models.whisper_large_v3_turbo` |
 | [Whisper-Medium](https://aihub.qualcomm.com/models/whisper_medium) | `qai_hub_models.models.whisper_medium` |
@@ -339,6 +342,9 @@ and many more.
 | [MeloTTS-EN](https://aihub.qualcomm.com/models/melotts_en) | `qai_hub_models.models.melotts_en` |
 | [MeloTTS-ES](https://aihub.qualcomm.com/models/melotts_es) | `qai_hub_models.models.melotts_es` |
 | [MeloTTS-ZH](https://aihub.qualcomm.com/models/melotts_zh) | `qai_hub_models.models.melotts_zh` |
+| [PiperTTS-DE](https://aihub.qualcomm.com/models/pipertts_de) | `qai_hub_models.models.pipertts_de` |
+| [PiperTTS-EN](https://aihub.qualcomm.com/models/pipertts_en) | `qai_hub_models.models.pipertts_en` |
+| [PiperTTS-IT](https://aihub.qualcomm.com/models/pipertts_it) | `qai_hub_models.models.pipertts_it` |
 
 ### Generative AI
 

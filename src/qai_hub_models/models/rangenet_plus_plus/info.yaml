@@ -1,35 +1,35 @@
 name: RangeNet++
 id: rangenet_plus_plus
-status: pending
+status: published
 headline: Real-time LiDAR point cloud semantic segmentation using range images.
 domain: Computer Vision
 description: RangeNet++ projects a LiDAR point cloud onto a 5-channel range image (depth, x, y, z, intensity) and applies a DarkNet-53 encoder with a decoder head to predict per-point semantic class labels in real time.
 use_case: Driver Assistance
 tags:
- - real-time
- - bu-auto
+- real-time
+- bu-auto
 applicable_scenarios:
- - Autonomous Driving
- - Robotics
- - HD Mapping
+- Autonomous Driving
+- Robotics
+- HD Mapping
 related_models:
- - pidnet
- - ddrnet23_slim
+- pidnet
+- ddrnet23_slim
 form_factors:
- - Auto
- - IoT
+- Auto
+- IoT
 has_static_banner: true
 has_animated_banner: false
 dataset:
- - semantickitti
+- semantickitti
 technical_details:
- Model checkpoint: darknet53_rangenet++
- Input resolution: 64x2048
- Input channels: '5'
- Number of output classes: '20'
- Backbone: DarkNet-53
+  Model checkpoint: darknet53_rangenet++
+  Input resolution: 64x2048
+  Input channels: '5'
+  Number of output classes: '20'
+  Backbone: DarkNet-53
 license_type: mit
 research_paper: https://ieeexplore.ieee.org/document/8967762
-research_paper_title: "RangeNet++: Fast and Accurate LiDAR Semantic Segmentation"
+research_paper_title: 'RangeNet++: Fast and Accurate LiDAR Semantic Segmentation'
 source_repo: https://github.com/PRBonn/lidar-bonnetal
 license: https://github.com/PRBonn/lidar-bonnetal/blob/master/LICENSE

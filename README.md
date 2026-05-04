@@ -279,6 +279,7 @@ and many more.
 | [MediaPipe-Pose-Estimation](https://aihub.qualcomm.com/models/mediapipe_pose) | [qai_hub_models.models.mediapipe_pose](src/qai_hub_models/models/mediapipe_pose/README.md) |
 | [Posenet-Mobilenet](https://aihub.qualcomm.com/models/posenet_mobilenet) | [qai_hub_models.models.posenet_mobilenet](src/qai_hub_models/models/posenet_mobilenet/README.md) |
 | [RTMPose-Body2d](https://aihub.qualcomm.com/models/rtmpose_body2d) | [qai_hub_models.models.rtmpose_body2d](src/qai_hub_models/models/rtmpose_body2d/README.md) |
+| [SixDRepNet](https://aihub.qualcomm.com/models/sixd_repnet) | [qai_hub_models.models.sixd_repnet](src/qai_hub_models/models/sixd_repnet/README.md) |
 | | |
 | **Gaze Estimation**
 | [EyeGaze](https://aihub.qualcomm.com/models/eyegaze) | [qai_hub_models.models.eyegaze](src/qai_hub_models/models/eyegaze/README.md) |
@@ -298,6 +299,7 @@ and many more.
 | [CenterNet-3D](https://aihub.qualcomm.com/models/centernet_3d) | [qai_hub_models.models.centernet_3d](src/qai_hub_models/models/centernet_3d/README.md) |
 | [CenterPoint](https://aihub.qualcomm.com/models/centerpoint) | [qai_hub_models.models.centerpoint](src/qai_hub_models/models/centerpoint/README.md) |
 | [GKT](https://aihub.qualcomm.com/models/gkt) | [qai_hub_models.models.gkt](src/qai_hub_models/models/gkt/README.md) |
+| [RangeNet++](https://aihub.qualcomm.com/models/rangenet_plus_plus) | [qai_hub_models.models.rangenet_plus_plus](src/qai_hub_models/models/rangenet_plus_plus/README.md) |
 | [StateTransformer](https://aihub.qualcomm.com/models/statetransformer) | [qai_hub_models.models.statetransformer](src/qai_hub_models/models/statetransformer/README.md) |
 | | |
 | **Robotics**
@@ -324,6 +326,7 @@ and many more.
 | | |
 | **Speech Recognition**
 | [Distil-Whisper](https://aihub.qualcomm.com/models/distil_whisper) | [qai_hub_models.models.distil_whisper](src/qai_hub_models/models/distil_whisper/README.md) |
+| [HuggingFace-WavLM-Base-Plus](https://aihub.qualcomm.com/models/huggingface_wavlm_base_plus) | [qai_hub_models.models.huggingface_wavlm_base_plus](src/qai_hub_models/models/huggingface_wavlm_base_plus/README.md) |
 | [Whisper-Base](https://aihub.qualcomm.com/models/whisper_base) | [qai_hub_models.models.whisper_base](src/qai_hub_models/models/whisper_base/README.md) |
 | [Whisper-Large-V3-Turbo](https://aihub.qualcomm.com/models/whisper_large_v3_turbo) | [qai_hub_models.models.whisper_large_v3_turbo](src/qai_hub_models/models/whisper_large_v3_turbo/README.md) |
 | [Whisper-Medium](https://aihub.qualcomm.com/models/whisper_medium) | [qai_hub_models.models.whisper_medium](src/qai_hub_models/models/whisper_medium/README.md) |
@@ -339,6 +342,9 @@ and many more.
 | [MeloTTS-EN](https://aihub.qualcomm.com/models/melotts_en) | [qai_hub_models.models.melotts_en](src/qai_hub_models/models/melotts_en/README.md) |
 | [MeloTTS-ES](https://aihub.qualcomm.com/models/melotts_es) | [qai_hub_models.models.melotts_es](src/qai_hub_models/models/melotts_es/README.md) |
 | [MeloTTS-ZH](https://aihub.qualcomm.com/models/melotts_zh) | [qai_hub_models.models.melotts_zh](src/qai_hub_models/models/melotts_zh/README.md) |
+| [PiperTTS-DE](https://aihub.qualcomm.com/models/pipertts_de) | [qai_hub_models.models.pipertts_de](src/qai_hub_models/models/pipertts_de/README.md) |
+| [PiperTTS-EN](https://aihub.qualcomm.com/models/pipertts_en) | [qai_hub_models.models.pipertts_en](src/qai_hub_models/models/pipertts_en/README.md) |
+| [PiperTTS-IT](https://aihub.qualcomm.com/models/pipertts_it) | [qai_hub_models.models.pipertts_it](src/qai_hub_models/models/pipertts_it/README.md) |
 
 ### Generative AI
 

@@ -4,7 +4,6 @@ supported_devices:
 - Samsung Galaxy S25 Ultra
 - Samsung Galaxy S25+
 - Snapdragon X2 Elite CRD
-- Snapdragon X Elite CRD
 - Samsung Galaxy S24
 - Samsung Galaxy S24 Ultra
 - Samsung Galaxy S24+
@@ -19,7 +18,6 @@ supported_devices:
 - Xiaomi 12 Pro
 - Samsung Galaxy S21
 - Samsung Galaxy S21 Ultra
-- Snapdragon X Plus 8-Core CRD
 - QCS8275 (Proxy)
 - QCS8550 (Proxy)
 - SA8775P ADP
@@ -32,12 +30,10 @@ supported_chipsets:
 - qualcomm-snapdragon-8-elite-gen5
 - qualcomm-snapdragon-8-elite
 - qualcomm-snapdragon-x2-elite
-- qualcomm-snapdragon-x-elite
 - qualcomm-snapdragon-8gen3
 - qualcomm-snapdragon-8gen2
 - qualcomm-snapdragon-8gen1
 - qualcomm-snapdragon-888
-- qualcomm-snapdragon-x-plus-8-core
 - qualcomm-qcs8275-proxy
 - qualcomm-qcs8550-proxy
 - qualcomm-sa8775p
@@ -51,15 +47,15 @@ precisions:
       proposal_generator:
         universal_assets:
           qnn_dlc:
-            model_id: mqy8x419n
+            model_id: mqyo3669m
             tool_versions:
               qairt: 2.45.0.260326154327
         performance_metrics:
           Dragonwing IQ-9075 EVK:
             qnn_dlc:
-              job_id: jp83o6mog
+              job_id: jgkrvvr25
               job_status: Passed
-              inference_time_milliseconds: 119.13
+              inference_time_milliseconds: 119.033
               estimated_peak_memory_range_mb:
                 min: 7
                 max: 71
@@ -71,9 +67,9 @@ precisions:
                 qairt: 2.45.0.260326154327
           QCS8275 (Proxy):
             qnn_dlc:
-              job_id: jg93vkywg
+              job_id: jgd7nnrlg
               job_status: Passed
-              inference_time_milliseconds: 353.675
+              inference_time_milliseconds: 353.892
               estimated_peak_memory_range_mb:
                 min: 0
                 max: 1756
@@ -85,12 +81,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           QCS8450 (Proxy):
             qnn_dlc:
-              job_id: j5636rny5
+              job_id: jgle44e8p
               job_status: Passed
-              inference_time_milliseconds: 157.312
+              inference_time_milliseconds: 151.505
               estimated_peak_memory_range_mb:
                 min: 7
-                max: 2737
+                max: 2739
               primary_compute_unit: NPU
               layer_counts:
                 total: 209
@@ -99,12 +95,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           QCS8550 (Proxy):
             qnn_dlc:
-              job_id: jgn92omq5
+              job_id: jpyvzzv7p
               job_status: Passed
-              inference_time_milliseconds: 95.28
+              inference_time_milliseconds: 95.916
               estimated_peak_memory_range_mb:
                 min: 7
-                max: 10
+                max: 24
               primary_compute_unit: NPU
               layer_counts:
                 total: 209
@@ -113,9 +109,9 @@ precisions:
                 qairt: 2.45.0.260326154327
           SA7255P ADP:
             qnn_dlc:
-              job_id: jg93vkywg
+              job_id: jgd7nnrlg
               job_status: Passed
-              inference_time_milliseconds: 353.675
+              inference_time_milliseconds: 353.892
               estimated_peak_memory_range_mb:
                 min: 0
                 max: 1756
@@ -127,9 +123,9 @@ precisions:
                 qairt: 2.45.0.260326154327
           SA8295P ADP:
             qnn_dlc:
-              job_id: jg93vky8g
+              job_id: jgd7nn7eg
               job_status: Passed
-              inference_time_milliseconds: 125.92
+              inference_time_milliseconds: 125.974
               estimated_peak_memory_range_mb:
                 min: 0
                 max: 1430
@@ -141,12 +137,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           SA8775P ADP:
             qnn_dlc:
-              job_id: j57jzkl95
+              job_id: j5mveevw5
               job_status: Passed
-              inference_time_milliseconds: 122.387
+              inference_time_milliseconds: 122.39
               estimated_peak_memory_range_mb:
-                min: 1
-                max: 1757
+                min: 0
+                max: 1756
               primary_compute_unit: NPU
               layer_counts:
                 total: 209
@@ -155,12 +151,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           Samsung Galaxy S24:
             qnn_dlc:
-              job_id: jgklzo7w5
+              job_id: jp8w2238p
               job_status: Passed
-              inference_time_milliseconds: 69.805
+              inference_time_milliseconds: 69.276
               estimated_peak_memory_range_mb:
                 min: 7
-                max: 2326
+                max: 2329
               primary_compute_unit: NPU
               layer_counts:
                 total: 209
@@ -169,12 +165,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           Samsung Galaxy S25:
             qnn_dlc:
-              job_id: jgl0no6jg
+              job_id: j5q9007mp
               job_status: Passed
-              inference_time_milliseconds: 53.369
+              inference_time_milliseconds: 53.244
               estimated_peak_memory_range_mb:
                 min: 0
-                max: 1509
+                max: 1510
               primary_compute_unit: NPU
               layer_counts:
                 total: 209
@@ -183,26 +179,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           Snapdragon 8 Elite Gen 5 QRD:
             qnn_dlc:
-              job_id: jp34kxv3g
+              job_id: j56q2237g
               job_status: Passed
-              inference_time_milliseconds: 43.422
-              estimated_peak_memory_range_mb:
-                min: 5
-                max: 1768
-              primary_compute_unit: NPU
-              layer_counts:
-                total: 209
-                npu: 209
-              tool_versions:
-                qairt: 2.45.0.260326154327
-          Snapdragon X Elite CRD:
-            qnn_dlc:
-              job_id: jpv13erkp
-              job_status: Passed
-              inference_time_milliseconds: 91.314
+              inference_time_milliseconds: 44.202
               estimated_peak_memory_range_mb:
                 min: 7
-                max: 7
+                max: 1769
               primary_compute_unit: NPU
               layer_counts:
                 total: 209
@@ -211,9 +193,9 @@ precisions:
                 qairt: 2.45.0.260326154327
           Snapdragon X2 Elite CRD:
             qnn_dlc:
-              job_id: jper98wog
+              job_id: jgzv22x6p
               job_status: Passed
-              inference_time_milliseconds: 42.858
+              inference_time_milliseconds: 43.187
               estimated_peak_memory_range_mb:
                 min: 7
                 max: 7
@@ -226,15 +208,15 @@ precisions:
       roi_head:
         universal_assets:
           qnn_dlc:
-            model_id: mmr58j42n
+            model_id: mm5yd4e2n
             tool_versions:
               qairt: 2.45.0.260326154327
         performance_metrics:
           Dragonwing IQ-9075 EVK:
             qnn_dlc:
-              job_id: jgklzoqn5
+              job_id: j5q90094p
               job_status: Passed
-              inference_time_milliseconds: 321.626
+              inference_time_milliseconds: 342.162
               estimated_peak_memory_range_mb:
                 min: 52
                 max: 106
@@ -246,12 +228,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           QCS8275 (Proxy):
             qnn_dlc:
-              job_id: jp1d07w8p
+              job_id: jg99009lg
               job_status: Passed
-              inference_time_milliseconds: 572.679
+              inference_time_milliseconds: 590.646
               estimated_peak_memory_range_mb:
                 min: 39
-                max: 735
+                max: 734
               primary_compute_unit: NPU
               layer_counts:
                 total: 263
@@ -260,12 +242,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           QCS8450 (Proxy):
             qnn_dlc:
-              job_id: jgo1yo3k5
+              job_id: j56q22q0g
               job_status: Passed
-              inference_time_milliseconds: 297.834
+              inference_time_milliseconds: 313.188
               estimated_peak_memory_range_mb:
                 min: 39
-                max: 955
+                max: 957
               primary_compute_unit: NPU
               layer_counts:
                 total: 263
@@ -274,12 +256,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           QCS8550 (Proxy):
             qnn_dlc:
-              job_id: jp27849q5
+              job_id: jp8w22wxp
               job_status: Passed
-              inference_time_milliseconds: 250.521
+              inference_time_milliseconds: 249.643
               estimated_peak_memory_range_mb:
                 min: 52
-                max: 55
+                max: 58
               primary_compute_unit: NPU
               layer_counts:
                 total: 263
@@ -288,12 +270,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           SA7255P ADP:
             qnn_dlc:
-              job_id: jp1d07w8p
+              job_id: jg99009lg
               job_status: Passed
-              inference_time_milliseconds: 572.679
+              inference_time_milliseconds: 590.646
               estimated_peak_memory_range_mb:
                 min: 39
-                max: 735
+                max: 734
               primary_compute_unit: NPU
               layer_counts:
                 total: 263
@@ -302,9 +284,9 @@ precisions:
                 qairt: 2.45.0.260326154327
           SA8295P ADP:
             qnn_dlc:
-              job_id: jp1d07w7p
+              job_id: jp4jnnjvp
               job_status: Passed
-              inference_time_milliseconds: 307.15
+              inference_time_milliseconds: 307.476
               estimated_peak_memory_range_mb:
                 min: 49
                 max: 846
@@ -316,9 +298,9 @@ precisions:
                 qairt: 2.45.0.260326154327
           SA8775P ADP:
             qnn_dlc:
-              job_id: jpx7v36lg
+              job_id: jpr16619g
               job_status: Passed
-              inference_time_milliseconds: 267.972
+              inference_time_milliseconds: 267.888
               estimated_peak_memory_range_mb:
                 min: 49
                 max: 923
@@ -330,12 +312,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           Samsung Galaxy S24:
             qnn_dlc:
-              job_id: j5q78zeng
+              job_id: jgkrvvlo5
               job_status: Passed
-              inference_time_milliseconds: 180.955
+              inference_time_milliseconds: 178.224
               estimated_peak_memory_range_mb:
-                min: 42
-                max: 891
+                min: 46
+                max: 893
               primary_compute_unit: NPU
               layer_counts:
                 total: 263
@@ -344,12 +326,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           Samsung Galaxy S25:
             qnn_dlc:
-              job_id: j5636re65
+              job_id: jgle440lp
               job_status: Passed
-              inference_time_milliseconds: 123.331
+              inference_time_milliseconds: 125.168
               estimated_peak_memory_range_mb:
-                min: 23
-                max: 714
+                min: 28
+                max: 719
               primary_compute_unit: NPU
               layer_counts:
                 total: 263
@@ -358,26 +340,12 @@ precisions:
                 qairt: 2.45.0.260326154327
           Snapdragon 8 Elite Gen 5 QRD:
             qnn_dlc:
-              job_id: jgo1yokq5
+              job_id: jp3qnn4z5
               job_status: Passed
-              inference_time_milliseconds: 94.707
+              inference_time_milliseconds: 99.642
               estimated_peak_memory_range_mb:
                 min: 51
-                max: 750
-              primary_compute_unit: NPU
-              layer_counts:
-                total: 263
-                npu: 263
-              tool_versions:
-                qairt: 2.45.0.260326154327
-          Snapdragon X Elite CRD:
-            qnn_dlc:
-              job_id: jgj0xo2vp
-              job_status: Passed
-              inference_time_milliseconds: 236.847
-              estimated_peak_memory_range_mb:
-                min: 52
-                max: 52
+                max: 749
               primary_compute_unit: NPU
               layer_counts:
                 total: 263
@@ -386,9 +354,9 @@ precisions:
                 qairt: 2.45.0.260326154327
           Snapdragon X2 Elite CRD:
             qnn_dlc:
-              job_id: jgzxe8jo5
+              job_id: jg99003vg
               job_status: Passed
-              inference_time_milliseconds: 100.686
+              inference_time_milliseconds: 96.983
               estimated_peak_memory_range_mb:
                 min: 52
                 max: 52
