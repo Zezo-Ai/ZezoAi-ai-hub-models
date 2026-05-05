@@ -209,7 +209,7 @@ def download_model(
         merge_output_metadata(file_metadata, model.get_output_spec())
         model_metadata = ModelMetadata(
             model_id=MODEL_ID,
-            model_name="RangeNet++",
+            model_name="RangeNet-Plus-Plus",
             runtime=runtime,
             precision=precision,
             tool_versions=tool_versions,

@@ -299,7 +299,7 @@ and many more.
 | [CenterNet-3D](https://aihub.qualcomm.com/models/centernet_3d) | `qai_hub_models.models.centernet_3d` |
 | [CenterPoint](https://aihub.qualcomm.com/models/centerpoint) | `qai_hub_models.models.centerpoint` |
 | [GKT](https://aihub.qualcomm.com/models/gkt) | `qai_hub_models.models.gkt` |
-| [RangeNet++](https://aihub.qualcomm.com/models/rangenet_plus_plus) | `qai_hub_models.models.rangenet_plus_plus` |
+| [RangeNet-Plus-Plus](https://aihub.qualcomm.com/models/rangenet_plus_plus) | `qai_hub_models.models.rangenet_plus_plus` |
 | [StateTransformer](https://aihub.qualcomm.com/models/statetransformer) | `qai_hub_models.models.statetransformer` |
 | | |
 | **Robotics**

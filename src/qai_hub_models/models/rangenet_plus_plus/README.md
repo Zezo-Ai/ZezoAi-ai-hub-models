@@ -1,8 +1,8 @@
-# [RangeNet++: Real-time LiDAR point cloud semantic segmentation using range images](https://aihub.qualcomm.com/models/rangenet_plus_plus)
+# [RangeNet-Plus-Plus: Real-time LiDAR point cloud semantic segmentation using range images](https://aihub.qualcomm.com/models/rangenet_plus_plus)
 
-RangeNet++ projects a LiDAR point cloud onto a 5-channel range image (depth, x, y, z, intensity) and applies a DarkNet-53 encoder with a decoder head to predict per-point semantic class labels in real time.
+RangeNet-Plus-Plus (also stylized as RangeNet++) projects a LiDAR point cloud onto a 5-channel range image (depth, x, y, z, intensity) and applies a DarkNet-53 encoder with a decoder head to predict per-point semantic class labels in real time.
 
-This is based on the implementation of RangeNet++ found [here](https://github.com/PRBonn/lidar-bonnetal).
+This is based on the implementation of RangeNet-Plus-Plus found [here](https://github.com/PRBonn/lidar-bonnetal).
 This repository contains scripts for optimized on-device export suitable to run on Qualcomm® devices. More details on model performance across various devices, can be found [here](https://aihub.qualcomm.com/models/rangenet_plus_plus).
 
 Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.qualcomm.com) to compile, profile, and evaluate this model. [Sign up](https://myaccount.qualcomm.com/signup) to run these models on a hosted Qualcomm® device.
@@ -48,7 +48,7 @@ python -m qai_hub_models.models.rangenet_plus_plus.export
 Additional options are documented with the `--help` option.
 
 ## License
-* The license for the original implementation of RangeNet++ can be found
+* The license for the original implementation of RangeNet-Plus-Plus can be found
   [here](https://github.com/PRBonn/lidar-bonnetal/blob/master/LICENSE).
 
 ## References
