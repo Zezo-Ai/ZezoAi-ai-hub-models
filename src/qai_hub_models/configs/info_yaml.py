@@ -474,6 +474,21 @@ class QAIHMModelInfo(BaseQAIHMConfig):
                 LLM_CALL_TO_ACTION.CONTACT_US,
             ]
 
+            if self.llm_details.call_to_action in {
+                LLM_CALL_TO_ACTION.DOWNLOAD,
+                LLM_CALL_TO_ACTION.DOWNLOAD_AND_VIEW_README,
+            }:
+                if self.restrict_model_sharing:
+                    raise ValueError(
+                        "LLM call to action cannot be 'download' when restrict model sharing is enabled."
+                    )
+            elif not self.restrict_model_sharing and os.path.exists(
+                QAIHM_MODELS_ROOT / self.id / "release-assets.yaml"
+            ):
+                raise ValueError(
+                    "LLM has downloadable assets but the call to action is not 'download'."
+                )
+
             if validate_urls_exist:
                 if self.llm_details.devices:
                     for (
