@@ -6,6 +6,15 @@
 # Matching uses the chipset field, plus any chipset that normalizes to the
 # same value via sanitize_chipset_name (e.g. 8-elite-for-galaxy -> 8-elite).
 devices:
+  Dragonwing IQ-8275 EVK:
+    chipset: qualcomm-qcs8275
+    os:
+      ostype: Linux
+      version: 'Ubuntu 24.04'
+    form_factor: IoT
+    vendor: qualcomm
+    icon: IoT_Chip
+    npu_count: 1
   SA8255P ADP:
     chipset: qualcomm-sa8775p
     os:
@@ -56,3 +65,14 @@ devices:
     form_factor: IoT
     vendor: qualcomm
     icon: IoT_Chip
+chipsets:
+  qualcomm-qcs8275:
+    aliases:
+    - qualcomm-qcs8275
+    marketing_name: Qualcomm® QCS8275
+    world: IoT
+    supports_fp16: true
+    htp_version: 75
+    soc_model: 67
+    reference_device: Dragonwing IQ-8275 EVK
+    supports_weight_sharing: true

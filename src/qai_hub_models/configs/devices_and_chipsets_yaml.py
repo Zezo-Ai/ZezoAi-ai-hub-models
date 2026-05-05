@@ -210,14 +210,10 @@ class DeviceDetailsYaml(BaseQAIHMConfig):
         )
 
 
-class _SimilarDevicesYaml(BaseQAIHMConfig):
-    devices: dict[str, DeviceDetailsYaml] = Field(default_factory=dict)
-
-
 @cache
-def _load_similar_devices_raw() -> dict[str, DeviceDetailsYaml]:
+def _load_similar_devices_raw() -> DevicesAndChipsetsYaml:
     """Load the similar devices YAML as typed DeviceDetailsYaml entries."""
-    return _SimilarDevicesYaml.from_yaml(SIMILAR_DEVICES_YAML_PATH).devices
+    return DevicesAndChipsetsYaml.from_yaml(SIMILAR_DEVICES_YAML_PATH)
 
 
 @cache
@@ -231,7 +227,8 @@ def load_similar_devices() -> dict[str, list[str]]:
     Returns unsupported_device_name -> list of supported device names.
     """
     raw = _load_similar_devices_raw()
-    similar_names = set(raw.keys())
+
+    similar_names = set(raw.devices.keys())
 
     dc = DevicesAndChipsetsYaml.load()
 
@@ -245,7 +242,9 @@ def load_similar_devices() -> dict[str, list[str]]:
         sanitized_to_devices[key].append(name)
 
     resolved: dict[str, list[str]] = {}
-    for unsupported_name, entry in raw.items():
+    for unsupported_name, entry in raw.devices.items():
+        if entry.chipset in raw.chipsets:
+            continue  # this is not a similar device; we're also defining a chipset that is not in workbench
         key = sanitize_chipset_name(entry.chipset)
         resolved[unsupported_name] = sanitized_to_devices.get(key, [])
     return resolved
@@ -405,10 +404,30 @@ class DevicesAndChipsetsYaml(BaseQAIHMConfig):
             out.chipsets[device.chipset].reference_device = device.reference_device.name
 
         # Add similar (unsupported) devices with their own explicit metadata.
-        for unsupported_name, entry in _load_similar_devices_raw().items():
-            if unsupported_name not in out.devices:
-                entry.available_in_workbench = False
-                out.devices[unsupported_name] = entry
+        sd = _load_similar_devices_raw()
+
+        chips_in_hub_and_sd = set(sd.chipsets.keys()).intersection(out.chipsets.keys())
+        assert not chips_in_hub_and_sd, (
+            f"Similar devices yaml contains chipsets that are available on workbench: {chips_in_hub_and_sd}"
+        )
+        out.chipsets.update(sd.chipsets)
+
+        dev_in_hub_and_sd = set(sd.devices.keys()).intersection(out.devices.keys())
+        assert not dev_in_hub_and_sd, (
+            f"Similar devices yaml contains devices that are available on workbench: {dev_in_hub_and_sd}"
+        )
+        for device_name, device_entry in sd.devices.items():
+            # Set this so we manually don't have to set this for every model in similar devices yaml.
+            device_entry.available_in_workbench = False
+            assert device_entry.chipset in out.chipsets, (
+                f"Unknown chipset for device {device_name} in similar-devices.yaml: {device_entry.chipset}"
+            )
+        out.devices.update(sd.devices)
+
+        for chipset_name, chipset_entry in sd.chipsets.items():
+            assert chipset_entry.reference_device in out.devices, (
+                f"Unknown reference device for chipset {chipset_name} in similar-devices.yaml: {chipset_entry.reference_device}"
+            )
 
         return out
 

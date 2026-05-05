@@ -100,22 +100,6 @@ def test_perf_yaml() -> None:
         ) from None
 
 
-def test_similar_devices_yaml() -> None:
-    """Validate that similar_devices.yaml entries resolve to known devices."""
-    dc = DevicesAndChipsetsYaml.load()
-    valid_devices = set(dc.devices.keys())
-    mapping = load_similar_devices()
-
-    for name, device_names in mapping.items():
-        assert len(device_names) > 0, (
-            f"Similar device '{name}' resolved to no supported devices"
-        )
-        for device_name in device_names:
-            assert device_name in valid_devices, (
-                f"Similar device '{name}' resolved to unknown device '{device_name}'"
-            )
-
-
 def test_apply_similar_devices_idempotent() -> None:
     """Applying similar devices to an already-processed perf.yaml should be a no-op."""
     mapping = load_similar_devices()

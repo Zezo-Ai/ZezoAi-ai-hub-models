@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pytest
 
+from qai_hub_models.configs.devices_and_chipsets_yaml import DevicesAndChipsetsYaml
 from qai_hub_models.configs.release_assets_yaml import QAIHMModelReleaseAssets
 from qai_hub_models.utils.aws import (
     QAIHM_PRIVATE_S3_BUCKET,
@@ -69,9 +70,16 @@ def get_models_with_release_assets() -> list[str]:
 
 def test_release_assets_yaml_schema() -> None:
     """Validate that all release-assets.yaml files conform to the schema."""
+    chipsets = DevicesAndChipsetsYaml.load().chipsets.keys()
     for model_id in get_models_with_release_assets():
         try:
-            QAIHMModelReleaseAssets.from_model(model_id)
+            yaml = QAIHMModelReleaseAssets.from_model(model_id)
+            for a in yaml.precisions.values():
+                for c in a.chipset_assets:
+                    if c not in chipsets:
+                        raise ValueError(  # noqa: TRY301
+                            f"Chipset {c} is not available in devices-and-chipsets.yaml; thus it can't be referenced here."
+                        )
         except Exception as err:  # noqa: PERF203
             raise AssertionError(
                 f"{model_id} release-assets.yaml validation failed: {err!s}"
