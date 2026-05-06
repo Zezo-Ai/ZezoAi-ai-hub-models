@@ -257,6 +257,21 @@ jobs:
             --verbose
         shell: bash
 
+      - name: Print link results summary
+        if: always()
+        working-directory: scripts/compiler_nightly
+        run: |
+          source "${{ github.workspace }}/${{ env.VENV_PATH }}/bin/activate"
+
+          DEV_LINK_CONFIG=$(ls -t results/dev-link-jobs__*.yaml | head -1)
+          PROD_LINK_CONFIG=$(ls -t results/link-scorecard__*.yaml | head -1)
+
+          python post_link_results.py \
+            --dev-link-config "${DEV_LINK_CONFIG}" \
+            --prod-link-config "${PROD_LINK_CONFIG}" \
+            --verbose
+        shell: bash
+
       - name: Upload link results
         if: always()
         uses: actions/upload-artifact@v7
