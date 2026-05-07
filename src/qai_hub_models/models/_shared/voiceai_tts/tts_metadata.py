@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from huggingface_hub import hf_hub_download
+from pydantic import SerializeAsAny
 from typing_extensions import Self
 
 from qai_hub_models.configs.model_metadata import ModelMetadata
@@ -112,7 +113,7 @@ class TTSMetadata(BaseQAIHMConfig):
     voices: list[VoiceSpec]
     model_type: str
     runtime: RuntimeInfo | None = None
-    assets: BaseQAIHMConfig | None = None
+    assets: SerializeAsAny[BaseQAIHMConfig] | None = None
 
     @classmethod
     def from_tts_model(
