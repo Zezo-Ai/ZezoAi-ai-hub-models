@@ -132,7 +132,7 @@ class HPatchesDataset(BaseDataset):
 
     @staticmethod
     def default_samples_per_job() -> int:
-        return 200
+        return 580
 
     @staticmethod
     def get_dataset_metadata() -> DatasetMetadata:
