@@ -123,15 +123,47 @@ ExportFunc = Callable[
 JobFunc = Callable[..., hub.Job | dict[str, hub.Job]]
 
 
+QAIHMModelT = (
+    BaseModel | CollectionModel | MultiGraphBaseModel | MultiGraphCollectionExportResult
+)
+
+
 def _get_components_and_graph_names(
-    model: Any,
-    model_id: str | None = None,
+    model: QAIHMModelT | type[QAIHMModelT],
+    model_id: str,
 ) -> tuple[list[str] | None, list[str] | None, ComponentGroup[list[str]] | None]:
     components: list[str] | None = None
     graph_names: list[str] | None = None
     component_graph_names: ComponentGroup[list[str]] | None = None
 
-    if isinstance(model, CollectionModel):
+    if isinstance(model, type):
+        if issubclass(model, CollectionModel):
+            components = model.component_class_names
+            if issubclass(model, MultiGraphPretrainedCollectionModel):
+                try:
+                    model_input_specs = model.get_input_spec()
+                    component_graph_names = ComponentGroup(
+                        {
+                            cn: [
+                                x
+                                for x in model_input_specs.by_component(cn)
+                                if x is not None
+                            ]
+                            for cn in components
+                        }
+                    )
+                except NotImplementedError:
+                    # This model does not support getting the input spec without being instantiated.
+                    # (special case that applies only for LLMs)
+                    gn_cache = GraphNamesYaml.from_test_artifacts()
+                    cgns = {cn: gn_cache.get(model_id, cn) for cn in components}
+                    component_graph_names = ComponentGroup(
+                        {k: v for k, v in cgns.items() if v is not None}
+                    )
+
+        elif issubclass(model, MultiGraphBaseModel):
+            graph_names = list(model.get_input_spec())
+    elif isinstance(model, CollectionModel):
         components = model.component_class_names
         cgn: dict[str, list[str]] = {}
         for component_name, component in model.components.items():
@@ -142,10 +174,9 @@ def _get_components_and_graph_names(
     elif isinstance(model, MultiGraphBaseModel):
         graph_names = list(model.get_input_spec())
 
-    if model_id is not None:
-        _stash_component_graph_names(
-            model_id, components, graph_names, component_graph_names
-        )
+    _stash_component_graph_names(
+        model_id, components, graph_names, component_graph_names
+    )
 
     return components, graph_names, component_graph_names
 
@@ -1181,14 +1212,17 @@ def export_test_e2e(
         Name of all model components (if applicable), or None of there are no components.
         Default is None.
     """
+    component_names, graph_names, component_graph_names = (
+        _get_components_and_graph_names(model_cls, model_id)
+    )
     test_params = ScExportTestParams(
         model_id,
-        path=scorecard_path,
-        precision=precision,
-        device=device,
-        component_names=model_cls.component_class_names
-        if issubclass(model_cls, CollectionModel)
-        else None,
+        scorecard_path,
+        precision,
+        device,
+        component_names,
+        graph_names,
+        component_graph_names,
     )
 
     # Some scorecards will run without the profiling step.
@@ -1302,6 +1336,7 @@ def export_test_e2e(
         link_job_patch,
         profile_job_patch,
         tempfile.TemporaryDirectory() as tmpdir,
+        mock.patch("qai_hub.upload_model", return_value=None),
     ):
         with contextlib.ExitStack() as stack:
             for m in mocks:

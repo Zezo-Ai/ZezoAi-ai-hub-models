@@ -50,6 +50,7 @@ class ResultsSpreadsheet(list):
     class Entry:
         model_id: str
         component_id: str | None
+        graph_name: str | None
         precision: Precision
         chipset: str
         runtime: ScorecardProfilePath
@@ -71,9 +72,11 @@ class ResultsSpreadsheet(list):
         inference_url: str | None
 
         @property
-        def model_component_id(self) -> str:
-            return self.model_id + (
-                f"::{self.component_id}" if self.component_id else ""
+        def model_component_graph_id(self) -> str:
+            return (
+                self.model_id
+                + (f"::{self.component_id}" if self.component_id else "")
+                + (f"::{self.graph_name}" if self.graph_name else "")
             )
 
     def to_csv(
@@ -117,7 +120,7 @@ class ResultsSpreadsheet(list):
         if not self.has_inference_jobs:
             fields_to_remove.extend(["inference_status", "inference_url"])
         if combine_model_and_component_id:
-            fields_to_remove.extend(["component_id"])
+            fields_to_remove.extend(["component_id", "graph_name"])
         for field_name in fields_to_remove:
             field_names.remove(field_name)
 
@@ -132,7 +135,7 @@ class ResultsSpreadsheet(list):
                 model_id: str = entry.model_id
                 if field_name == "model_id":
                     return (
-                        entry.model_component_id
+                        entry.model_component_graph_id
                         if combine_model_and_component_id
                         else entry.model_id
                     )
@@ -281,6 +284,7 @@ class ResultsSpreadsheet(list):
         return ResultsSpreadsheet.Entry(
             model_id=summary.params.model_id,
             component_id=summary.params.component,
+            graph_name=summary.params.graph_name,
             precision=summary.params.precision,
             chipset=summary.params.device.chipset,
             runtime=summary.params.path,

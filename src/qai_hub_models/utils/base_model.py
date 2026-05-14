@@ -9,7 +9,7 @@ import inspect
 import os
 import re
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import nullcontext
 from copy import deepcopy
 from pathlib import Path
@@ -53,6 +53,64 @@ ComponentT = TypeVar("ComponentT", "BaseModel", "BasePrecompiledModel")
 CollectionModelT = TypeVar("CollectionModelT", bound="CollectionModel[Any]")
 
 
+def get_input_spec_params(
+    model: HubModel | type[HubModel],
+) -> dict[str, inspect.Parameter]:
+    """Return the non-self parameters of get_input_spec, ignoring variadic params (*args, **kwargs)."""
+    get_input_spec_args = inspect.signature(model._get_input_spec_for_instance)
+    if isinstance(model, type):
+        default_args = ["self", "args", "kwargs"]
+    else:
+        default_args = ["args", "kwargs"]
+    if list(get_input_spec_args.parameters.keys()) == default_args:
+        # Use get_input_spec args if get_input_spec_for_instance is not defined.
+        get_input_spec_args = inspect.signature(model.get_input_spec)
+    params = dict(get_input_spec_args.parameters)
+    for arg in ["self", "cls", "args", "kwargs"]:
+        params.pop(arg, None)
+    return params
+
+
+def get_input_spec_kwargs(
+    model: HubModel | type[HubModel], args_dict: Mapping[str, Any]
+) -> dict[str, Any]:
+    """
+    Given a dict with many args, pull out the ones relevant
+    to constructing the model's input_spec.
+    """
+    get_input_spec_args = get_input_spec_params(model)
+    input_spec_kwargs = {}
+    for name in get_input_spec_args:
+        if name == "self" or name not in args_dict:
+            continue
+        input_spec_kwargs[name] = args_dict[name]
+    return input_spec_kwargs
+
+
+def get_components_input_spec_kwargs(
+    model: CollectionModel | type[CollectionModel],
+    per_component_kwargs: ComponentGroup[dict[str, Any]] | None,
+    global_kwargs: dict[str, Any] | None,
+) -> ComponentGroup[dict[str, Any]]:
+    """Returns a dict of all matching kwargs for get_input_spec on each component."""
+    per_component_kwargs = (
+        ComponentGroup(per_component_kwargs.copy())
+        if per_component_kwargs
+        else ComponentGroup()
+    )
+    if global_kwargs:
+        for component_name, component in (
+            model.component_classes.items()
+            if isinstance(model, type)
+            else model.components.items()
+        ):
+            component_kwargs = get_input_spec_kwargs(component, global_kwargs)
+            component_kwargs.update(per_component_kwargs.get(component_name, {}))
+            if component_kwargs:
+                per_component_kwargs[component_name] = component_kwargs
+    return per_component_kwargs
+
+
 class CollectionModel(Generic[ComponentT]):
     """
     Model that glues together several BaseModels or BasePrecompiledModel.
@@ -90,6 +148,8 @@ class CollectionModel(Generic[ComponentT]):
                     f"of {expected_class.__name__}, got {type(arg).__name__}"
                 )
             self.components[name] = arg
+
+        self.get_input_spec = self._get_input_spec_for_instance
 
     @classmethod
     def add_component(
@@ -271,6 +331,73 @@ class CollectionModel(Generic[ComponentT]):
         """
         return
 
+    @classmethod
+    def get_input_spec(
+        cls,
+        per_component_kwargs: ComponentGroup[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> ComponentGroup[InputSpec]:
+        """Return input specifications for every component.
+
+        Parameters
+        ----------
+        per_component_kwargs
+            Per-component keyword arguments to pass to each component's ``get_input_spec()``.
+            These values supercede those in global kwargs.
+        **kwargs
+            Args to be distributed among all components. An entry is used if a
+            component's get_input_spec() has parameters that match keys in the dict.
+
+        Returns
+        -------
+        ComponentGroup[InputSpec]
+            Keyed by component_name.
+        """
+        per_component_kwargs = get_components_input_spec_kwargs(
+            cls, per_component_kwargs, kwargs
+        )
+        return ComponentGroup(
+            {
+                comp_name: component.get_input_spec(
+                    **per_component_kwargs.get(comp_name, {})
+                )
+                for comp_name, component in cls.component_classes.items()
+            }
+        )
+
+    def _get_input_spec_for_instance(
+        self,
+        per_component_kwargs: ComponentGroup[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> ComponentGroup[InputSpec]:
+        """Return input specifications for every component.
+
+        Parameters
+        ----------
+        per_component_kwargs
+            Per-component keyword arguments to pass to each component's ``get_input_spec()``.
+            These values supercede those in global kwargs.
+        **kwargs
+            Args to be distributed among all components. An entry is used if a
+            component's get_input_spec() has parameters that match keys in the dict.
+
+        Returns
+        -------
+        ComponentGroup[InputSpec]
+            Keyed by component_name.
+        """
+        per_component_kwargs = get_components_input_spec_kwargs(
+            self, per_component_kwargs, kwargs
+        )
+        return ComponentGroup(
+            {
+                comp_name: component.get_input_spec(
+                    **per_component_kwargs.get(comp_name, {})
+                )
+                for comp_name, component in self.components.items()
+            }
+        )
+
 
 class HubModel(HubModelProtocol):
     """Base interface for AI Hub Workbench models."""
@@ -287,11 +414,7 @@ class HubModel(HubModelProtocol):
     def __init__(self) -> None:
         # If a child class implements _get_input_spec_for_instance(),
         # then calling `get_input_spec` on the instance will redirect to it.
-        # Skip for MultiGraphBaseModel subclasses: their get_input_spec
-        # returns dict[str, InputSpec] and wraps _get_input_spec_for_instance.
-        if self._get_input_spec_for_instance.__module__ != __name__ and not isinstance(
-            self, MultiGraphBaseModel
-        ):
+        if self._get_input_spec_for_instance.__module__ != __name__:
             self.get_input_spec = self._get_input_spec_for_instance
         if self._get_output_names_for_instance.__module__ != __name__:
             self.get_output_names = self._get_output_names_for_instance
@@ -739,7 +862,8 @@ class MultiGraphBaseModel(BaseModel):
     re-derive the graph/spec mapping.
     """
 
-    def get_input_spec(self, *args: Any, **kwargs: Any) -> MultiGraphGroup[InputSpec]:
+    @staticmethod
+    def get_input_spec(*args: Any, **kwargs: Any) -> MultiGraphGroup[InputSpec]:
         """Return input specifications keyed by graph name.
 
         Parameters
@@ -916,27 +1040,15 @@ class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtoc
     pass
 
 
-def _get_input_spec_params(
-    model_cls: type[BaseModel | BasePrecompiledModel],
-) -> dict[str, inspect.Parameter]:
-    """Return the non-self parameters of get_input_spec, ignoring variadic params (*args, **kwargs)."""
-    sig = inspect.signature(model_cls.get_input_spec)
-    return {
-        name: param
-        for name, param in sig.parameters.items()
-        if name != "self"
-        and param.kind
-        not in [inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD]
-    }
-
-
 class MultiGraphPretrainedCollectionModel(
     CollectionModel[BaseModel | MultiGraphBaseModel], FromPretrainedProtocol
 ):
     """Collection model where some or all components have multiple graphs."""
 
+    @classmethod
     def get_input_spec(
-        self,
+        cls,
+        per_component_kwargs: ComponentGroup[dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> MultiGraphComponentGroup[InputSpec]:
         """Return input specifications for every component and graph.
@@ -948,26 +1060,72 @@ class MultiGraphPretrainedCollectionModel(
 
         Parameters
         ----------
+        per_component_kwargs
+            Per-component keyword arguments to pass to each component's
+            ``get_input_spec()``, or a dict that will apply to all components.
+            These values supercede those in global kwargs.
         **kwargs
-            Forwarded to each component's ``get_input_spec()``, filtered
-            to only include parameters that the component accepts.
+            Args to be distributed among all components. An entry is used if a
+            component's get_input_spec() has parameters that match keys in the dict.
 
         Returns
         -------
         MultiGraphComponentGroup[InputSpec]
             Keyed by (component_name, graph_name | None).
         """
+        per_component_kwargs = get_components_input_spec_kwargs(
+            cls, per_component_kwargs, kwargs
+        )
+        out: MultiGraphComponentGroup[InputSpec] = MultiGraphComponentGroup()
+        for comp_name, component in cls.component_classes.items():
+            if issubclass(component, MultiGraphBaseModel):
+                for graph_name, spec in component.get_input_spec(
+                    **per_component_kwargs.get(comp_name, {})
+                ).items():
+                    out[(comp_name, graph_name)] = spec
+            else:
+                out[(comp_name, None)] = component.get_input_spec()
+        return out
+
+    def _get_input_spec_for_instance(
+        self,
+        per_component_kwargs: ComponentGroup[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> MultiGraphComponentGroup[InputSpec]:
+        """Return input specifications for every component and graph.
+
+        For ``MultiGraphBaseModel`` components the inner dict is the
+        component's own ``get_input_spec()`` (graph_name -> InputSpec).
+        For plain ``BaseModel`` components, a single-entry is
+        synthesized with graph_name=None.
+
+        Parameters
+        ----------
+        per_component_kwargs
+            Per-component keyword arguments to pass to each component's
+            ``get_input_spec()``, or a dict that will apply to all components.
+            These values supercede those in global kwargs.
+        **kwargs
+            Args to be distributed among all components. An entry is used if a
+            component's get_input_spec() has parameters that match keys in the dict.
+
+        Returns
+        -------
+        MultiGraphComponentGroup[InputSpec]
+            Keyed by (component_name, graph_name | None).
+        """
+        per_component_kwargs = get_components_input_spec_kwargs(
+            self, per_component_kwargs, kwargs
+        )
         out: MultiGraphComponentGroup[InputSpec] = MultiGraphComponentGroup()
         for comp_name, component in self.components.items():
-            accepted = _get_input_spec_params(type(component))
-            comp_kwargs = {k: v for k, v in kwargs.items() if k in accepted}
             if isinstance(component, MultiGraphBaseModel):
-                for graph_name, spec in component.get_input_spec(**comp_kwargs).items():
-                    out.component_graph_names[(comp_name, graph_name)] = spec
+                for graph_name, spec in component.get_input_spec(
+                    **per_component_kwargs.get(comp_name, {})
+                ).items():
+                    out[(comp_name, graph_name)] = spec
             else:
-                out.component_graph_names[(comp_name, None)] = component.get_input_spec(
-                    **comp_kwargs
-                )
+                out[(comp_name, None)] = component.get_input_spec()
         return out
 
     def get_hub_compile_options(
@@ -1003,16 +1161,14 @@ class MultiGraphPretrainedCollectionModel(
                 for graph_name, opts in component.get_hub_compile_options(
                     target_runtime, precision, other_compile_options, device
                 ).items():
-                    out.component_graph_names[(comp_name, graph_name)] = opts
+                    out[(comp_name, graph_name)] = opts
             else:
-                out.component_graph_names[(comp_name, None)] = (
-                    component.get_hub_compile_options(
-                        target_runtime,
-                        precision,
-                        other_compile_options,
-                        device,
-                        context_graph_name=comp_name,
-                    )
+                out[(comp_name, None)] = component.get_hub_compile_options(
+                    target_runtime,
+                    precision,
+                    other_compile_options,
+                    device,
+                    context_graph_name=comp_name,
                 )
         return out
 
@@ -1043,14 +1199,12 @@ class MultiGraphPretrainedCollectionModel(
                 for graph_name, opts in component.get_hub_profile_options(
                     target_runtime, other_profile_options
                 ).items():
-                    out.component_graph_names[(comp_name, graph_name)] = opts
+                    out[(comp_name, graph_name)] = opts
             else:
-                out.component_graph_names[(comp_name, None)] = (
-                    component.get_hub_profile_options(
-                        target_runtime,
-                        other_profile_options,
-                        context_graph_name=comp_name,
-                    )
+                out[(comp_name, None)] = component.get_hub_profile_options(
+                    target_runtime,
+                    other_profile_options,
+                    context_graph_name=comp_name,
                 )
         return out
 
@@ -1081,9 +1235,9 @@ class MultiGraphPretrainedCollectionModel(
                 for graph_name, inputs in component.sample_inputs(
                     use_channel_last_format=use_channel_last_format, **kwargs
                 ).items():
-                    out.component_graph_names[(comp_name, graph_name)] = inputs
+                    out[(comp_name, graph_name)] = inputs
             else:
-                out.component_graph_names[(comp_name, None)] = component.sample_inputs(
+                out[(comp_name, None)] = component.sample_inputs(
                     use_channel_last_format=use_channel_last_format, **kwargs
                 )
         return out

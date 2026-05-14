@@ -489,10 +489,10 @@ def assert_success_and_get_target_models(  # type: ignore[misc]
     """
     if isinstance(jobs, MultiGraphComponentGroup):
         out_mgcg: MultiGraphComponentGroup[hub.Model] = MultiGraphComponentGroup()
-        for (comp, gn), job in jobs.component_graph_names.items():
+        for (comp, gn), job in jobs.items():
             target_model = job.get_target_model()
             assert target_model is not None, f"Job failed for {comp}/{gn}: {job.url}"
-            out_mgcg.component_graph_names[(comp, gn)] = target_model
+            out_mgcg[(comp, gn)] = target_model
         return out_mgcg
 
     if isinstance(jobs, ComponentGroup):

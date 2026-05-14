@@ -34,7 +34,8 @@ from qai_hub_models.utils.base_model import (
     CollectionModel,
     HubModel,
     TargetRuntime,
-    _get_input_spec_params,
+    get_input_spec_kwargs,
+    get_input_spec_params,
 )
 from qai_hub_models.utils.envvars import DevModeEnvvar
 from qai_hub_models.utils.evaluate import EvalMode
@@ -855,30 +856,6 @@ def demo_model_from_cli_args(
     return inference_model
 
 
-def get_input_spec_kwargs(
-    model: HubModel | type[HubModel], args_dict: Mapping[str, Any]
-) -> Mapping[str, Any]:
-    """
-    Given a dict with many args, pull out the ones relevant
-    to constructing the model's input_spec.
-    """
-    get_input_spec_args = inspect.signature(model._get_input_spec_for_instance)
-    if isinstance(model, type):
-        default_args = ["self", "args", "kwargs"]
-    else:
-        default_args = ["args", "kwargs"]
-    if list(get_input_spec_args.parameters.keys()) == default_args:
-        # Use get_input_spec args if get_input_spec_for_instance is not defined.
-        get_input_spec_args = inspect.signature(model.get_input_spec)
-
-    input_spec_kwargs = {}
-    for name in get_input_spec_args.parameters:
-        if name == "self" or name not in args_dict:
-            continue
-        input_spec_kwargs[name] = args_dict[name]
-    return input_spec_kwargs
-
-
 def _parse_int_list(value: str) -> list[int]:
     """Parse a CLI value as a comma-separated list of ints."""
     return [int(v.strip()) for v in value.split(",")]
@@ -933,7 +910,7 @@ def get_model_input_spec_parser(
         for param in FunctionDoc(func=model_cls.get_input_spec)["Parameters"]
     }
 
-    for name, param in _get_input_spec_params(model_cls).items():
+    for name, param in get_input_spec_params(model_cls).items():
         resolved_type = _resolve_param_type(param, model_cls)
         help_str = input_spec_docs.get(
             name,
@@ -961,7 +938,7 @@ def get_collection_model_input_spec_parser(
         parser = get_parser()
 
     for comp_name, comp_cls in model_cls.component_classes.items():
-        params = _get_input_spec_params(comp_cls)
+        params = get_input_spec_params(comp_cls)
         cli_prefix = comp_cls.cli_args_prefix
         if cli_prefix:
             cli_prefix += "-"
@@ -1000,7 +977,7 @@ def get_component_input_spec_kwargs(
     - Else skip (component uses its default)
     """
     comp_cls = model_cls.component_classes[component_name]
-    params = _get_input_spec_params(comp_cls)
+    params = get_input_spec_params(comp_cls)
     cli_prefix = getattr(comp_cls, "cli_args_prefix", component_name)
     kwargs: dict[str, Any] = {}
     for param_name in params:

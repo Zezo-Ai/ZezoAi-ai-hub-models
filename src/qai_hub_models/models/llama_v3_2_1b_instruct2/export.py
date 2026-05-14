@@ -93,16 +93,18 @@ def compile_model(
         # Upload the source model once so every per-graph compile job reuses
         # the same asset instead of re-uploading the .aimet / ONNX bundle.
         uploaded_model = hub.upload_model(model_to_compile)  # type: ignore[arg-type]
-        for graph_name, graph_input_spec in all_input_specs[component_name].items():
+        for graph_name, graph_input_spec in all_input_specs.by_component(
+            component_name
+        ).items():
             print(f"Optimizing model {component_name} to run on-device")
             submitted_compile_job = hub.submit_compile_job(
                 model=uploaded_model,
                 input_specs=to_hub_input_specs(graph_input_spec),
                 device=device,
                 name=f"{model_name}_{component_name}",
-                options=all_compile_options[component_name][graph_name],
+                options=all_compile_options.by_component(component_name)[graph_name],
             )
-            compile_jobs.component_graph_names[(component_name, graph_name)] = cast(
+            compile_jobs[(component_name, graph_name)] = cast(
                 hub.client.CompileJob, submitted_compile_job
             )
     return compile_jobs
@@ -123,7 +125,7 @@ def link_model(
     link_jobs: ComponentGroup[hub.client.LinkJob] = ComponentGroup()
     # Group compiled models by component for linking
     grouped: dict[str, list[hub.Model]] = {}
-    for (comp_name, _gn), m in compiled_models.component_graph_names.items():
+    for (comp_name, _gn), m in compiled_models.items():
         grouped.setdefault(comp_name, []).append(m)
     for component_name, models_list in grouped.items():
         component = model.components[component_name]
@@ -150,7 +152,7 @@ def profile_model(
     profile_jobs: MultiGraphComponentGroup[hub.client.ProfileJob] = (
         MultiGraphComponentGroup()
     )
-    for (component_name, graph_name), opts in options.component_graph_names.items():
+    for (component_name, graph_name), opts in options.items():
         if components is not None and component_name not in components:
             continue
         if graph_names is not None and graph_name not in graph_names:
@@ -163,7 +165,7 @@ def profile_model(
             name=job_name,
             options=opts,
         )
-        profile_jobs.component_graph_names[(component_name, graph_name)] = cast(
+        profile_jobs[(component_name, graph_name)] = cast(
             hub.client.ProfileJob, submitted_profile_job
         )
     return profile_jobs
@@ -181,10 +183,7 @@ def inference_model(
     inference_jobs: MultiGraphComponentGroup[hub.client.InferenceJob] = (
         MultiGraphComponentGroup()
     )
-    for (
-        component_name,
-        graph_name,
-    ), graph_inputs in inputs.component_graph_names.items():
+    for (component_name, graph_name), graph_inputs in inputs.items():
         if components is not None and component_name not in components:
             continue
         if graph_names is not None and graph_name not in graph_names:
@@ -198,9 +197,9 @@ def inference_model(
             inputs=graph_inputs,
             device=device,
             name=job_name,
-            options=options.component_graph_names.get((component_name, graph_name), ""),
+            options=options.get((component_name, graph_name), ""),
         )
-        inference_jobs.component_graph_names[(component_name, graph_name)] = cast(
+        inference_jobs[(component_name, graph_name)] = cast(
             hub.client.InferenceJob, submitted_inference_job
         )
     return inference_jobs
@@ -243,7 +242,7 @@ def download_model(
             )
             # Merge semantic metadata from get_input_spec()
             all_input_specs = model.get_input_spec()
-            for _graph_spec in all_input_specs[component_name].values():
+            for _graph_spec in all_input_specs.by_component(component_name).values():
                 merge_input_metadata(model_file_metadata[model_file_name], _graph_spec)
 
         # Extract and save metadata alongside downloaded model
@@ -437,7 +436,7 @@ def export_model(
         # For JIT runtimes, extract one model per component from compile jobs
         flat_jobs: dict[str, hub.client.CompileJob] = {}
         seen_components: set[str] = set()
-        for (comp_name, _gn), job in compile_result.component_graph_names.items():
+        for (comp_name, _gn), job in compile_result.items():
             if comp_name not in seen_components:
                 flat_jobs[comp_name] = job
                 seen_components.add(comp_name)
@@ -477,16 +476,12 @@ def export_model(
     tool_versions_are_from_device_job = False
     if not skip_summary or not skip_downloading:
         first_profile_job = (
-            next(iter(profile_result.component_graph_names.values()), None)
-            if profile_result
-            else None
+            next(iter(profile_result.values()), None) if profile_result else None
         )
         inference_job = (
-            next(iter(inference_result.component_graph_names.values()), None)
-            if inference_result
-            else None
+            next(iter(inference_result.values()), None) if inference_result else None
         )
-        compile_job = next(iter(compile_result.component_graph_names.values()), None)
+        compile_job = next(iter(compile_result.values()), None)
         if first_profile_job is not None and first_profile_job.wait():
             tool_versions = ToolVersions.from_job(first_profile_job)
             tool_versions_are_from_device_job = True
@@ -515,19 +510,16 @@ def export_model(
 
     # 7. Summarizes the results from profiling and inference
     if not skip_summary and profile_result is not None:
-        for pj in profile_result.component_graph_names.values():
+        for pj in profile_result.values():
             assert pj.wait().success, "Job failed: " + pj.url
             profile_data: dict[str, Any] = pj.download_profile()
             print_profile_metrics_from_job(pj, profile_data)
 
     if not skip_summary and inference_result is not None:
         all_specs = model.get_input_spec()
-        for (
-            component_name,
-            graph_name,
-        ), graph_input_spec in all_specs.component_graph_names.items():
+        for (component_name, graph_name), graph_input_spec in all_specs.items():
             component = model.components[component_name]
-            ij = inference_result.component_graph_names[(component_name, graph_name)]
+            ij = inference_result[(component_name, graph_name)]
             sample_inputs = BaseModel.sample_inputs(
                 component, graph_input_spec, use_channel_last_format=False
             )

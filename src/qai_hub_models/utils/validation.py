@@ -37,7 +37,7 @@ def validate_io_names(model_cls: type[BaseModel]) -> list[str]:
     """
     try:
         input_spec = model_cls.get_input_spec()
-    except TypeError:
+    except (TypeError, NotImplementedError):
         # get_input_spec requires an instance (e.g. LLM part models)
         return []
     output_names = model_cls.get_output_names()

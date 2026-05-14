@@ -232,7 +232,7 @@ class ScorecardJobYaml(ScorecardYamlFile[str], Generic[ScorecardJobTypeVar]):
             for (
                 component,
                 graph_name,
-            ), job in export_output.component_graph_names.items():
+            ), job in export_output.items():
                 self.set_job_id(
                     job.job_id,
                     ScJobParams(
@@ -324,7 +324,7 @@ class ScorecardJobYaml(ScorecardYamlFile[str], Generic[ScorecardJobTypeVar]):
                     mgcg_components[(job_params.component, job_params.graph_name)] = (
                         sc_job.job
                     )
-                return MultiGraphComponentGroup(component_graph_names=mgcg_components)
+                return MultiGraphComponentGroup(mgcg_components)
             out_gn: dict[str, JobTypeVar] = {}
             for job_params, sc_job in all_jobs.items():
                 assert (

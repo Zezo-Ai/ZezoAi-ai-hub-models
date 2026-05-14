@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 import qai_hub as hub
 
@@ -26,22 +26,12 @@ class ComponentGroup(dict[str, ValT]):
     """Groups a value per component for a collection model."""
 
 
-@dataclass
-class MultiGraphComponentGroup(Generic[ValT]):
+class MultiGraphComponentGroup(dict[tuple[str, str | None], ValT]):
     """Groups a value per (component, graph_name) for a collection model with multi-graph components."""
 
-    # graph_name is None for components that have a single input spec.
-    component_graph_names: dict[tuple[str, str | None], ValT] = field(
-        default_factory=dict
-    )
-
-    def __getitem__(self, component_name: str) -> dict[str | None, ValT]:
+    def by_component(self, component_name: str) -> dict[str | None, ValT]:
         """Return {graph_name: value} for entries matching the given component."""
-        return {
-            gn: v
-            for (comp, gn), v in self.component_graph_names.items()
-            if comp == component_name
-        }
+        return {gn: v for (comp, gn), v in self.items() if comp == component_name}
 
 
 """

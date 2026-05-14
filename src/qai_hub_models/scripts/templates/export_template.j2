@@ -261,7 +261,7 @@ def compile_model(
     # the same asset instead of re-uploading the .aimet / ONNX bundle.
     uploaded_model = hub.upload_model(model_to_compile)  # type: ignore[arg-type]
     {%- if is_collection_model %}
-    for graph_name, graph_input_spec in all_input_specs[component_name].items():
+    for graph_name, graph_input_spec in all_input_specs.by_component(component_name).items():
         print(f"Optimizing model {component_name} to run on-device")
         submitted_compile_job = hub.submit_compile_job(
             model=uploaded_model,
@@ -271,9 +271,9 @@ def compile_model(
             {%- if is_aimet and num_calibration_samples %}
             calibration_data={{ model_var }}.get_calibration_data(num_samples={{ num_calibration_samples }}),
             {%- endif %}
-            options=all_compile_options[component_name][graph_name],
+            options=all_compile_options.by_component(component_name)[graph_name],
         )
-        compile_jobs.component_graph_names[(component_name, graph_name)] = cast(hub.client.CompileJob, submitted_compile_job)
+        compile_jobs[(component_name, graph_name)] = cast(hub.client.CompileJob, submitted_compile_job)
     {%- else %}
     for graph_name, graph_input_spec in all_input_specs.items():
         model_compile_options = all_compile_options[graph_name]
@@ -336,7 +336,7 @@ def link_model(
     {%- if has_multi_graph %}
     # Group compiled models by component for linking
     grouped: dict[str, list[hub.Model]] = {}
-    for (comp_name, _gn), m in compiled_models.component_graph_names.items():
+    for (comp_name, _gn), m in compiled_models.items():
         grouped.setdefault(comp_name, []).append(m)
     for component_name, models_list in grouped.items():
     {%- else %}
@@ -390,7 +390,7 @@ def profile_model(
 ) -> {{ "MultiGraphComponentGroup[hub.client.ProfileJob]" if is_collection_model else "MultiGraphGroup[hub.client.ProfileJob]" }}:
     {%- if is_collection_model %}
     profile_jobs: MultiGraphComponentGroup[hub.client.ProfileJob] = MultiGraphComponentGroup()
-    for (component_name, graph_name), opts in options.component_graph_names.items():
+    for (component_name, graph_name), opts in options.items():
         if components is not None and component_name not in components:
             continue
         if graph_names is not None and graph_name not in graph_names:
@@ -403,7 +403,7 @@ def profile_model(
             name=job_name,
             options=opts,
         )
-        profile_jobs.component_graph_names[(component_name, graph_name)] = cast(hub.client.ProfileJob, submitted_profile_job)
+        profile_jobs[(component_name, graph_name)] = cast(hub.client.ProfileJob, submitted_profile_job)
     return profile_jobs
     {%- else %}
     profile_jobs: MultiGraphGroup[hub.client.ProfileJob] = MultiGraphGroup()
@@ -483,7 +483,7 @@ def inference_model(
 ) -> {{ "MultiGraphComponentGroup[hub.client.InferenceJob]" if is_collection_model else "MultiGraphGroup[hub.client.InferenceJob]" }}:
     {%- if is_collection_model %}
     inference_jobs: MultiGraphComponentGroup[hub.client.InferenceJob] = MultiGraphComponentGroup()
-    for (component_name, graph_name), graph_inputs in inputs.component_graph_names.items():
+    for (component_name, graph_name), graph_inputs in inputs.items():
         if components is not None and component_name not in components:
             continue
         if graph_names is not None and graph_name not in graph_names:
@@ -495,9 +495,9 @@ def inference_model(
             inputs=graph_inputs,
             device=device,
             name=job_name,
-            options=options.component_graph_names.get((component_name, graph_name), ""),
+            options=options.get((component_name, graph_name), ""),
         )
-        inference_jobs.component_graph_names[(component_name, graph_name)] = cast(hub.client.InferenceJob, submitted_inference_job)
+        inference_jobs[(component_name, graph_name)] = cast(hub.client.InferenceJob, submitted_inference_job)
     return inference_jobs
     {%- else %}
     inference_jobs: MultiGraphGroup[hub.client.InferenceJob] = MultiGraphGroup()
@@ -608,7 +608,7 @@ def download_model(
         # Merge semantic metadata from get_input_spec()
         {%- if has_multi_graph %}
         all_input_specs = model.get_input_spec()
-        for _graph_spec in all_input_specs[component_name].values():
+        for _graph_spec in all_input_specs.by_component(component_name).values():
             merge_input_metadata(model_file_metadata[model_file_name], _graph_spec)
         {%- else %}
         component = model.components[component_name]
@@ -941,7 +941,7 @@ def export_model(
             {%- if is_collection_model %}
             flat_onnx_jobs: dict[str, hub.client.CompileJob] = {}
             seen_onnx_components: set[str] = set()
-            for (comp_name, _gn), job in onnx_compile_result.component_graph_names.items():
+            for (comp_name, _gn), job in onnx_compile_result.items():
                 if comp_name not in seen_onnx_components:
                     flat_onnx_jobs[comp_name] = job
                     seen_onnx_components.add(comp_name)
@@ -1050,7 +1050,7 @@ def export_model(
         {%- if is_collection_model %}
         flat_jobs: dict[str, hub.client.CompileJob] = {}
         seen_components: set[str] = set()
-        for (comp_name, _gn), job in compile_result.component_graph_names.items():
+        for (comp_name, _gn), job in compile_result.items():
             if comp_name not in seen_components:
                 flat_jobs[comp_name] = job
                 seen_components.add(comp_name)
@@ -1190,17 +1190,17 @@ def export_model(
         {%- if has_multi_graph %}
         {%- if is_collection_model %}
         first_profile_job = (
-            next(iter(profile_result.component_graph_names.values()), None)
+            next(iter(profile_result.values()), None)
             if profile_result
             else None
         )
         {%- if not is_precompiled %}
         inference_job = (
-            next(iter(inference_result.component_graph_names.values()), None)
+            next(iter(inference_result.values()), None)
             if inference_result
             else None
         )
-        compile_job = next(iter(compile_result.component_graph_names.values()), None)
+        compile_job = next(iter(compile_result.values()), None)
         {%- endif %}
         {%- else %}
         first_profile_job = next(iter(profile_result.values()), None) if profile_result else None
@@ -1274,7 +1274,7 @@ def export_model(
     {%- if has_multi_graph %}
     if not skip_summary and profile_result is not None:
         {%- if is_collection_model %}
-        for pj in profile_result.component_graph_names.values():
+        for pj in profile_result.values():
             assert pj.wait().success, "Job failed: " + pj.url
             profile_data : dict[str, Any] = pj.download_profile()
             print_profile_metrics_from_job(pj, profile_data)
@@ -1301,9 +1301,9 @@ def export_model(
     if not skip_summary and inference_result is not None:
         {%- if is_collection_model %}
         all_specs = model.get_input_spec()
-        for (component_name, graph_name), graph_input_spec in all_specs.component_graph_names.items():
+        for (component_name, graph_name), graph_input_spec in all_specs.items():
             component = model.components[component_name]
-            ij = inference_result.component_graph_names[(component_name, graph_name)]
+            ij = inference_result[(component_name, graph_name)]
             sample_inputs = BaseModel.sample_inputs(component, graph_input_spec, use_channel_last_format=False)
             torch_out = torch_inference(
                 component, sample_inputs, return_channel_last_output=target_runtime.channel_last_native_execution
@@ -1370,7 +1370,7 @@ def export_model(
             assert link_result is not None
             print_on_target_demo_cmd(list(link_result.values()), Path(__file__).parent, device)
         else:
-            print_on_target_demo_cmd(list(compile_result.component_graph_names.values()), Path(__file__).parent, device)
+            print_on_target_demo_cmd(list(compile_result.values()), Path(__file__).parent, device)
         {%- else %}
         if target_runtime.uses_hub_link:
             assert link_result is not None

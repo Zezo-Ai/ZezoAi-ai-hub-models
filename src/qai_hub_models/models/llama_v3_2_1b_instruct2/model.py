@@ -393,7 +393,7 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
             llm_io_type=llm_io_type,
         )
 
-    def _get_input_spec_for_instance(
+    def _get_single_graph_input_spec(
         self,
         sequence_length: int | None = None,
         context_length: int | None = None,
@@ -665,7 +665,13 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
             other_profile_options=other_profile_options,
         )
 
-    def get_input_spec(
+    @staticmethod
+    def get_input_spec() -> MultiGraphGroup[InputSpec]:
+        raise NotImplementedError(
+            "You must instantiate this model to determine the spec."
+        )
+
+    def _get_input_spec_for_instance(
         self,
         context_length: list[int] = DEFAULT_EXPORT_CONTEXT_LENGTHS,
         sequence_length: list[int] = DEFAULT_EXPORT_SEQUENCE_LENGTHS,
@@ -690,7 +696,7 @@ class Llama3_2_1B_PartBase(MultiGraphBaseModel):
                 graph_name = (
                     f"{inst}_ar{seq_len}_cl{ctx_len}_{self.part_id}_of_{NUM_SPLITS}"
                 )
-                specs[graph_name] = self._get_input_spec_for_instance(seq_len, ctx_len)
+                specs[graph_name] = self._get_single_graph_input_spec(seq_len, ctx_len)
         return specs
 
 
