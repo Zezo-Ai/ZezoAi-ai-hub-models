@@ -112,6 +112,8 @@ def update_code_gen_failure_reasons(
         assert params.precision is not None
         assert params.device is not None
         assert isinstance(params.path, ScorecardProfilePath)
+        if params.device != default_device:
+            continue
 
         disable_reasons = code_gen_config.disabled_paths.get_disable_reasons(
             params.precision, params.path.runtime
@@ -123,9 +125,8 @@ def update_code_gen_failure_reasons(
         if params.path not in enabled_test_paths[params.precision]:
             continue
 
-        if failure_reason := summary.get_failure_reason(
-            exclude_device_jobs=params.device != default_device
-        ):
+        # We enable a model if it works on the default device.
+        if failure_reason := summary.get_failure_reason():
             disable_reasons.scorecard_failure = failure_reason
 
 

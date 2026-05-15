@@ -1698,13 +1698,14 @@ def accuracy_on_sample_inputs_via_export(
         calibration_data_patch,
         quantize_job_patch,
         compile_job_patch,
-        _,  # link_job_patch
+        link_job_patch,
         _,  # profile_job_patch
         inference_job_patch,
     ) = patch_hub_with_cached_jobs(
         test_params,
         patch_quantization=not QAIHMModelCodeGen.from_model(model_id).is_aimet,
         patch_compile=True,
+        patch_link=scorecard_path.runtime.uses_hub_link,
         patch_profile=False,
         patch_inference=True,
     )
@@ -1726,6 +1727,7 @@ def accuracy_on_sample_inputs_via_export(
         calibration_data_patch,
         quantize_job_patch,
         compile_job_patch,
+        link_job_patch,
         inference_job_patch,
         tabulate_patch,
     ):
@@ -1935,13 +1937,14 @@ def accuracy_on_dataset_via_evaluate_and_export(
         calibration_data_patch,
         quantize_job_patch,
         compile_job_patch,
-        _,  # link_job_patch
+        link_job_patch,
         _,  # profile_job_patch
         inference_job_patch,
     ) = patch_hub_with_cached_jobs(
         params=test_params,
         patch_quantization=not QAIHMModelCodeGen.from_model(model_id).is_aimet,
         patch_compile=True,
+        patch_link=scorecard_path.runtime.uses_hub_link,
         patch_inference=True,
     )
 
@@ -1961,6 +1964,7 @@ def accuracy_on_dataset_via_evaluate_and_export(
         calibration_data_patch,
         quantize_job_patch,
         compile_job_patch,
+        link_job_patch,
         inference_job_patch,
         compare_torch_inference_patch,
         inference_job_dataset_download_patch,

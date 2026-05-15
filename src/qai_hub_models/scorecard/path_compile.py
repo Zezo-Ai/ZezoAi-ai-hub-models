@@ -187,11 +187,13 @@ class ScorecardCompilePath(Enum):
 
         return out.strip()
 
-    def get_link_options(self) -> str:
+    def get_link_options(self, include_default_qaihm_qnn_version: bool = False) -> str:
         """
         Extra options to pass to the link step.
 
         Ensures the link step uses the same QAIRT version as the compile step
         when a non-default version is configured (e.g. ``QAIHM_TEST_QAIRT_VERSION=latest``).
         """
-        return self._get_qairt_version_option().strip()
+        return self._get_qairt_version_option(
+            include_default=include_default_qaihm_qnn_version
+        ).strip()

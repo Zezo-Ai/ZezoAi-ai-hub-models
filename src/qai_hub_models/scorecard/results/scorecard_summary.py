@@ -210,23 +210,22 @@ class ScorecardExportTestSummary:
             ],
         )
 
-    def get_failure_reason(self, exclude_device_jobs: bool = False) -> str | None:
+    def get_failure_reason(self) -> str | None:
         """Returns the reason this export test failed, or None if it succeeded."""
         too_slow_jobs: list[str] = []
         failing_jobs: list[str] = []
         has_missing_profile_job: bool = False
         for summary in self.job_summaries:
-            if not exclude_device_jobs:
-                if summary.profile_job:
-                    if not summary.profile_job.success:
-                        failing_jobs.append(summary.profile_job.job_id)
-                    if (
-                        summary.profile_job.inference_time_milliseconds
-                        > MAX_ACCEPTABLE_INFERENCE_TIME_MS
-                    ):
-                        too_slow_jobs.append(summary.profile_job.job_id)
-                    continue
-                has_missing_profile_job = True
+            if summary.profile_job:
+                if not summary.profile_job.success:
+                    failing_jobs.append(summary.profile_job.job_id)
+                if (
+                    summary.profile_job.inference_time_milliseconds
+                    > MAX_ACCEPTABLE_INFERENCE_TIME_MS
+                ):
+                    too_slow_jobs.append(summary.profile_job.job_id)
+                continue
+            has_missing_profile_job = True
 
             if summary.link_job:
                 if not summary.link_job.success:
