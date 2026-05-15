@@ -57,7 +57,9 @@ from qai_hub_models.utils.validation import perform_runtime_model_validation
 {%- if is_collection_model %}
 import qai_hub_models.models.{{ model_name }} as _model_module
 {%- endif %}
+{%- if not separate_quantize_script %}
 from qai_hub_models.utils.args import get_model_kwargs
+{%- endif %}
 from qai_hub_models.utils.testing import skip_invalid_runtime_device
 from qai_hub_models.utils.testing_export_eval import (
     compile_via_export,
@@ -152,7 +154,11 @@ def test_compile(precision: Precision, scorecard_path: ScorecardCompilePath, dev
         compile_via_export(
             compile_model,
             MODEL_ID,
+            {%- if separate_quantize_script %}
+            Model.from_pretrained(checkpoint=f"DEFAULT_{str(precision).upper()}"),
+            {%- else %}
             Model.from_pretrained(),
+            {%- endif %}
             precision,
             scorecard_path,
             device,
@@ -171,7 +177,11 @@ def test_link(precision: Precision, scorecard_path: ScorecardCompilePath, device
         link_via_export(
             link_model,
             MODEL_ID,
+            {%- if separate_quantize_script %}
+            Model.from_pretrained(checkpoint=f"DEFAULT_{str(precision).upper()}"),
+            {%- else %}
             Model.from_pretrained(),
+            {%- endif %}
             precision,
             scorecard_path,
             device,
@@ -187,7 +197,11 @@ def test_profile(precision: Precision, scorecard_path: ScorecardProfilePath, dev
         profile_via_export(
             profile_model,
             MODEL_ID,
+            {%- if separate_quantize_script %}
+            Model.from_pretrained(checkpoint=f"DEFAULT_{str(precision).upper()}"),
+            {%- else %}
             Model.from_pretrained(),
+            {%- endif %}
             precision,
             scorecard_path,
             device,
@@ -214,7 +228,11 @@ def test_inference(precision: Precision, scorecard_path: ScorecardProfilePath, d
             inference_via_export(
                 inference_model,
                 MODEL_ID,
+                {%- if separate_quantize_script %}
+                Model.from_pretrained(checkpoint=f"DEFAULT_{str(precision).upper()}"),
+                {%- else %}
                 Model.from_pretrained(),
+                {%- endif %}
                 precision,
                 scorecard_path,
                 device,
@@ -296,7 +314,11 @@ def test_val_accuracy(precision: Precision, scorecard_path: ScorecardProfilePath
         if HAS_EVAL_DATASET:
             accuracy_on_dataset_via_evaluate_and_export(
                 export_model,
+                {%- if separate_quantize_script %}
+                Model.from_pretrained(checkpoint=f"DEFAULT_{str(precision).upper()}"),
+                {%- else %}
                 Model.from_pretrained(**get_model_kwargs(Model, dict(precision=precision))),
+                {%- endif %}
                 Model.eval_datasets()[0],
                 torch_val_outputs,
                 torch_evaluate_mock_outputs,
@@ -309,7 +331,11 @@ def test_val_accuracy(precision: Precision, scorecard_path: ScorecardProfilePath
             accuracy_on_sample_inputs_via_export(
                 export_model,
                 MODEL_ID,
+                {%- if separate_quantize_script %}
+                Model.from_pretrained(checkpoint=f"DEFAULT_{str(precision).upper()}"),
+                {%- else %}
                 Model.from_pretrained(),
+                {%- endif %}
                 precision,
                 scorecard_path,
                 device,
@@ -318,7 +344,11 @@ def test_val_accuracy(precision: Precision, scorecard_path: ScorecardProfilePath
         accuracy_on_sample_inputs_via_export(
             export_model,
             MODEL_ID,
+            {%- if separate_quantize_script %}
+            Model.from_pretrained(checkpoint=f"DEFAULT_{str(precision).upper()}"),
+            {%- else %}
             Model.from_pretrained(),
+            {%- endif %}
             precision,
             scorecard_path,
             device,
