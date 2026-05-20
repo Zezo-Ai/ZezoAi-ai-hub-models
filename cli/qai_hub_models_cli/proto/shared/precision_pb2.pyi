@@ -52,11 +52,11 @@ class _PrecisionEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._Enum
     PRECISION_W8A16_MIXED_FP16: _Precision.ValueType  # 10
     """8-bit w, 16-bit a with FP16 override"""
     PRECISION_MXFP4: _Precision.ValueType  # 11
-    """GGUF format (llama.cpp)"""
+    """GGUF format"""
     PRECISION_Q8_0: _Precision.ValueType  # 12
-    """GGUF format (llama.cpp)"""
+    """GGUF format"""
     PRECISION_Q4_0: _Precision.ValueType  # 13
-    """GGUF format (llama.cpp)"""
+    """GGUF format"""
     PRECISION_MIXED: _Precision.ValueType  # 14
     """Component with multiple precisions, no float layers"""
     PRECISION_MIXED_WITH_FLOAT: _Precision.ValueType  # 15
@@ -86,11 +86,11 @@ PRECISION_W8A8_MIXED_FP16: Precision.ValueType  # 9
 PRECISION_W8A16_MIXED_FP16: Precision.ValueType  # 10
 """8-bit w, 16-bit a with FP16 override"""
 PRECISION_MXFP4: Precision.ValueType  # 11
-"""GGUF format (llama.cpp)"""
+"""GGUF format"""
 PRECISION_Q8_0: Precision.ValueType  # 12
-"""GGUF format (llama.cpp)"""
+"""GGUF format"""
 PRECISION_Q4_0: Precision.ValueType  # 13
-"""GGUF format (llama.cpp)"""
+"""GGUF format"""
 PRECISION_MIXED: Precision.ValueType  # 14
 """Component with multiple precisions, no float layers"""
 PRECISION_MIXED_WITH_FLOAT: Precision.ValueType  # 15

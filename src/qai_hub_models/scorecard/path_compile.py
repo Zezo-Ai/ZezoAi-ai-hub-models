@@ -34,10 +34,6 @@ class ScorecardCompilePath(Enum):
 
     ONNX_FP16 = "onnx_fp16"
 
-    LLAMA_CPP_CPU = "llama_cpp_cpu"
-    LLAMA_CPP_GPU = "llama_cpp_gpu"
-    LLAMA_CPP_NPU = "llama_cpp_npu"
-
     def __str__(self) -> str:
         return self.name.lower()
 
@@ -100,12 +96,6 @@ class ScorecardCompilePath(Enum):
             return TargetRuntime.QNN_DLC
         if self == ScorecardCompilePath.GENIE:
             return TargetRuntime.GENIE
-        if self == ScorecardCompilePath.LLAMA_CPP_CPU:
-            return TargetRuntime.LLAMA_CPP_CPU
-        if self == ScorecardCompilePath.LLAMA_CPP_GPU:
-            return TargetRuntime.LLAMA_CPP_GPU
-        if self == ScorecardCompilePath.LLAMA_CPP_NPU:
-            return TargetRuntime.LLAMA_CPP_NPU
         if self == ScorecardCompilePath.VOICE_AI:
             return TargetRuntime.VOICE_AI
         assert_never(self)

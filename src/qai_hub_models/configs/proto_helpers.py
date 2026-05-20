@@ -44,9 +44,6 @@ _RUNTIME_TO_PROTO: dict[str, int] = {
     "precompiled_qnn_onnx": runtime_pb2.RUNTIME_PRECOMPILED_QNN_ONNX,
     "genie": runtime_pb2.RUNTIME_GENIE,
     "voice_ai": runtime_pb2.RUNTIME_VOICE_AI,
-    "llama_cpp_cpu": runtime_pb2.RUNTIME_LLAMA_CPP_CPU,
-    "llama_cpp_gpu": runtime_pb2.RUNTIME_LLAMA_CPP_GPU,
-    "llama_cpp_npu": runtime_pb2.RUNTIME_LLAMA_CPP_NPU,
 }
 
 

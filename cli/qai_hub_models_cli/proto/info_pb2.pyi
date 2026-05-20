@@ -287,30 +287,16 @@ class ModelInfo(google.protobuf.message.Message):
 
         CALL_TO_ACTION_FIELD_NUMBER: builtins.int
         GENIE_COMPATIBLE_FIELD_NUMBER: builtins.int
-        LLAMA_CPP_COMPATIBLE_FIELD_NUMBER: builtins.int
-        LLAMA_CPP_MODEL_URL_FIELD_NUMBER: builtins.int
         call_to_action: global___ModelInfo.LLMDetails.CallToAction.ValueType
         genie_compatible: builtins.bool
         """Genie (QNN context binary) support"""
-        llama_cpp_compatible: builtins.bool
-        """llama.cpp support
-        Whether the model runs with llama.cpp. If true, llama_cpp_model_url must be set.
-        """
-        llama_cpp_model_url: builtins.str
-        """Global llama.cpp model URL — used when genie_compatible is false.
-        This allows specifying the URL once instead of per device.
-        """
         def __init__(
             self,
             *,
             call_to_action: global___ModelInfo.LLMDetails.CallToAction.ValueType = ...,
             genie_compatible: builtins.bool = ...,
-            llama_cpp_compatible: builtins.bool = ...,
-            llama_cpp_model_url: builtins.str | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["_llama_cpp_model_url", b"_llama_cpp_model_url", "llama_cpp_model_url", b"llama_cpp_model_url"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["_llama_cpp_model_url", b"_llama_cpp_model_url", "call_to_action", b"call_to_action", "genie_compatible", b"genie_compatible", "llama_cpp_compatible", b"llama_cpp_compatible", "llama_cpp_model_url", b"llama_cpp_model_url"]) -> None: ...
-        def WhichOneof(self, oneof_group: typing.Literal["_llama_cpp_model_url", b"_llama_cpp_model_url"]) -> typing.Literal["llama_cpp_model_url"] | None: ...
+        def ClearField(self, field_name: typing.Literal["call_to_action", b"call_to_action", "genie_compatible", b"genie_compatible"]) -> None: ...
 
     AIHM_VERSION_FIELD_NUMBER: builtins.int
     ID_FIELD_NUMBER: builtins.int

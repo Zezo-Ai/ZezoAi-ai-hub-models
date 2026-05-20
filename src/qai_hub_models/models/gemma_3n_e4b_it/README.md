@@ -10,47 +10,6 @@ This repository contains scripts for optimized on-device export suitable to run 
 
 Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.qualcomm.com) to compile, profile, and evaluate this model. [Sign up](https://myaccount.qualcomm.com/signup) to run these models on a hosted Qualcomm® device.
 
-## Run inference on-device with Llama.cpp
-
-The model can be run on-device using [llama.cpp](https://github.com/ggml-org/llama.cpp). Below are instructions for building Llama.cpp for Qualcomm powered chipsets, downloading the model, and running inference on different compute units.
-
-### Step 1: Build Llama.cpp for Qualcomm Powered Chipsets
-Follow the instructions at [llama.cpp Qualcomm build guide](https://github.com/ggml-org/llama.cpp/tree/master/docs/backend/snapdragon#readme) to build llama.cpp with Hexagon NPU support.
-
-### Step 2: Download the model
-```bash
-curl -L -o model.gguf https://huggingface.co/ggml-org/gemma-3n-E4B-it-GGUF/resolve/main/gemma-3n-E4B-it-Q8_0.gguf
-```
-
-### Step 3: Push files to device
-```bash
-adb push <llama-cpp-install-dir>/ /data/local/tmp/llama.cpp/
-adb push model.gguf /data/local/tmp/llama.cpp/
-```
-
-### Step 4: Open device shell
-```bash
-adb shell
-cd /data/local/tmp/llama.cpp
-export LD_LIBRARY_PATH=/data/local/tmp/llama.cpp/lib:$LD_LIBRARY_PATH
-export ADSP_LIBRARY_PATH="/data/local/tmp/llama.cpp/lib;/system/lib/rfsa/adsp;/system/vendor/lib/rfsa/adsp;/dsp"
-```
-
-### Step 5: Run the model
-#### Run on CPU
-```bash
-GGML_HEXAGON_NDEV=0 llama-completion --model model.gguf --n-predict -1 --ctx-size 128 --system-prompt "You are a helpful assistant. Be helpful but brief." --prompt "Describe the process of photosynthesis as if explaining it to a ten-year-old." --seed 1 --single-turn --no-display-prompt --n-gpu-layers 0
-```
-#### Run on GPU
-```bash
-GGML_HEXAGON_NDEV=0 llama-completion --model model.gguf --n-predict -1 --ctx-size 128 --system-prompt "You are a helpful assistant. Be helpful but brief." --prompt "Describe the process of photosynthesis as if explaining it to a ten-year-old." --seed 1 --single-turn --no-display-prompt -fa off
-```
-#### Run on HTP (NPU)
-```bash
-GGML_HEXAGON_NDEV=1 llama-completion --model model.gguf --n-predict -1 --ctx-size 128 --system-prompt "You are a helpful assistant. Be helpful but brief." --prompt "Describe the process of photosynthesis as if explaining it to a ten-year-old." --seed 1 --single-turn --no-display-prompt --no-mmap -t 6 --cpu-mask 0xfc --cpu-strict 1 -ctk f16 -ctv f16 -fa on --batch-size 128 --device "HTP0"
-```
-
-
 ## License
 * The license for the original implementation of Gemma-3n-E4B-it can be found
   [here](https://ai.google.dev/gemma/terms).

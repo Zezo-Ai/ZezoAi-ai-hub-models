@@ -50,9 +50,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
     VOICE_AI = "voice_ai"
     ONNX_DML_GPU = "onnx_dml_gpu"
     QNN_DLC_GPU = "qnn_dlc_gpu"
-    LLAMA_CPP_CPU = "llama_cpp_cpu"
-    LLAMA_CPP_GPU = "llama_cpp_gpu"
-    LLAMA_CPP_NPU = "llama_cpp_npu"
 
     def __str__(self) -> str:
         return self.name.lower()
@@ -83,9 +80,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
             ScorecardProfilePath.QNN_CONTEXT_BINARY,
             ScorecardProfilePath.GENIE,
             ScorecardProfilePath.VOICE_AI,
-            ScorecardProfilePath.LLAMA_CPP_CPU,
-            ScorecardProfilePath.LLAMA_CPP_GPU,
-            ScorecardProfilePath.LLAMA_CPP_NPU,
         ]
 
     @property
@@ -212,12 +206,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
             return TargetRuntime.GENIE
         if self == ScorecardProfilePath.VOICE_AI:
             return TargetRuntime.VOICE_AI
-        if self == ScorecardProfilePath.LLAMA_CPP_CPU:
-            return TargetRuntime.LLAMA_CPP_CPU
-        if self == ScorecardProfilePath.LLAMA_CPP_GPU:
-            return TargetRuntime.LLAMA_CPP_GPU
-        if self == ScorecardProfilePath.LLAMA_CPP_NPU:
-            return TargetRuntime.LLAMA_CPP_NPU
         assert_never(self)
 
     @property
@@ -243,12 +231,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
             return ScorecardCompilePath.GENIE
         if self == ScorecardProfilePath.VOICE_AI:
             return ScorecardCompilePath.VOICE_AI
-        if self == ScorecardProfilePath.LLAMA_CPP_CPU:
-            return ScorecardCompilePath.LLAMA_CPP_CPU
-        if self == ScorecardProfilePath.LLAMA_CPP_GPU:
-            return ScorecardCompilePath.LLAMA_CPP_GPU
-        if self == ScorecardProfilePath.LLAMA_CPP_NPU:
-            return ScorecardCompilePath.LLAMA_CPP_NPU
         assert_never(self)
 
     @property
@@ -262,17 +244,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
     def get_profile_options(
         self, include_default_qaihm_qnn_version: bool = False
     ) -> str:
-        # LLAMA_CPP paths don't run through AI Hub profiling
-        if self in [
-            ScorecardProfilePath.LLAMA_CPP_CPU,
-            ScorecardProfilePath.LLAMA_CPP_GPU,
-            ScorecardProfilePath.LLAMA_CPP_NPU,
-        ]:
-            raise ValueError(
-                f"{self.name} does not support AI Hub profiling. "
-                "LLAMA_CPP paths use pre-built GGUF models and run outside of scorecard."
-            )
-
         out = ""
         if self == ScorecardProfilePath.ONNX_DML_GPU:
             out = out + " --onnx_execution_providers directml"
@@ -310,9 +281,6 @@ class ScorecardProfilePath(Enum, metaclass=ScorecardProfilePathMeta):
         """The name of the runtime on the website that corresponds to this path."""
         if self in [
             ScorecardProfilePath.VOICE_AI,
-            ScorecardProfilePath.LLAMA_CPP_CPU,
-            ScorecardProfilePath.LLAMA_CPP_GPU,
-            ScorecardProfilePath.LLAMA_CPP_NPU,
         ]:
             return self.value
         return self.runtime.inference_engine.value

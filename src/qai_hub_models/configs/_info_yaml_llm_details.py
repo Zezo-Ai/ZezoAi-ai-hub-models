@@ -37,13 +37,6 @@ class LLMDetails(BaseQAIHMConfig):
     call_to_action: LLM_CALL_TO_ACTION
     genie_compatible: bool = False
 
-    # Whether the model runs with llama.cpp. If True, llama_cpp_model_url must be set.
-    llama_cpp_compatible: bool = False
-
-    # Global llama.cpp model URL - used when genie_compatible is False
-    # This allows specifying the URL once instead of per device
-    llama_cpp_model_url: str | None = None
-
     # Dict<Device Name, Dict<Long Runtime Name, LLMDeviceRuntimeDetails>
     # Used when genie_compatible is True (QNN context binary models)
     devices: dict[str, dict[ScorecardProfilePath, LLMDeviceRuntimeDetails]] | None = (
@@ -75,12 +68,6 @@ class LLMDetails(BaseQAIHMConfig):
         ):
             raise ValueError(
                 "In LLM details, genie_compatible must not be True if the call to action is contact for purchase."
-            )
-
-        # llama_cpp_compatible requires a llama_cpp_model_url
-        if self.llama_cpp_compatible and not self.llama_cpp_model_url:
-            raise ValueError(
-                "In LLM details, llama_cpp_model_url must be set when llama_cpp_compatible is True."
             )
 
         return self

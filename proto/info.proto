@@ -256,13 +256,8 @@ message ModelInfo {
     // Genie (QNN context binary) support
     bool genie_compatible = 2;
 
-    // llama.cpp support
-    // Whether the model runs with llama.cpp. If true, llama_cpp_model_url must be set.
-    bool llama_cpp_compatible = 3;
-
-    // Global llama.cpp model URL — used when genie_compatible is false.
-    // This allows specifying the URL once instead of per device.
-    optional string llama_cpp_model_url = 4;
+    reserved 3, 4;
+    reserved "llama_cpp_compatible", "llama_cpp_model_url";
 
     enum CallToAction {
       CALL_TO_ACTION_UNSPECIFIED = 0;

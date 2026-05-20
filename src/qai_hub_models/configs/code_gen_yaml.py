@@ -180,11 +180,6 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # the checkpoint (via args.json or DEFAULT_* sentinel).
     separate_quantize_script: bool = False
 
-    # llama.cpp commands for running the model on different runtimes
-    llama_cpp_cpu_command: str | None = None
-    llama_cpp_gpu_command: str | None = None
-    llama_cpp_npu_command: str | None = None
-
     # Instructions for installing system-level dependencies before pip install.
     readme_install_system_deps: str | None = None
 

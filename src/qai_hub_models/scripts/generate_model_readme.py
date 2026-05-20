@@ -96,13 +96,6 @@ def generate_and_write_model_readme(model_id: str) -> Path:
             "readme_export_device": model_code_gen.default_device
             if model_code_gen.requires_aot_prepare
             else None,
-            # llama.cpp commands for LLM models
-            "llama_cpp_cpu_command": model_code_gen.llama_cpp_cpu_command,
-            "llama_cpp_gpu_command": model_code_gen.llama_cpp_gpu_command,
-            "llama_cpp_npu_command": model_code_gen.llama_cpp_npu_command,
-            "llama_cpp_model_url": model_info.llm_details.llama_cpp_model_url
-            if model_info.llm_details
-            else None,
             # System-level dependencies installation instructions
             "readme_install_system_deps": model_code_gen.readme_install_system_deps,
         }

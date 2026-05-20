@@ -362,7 +362,6 @@ class InferenceEngine(Enum):
     QNN = "qnn"
     ONNX = "onnx"
     GENIE = "genie"
-    LLAMA_CPP = "llama_cpp"
 
     @property
     def full_package_name(self) -> str:
@@ -374,8 +373,6 @@ class InferenceEngine(Enum):
             return "ONNX Runtime"
         if self == InferenceEngine.GENIE:
             return "Genie (Qualcomm GenAI Inference Extensions)"
-        if self == InferenceEngine.LLAMA_CPP:
-            return "Llama.cpp"
         assert_never(self)
 
     @property
@@ -461,12 +458,6 @@ class TargetRuntime(Enum):
     # https://qpm.qualcomm.com/#/main/tools/details/VoiceAI_Translation
     VOICE_AI = "voice_ai"
 
-    # Llama.cpp runtime variants
-    # https://github.com/ggml-org/llama.cpp
-    LLAMA_CPP_CPU = "llama_cpp_cpu"
-    LLAMA_CPP_GPU = "llama_cpp_gpu"
-    LLAMA_CPP_NPU = "llama_cpp_npu"
-
     @staticmethod
     def from_hub_model_type(model_type: hub.SourceModelType) -> TargetRuntime:
         for rt in TargetRuntime:
@@ -491,12 +482,6 @@ class TargetRuntime(Enum):
             return InferenceEngine.ONNX
         if self == TargetRuntime.GENIE:
             return InferenceEngine.GENIE
-        if (
-            self == TargetRuntime.LLAMA_CPP_CPU  # noqa: PLR1714 | Can't merge comparisons and use assert_never
-            or self == TargetRuntime.LLAMA_CPP_GPU
-            or self == TargetRuntime.LLAMA_CPP_NPU
-        ):
-            return InferenceEngine.LLAMA_CPP
         assert_never(self)
 
     @property
@@ -514,12 +499,6 @@ class TargetRuntime(Enum):
             return "onnx.zip"
         if self == TargetRuntime.GENIE:
             return "genie.zip"
-        if (
-            self == TargetRuntime.LLAMA_CPP_CPU  # noqa: PLR1714 | Can't merge comparisons and use assert_never
-            or self == TargetRuntime.LLAMA_CPP_GPU
-            or self == TargetRuntime.LLAMA_CPP_NPU
-        ):
-            return "gguf"
 
         assert_never(self)
 
@@ -534,12 +513,7 @@ class TargetRuntime(Enum):
             return hub.SourceModelType.ONNX
         if self == TargetRuntime.TFLITE:
             return hub.SourceModelType.TFLITE
-        if (
-            self == TargetRuntime.GENIE  # noqa: PLR1714 | Can't merge comparisons and use assert_never
-            or self == TargetRuntime.LLAMA_CPP_CPU
-            or self == TargetRuntime.LLAMA_CPP_GPU
-            or self == TargetRuntime.LLAMA_CPP_NPU
-        ):
+        if self == TargetRuntime.GENIE:
             raise ValueError(f"No Hub model type is applicable for {self.value}")
         assert_never(self)
 
@@ -614,34 +588,11 @@ class TargetRuntime(Enum):
                 Precision.w8a16_mixed_fp16,
                 Precision.mixed,
             ]
-        if (
-            self == TargetRuntime.LLAMA_CPP_CPU  # noqa: PLR1714 | Can't merge comparisons and use assert_never
-            or self == TargetRuntime.LLAMA_CPP_GPU
-            or self == TargetRuntime.LLAMA_CPP_NPU
-        ):
-            # Llama.cpp supports various GGUF quantization formats
-            return precision in [
-                Precision.mxfp4,
-                Precision.q8_0,
-                Precision.q4_0,
-            ]
-
         assert_never(self)
 
     @property
     def aihub_target_runtime_flag(self) -> str:
         """AI Hub Workbench job flag for compiling to this runtime."""
-        # LLAMA_CPP_* runtimes don't go through AI Hub compilation
-        if self in [
-            TargetRuntime.LLAMA_CPP_CPU,
-            TargetRuntime.LLAMA_CPP_GPU,
-            TargetRuntime.LLAMA_CPP_NPU,
-        ]:
-            raise ValueError(
-                f"Runtime {self.name} does not support AI Hub compilation. "
-                "llama.cpp runtimes use pre-built GGUF models instead."
-            )
-
         if self.is_orchestrator_runtime or self.uses_hub_link:
             # Orchestrator runtimes and link-based runtimes compile to DLC first.
             # Link-based runtimes (e.g., QNN_CONTEXT_BINARY) then use hub.link()
@@ -695,9 +646,6 @@ class TargetRuntime(Enum):
         return self in [
             TargetRuntime.GENIE,
             TargetRuntime.VOICE_AI,
-            TargetRuntime.LLAMA_CPP_CPU,
-            TargetRuntime.LLAMA_CPP_GPU,
-            TargetRuntime.LLAMA_CPP_NPU,
         ]
 
 
@@ -738,7 +686,7 @@ class Precision:
     w8a8_mixed_fp16: Precision
     w8a16_mixed_fp16: Precision
 
-    # GGUF-specific Precision (for llama.cpp)
+    # GGUF-specific Precision
     mxfp4: Precision
     q8_0: Precision
     q4_0: Precision

@@ -42,6 +42,3 @@ class TargetRuntime(Enum):
     PRECOMPILED_QNN_ONNX = "precompiled_qnn_onnx"
     GENIE = "genie"
     VOICE_AI = "voice_ai"
-    LLAMA_CPP_CPU = "llama_cpp_cpu"
-    LLAMA_CPP_GPU = "llama_cpp_gpu"
-    LLAMA_CPP_NPU = "llama_cpp_npu"

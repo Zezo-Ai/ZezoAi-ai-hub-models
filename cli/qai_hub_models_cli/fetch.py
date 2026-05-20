@@ -96,10 +96,6 @@ def get_asset_url(
     FileNotFoundError
         If the asset does not exist on the server.
     """
-    # TODO(#18390): llama_cpp runtimes are not
-    # distributed as standard S3 zips. Check if the model exists and
-    # supports llama_cpp, then direct the user to the model README
-    # for download instructions instead of failing on a missing asset.
     verify_not_dev_release(version)
     verify_version_supported(version)
 

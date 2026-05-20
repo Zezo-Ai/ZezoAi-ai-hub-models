@@ -55,7 +55,6 @@ from tasks.test import (
     GenerateTestSummaryTask,
     GPUPyTestModelsTask,
     InstallGlobalRequirementsTask,
-    LlamaCppBenchmarkTask,
     PyTestModelsTask,
     PyTestQAIHMTask,
 )
@@ -334,25 +333,6 @@ class TaskLibrary:
             DownloadQAIRTAutoSDKTask(
                 venv=self.venv_path,
             ),
-        )
-
-    @public_task("Run Llama.CPP benchmarks on QDC devices")
-    @depends(["install_deps"])
-    def run_llama_cpp_benchmark(
-        self, plan: Plan, step_id: str = "run_llama_cpp_benchmark"
-    ) -> str:
-        """
-        Run Llama.CPP benchmarks. Uses environment variables:
-        - LLAMA_CPP_PATH: Path to Llama.CPP binaries
-        - QAIHM_TEST_MODELS: Comma-separated model names, or "all" (default: "all")
-        - QAIHM_TEST_DEVICES: Comma-separated list of QDC device names
-        - QDC_API_KEY: QDC API token
-
-        Model configs are defined in src/qai_hub_models/scripts/run_llama_cpp_benchmarks.py
-        """
-        return plan.add_step(
-            step_id,
-            LlamaCppBenchmarkTask(venv=self.venv_path),
         )
 
     @public_task("Collect LLM performance numbers (TPS/TTFT) via pytest")

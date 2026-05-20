@@ -277,8 +277,6 @@ class QAIHMModelInfo(BaseQAIHMConfig):
             llm_details = info_pb2.ModelInfo.LLMDetails(
                 call_to_action=call_to_action_to_proto(self.llm_details.call_to_action),
                 genie_compatible=self.llm_details.genie_compatible,
-                llama_cpp_compatible=self.llm_details.llama_cpp_compatible,
-                llama_cpp_model_url=self.llm_details.llama_cpp_model_url,
             )
 
         numerics_benchmark = None
@@ -480,39 +478,29 @@ class QAIHMModelInfo(BaseQAIHMConfig):
                     "LLM has downloadable assets but the call to action is not 'download'."
                 )
 
-            if validate_urls_exist:
-                if self.llm_details.devices:
-                    for (
-                        device_runtime_config_mapping
-                    ) in self.llm_details.devices.values():
-                        for runtime_detail in device_runtime_config_mapping.values():
-                            if runtime_detail.model_download_url.startswith(
-                                ("http://", "https://")
-                            ):
-                                model_download_url = runtime_detail.model_download_url
-                            else:
-                                version = runtime_detail.model_download_url.split("/")[
-                                    0
-                                ][1:]
-                                relative_path = "/".join(
-                                    runtime_detail.model_download_url.split("/")[1:]
-                                )
-                                model_download_url = ASSET_CONFIG.get_model_asset_url(
-                                    self.id, version, relative_path
-                                )
-                            urls_to_check.append(
-                                (
-                                    model_download_url,
-                                    f"Download URL does not exist ({runtime_detail.model_download_url})",
-                                )
+            if validate_urls_exist and self.llm_details.devices:
+                for device_runtime_config_mapping in self.llm_details.devices.values():
+                    for runtime_detail in device_runtime_config_mapping.values():
+                        if runtime_detail.model_download_url.startswith(
+                            ("http://", "https://")
+                        ):
+                            model_download_url = runtime_detail.model_download_url
+                        else:
+                            version = runtime_detail.model_download_url.split("/")[0][
+                                1:
+                            ]
+                            relative_path = "/".join(
+                                runtime_detail.model_download_url.split("/")[1:]
                             )
-                elif self.llm_details.llama_cpp_model_url:
-                    urls_to_check.append(
-                        (
-                            self.llm_details.llama_cpp_model_url,
-                            "Llama.cpp download URL does not exist",
+                            model_download_url = ASSET_CONFIG.get_model_asset_url(
+                                self.id, version, relative_path
+                            )
+                        urls_to_check.append(
+                            (
+                                model_download_url,
+                                f"Download URL does not exist ({runtime_detail.model_download_url})",
+                            )
                         )
-                    )
         elif self.llm_details:
             raise ValueError("Model type must be LLM if llm_details is set")
 
