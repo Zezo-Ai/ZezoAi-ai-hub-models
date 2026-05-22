@@ -351,7 +351,7 @@ def test_qdc(
     )
 
     qdc_job_name = f"Genie {MODEL_ID} {precision}"
-    tps, min_ttft, _ = submit_genie_bundle_to_qdc_device(
+    tps, prefill_tps, min_ttft, _ = submit_genie_bundle_to_qdc_device(
         os.environ["QDC_API_TOKEN"],
         device.reference_device.name,
         str(genie_bundle_path),
@@ -363,6 +363,7 @@ def test_qdc(
         precision=str(precision),
         device=device.name,
         tps=tps,
+        prefill_tps=prefill_tps,
         ttft_ms=min_ttft,
     )
     assert tps > 6.0
@@ -390,7 +391,7 @@ def test_llm_perf(
     compile_job_cache: CompileJobCache,
     llm_perf_config: LLMPerfConfig,
 ) -> None:
-    tps, ttft = test.run_llm_perf_test(
+    tps, ttft, prefill_tps = test.run_llm_perf_test(
         model_id=MODEL_ID,
         export_model_func=export_model,
         device=device,
@@ -415,5 +416,6 @@ def test_llm_perf(
         precision=str(precision),
         device=device.name,
         tps=tps,
+        prefill_tps=prefill_tps,
         ttft_ms=ttft,
     )

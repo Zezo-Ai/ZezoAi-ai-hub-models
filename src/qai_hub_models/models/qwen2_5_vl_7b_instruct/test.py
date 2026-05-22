@@ -130,7 +130,7 @@ def test_llm_perf(
     compile_job_cache: CompileJobCache,
     llm_perf_config: LLMPerfConfig,
 ) -> None:
-    tps, ttft = test.run_llm_perf_test(
+    tps, ttft, prefill_tps = test.run_llm_perf_test(
         model_id=MODEL_ID,
         export_model_func=export_model,
         device=device,
@@ -153,5 +153,6 @@ def test_llm_perf(
         precision=str(precision),
         device=device.name,
         tps=tps,
+        prefill_tps=prefill_tps,
         ttft_ms=ttft,
     )

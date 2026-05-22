@@ -419,7 +419,7 @@ class GenieQDCJobs(QDCJobs):
     def compute_metrics(
         self,
         job_log_files: list,
-    ) -> tuple[float | None, float | None]:
+    ) -> tuple[float | None, float | None, float | None]:
         """Compute and print performance metrics from job logs.
 
         Parameters
@@ -433,10 +433,13 @@ class GenieQDCJobs(QDCJobs):
             Average tokens per second.
         min_time_to_first_token: float | None
             Minimum time to first token in ms.
+        prefill_tokens_per_second : float | None
+            Prefill (prompt-processing) tokens per second.
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             tps: list[float] = []
             ttft: list[float] = []
+            prefill_tps: list[float] = []
 
             if job_log_files:
                 for job_log in job_log_files:
@@ -487,6 +490,9 @@ class GenieQDCJobs(QDCJobs):
                             ttft.append(
                                 float(component["time-to-first-token"]["value"])
                             )
+                            prefill_tps.append(
+                                float(component["prompt-processing-rate"]["value"])
+                            )
                         else:
                             print(
                                 "Warning: Unexpected profile log structure, "
@@ -500,16 +506,24 @@ class GenieQDCJobs(QDCJobs):
             print("Perf metrics:")
             print(f"  Tokens Per Second (all trials): {tps}")
             print(f"  Time to First Token ms (all trials): {ttft_ms}")
+            print(f"  Prefill Tokens Per Second (all trials): {prefill_tps}")
             print(
                 f"  Tokens Per Second — average: {statistics.mean(tps):.2f}, median: {statistics.median(tps):.2f}"
             )
             print(
                 f"  Time to First Token (ms) — average: {statistics.mean(ttft_ms):.2f}, median: {statistics.median(ttft_ms):.2f}"
             )
-            return statistics.median(tps), statistics.median(ttft_ms)
+            print(
+                f"  Prefill Tokens Per Second — average: {statistics.mean(prefill_tps):.2f}, median: {statistics.median(prefill_tps):.2f}"
+            )
+            return (
+                statistics.median(tps),
+                statistics.median(prefill_tps),
+                statistics.median(ttft_ms),
+            )
 
         print("No performance metrics found.")
-        return None, None
+        return None, None, None
 
     @staticmethod
     def _parse_eval_outputs(content: str) -> dict[int, str]:
@@ -643,7 +657,7 @@ def submit_genie_bundle_to_qdc_device(
     qairt_version: str = "2.45.40.260406",
     eval_prompts: list[str] | None | object = _USE_DEFAULT_PROMPTS,
     num_trials: int = 25,
-) -> tuple[float | None, float | None, list[dict]]:
+) -> tuple[float | None, float | None, float | None, list[dict]]:
     """
     Submit a Genie bundle to QDC for execution on the specified device.
 
@@ -674,8 +688,9 @@ def submit_genie_bundle_to_qdc_device(
 
     Returns
     -------
-    tuple[float | None, float | None, list[dict]]
-        (avg_tokens_per_second, min_time_to_first_token, eval_results)
+    tuple[float | None, float | None, float | None, list[dict]]
+        (avg_tokens_per_second, prefill_tokens_per_second,
+        min_time_to_first_token, eval_results)
         where eval_results is a list of dicts with keys: idx, prompt, output.
     """
     prompts_to_use: list[str] | None
@@ -715,13 +730,13 @@ def submit_genie_bundle_to_qdc_device(
     job_log_files = genie_job.get_job_log_files(job_id)
     time.sleep(POLL_INTERVAL)
 
-    tps, ttft = genie_job.compute_metrics(job_log_files)
+    tps, prefill_tps, ttft = genie_job.compute_metrics(job_log_files)
 
     eval_results: list[dict] = []
     if prompts_to_use:
         eval_results = genie_job.compute_eval_results(job_log_files, prompts_to_use)
 
-    return tps, ttft, eval_results
+    return tps, prefill_tps, ttft, eval_results
 
 
 if __name__ == "__main__":
@@ -809,7 +824,7 @@ if __name__ == "__main__":
             "Please add a file with prompt to run on-device."
         )
 
-    tps, ttft, eval_results = submit_genie_bundle_to_qdc_device(
+    tps, prefill_tps, ttft, eval_results = submit_genie_bundle_to_qdc_device(
         args.api_token,
         args.device,
         args.genie_bundle_path,

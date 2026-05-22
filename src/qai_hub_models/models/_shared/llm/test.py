@@ -745,7 +745,7 @@ def run_llm_perf_test(
     num_layers_per_split: int | None = None,
     qairt_sdk_path: str | None = None,
     skip_perf_update: bool = False,
-) -> tuple[float | None, float | None]:
+) -> tuple[float | None, float | None, float | None]:
     """Compile via export_model, run QDC, and update perf.yaml for one
     (model, precision, device).
 
@@ -757,7 +757,7 @@ def run_llm_perf_test(
     compile jobs from the first device, skipping compilation while still
     running the export/link/download/genie bundle steps.
 
-    Returns (tokens_per_second, time_to_first_token_ms).
+    Returns (tokens_per_second, time_to_first_token_ms, prefill_tokens_per_second).
     """
     if export_context_lengths is None:
         export_context_lengths = DEFAULT_EXPORT_CONTEXT_LENGTHS
@@ -859,7 +859,7 @@ def run_llm_perf_test(
         raise ValueError("QDC_API_TOKEN environment variable is not set")
 
     run_eval = os.environ.get("QAIHM_RUN_EVAL", "true").lower() == "true"
-    tps, ttft, eval_results = submit_genie_bundle_to_qdc_device(
+    tps, prefill_tps, ttft, eval_results = submit_genie_bundle_to_qdc_device(
         api_token,
         device.reference_device.name,
         str(genie_bundle_path),
@@ -877,6 +877,7 @@ def run_llm_perf_test(
             max(export_context_lengths),
             tps,
             ttft,
+            prefill_tps,
         )
 
     # Save eval results to CSV in the working directory (not output_dir)
@@ -885,4 +886,4 @@ def run_llm_perf_test(
         eval_csv_path = Path(f"{model_id}_{device.chipset}_{precision}_eval.csv")
         save_eval_results_csv(eval_results, str(eval_csv_path))
 
-    return tps, ttft
+    return tps, ttft, prefill_tps

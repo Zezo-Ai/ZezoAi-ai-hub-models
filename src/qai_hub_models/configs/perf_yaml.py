@@ -38,6 +38,7 @@ class QAIHMModelPerf(BaseQAIHMConfig):
             time_to_first_token_range_milliseconds: (
                 QAIHMModelPerf.PerformanceDetails.TimeToFirstTokenRangeMilliseconds
             )
+            prefill_tokens_per_second: float | None = None
 
         class PeakMemoryRangeMB(BaseQAIHMConfig):
             min: int
@@ -315,6 +316,7 @@ class QAIHMModelPerf(BaseQAIHMConfig):
                             context_length=lm.context_length,
                             tokens_per_second=lm.tokens_per_second,
                             time_to_first_token_range_milliseconds=ttft,
+                            prefill_tokens_per_second=lm.prefill_tokens_per_second,
                         )
                     )
 

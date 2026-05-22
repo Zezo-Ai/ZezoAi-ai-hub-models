@@ -123,6 +123,7 @@ def update_perf_yaml(
     context_length: int,
     tps: float,
     ttft_ms: float,
+    prefill_tps: float | None = None,
 ) -> None:
     """Update the perf.yaml file for a model with new LLM metrics."""
     perf = QAIHMModelPerf.from_model(model_id, not_exists_ok=True)
@@ -168,6 +169,7 @@ def update_perf_yaml(
             min=ttft_ms,
             max=estimated_max_ttft_ms,
         ),
+        prefill_tokens_per_second=prefill_tps,
     )
 
     if perf_details.llm_metrics is None:

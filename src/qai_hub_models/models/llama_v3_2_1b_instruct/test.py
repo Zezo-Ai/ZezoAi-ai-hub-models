@@ -361,7 +361,7 @@ def test_qdc(
     print(f"[provenance] metadata.json precision={metadata.precision}")
 
     qdc_job_name = f"Genie {MODEL_ID} {precision}"
-    tps, min_ttft, _ = submit_genie_bundle_to_qdc_device(
+    tps, prefill_tps, min_ttft, _ = submit_genie_bundle_to_qdc_device(
         os.environ["QDC_API_TOKEN"],
         device.reference_device.name,
         str(genie_bundle_path),
@@ -373,6 +373,7 @@ def test_qdc(
         precision=str(precision),
         device=device.name,
         tps=tps,
+        prefill_tps=prefill_tps,
         ttft_ms=min_ttft,
     )
     # With both ar128 and ar1 in the genie bundle, TPS should match v1.
@@ -421,7 +422,7 @@ def test_llm_perf(
     FPSplitModelWrapper.clear_cache()
     QuantizedSplitModelWrapper.clear_cache()
 
-    tps, ttft = test.run_llm_perf_test(
+    tps, ttft, prefill_tps = test.run_llm_perf_test(
         model_id=MODEL_ID,
         export_model_func=export_model,
         device=device,
@@ -442,5 +443,6 @@ def test_llm_perf(
         precision=str(precision),
         device=device.name,
         tps=tps,
+        prefill_tps=prefill_tps,
         ttft_ms=ttft,
     )

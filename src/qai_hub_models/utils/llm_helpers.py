@@ -62,6 +62,7 @@ def log_perf_on_device_result(
     precision: str,
     device: str,
     tps: float | None,
+    prefill_tps: float | None,
     ttft_ms: float | None,
 ) -> None:
     """
@@ -79,6 +80,8 @@ def log_perf_on_device_result(
         Device on which the model was run (e.g., 'Snapdragon X Elite', 'Snapdragon 8 Elite').
     tps
         Tokens per second, measuring throughput (unit: tokens/sec).
+    prefill_tps
+        Prefill (prompt-processing) tokens per second (unit: tokens/sec).
     ttft_ms
         Time to first token, measuring latency (unit: milliseconds).
     """
@@ -95,11 +98,12 @@ def log_perf_on_device_result(
                         "Model Name",
                         "Precision",
                         "Device",
-                        "Tokens per Second",
+                        "Decode (t/s)",
+                        "Prefill (t/s)",
                         "TTFT (ms)",
                     ]
                 )
-            writer.writerow([model_name, precision, device, tps, ttft_ms])
+            writer.writerow([model_name, precision, device, tps, prefill_tps, ttft_ms])
 
 
 def create_genie_config(

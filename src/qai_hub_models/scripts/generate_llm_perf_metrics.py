@@ -52,7 +52,7 @@ def _is_local_support() -> bool:
     )
 
 
-def _get_processed_kpis(profile: dict) -> tuple[int, float]:
+def _get_processed_kpis(profile: dict) -> tuple[int, float, float | None]:
     """Get Prompt Processor(PP) and Token Generator(TG) metrics from output log"""
     components = profile["components"]
     assert len(components) == 1
@@ -65,9 +65,11 @@ def _get_processed_kpis(profile: dict) -> tuple[int, float]:
     assert len(query_events) == 1
     ttft = query_events[0]["time-to-first-token"]
     tps = query_events[0]["token-generation-rate"]
+    prefill = query_events[0]["prompt-processing-rate"]
     assert ttft["unit"] == "us"
     assert tps["unit"] == "toks/sec"
-    return ttft["value"], tps["value"]
+    assert prefill["unit"] == "toks/sec"
+    return ttft["value"], tps["value"], prefill["value"]
 
 
 def _get_time_to_first_token_range(
@@ -102,6 +104,7 @@ def _get_llm_metrics(
     token_generator_tps: list[float],
     input_seq_length: int,
     max_context_length: int,
+    prefill_tps: list[float] | None = None,
     verbose: bool = False,
 ) -> str:
     """
@@ -115,6 +118,10 @@ def _get_llm_metrics(
         prompt_processor_time, input_seq_length, max_context_length
     )
     avg_tps = _get_avg_tokens_per_second(token_generator_tps)
+    prefill_line = ""
+    if prefill_tps:
+        avg_prefill_tps = sum(prefill_tps) / len(prefill_tps)
+        prefill_line = f"\n        prefill_tokens_per_second: {avg_prefill_tps:.5f}"
 
     # Write TTFT and TPS in AI Hub Models Perf yaml format
     return f"""
@@ -123,7 +130,7 @@ def _get_llm_metrics(
         time_to_first_token_range_milliseconds:
           min: {time_to_first_token_range[0]}
           max: {time_to_first_token_range[1]}
-        tokens_per_second: {avg_tps:.5f}
+        tokens_per_second: {avg_tps:.5f}{prefill_line}
 """
 
 
@@ -148,7 +155,7 @@ def _run_model_on_android_device(
     prompt_file: str | None = None,
     num_iterations: int = 5,
     verbose: bool = False,
-) -> tuple[list[int], list[float]]:
+) -> tuple[list[int], list[float], list[float]]:
     """Runs models on device from working directory"""
     assert (prompt is not None) != (prompt_file is not None)
 
@@ -174,7 +181,9 @@ def _run_model_on_android_device(
     if verbose:
         print(f"{command}")
 
-    prompt_processor_time, token_generator_tps = [], []
+    prompt_processor_time: list[int] = []
+    token_generator_tps: list[float] = []
+    prefill_tps: list[float] = []
     for i in range(num_iterations):
         print(f"Inference iteration {i + 1}")
         if prompt_file is not None and prompt_path is not None:
@@ -191,11 +200,13 @@ def _run_model_on_android_device(
             print(model_output)
 
         # Collect KPIs from model output
-        pp_time, tg_tps = _get_processed_kpis(profile)
+        pp_time, tg_tps, pp_rate = _get_processed_kpis(profile)
         prompt_processor_time.append(pp_time)
         token_generator_tps.append(tg_tps)
+        if pp_rate is not None:
+            prefill_tps.append(pp_rate)
 
-    return prompt_processor_time, token_generator_tps
+    return prompt_processor_time, token_generator_tps, prefill_tps
 
 
 def _run_model_on_local_host(
@@ -204,7 +215,7 @@ def _run_model_on_local_host(
     prompt_file: str | None = None,
     num_iterations: int = 5,
     verbose: bool = False,
-) -> tuple[list[int], list[float]]:
+) -> tuple[list[int], list[float], list[float]]:
     """Runs models on host machine from working directory"""
     assert (prompt is not None) != (prompt_file is not None)
 
@@ -238,7 +249,9 @@ def _run_model_on_local_host(
         print(f"From working directory: {working_dir}")
         print(shlex.join(command))
 
-    prompt_processor_time, token_generator_tps = [], []
+    prompt_processor_time: list[int] = []
+    token_generator_tps: list[float] = []
+    prefill_tps: list[float] = []
     for i in range(num_iterations):
         print(f"Inference iteration {i + 1}")
         process = subprocess.run(
@@ -258,11 +271,13 @@ def _run_model_on_local_host(
         os.remove(full_path)
 
         # Collect KPIs from model output
-        pp_time, tg_tps = _get_processed_kpis(profile)
+        pp_time, tg_tps, pp_rate = _get_processed_kpis(profile)
         prompt_processor_time.append(pp_time)
         token_generator_tps.append(tg_tps)
+        if pp_rate is not None:
+            prefill_tps.append(pp_rate)
 
-    return prompt_processor_time, token_generator_tps
+    return prompt_processor_time, token_generator_tps, prefill_tps
 
 
 def main() -> None:
@@ -430,7 +445,7 @@ def main() -> None:
             ret = _run_model_on_android_device(
                 device, working_dir, prompt=prompt, prompt_file=prompt_file, **extra
             )
-        prompt_processor_time, token_generator_tps = ret
+        prompt_processor_time, token_generator_tps, prefill_tps = ret
 
         # Aggregate LLM metrics
         llm_metric = _get_llm_metrics(
@@ -438,6 +453,7 @@ def main() -> None:
             token_generator_tps,
             input_seq_length,
             max_context_length,
+            prefill_tps=prefill_tps,
         )
 
         print("\n---------------- LLM Metrics ----------------")
