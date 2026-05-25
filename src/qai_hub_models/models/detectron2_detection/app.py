@@ -140,16 +140,20 @@ class Detectron2DetectionApp(ProposalBasedDetectionApp):
         )
 
         # Run Proposal Generator Inference
-        feature, proposals, objectness_logits = self.proposal_generator(image_tensor)
+        with torch.no_grad():
+            feature, proposals, objectness_logits = self.proposal_generator(
+                image_tensor
+            )
 
         padded_proposals = self.filter_proposals([proposals], [objectness_logits])[0]
 
         # Run ROI Head Inference
         pred_boxes, pred_scores, pred_classes = [], [], []
         for i in range(len(padded_proposals)):
-            boxes, scores, classes = self.roi_head(
-                feature[i : i + 1], padded_proposals[i : i + 1]
-            )
+            with torch.no_grad():
+                boxes, scores, classes = self.roi_head(
+                    feature[i : i + 1], padded_proposals[i : i + 1]
+                )
             pred_boxes.append(boxes)
             pred_scores.append(scores)
             pred_classes.append(classes)

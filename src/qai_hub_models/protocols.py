@@ -22,10 +22,6 @@ from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
 
 from typing_extensions import Self
 
-from qai_hub_models import (
-    SourceModelFormat,
-    TargetRuntime,
-)
 from qai_hub_models.utils.base_evaluator import BaseEvaluator, _DataLoader
 
 __all__ = [
@@ -95,12 +91,6 @@ class AIMETQuantizableModelProtocol(QuantizableModelProtocol, Protocol):
             Set to true if the data loader passed in also provides ground truth data.
             The ground truth data will be discarded for quantization.
         """
-        ...
-
-    def preferred_hub_source_model_format(
-        self, target_runtime: TargetRuntime
-    ) -> SourceModelFormat:
-        """Source model format preferred for conversion on AI Hub Workbench."""
         ...
 
 

@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from pathlib import Path
 from typing import Any
 
 import qai_hub as hub
@@ -29,7 +28,7 @@ from qai_hub_models.models.pi05.demo import (
     _to_device_tree,
     compute_sequence_metrics,
 )
-from qai_hub_models.models.pi05.export import compile_model, link_model
+from qai_hub_models.models.pi05.export import compile_model, link_model, upload_model
 from qai_hub_models.models.pi05.model import (
     NUM_ACTION_STEPS,
     Pi05ActionExpert,
@@ -162,16 +161,17 @@ def compile_for_device(
     """Compile the 4 on-device Pi05 components and return hub.Model handles."""
     hub_device = hub.Device(device_name)
     model = Model.from_pretrained()
-    output_path = Path.cwd() / "export_assets"
 
     print("Compiling Pi05 components for on-device inference...")
+    components = list(_COMPONENT_SPEC.keys())
+    source_models = upload_model(model, components=components)
     compile_jobs = compile_model(
         model,
         "pi05_eval",
         hub_device,
         target_runtime,
-        output_path=output_path,
-        components=list(_COMPONENT_SPEC.keys()),
+        source_models,
+        components=components,
     )
     compiled_models = assert_success_and_get_target_models(compile_jobs)
 

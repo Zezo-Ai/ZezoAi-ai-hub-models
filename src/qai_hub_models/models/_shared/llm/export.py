@@ -371,12 +371,9 @@ def export_model(
             },
         )
         sub_output_path = Path(onnx_export_dir) / label
-        source_model_dir = inst_model.convert_to_hub_source_model(
-            target_runtime,
+        source_model_dir = inst_model.serialize(
             sub_output_path,
             inst_input_spec,
-            external_onnx_weights=True,
-            output_names=inst_model.get_output_names(),
         )
         assert source_model_dir is not None
         source_model_bundle = ONNXBundle.from_bundle_path(source_model_dir)

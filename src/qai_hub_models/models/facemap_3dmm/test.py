@@ -67,7 +67,7 @@ def test_trace() -> None:
     lmk_gt = np.loadtxt(GT_LMK_PATH.fetch())
 
     assert (
-        np.sqrt(np.sum((lmk.cpu().numpy() - lmk_gt) ** 2, 1).mean())
+        np.sqrt(np.sum((lmk.detach().cpu().numpy() - lmk_gt) ** 2, 1).mean())
         / (x1 - x0 + 1)
         * 100
         < 1.0

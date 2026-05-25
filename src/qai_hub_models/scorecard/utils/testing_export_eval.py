@@ -519,7 +519,8 @@ def pre_quantize_compile_via_export(
         | MultiGraphComponentGroup[hub.CompileJob],
     ],
     model_id: str,
-    model: CollectionModel | BaseModel,
+    model: PretrainedCollectionModel | BaseModel,
+    upload_model: Callable[..., Any] | None = None,
 ) -> None:
     """
     Use the provided export script function to submit ONNX compile jobs (before quantization).
@@ -540,6 +541,8 @@ def pre_quantize_compile_via_export(
         Model ID.
     model
         QAIHM instance of the model.
+    upload_model
+        Export script function to serialize and upload models.
     """
     component_names, graph_names, component_graph_names = (
         _get_components_and_graph_names(model, model_id)
@@ -556,6 +559,10 @@ def pre_quantize_compile_via_export(
         component_graph_names=component_graph_names,
     )
 
+    # Upload model
+    assert upload_model is not None
+    source_models = upload_model(model)
+
     # Run ONNX compile jobs
     compile_output = compile_model(
         model,
@@ -563,6 +570,7 @@ def pre_quantize_compile_via_export(
         cs_universal.reference_device,
         TargetRuntime.ONNX,
         Precision.float,
+        source_models,
     )
 
     # Verify success or cache job IDs to a file.
@@ -655,11 +663,12 @@ def compile_via_export(
         | MultiGraphComponentGroup[hub.CompileJob],
     ],
     model_id: str,
-    model: CollectionModel | BaseModel,
+    model: PretrainedCollectionModel | MultiGraphCollectionModel | BaseModel,
     precision: Precision,
     scorecard_path: ScorecardCompilePath,
     device: ScorecardDevice,
     is_aimet: bool = False,
+    upload_model: Callable[..., Any] | None = None,
 ) -> None:
     """
     Use the provided export script function to submit compile jobs.
@@ -692,6 +701,8 @@ def compile_via_export(
         Scorecard device.
     is_aimet
         Whether the model uses local aimet encodings during compilation.
+    upload_model
+        Export script function to serialize and upload models.
     """
     component_names, graph_names, component_graph_names = (
         _get_components_and_graph_names(model, model_id)
@@ -707,26 +718,27 @@ def compile_via_export(
     )
 
     if is_aimet:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            if component_graph_names is not None:
-                compile_output = compile_model(
-                    model,
-                    model_id,
-                    device.execution_device,
-                    scorecard_path.runtime,
-                    precision,
-                    tmpdir,
-                    extra_options=scorecard_path.get_compile_options(),
-                )
-            else:
-                compile_output = compile_model(
-                    model,
-                    model_id,
-                    device.execution_device,
-                    scorecard_path.runtime,
-                    tmpdir,
-                    extra_options=scorecard_path.get_compile_options(),
-                )
+        assert upload_model is not None
+        source_models = upload_model(model)
+        if component_graph_names is not None:
+            compile_output = compile_model(
+                model,
+                model_id,
+                device.execution_device,
+                scorecard_path.runtime,
+                precision,
+                source_models,
+                extra_options=scorecard_path.get_compile_options(),
+            )
+        else:
+            compile_output = compile_model(
+                model,
+                model_id,
+                device.execution_device,
+                scorecard_path.runtime,
+                source_models,
+                extra_options=scorecard_path.get_compile_options(),
+            )
     else:
         quantize_jobs = (
             QuantizeScorecardJobYaml.from_test_artifacts().get_export_output(
@@ -744,13 +756,26 @@ def compile_via_export(
             else None
         )
 
+        if quantize_job_input is not None:
+            if isinstance(quantize_job_input, ComponentGroup) and len(
+                quantize_job_input
+            ) != len(component_names or []):
+                assert upload_model is not None
+                source_models = upload_model(model)
+                source_models |= quantize_job_input
+            else:
+                source_models = quantize_job_input
+        else:
+            assert upload_model is not None
+            source_models = upload_model(model)
+
         compile_output = compile_model(
             model,
             model_id,
             device.execution_device,
             scorecard_path.runtime,
             precision,
-            quantize_job_input,
+            source_models,
             extra_options=scorecard_path.get_compile_options(),
         )
 
@@ -1278,20 +1303,27 @@ def export_test_e2e(
             mock.MagicMock(return_value=mock.MagicMock(spec=hub.Model)),
         )
     )
-    if issubclass(model_cls, (PretrainedCollectionModel, MultiGraphCollectionModel)):
-        mocks.extend(
+    if issubclass(model_cls, PretrainedCollectionModel):
+        mocks.append(
             mock.patch.object(
-                component_cls,
-                "convert_to_hub_source_model",
+                model_cls,
+                "serialize_component",
                 mock.MagicMock(return_value=None),
             )
-            for component_cls in model_cls.component_classes.values()
+        )
+    elif issubclass(model_cls, MultiGraphCollectionModel):
+        mocks.append(
+            mock.patch.object(
+                model_cls,
+                "serialize_component_graph",
+                mock.MagicMock(return_value=None),
+            )
         )
     elif issubclass(model_cls, BaseModel):
         mocks.append(
             mock.patch.object(
                 model_cls,
-                "convert_to_hub_source_model",
+                "serialize",
                 mock.MagicMock(return_value=None),
             )
         )

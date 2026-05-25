@@ -6,23 +6,23 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Generator
 from pathlib import Path
 
 import numpy as np
 import pytest
-import qai_hub as hub
 import torch
-from qai_hub.client import SourceModel
 
 import qai_hub_models.models.llama_v3_2_1b_instruct as _model_module
-from qai_hub_models.common import Precision, TargetRuntime
+from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.models.llama_v3_2_1b_instruct import MODEL_ID, Model
 from qai_hub_models.models.llama_v3_2_1b_instruct.export import (
     compile_model,
     export_model,
     link_model,
     profile_model,
+    upload_model,
 )
 from qai_hub_models.scorecard import (
     ScorecardCompilePath,
@@ -49,7 +49,6 @@ from qai_hub_models.scorecard.utils.testing_export_eval import (
     torch_inference_for_accuracy_validation,
     torch_inference_for_accuracy_validation_outputs,
 )
-from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.validation import perform_runtime_model_validation
 
@@ -119,6 +118,7 @@ def test_compile(
             scorecard_path,
             device,
             is_aimet=True,
+            upload_model=upload_model,
         )
     except CachedScorecardJobError as e:
         pytest.skip(str(e))
@@ -276,44 +276,34 @@ def test_export(
         pytest.skip(str(e))
 
 
-# Trace the model & upload to hub only once for all module + input pairs.
-# This speeds up tests and limits memory leaks for torch jit trace.
+# Serialize the model only once for all module + input pairs.
+# This speeds up tests and limits memory leaks.
 @pytest.fixture(scope="module", autouse=True)
-def cached_torch_trace_for_export() -> Generator[pytest.MonkeyPatch, None, None]:
+def cached_serialize_for_export(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[pytest.MonkeyPatch, None, None]:
+    cache_dir = tmp_path_factory.mktemp("serialize_cache")
     with pytest.MonkeyPatch.context() as mp:
-        model_cache: dict[str, hub.Model] = {}
-        convert_to_hub_source_model = BaseModel.convert_to_hub_source_model
+        model_cache: dict[str, Path] = {}
+        serialize_component_graph = Model.serialize_component_graph
 
-        def _cached_convert_to_hub_source_model(
-            self: BaseModel,
-            target_runtime: TargetRuntime,
-            output_path: str | Path,
+        def _cached_serialize_component_graph(
+            self: Model,
+            component_name: str,
+            graph_name: str,
+            output_dir: str | os.PathLike,
             input_spec: InputSpec | None = None,
-            check_trace: bool = True,
-            external_onnx_weights: bool = False,
-            output_names: list[str] | None = None,
-        ) -> SourceModel | hub.Model:
-            source_model_format = self.preferred_hub_source_model_format(target_runtime)
-            model_key = str(self) + str(input_spec) + str(source_model_format)
-            model = model_cache.get(model_key)
-            if not model:
-                source_model = convert_to_hub_source_model(
-                    self,
-                    target_runtime,
-                    output_path,
-                    input_spec,
-                    check_trace,
-                    external_onnx_weights,
-                    output_names,
+        ) -> Path:
+            model_key = component_name + graph_name + str(input_spec)
+            cached = model_cache.get(model_key)
+            if not cached:
+                cached = serialize_component_graph(
+                    self, component_name, graph_name, cache_dir, input_spec
                 )
-                assert source_model is not None
-                model = hub.upload_model(source_model)
-                model_cache[model_key] = model
-            return model
+                model_cache[model_key] = cached
+            return cached
 
         mp.setattr(
-            BaseModel,
-            "convert_to_hub_source_model",
-            _cached_convert_to_hub_source_model,
+            Model, "serialize_component_graph", _cached_serialize_component_graph
         )
         yield mp

@@ -76,13 +76,13 @@ class MultiGraphWorkbenchModel(FromPretrainedProtocol):
     def shared_source_model(self) -> bool:
         return False
 
-    def convert_graph_to_hub_source_model(
+    def serialize_graph(
         self,
         graph_name: str,
-        output_path: str | os.PathLike,
+        output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-    ) -> Path | None:
-        raise NotImplementedError
+    ) -> Path:
+        raise NotImplementedError()
 
     # -- Subclasses may override these --
 
@@ -300,27 +300,18 @@ class MultiGraphCollectionModel(
         """Returns list of dataset classes on which this model can be evaluated."""
         return []
 
-    def convert_to_hub_source_model(
+    def serialize_component_graph(
         self,
         component_name: str,
         graph_name: str | None,
-        output_path: str | Path,
-        target_runtime: TargetRuntime,
+        output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-    ) -> Path | str:
+    ) -> Path:
         component = self.components[component_name]
-        result: Path | str | None
         if isinstance(component, MultiGraphWorkbenchModel):
             assert graph_name is not None
-            result = component.convert_graph_to_hub_source_model(
-                graph_name, output_path, input_spec
-            )
-        else:
-            result = component.convert_to_hub_source_model(
-                target_runtime, output_path, input_spec
-            )
-        assert result is not None
-        return result
+            return component.serialize_graph(graph_name, output_dir, input_spec)
+        return component.serialize(output_dir, input_spec)
 
     # -- Per-component-graph getters --
 
@@ -338,6 +329,12 @@ class MultiGraphCollectionModel(
                 graph_name, precision, other_quantize_options
             )
         return component.get_hub_quantize_options(precision, other_quantize_options)
+
+    def component_has_shared_source_model(self, component_name: str) -> bool:
+        component = self.components[component_name]
+        if not isinstance(component, MultiGraphWorkbenchModel):
+            return True
+        return component.shared_source_model
 
     def get_component_graph_hub_compile_options(
         self,
@@ -358,7 +355,7 @@ class MultiGraphCollectionModel(
             target_runtime, precision, other_compile_options, device, component_name
         )
 
-    def get_component_graph_hub_link_options(
+    def get_component_hub_link_options(
         self,
         component_name: str,
         target_runtime: TargetRuntime,

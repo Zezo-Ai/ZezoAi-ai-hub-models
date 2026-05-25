@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -104,3 +105,10 @@ def filter_component_graph_name_kwargs(
             out[(component_name, graph_name)] = kwargs
 
     return out
+
+
+def cli_friendly_class_name(class_name: str) -> str:
+    """CLI-friendly name derived from the python class name."""
+    name = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", class_name)
+    name = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
+    return name.lower()

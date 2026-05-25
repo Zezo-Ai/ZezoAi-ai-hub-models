@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import qai_hub as hub
 
@@ -24,7 +24,6 @@ from qai_hub_models.utils.args import (
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.base_model import (
-    BasePrecompiledModel,
     PrecompiledCollectionModel,
 )
 from qai_hub_models.utils.export_result import CollectionExportResult, ComponentGroup
@@ -39,33 +38,6 @@ from qai_hub_models.utils.qai_hub_helpers import (
 )
 
 
-def link_model(
-    compiled_models: ComponentGroup[hub.Model],
-    device: hub.Device,
-    model_name: str,
-    model: PrecompiledCollectionModel,
-    target_runtime: TargetRuntime,
-    extra_options: str = "",
-) -> ComponentGroup[hub.client.LinkJob]:
-    """Link compiled DLCs to context binary for AOT."""
-    assert target_runtime.is_aot_compiled, (
-        f"link_model() requires an AOT runtime, got {target_runtime}"
-    )
-    link_jobs: ComponentGroup[hub.client.LinkJob] = ComponentGroup()
-    for component_name, compiled_model in compiled_models.items():
-        component = model.components[component_name]
-
-        link_options = component.get_hub_link_options(target_runtime, extra_options)
-        print(f"Linking {component_name} to context binary")
-        link_jobs[component_name] = hub.submit_link_job(
-            [compiled_model],
-            device=device,
-            name=f"{model_name}_{component_name}",
-            options=link_options,
-        )
-    return link_jobs
-
-
 def profile_model(
     model_name: str,
     device: hub.Device,
@@ -76,14 +48,11 @@ def profile_model(
     profile_jobs: ComponentGroup[hub.client.ProfileJob] = ComponentGroup()
     for component_name in components or Model.component_class_names:
         print(f"Profiling model {component_name} on a hosted device.")
-        submitted_profile_job = hub.submit_profile_job(
+        profile_jobs[component_name] = hub.submit_profile_job(
             model=uploaded_models[component_name],
             device=device,
             name=f"{model_name}_{component_name}",
             options=options.get(component_name, ""),
-        )
-        profile_jobs[component_name] = cast(
-            hub.client.ProfileJob, submitted_profile_job
         )
     return profile_jobs
 
@@ -102,9 +71,7 @@ def save_model(
         dst_path = Path(tmpdir) / output_folder_name
         dst_path.mkdir()
         for component_name in components:
-            path = cast(
-                BasePrecompiledModel, model.components[component_name]
-            ).get_target_model_path()
+            path = model.get_component_target_model_path(component_name)
             shutil.copyfile(src=path, dst=dst_path / os.path.basename(path))
 
         if zip_assets:
@@ -226,9 +193,7 @@ def export_model(
     if not skip_profiling:
         print("Uploading model assets on hub")
         for component_name in components:
-            path = cast(
-                BasePrecompiledModel, model.components[component_name]
-            ).get_target_model_path()
+            path = model.get_component_target_model_path(component_name)
             uploaded_models[component_name] = hub.upload_model(path)
 
     # 3. Profiles the model performance on a real device

@@ -19,9 +19,6 @@ from .common import (
     SampleInputsType as SampleInputsType,
 )
 from .common import (
-    SourceModelFormat as SourceModelFormat,
-)
-from .common import (
     TargetRuntime as TargetRuntime,
 )
 from .common import (

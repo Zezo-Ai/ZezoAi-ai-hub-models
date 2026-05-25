@@ -48,7 +48,6 @@ from typing_extensions import Self
 from qai_hub_models import (
     Precision,
     SampleInputsType,
-    SourceModelFormat,
     TargetRuntime,
 )
 from qai_hub_models.configs.model_metadata import ModelMetadata
@@ -608,11 +607,6 @@ class Qwen2_5_VL_7B_VisionEncoder(Qwen2VLVisionEncoder):
     def get_output_names(self) -> list[str]:
         return ["image_features"]
 
-    def preferred_hub_source_model_format(
-        self, target_runtime: TargetRuntime
-    ) -> SourceModelFormat:
-        return SourceModelFormat.ONNX
-
     # ------------------------------------------------------------------
     # VEG Quantization Lifecycle (classmethods)
     # ------------------------------------------------------------------
@@ -823,21 +817,17 @@ class Qwen2_5_VL_7B_VisionEncoder(Qwen2VLVisionEncoder):
             else None,
         )
 
-    def convert_to_hub_source_model(
+    def serialize(
         self,
-        target_runtime: TargetRuntime,
-        output_path: str | Path,
+        output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-        check_trace: bool = True,
-        external_onnx_weights: bool = False,
-        output_names: list[str] | None = None,
-    ) -> str:
+    ) -> Path:
         model_name = "Qwen2_5_VL_7B_VisionEncoder"
 
         ext = ".aimet" if self._is_quantized else ".onnx"
-        out_dir = Path(output_path) / f"{model_name}{ext}"
+        out_dir = Path(output_dir) / f"{model_name}{ext}"
         if (out_dir / f"{model_name}.onnx").exists():
-            return str(out_dir)
+            return out_dir
         out_dir.mkdir(parents=True, exist_ok=True)
 
         onnx_bundle = self._get_onnx_bundle()
@@ -846,7 +836,7 @@ class Qwen2_5_VL_7B_VisionEncoder(Qwen2VLVisionEncoder):
             dst_model_name=model_name,
             copy=True,
         )
-        return str(out_dir)
+        return out_dir
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None
@@ -1020,11 +1010,6 @@ class Qwen2_5_VL_7B_PartBase(torch.nn.Module, MultiGraphWorkbenchModel):
             name.replace("/", "_").replace(".", "_")
             for name in self._get_onnx_output_names()
         ]
-
-    def preferred_hub_source_model_format(
-        self, target_runtime: TargetRuntime
-    ) -> SourceModelFormat:
-        return SourceModelFormat.ONNX
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

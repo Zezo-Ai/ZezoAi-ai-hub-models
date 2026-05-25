@@ -11,6 +11,7 @@ from collections.abc import Generator
 from typing import Any
 
 import pytest
+import torch.jit._trace
 
 from qai_hub_models.models.sam2 import Model
 
@@ -18,6 +19,7 @@ from qai_hub_models.models.sam2 import Model
 def pytest_configure(config: pytest.Config) -> None:
     # pytest is unable to figure out how to silence several PyTorch warning types from pyproject.toml settings,
     # so we apply a manual warning filter here instead.
+    warnings.filterwarnings(action="ignore", category=torch.jit._trace.TracerWarning)
     warnings.filterwarnings(action="ignore", category=UserWarning, module="torch.*")
     warnings.filterwarnings(action="ignore", category=FutureWarning, module="torch.*")
     warnings.filterwarnings(

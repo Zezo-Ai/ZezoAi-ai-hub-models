@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
@@ -162,26 +163,24 @@ class LoadPolicyMixin(FromPretrainedMixin):
     ) -> PI05Policy:
         return load_checkpoint(str(checkpoint)).to(host_device)
 
-    def convert_to_hub_source_model(
+    def serialize(
         self,
-        target_runtime: TargetRuntime,
-        output_path: str | Path,
+        output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-        check_trace: bool = True,
-        external_onnx_weights: bool = False,
-        output_names: list[str] | None = None,
-    ) -> str:
+    ) -> Path:
         class_name = self.__class__.__name__
-        path = Path(output_path) / f"{class_name}.onnx"
+        path = Path(output_dir) / f"{class_name}.onnx"
         assert input_spec is not None
         if path.exists():
-            return str(path)
-        return export_torch_to_onnx_zip(
-            self.to("cpu"),  # type: ignore[attr-defined]
-            str(path),
-            make_torch_inputs(input_spec),
-            input_names=list(input_spec.keys()),
-            skip_zip=False,
+            return path
+        return Path(
+            export_torch_to_onnx_zip(
+                self.to("cpu"),  # type: ignore[attr-defined]
+                str(path),
+                make_torch_inputs(input_spec),
+                input_names=list(input_spec.keys()),
+                skip_zip=False,
+            )
         )
 
     def get_unsupported_reason(
@@ -261,9 +260,7 @@ class Pi05PaliGemmaVision(LoadPolicyMixin, BaseModel):
 
 class _Pi05CachedExportMixin:
     """Mixin that overrides convert_to_hub_source_model to route through
-    BaseModel's version (which dispatches via prepare_compile_zoo_model_to_hub)
-    instead of LoadPolicyMixin's version (which tries to trace the model
-    directly).
+    BaseModel's version instead of LoadPolicyMixin's version (which tries to trace the model directly).
 
     Also propagates AIMET encodings through memory ops (Transpose, Reshape,
     etc.) during export, mirroring what LLM models do in _adapt_aimet_encodings.
@@ -271,23 +268,16 @@ class _Pi05CachedExportMixin:
     carry encodings through to downstream consumers (e.g. MatMul on HTP).
     """
 
-    def convert_to_hub_source_model(
+    def serialize(
         self,
-        target_runtime: TargetRuntime,
-        output_path: str | Path,
+        output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-        check_trace: bool = True,
-        external_onnx_weights: bool = False,
-        output_names: list[str] | None = None,
-    ) -> str | None:
-        return BaseModel.convert_to_hub_source_model(
-            self,  # type: ignore[arg-type]
-            target_runtime,
-            output_path,
-            input_spec,
-            check_trace,
-            external_onnx_weights,
-            output_names,
+    ) -> Path:
+        return Path(
+            self.convert_to_onnx_and_aimet_encodings(
+                Path(output_dir),
+                self.__class__.__name__,
+            )
         )
 
     def convert_to_onnx_and_aimet_encodings(
@@ -326,7 +316,7 @@ class _Pi05CachedExportMixin:
         apply_propagate_memory_encodings(ONNXBundle.from_bundle_path(export_dir))
 
 
-class Pi05PaliGemmaVisionQuantizable(  # type: ignore[misc]
+class Pi05PaliGemmaVisionQuantizable(
     _Pi05CachedExportMixin, AIMETOnnxQuantizableMixin, Pi05PaliGemmaVision
 ):
     """Exportable PaliGemma Vision encoder that can be quantized by AIMET-ONNX."""
@@ -681,29 +671,27 @@ class Pi05PaliGemmaTokenEmbed(LoadPolicyMixin, BaseModel):
     def get_output_names(self) -> list[str]:
         return self.get_output_names_static()
 
-    def convert_to_hub_source_model(
+    def serialize(
         self,
-        target_runtime: TargetRuntime,
-        output_path: str | Path,
+        output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-        check_trace: bool = True,
-        external_onnx_weights: bool = False,
-        output_names: list[str] | None = None,
-    ) -> str:
+    ) -> Path:
         class_name = self.__class__.__name__
-        path = Path(output_path) / f"{class_name}.onnx"
+        path = Path(output_dir) / f"{class_name}.onnx"
         assert input_spec is not None
         sample_inputs = make_torch_inputs(input_spec)
         # Override lang_mask to 0/1 tensors
         sample_inputs[1] = torch.ones(input_spec["lang_mask"][0])
         if path.exists():
-            return str(path)
-        return export_torch_to_onnx_zip(
-            self.to("cpu"),
-            str(path),
-            sample_inputs,
-            input_names=list(input_spec.keys()),
-            skip_zip=False,
+            return path
+        return Path(
+            export_torch_to_onnx_zip(
+                self.to("cpu"),
+                str(path),
+                sample_inputs,
+                input_names=list(input_spec.keys()),
+                skip_zip=False,
+            )
         )
 
 
@@ -1502,7 +1490,7 @@ class Pi05PaliGemmaBackbone(Pi05PaliGemmaBackboneBase):
         super().__init__(policy, layer_range=(0, 18), return_hidden_state=False)
 
 
-class Pi05PaliGemmaBackboneQuantizable(  # type: ignore[misc]
+class Pi05PaliGemmaBackboneQuantizable(
     _Pi05CachedExportMixin, AIMETOnnxQuantizableMixin, Pi05PaliGemmaBackbone
 ):
     """Exportable PaliGemma full backbone that can be quantized by AIMET-ONNX."""
@@ -1683,35 +1671,27 @@ class Pi05ActionExpertQuantizable(
             None, host_device=host_device, onnx_bundle=bundle, precision=precision
         )
 
-    def convert_to_hub_source_model(
+    def serialize(
         self,
-        target_runtime: TargetRuntime,
-        output_path: str | Path,
+        output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-        check_trace: bool = True,
-        external_onnx_weights: bool = False,
-        output_names: list[str] | None = None,
-    ) -> str | None:
+    ) -> Path:
         if self._quant_sim is None and self._onnx_bundle is not None:
             class_name = self.__class__.__name__
-            out_dir = Path(output_path) / f"{class_name}.aimet"
+            out_dir = Path(output_dir) / f"{class_name}.aimet"
             if (out_dir / "model.onnx").exists():
-                return str(out_dir)
+                return out_dir
             out_dir.mkdir(parents=True, exist_ok=True)
             self._onnx_bundle.move(
                 dst_folder=str(out_dir),
                 dst_model_name=class_name,
                 copy=True,
             )
-            return str(out_dir)
-        return _Pi05CachedExportMixin.convert_to_hub_source_model(
+            return out_dir
+        return _Pi05CachedExportMixin.serialize(
             self,
-            target_runtime,
-            output_path,
+            output_dir,
             input_spec,
-            check_trace,
-            external_onnx_weights,
-            output_names,
         )
 
     def forward(

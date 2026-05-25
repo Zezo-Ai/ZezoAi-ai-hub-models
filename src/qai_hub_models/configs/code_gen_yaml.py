@@ -71,9 +71,6 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # If set, changes the default device when running export.py for the model.
     default_device: str = DEFAULT_EXPORT_DEVICE
 
-    # Sets the `check_trace` argument on `torch.jit.trace`.
-    check_trace: bool = True
-
     # Some model outputs have low PSNR when in practice the numerical accuracy is fine.
     # This can happen when the model outputs many low confidence values that get
     # filtered out in post-processing.
@@ -140,10 +137,6 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # If extra flags are needed when pip installing for this model on GPU, provide them here
     pip_install_flags_gpu: str | None = None
 
-    # A list of optimizations from `torch.utils.mobile_optimizer` that will
-    # speed up the conversion to torchscript.
-    torchscript_opt: list[str] | None = None
-
     # A comma separated list of metrics to print in the inference summary of `export.py`.
     inference_metrics: str = "psnr"
 
@@ -165,9 +158,6 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # The model supports python versions that are less than this version. None == Any version
     python_version_less_than: str | None = None
     python_version_less_than_reason: str | None = None
-
-    # Enables PT2 export (replaces TorchScript export)
-    enable_pt2: bool = False
 
     # If set, the model returns multiple (input_spec, graph_name) pairs.
     # The generated export.py will loop over compile specs, submit multiple

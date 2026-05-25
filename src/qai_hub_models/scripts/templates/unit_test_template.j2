@@ -5,17 +5,12 @@
 
 from __future__ import annotations
 
-{%- if is_aimet %}
+import os
 from pathlib import Path
-from qai_hub.client import SourceModel
-from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
-{%- else %}
-{% if torchscript_opt %}
-from torch.utils import mobile_optimizer
-from typing import Any
-{% endif %}
+{%- if has_multi_graph and not is_collection_model %}
+from qai_hub_models.utils.base_multi_graph_model import MultiGraphWorkbenchModel
 {%- endif %}
+from qai_hub_models.utils.input_spec import InputSpec
 
 import numpy as np
 import torch
@@ -30,11 +25,12 @@ from qai_hub_models.models.{{ model_name }}.export import (
     link_model,
     profile_model,
     quantize_model,
+    upload_model,
 )
 {%- if has_skipped_runtime or is_aimet or can_use_quantize_job %}
-from qai_hub_models.common import TargetRuntime
+from qai_hub_models import TargetRuntime
 {%- endif %}
-from qai_hub_models.common import Precision
+from qai_hub_models import Precision
 from qai_hub_models.scorecard import (
     ScorecardCompilePath,
     ScorecardDevice,
@@ -123,6 +119,7 @@ def test_pre_quantize_compile() -> None:
         compile_model,
         MODEL_ID,
         Model.from_pretrained(),
+        upload_model,
     )
 
 
@@ -164,6 +161,7 @@ def test_compile(precision: Precision, scorecard_path: ScorecardCompilePath, dev
             {%- if is_aimet %}
             is_aimet=True,
             {%- endif %}
+            upload_model=upload_model,
         )
     except CachedScorecardJobError as e:
         pytest.skip(str(e))
@@ -369,81 +367,77 @@ def test_export(precision: Precision, scorecard_path: ScorecardProfilePath, devi
         pytest.skip(str(e))
 
 
-# Trace the model & upload to hub only once for all module + input pairs.
-# This speeds up tests and limits memory leaks for torch jit trace.
+# Serialize the model only once for all module + input pairs.
+# This speeds up tests and limits memory leaks.
 @pytest.fixture(scope="module", autouse=True)
-def cached_torch_trace_for_export() -> Generator[pytest.MonkeyPatch, None, None]:
+def cached_serialize_for_export(tmp_path_factory: pytest.TempPathFactory) -> Generator[pytest.MonkeyPatch, None, None]:
+    cache_dir = tmp_path_factory.mktemp("serialize_cache")
     with pytest.MonkeyPatch.context() as mp:
-        model_cache: dict[str, hub.Model] = {}
+        model_cache: dict[str, Path] = {}
 
-        {%- if is_aimet %}
-        convert_to_hub_source_model = BaseModel.convert_to_hub_source_model
-        def _cached_convert_to_hub_source_model(
-            self: BaseModel,
-            target_runtime: TargetRuntime,
-            output_path: str | Path,
+        {%- if has_multi_graph and is_collection_model %}
+        serialize_component_graph = Model.serialize_component_graph
+        def _cached_serialize_component_graph(
+            self: Model,
+            component_name: str,
+            graph_name: str,
+            output_dir: str | os.PathLike,
             input_spec: InputSpec | None = None,
-            check_trace: bool = True,
-            external_onnx_weights: bool = False,
-            output_names: list[str] | None = None,
-        ) -> SourceModel | hub.Model:
-            source_model_format = self.preferred_hub_source_model_format(target_runtime)
-            model_key = str(self) + str(input_spec) + str(source_model_format)
-            model = model_cache.get(model_key, None)
-            if not model:
-                source_model = convert_to_hub_source_model(
-                    self, target_runtime, output_path, input_spec, check_trace,
-                    external_onnx_weights, output_names,
-                )
-                assert source_model is not None
-                model = hub.upload_model(source_model)
-                model_cache[model_key] = model
-            return model
+        ) -> Path:
+            model_key = component_name + graph_name + str(input_spec)
+            cached = model_cache.get(model_key, None)
+            if not cached:
+                cached = serialize_component_graph(self, component_name, graph_name, cache_dir, input_spec)
+                model_cache[model_key] = cached
+            return cached
 
-        mp.setattr(BaseModel, "convert_to_hub_source_model", _cached_convert_to_hub_source_model)
-        {%- else %}
-        {%- set serial_name = "trace" if not enable_pt2 else "export" %}
-        {%- if enable_pt2 %}
-        torch_{{ serial_name }} = torch.export.export
-        {%- else %}
-        torch_{{ serial_name }} = torch.jit.trace
-        {%- endif %}
-        {% if torchscript_opt %}
-        optimize_for_mobile = mobile_optimizer.optimize_for_mobile
-        {% endif %}
-        def _cached_torch_{{ serial_name }}(module: torch.nn.Module, inputs: torch.Tensor | tuple[torch.Tensor, ...]{{ ", check_trace: bool=True" if not enable_pt2 else "" }}) -> hub.Model:
-            model_key = str(module) + str(sorted([f"{x.shape}{x.type()}" for x in inputs]))
-            model = model_cache.get(model_key, None)
-            if not model:
-                {%- if enable_pt2 %}
-                {{ serial_name }} = torch_{{ serial_name }}(module, inputs) # type: ignore[arg-type]
-                {%- else %}
-                {{ serial_name }} = torch_{{ serial_name }}(module, inputs, check_trace=check_trace)
-                {%- endif %}
-                {%- if torchscript_opt %}
-                {{ serial_name }} = optimize_for_mobile(
-                    {{ serial_name }},
-                    optimization_blocklist={
-                        {% for opt in torchscript_opt %}
-                        mobile_optimizer.MobileOptimizerType.{{ opt }},  # type: ignore[attr-defined]
-                        {% endfor %}
-                    },
-                )
-                {%- endif %}
-                model = hub.upload_model({{ serial_name }})
-                model_cache[model_key] = model
-            assert isinstance(model, hub.Model)
-            return model
+        mp.setattr(Model, "serialize_component_graph", _cached_serialize_component_graph)
+        {%- elif has_multi_graph %}
+        serialize_graph = MultiGraphWorkbenchModel.serialize_graph
+        def _cached_serialize_graph(
+            self: MultiGraphWorkbenchModel,
+            graph_name: str,
+            output_dir: str | os.PathLike,
+            input_spec: InputSpec | None = None,
+        ) -> Path:
+            model_key = str(self) + graph_name + str(input_spec)
+            cached = model_cache.get(model_key, None)
+            if not cached:
+                cached = serialize_graph(self, graph_name, cache_dir, input_spec)
+                model_cache[model_key] = cached
+            return cached
 
-        {%- if enable_pt2 %}
-        mp.setattr(torch.export, "export", _cached_torch_{{ serial_name }})
+        mp.setattr(MultiGraphWorkbenchModel, "serialize_graph", _cached_serialize_graph)
+        {%- elif is_collection_model %}
+        serialize_component = Model.serialize_component
+        def _cached_serialize_component(
+            self: Model,
+            component_name: str,
+            output_dir: str | os.PathLike,
+            input_spec: InputSpec | None = None,
+        ) -> Path:
+            model_key = component_name + str(input_spec)
+            cached = model_cache.get(model_key, None)
+            if not cached:
+                cached = serialize_component(self, component_name, cache_dir, input_spec)
+                model_cache[model_key] = cached
+            return cached
+
+        mp.setattr(Model, "serialize_component", _cached_serialize_component)
         {%- else %}
-        mp.setattr(torch.jit, "trace", _cached_torch_{{ serial_name }})
+        serialize = Model.serialize
+        def _cached_serialize(
+            self: Model,
+            output_dir: str | os.PathLike,
+            input_spec: InputSpec | None = None,
+        ) -> Path:
+            model_key = str(input_spec)
+            cached = model_cache.get(model_key, None)
+            if not cached:
+                cached = serialize(self, cache_dir, input_spec)
+                model_cache[model_key] = cached
+            return cached
+
+        mp.setattr(Model, "serialize", _cached_serialize)
         {%- endif %}
-        {%- endif %}
-        {% if torchscript_opt -%}
-        def _dummy_optimize_for_mobile(model: torch.jit.ScriptModule, *args: Any, **kwargs: Any) -> torch.jit.ScriptModule:
-            return model
-        mp.setattr(mobile_optimizer, "optimize_for_mobile", _dummy_optimize_for_mobile)
-        {% endif -%}
         yield mp

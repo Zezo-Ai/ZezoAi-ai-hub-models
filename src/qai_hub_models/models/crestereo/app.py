@@ -150,9 +150,10 @@ class CREStereoApp:
             right_t, scale_factor=0.5, mode="bilinear", align_corners=True
         )
 
-        disp_tensor = self.model(
-            left_t, right_t, left_dw2_t, right_dw2_t
-        )  # (1, 1, H, W)
+        with torch.no_grad():
+            disp_tensor = self.model(
+                left_t, right_t, left_dw2_t, right_dw2_t
+            )  # (1, 1, H, W)
 
         disp_np = disp_tensor.squeeze().cpu().numpy().astype(np.float32)  # (H, W)
         disp_np = cv2.resize(disp_np, (in_w, in_h), interpolation=cv2.INTER_LINEAR) * t

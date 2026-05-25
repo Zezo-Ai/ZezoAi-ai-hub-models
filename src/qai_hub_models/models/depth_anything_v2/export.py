@@ -12,10 +12,9 @@ import shutil
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import qai_hub as hub
-import torch
 
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.common import SampleInputsType
@@ -40,11 +39,7 @@ from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import ExportResult
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
-from qai_hub_models.utils.input_spec import (
-    InputSpec,
-    make_torch_inputs,
-    to_hub_input_specs,
-)
+from qai_hub_models.utils.input_spec import InputSpec, to_hub_input_specs
 from qai_hub_models.utils.onnx.helpers import download_and_unzip_workbench_onnx_model
 from qai_hub_models.utils.path_helpers import get_next_free_path
 from qai_hub_models.utils.printing import (
@@ -54,11 +49,6 @@ from qai_hub_models.utils.printing import (
     print_tool_versions,
 )
 from qai_hub_models.utils.qai_hub_helpers import can_access_qualcomm_ai_hub
-from qai_hub_models.utils.version_helpers import (
-    PT2_LESS_THAN_TORCH_VERSION,
-    PT2_MIN_TORCH_VERSION,
-    ensure_supported_version,
-)
 
 
 def quantize_model(
@@ -90,44 +80,38 @@ def quantize_model(
     )
 
 
+def upload_model(
+    model: BaseModel,
+    input_spec: InputSpec | None = None,
+) -> hub.Model:
+    input_spec = input_spec or model.get_input_spec()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        return hub.upload_model(str(model.serialize(tmpdir, input_spec)))
+
+
 def compile_model(
     model: BaseModel,
     model_name: str,
     device: hub.Device,
     target_runtime: TargetRuntime,
     precision: Precision,
-    source_model: hub.Model | None = None,
+    source_model: hub.Model,
     input_spec: InputSpec | None = None,
     extra_options: str = "",
 ) -> hub.client.CompileJob:
     input_spec = input_spec or model.get_input_spec()
-    model_to_compile: hub.Model | torch.export.ExportedProgram
-    if source_model:
-        model_to_compile = source_model
-    else:
-        # Serialize the model
-        ensure_supported_version(
-            "torch",
-            min_version=PT2_MIN_TORCH_VERSION,
-            below_version=PT2_LESS_THAN_TORCH_VERSION,
-        )
-        with torch.no_grad():
-            model_to_compile = torch.export.export(
-                model.to("cpu"), tuple(make_torch_inputs(input_spec))
-            )
 
     model_compile_options = model.get_hub_compile_options(
         target_runtime, precision, extra_options, device, MODEL_ID
     )
     print(f"Optimizing model {model_name} to run on-device")
-    submitted_compile_job = hub.submit_compile_job(
-        model=model_to_compile,
+    return hub.submit_compile_job(
+        model=source_model,
         input_specs=to_hub_input_specs(input_spec),
         device=device,
         name=model_name,
         options=model_compile_options,
     )
-    return cast(hub.client.CompileJob, submitted_compile_job)
 
 
 def link_model(
@@ -159,13 +143,12 @@ def profile_model(
     target_model: hub.Model,
 ) -> hub.client.ProfileJob:
     print(f"Profiling model {model_name} on a hosted device.")
-    submitted_profile_job = hub.submit_profile_job(
+    return hub.submit_profile_job(
         model=target_model,
         device=device,
         name=model_name,
         options=options,
     )
-    return cast(hub.client.ProfileJob, submitted_profile_job)
 
 
 def inference_model(
@@ -176,14 +159,13 @@ def inference_model(
     target_model: hub.Model,
 ) -> hub.client.InferenceJob:
     print(f"Running inference for {model_name} on a hosted device with example inputs.")
-    submitted_inference_job = hub.submit_inference_job(
+    return hub.submit_inference_job(
         model=target_model,
         inputs=inputs,
         device=device,
         name=model_name,
         options=options,
     )
-    return cast(hub.client.InferenceJob, submitted_inference_job)
 
 
 def download_model(
@@ -373,6 +355,7 @@ def export_model(
     input_spec = model.get_input_spec(
         **get_input_spec_kwargs(model, additional_model_kwargs)
     )
+    source_model_to_compile = upload_model(model, input_spec)
 
     # 2. Converts the PyTorch model to ONNX and quantizes the ONNX model.
     quantize_job: hub.client.QuantizeJob | None = None
@@ -388,6 +371,7 @@ def export_model(
                 device,
                 TargetRuntime.ONNX,
                 precision,
+                source_model_to_compile,
                 input_spec=input_spec,
             )
             onnx_model = onnx_compile_result.get_target_model()
@@ -409,13 +393,15 @@ def export_model(
             assert quantized_model is not None, f"Quantize job failed: {quantize_job}"
 
     # 3. Compiles the model to an asset that can be run on device
+    if quantized_model:
+        source_model_to_compile = quantized_model
     compile_result = compile_model(
         model,
         model_name,
         device,
         target_runtime,
         precision,
-        quantized_model,
+        source_model_to_compile,
         input_spec=input_spec,
         extra_options=compile_options,
     )

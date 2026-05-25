@@ -12,10 +12,9 @@ import shutil
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import qai_hub as hub
-import torch
 
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.common import SampleInputsType
@@ -40,11 +39,7 @@ from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import CollectionExportResult, ComponentGroup
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
-from qai_hub_models.utils.input_spec import (
-    InputSpec,
-    make_torch_inputs,
-    to_hub_input_specs,
-)
+from qai_hub_models.utils.input_spec import InputSpec, to_hub_input_specs
 from qai_hub_models.utils.onnx.helpers import download_and_unzip_workbench_onnx_model
 from qai_hub_models.utils.path_helpers import get_next_free_path
 from qai_hub_models.utils.printing import (
@@ -70,18 +65,14 @@ def quantize_model(
     components: list[str] | None = None,
 ) -> ComponentGroup[hub.client.QuantizeJob]:
     component_precisions = (
-        model.get_component_precisions(precision)
+        model.get_mixed_precisions(precision)
         if isinstance(precision, Precision)
         else precision
     )
     quantize_jobs: ComponentGroup[hub.client.QuantizeJob] = ComponentGroup()
-    if not input_specs:
-        input_specs = {
-            name: model.components[name].get_input_spec() for name in model.components
-        }
-    for component_name in components or model.component_class_names:
+    input_specs = input_specs or model.get_input_spec()
+    for component_name in components or Model.component_class_names:
         component_precision = component_precisions[component_name]
-        component = model.components[component_name]
 
         if component_precision != Precision.float:
             print(f"Quantizing {component_name}.")
@@ -106,11 +97,27 @@ def quantize_model(
                 activations_dtype=component_precision.activations_type,
                 weights_dtype=component_precision.weights_type,
                 name=f"{model_name}_{component_name}",
-                options=component.get_hub_quantize_options(
-                    component_precision, extra_options
+                options=model.get_component_hub_quantize_options(
+                    component_name, component_precision, extra_options
                 ),
             )
     return quantize_jobs
+
+
+def upload_model(
+    model: PretrainedCollectionModel,
+    input_specs: dict[str, InputSpec] | None = None,
+    components: list[str] | None = None,
+) -> ComponentGroup[hub.Model]:
+    all_input_specs = input_specs or model.get_input_spec()
+    uploaded: ComponentGroup[hub.Model] = ComponentGroup()
+    for name in components or Model.component_class_names:
+        spec = all_input_specs[name]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            uploaded[name] = hub.upload_model(
+                str(model.serialize_component(name, tmpdir, spec))
+            )
+    return uploaded
 
 
 def compile_model(
@@ -119,24 +126,18 @@ def compile_model(
     device: hub.Device,
     target_runtime: TargetRuntime,
     precision: Precision,
-    source_models: ComponentGroup[hub.Model] | None = None,
+    source_models: ComponentGroup[hub.Model],
     input_specs: dict[str, InputSpec] | None = None,
     components: list[str] | None = None,
     extra_options: str = "",
 ) -> ComponentGroup[hub.client.CompileJob]:
     compile_jobs: ComponentGroup[hub.client.CompileJob] = ComponentGroup()
+    all_input_specs = input_specs or model.get_input_spec()
     for component_name in components or Model.component_class_names:
-        component = model.components[component_name]
-        input_spec = (input_specs or {}).get(component_name, component.get_input_spec())
-        if source_models and (source_model := source_models.get(component_name)):
-            model_to_compile = source_model
-        else:
-            # Trace the model
-            model_to_compile = torch.jit.trace(
-                component.to("cpu"), make_torch_inputs(input_spec)
-            )
+        input_spec = all_input_specs[component_name]
 
-        model_compile_options = component.get_hub_compile_options(
+        model_compile_options = model.get_component_hub_compile_options(
+            component_name,
             target_runtime,
             precision,
             extra_options,
@@ -144,15 +145,12 @@ def compile_model(
             f"{MODEL_ID}_{component_name.lower()}",
         )
         print(f"Optimizing model {component_name} to run on-device")
-        submitted_compile_job = hub.submit_compile_job(
-            model=model_to_compile,
+        compile_jobs[component_name] = hub.submit_compile_job(
+            model=source_models[component_name],
             input_specs=to_hub_input_specs(input_spec),
             device=device,
             name=f"{model_name}_{component_name}",
             options=model_compile_options,
-        )
-        compile_jobs[component_name] = cast(
-            hub.client.CompileJob, submitted_compile_job
         )
     return compile_jobs
 
@@ -171,9 +169,9 @@ def link_model(
     )
     link_jobs: ComponentGroup[hub.client.LinkJob] = ComponentGroup()
     for component_name, compiled_model in compiled_models.items():
-        component = model.components[component_name]
-
-        link_options = component.get_hub_link_options(target_runtime, extra_options)
+        link_options = model.get_component_hub_link_options(
+            component_name, target_runtime, extra_options
+        )
         print(f"Linking {component_name} to context binary")
         link_jobs[component_name] = hub.submit_link_job(
             [compiled_model],
@@ -194,14 +192,11 @@ def profile_model(
     profile_jobs: ComponentGroup[hub.client.ProfileJob] = ComponentGroup()
     for component_name in components or Model.component_class_names:
         print(f"Profiling model {component_name} on a hosted device.")
-        submitted_profile_job = hub.submit_profile_job(
+        profile_jobs[component_name] = hub.submit_profile_job(
             model=target_models[component_name],
             device=device,
             name=f"{model_name}_{component_name}",
             options=options.get(component_name, ""),
-        )
-        profile_jobs[component_name] = cast(
-            hub.client.ProfileJob, submitted_profile_job
         )
     return profile_jobs
 
@@ -219,15 +214,12 @@ def inference_model(
         print(
             f"Running inference for {component_name} on a hosted device with example inputs."
         )
-        submitted_inference_job = hub.submit_inference_job(
+        inference_jobs[component_name] = hub.submit_inference_job(
             model=target_models[component_name],
             inputs=inputs[component_name],
             device=device,
             name=f"{model_name}_{component_name}",
             options=options.get(component_name, ""),
-        )
-        inference_jobs[component_name] = cast(
-            hub.client.InferenceJob, submitted_inference_job
         )
     return inference_jobs
 
@@ -268,12 +260,13 @@ def download_model(
                 target_model
             )
             # Merge semantic metadata from get_input_spec()
-            component = model.components[component_name]
             merge_input_metadata(
-                model_file_metadata[model_file_name], component.get_input_spec()
+                model_file_metadata[model_file_name],
+                model.get_component_input_spec(component_name),
             )
             merge_output_metadata(
-                model_file_metadata[model_file_name], component.get_output_spec()
+                model_file_metadata[model_file_name],
+                model.get_component_output_spec(component_name),
             )
 
         # Extract and save metadata alongside downloaded model
@@ -448,6 +441,7 @@ def export_model(
             for name in components
         }
     )
+    source_models_to_compile = upload_model(model, input_specs, components)
 
     # 2. Converts the PyTorch model to ONNX and quantizes the ONNX model.
     quantize_jobs: ComponentGroup[hub.client.QuantizeJob] | None = None
@@ -463,13 +457,14 @@ def export_model(
                 }
             )
         else:
-            component_precisions = model.get_component_precisions(precision)
+            component_precisions = model.get_mixed_precisions(precision)
             onnx_compile_result = compile_model(
                 model,
                 model_name,
                 device,
                 TargetRuntime.ONNX,
                 precision,
+                source_models_to_compile,
                 input_specs=input_specs,
                 components=[
                     c
@@ -493,13 +488,15 @@ def export_model(
             quantized_models = assert_success_and_get_target_models(quantize_jobs)
 
     # 3. Compiles the model to an asset that can be run on device
+    if quantized_models:
+        source_models_to_compile |= quantized_models
     compile_result = compile_model(
         model,
         model_name,
         device,
         target_runtime,
         precision,
-        quantized_models,
+        source_models_to_compile,
         input_specs=input_specs,
         components=components,
         extra_options=compile_options,

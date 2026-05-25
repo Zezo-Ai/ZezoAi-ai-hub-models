@@ -6,10 +6,8 @@
 from __future__ import annotations
 
 import argparse
-import os
 from collections.abc import Mapping, ValuesView
 from importlib import import_module
-from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
@@ -17,14 +15,9 @@ import qai_hub as hub
 import torch
 from qai_hub.public_rest_api import DatasetEntries
 
-from qai_hub_models import (
-    SourceModelFormat,
-    TargetRuntime,
-)
-from qai_hub_models.protocols import ExecutableModelProtocol
-from qai_hub_models.utils.aimet.aimet_dummy_model import AimetEncodingLoaderMixin
+from qai_hub_models.models.common import TargetRuntime
+from qai_hub_models.models.protocols import ExecutableModelProtocol
 from qai_hub_models.utils.asset_loaders import ModelZooAssetConfig, VersionType
-from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.qai_hub_helpers import (
     _AIHUB_NAME,
@@ -40,131 +33,6 @@ try:
     from qai_hub_models.utils.quantization_aimet_onnx import AIMETOnnxQuantizableMixin
 except NotImplementedError:
     AIMETOnnxQuantizableMixin = None  # type: ignore[assignment,misc]
-
-
-def prepare_compile_zoo_model_to_hub(
-    model: BaseModel,
-    source_model_format: SourceModelFormat,
-    target_runtime: TargetRuntime,
-    output_path: str | Path = "",
-    input_spec: InputSpec | None = None,
-    check_trace: bool = True,
-    external_onnx_weights: bool = False,
-    output_names: list[str] | None = None,
-) -> str | None:
-    """
-    Parameters
-    ----------
-    model
-        Model to compile.
-    source_model_format
-        Format of the source model (ONNX or TORCHSCRIPT).
-    target_runtime
-        Target runtime for compilation (QNN or TFLITE).
-    output_path
-        Path where the model will be exported.
-    input_spec
-        Input specification for the model.
-    check_trace
-        Whether to check the trace during conversion.
-    external_onnx_weights
-        Whether to use external weights for ONNX export.
-    output_names
-        List of output names for the model.
-
-    Notes
-    -----
-    (source_model_format, target_runtime)
-        One of the followings
-
-        (1) (ONNX, QNN)
-
-            (a) For fp32 model, torch -> onnx -> qnn.
-
-            (b) For AIMET, torch -> onnx + aimet encodings -> qnn
-
-        (2) (ONNX, TFLITE)
-
-            (a) For fp32, torch (fp32) -> onnx -> tflite,
-
-            (b) For quantized, torch(AIMET) -> onnx + aimet .encodings -> tflite
-            (via qnn-onnx-converter).
-
-        (3) (TORCHSCRIPT, TFLITE)
-
-            (a) Fp32: Invalid option for model not subclass of
-            (AIMETOnnxQuantizableMixin)
-
-        (4) (TORCHSCRIPT, QNN)
-
-            (a) For fp32, torch -> qnn (via qnn-torch-converter, aka
-                    --use_qnn_pytorch_converter flag in Hub)
-
-    Returns
-    -------
-    model_path : str | None
-        Path to source model that can be used directly with hub.upload_model or
-        hub.submit_compile_job.
-    """
-    model_name = model.__class__.__name__
-
-    if output_names is None:
-        output_names = []
-
-    if AIMETOnnxQuantizableMixin is not None and isinstance(
-        model, AIMETOnnxQuantizableMixin
-    ):
-
-        def export_model_func() -> str:
-            print("Exporting model to ONNX with AIMET encodings")
-            return model.convert_to_onnx_and_aimet_encodings(
-                output_dir=output_path,
-                model_name=model_name,
-            )
-
-    elif isinstance(model, AimetEncodingLoaderMixin):
-        if source_model_format == SourceModelFormat.ONNX:
-
-            def export_model_func() -> str:
-                print("Exporting model to ONNX with AIMET encodings")
-                return model.convert_to_onnx_and_aimet_encodings(
-                    output_path,
-                    input_spec=input_spec,
-                    model_name=model_name,
-                    external_weights=external_onnx_weights,
-                    output_names=output_names,
-                )
-
-        elif (
-            source_model_format == SourceModelFormat.TORCHSCRIPT
-            and target_runtime == TargetRuntime.TFLITE
-        ):
-
-            def export_model_func() -> str:
-                print("Converting model to Torchscript")
-                traced_model = model.convert_to_torchscript(
-                    input_spec=input_spec, check_trace=check_trace
-                )
-                model_path = os.path.join(output_path, model_name + ".pt")
-                os.makedirs(output_path, exist_ok=True)
-                torch.jit.save(traced_model, model_path)
-                return model_path
-
-        else:  # Torchscript and QNN
-            raise NotImplementedError()
-
-    else:  # fp32
-
-        def export_model_func() -> str:
-            traced_model = model.convert_to_torchscript(
-                input_spec=input_spec, check_trace=check_trace
-            )
-            model_path = os.path.join(output_path, model_name + ".pt")
-            os.makedirs(output_path, exist_ok=True)
-            torch.jit.save(traced_model, model_path)
-            return model_path
-
-    return export_model_func()
 
 
 def compile_model_from_args(

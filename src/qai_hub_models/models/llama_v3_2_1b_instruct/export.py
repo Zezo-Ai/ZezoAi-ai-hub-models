@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import qai_hub as hub
 
@@ -39,7 +39,6 @@ from qai_hub_models.utils.args import (
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.base_multi_graph_model import (
     MultiGraphCollectionModel,
-    MultiGraphWorkbenchModel,
 )
 from qai_hub_models.utils.checkpoint import CheckpointType
 from qai_hub_models.utils.export_result import (
@@ -61,13 +60,39 @@ from qai_hub_models.utils.qai_hub_helpers import (
 )
 
 
+def upload_model(
+    model: MultiGraphCollectionModel,
+    input_specs: MultiGraphComponentGroup[InputSpec] | None = None,
+    components: list[str] | None = None,
+) -> MultiGraphComponentGroup[hub.Model]:
+    all_input_specs = input_specs or model.get_input_spec()
+    uploaded: MultiGraphComponentGroup[hub.Model] = MultiGraphComponentGroup()
+    shared: dict[str, hub.Model] = {}
+    for (comp_name, graph_name), spec in all_input_specs.items():
+        if components is not None and comp_name not in components:
+            continue
+        if comp_name in shared:
+            uploaded[(comp_name, graph_name)] = shared[comp_name]
+            continue
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hub_model = hub.upload_model(
+                str(
+                    model.serialize_component_graph(comp_name, graph_name, tmpdir, spec)
+                )
+            )
+        uploaded[(comp_name, graph_name)] = hub_model
+        if model.component_has_shared_source_model(comp_name):
+            shared[comp_name] = hub_model
+    return uploaded
+
+
 def compile_model(
     model: MultiGraphCollectionModel,
     model_name: str,
     device: hub.Device,
     target_runtime: TargetRuntime,
     precision: Precision,
-    output_path: Path,
+    source_models: MultiGraphComponentGroup[hub.Model],
     input_specs: MultiGraphComponentGroup[InputSpec] | None = None,
     components: list[str] | None = None,
     extra_options: str = "",
@@ -79,45 +104,17 @@ def compile_model(
     all_compile_options = model.get_hub_compile_options(
         target_runtime, precision, extra_options, device
     )
-    for component_name in components or Model.component_class_names:
-        component = model.components[component_name]
-        # Trace the model
-        shared_uploaded_model: hub.Model | None = None
-        if (
-            isinstance(component, MultiGraphWorkbenchModel)
-            and component.shared_source_model
-        ):
-            source_model_path = model.convert_to_hub_source_model(
-                component_name, component.graph_names[0], output_path, target_runtime
-            )
-            shared_uploaded_model = hub.upload_model(str(source_model_path))
-        for graph_name, graph_input_spec in all_input_specs.by_component(
-            component_name
-        ).items():
-            if shared_uploaded_model:
-                uploaded_model = shared_uploaded_model
-            else:
-                source_model_path = model.convert_to_hub_source_model(
-                    component_name,
-                    graph_name,
-                    output_path,
-                    target_runtime,
-                    graph_input_spec,
-                )
-                uploaded_model = hub.upload_model(str(source_model_path))
-            print(f"Optimizing model {component_name} to run on-device")
-            submitted_compile_job = hub.submit_compile_job(
-                model=uploaded_model,
-                input_specs=to_hub_input_specs(graph_input_spec),
-                device=device,
-                name=f"{model_name}_{component_name}",
-                options=all_compile_options.by_component(component_name).get(
-                    graph_name, ""
-                ),
-            )
-            compile_jobs[(component_name, graph_name)] = cast(
-                hub.client.CompileJob, submitted_compile_job
-            )
+    for (component_name, graph_name), graph_input_spec in all_input_specs.items():
+        if components is not None and component_name not in components:
+            continue
+        print(f"Optimizing model {component_name} to run on-device")
+        compile_jobs[(component_name, graph_name)] = hub.submit_compile_job(
+            model=source_models[(component_name, graph_name)],
+            input_specs=to_hub_input_specs(graph_input_spec),
+            device=device,
+            name=f"{model_name}_{component_name}",
+            options=all_compile_options.get((component_name, graph_name), ""),
+        )
     return compile_jobs
 
 
@@ -139,9 +136,9 @@ def link_model(
     for (comp_name, _gn), m in compiled_models.items():
         grouped.setdefault(comp_name, []).append(m)
     for component_name, models_list in grouped.items():
-        component = model.components[component_name]
-
-        link_options = component.get_hub_link_options(target_runtime, extra_options)
+        link_options = model.get_component_hub_link_options(
+            component_name, target_runtime, extra_options
+        )
         print(f"Linking {component_name} to context binary")
         link_jobs[component_name] = hub.submit_link_job(
             models_list,  # type: ignore[arg-type]
@@ -169,15 +166,11 @@ def profile_model(
         if graph_names is not None and graph_name not in graph_names:
             continue
         print(f"Profiling model {component_name} on a hosted device.")
-        job_name = f"{model_name}_{component_name}_{graph_name}"
-        submitted_profile_job = hub.submit_profile_job(
+        profile_jobs[(component_name, graph_name)] = hub.submit_profile_job(
             model=target_models[component_name],
             device=device,
-            name=job_name,
+            name=f"{model_name}_{component_name}_{graph_name}",
             options=opts,
-        )
-        profile_jobs[(component_name, graph_name)] = cast(
-            hub.client.ProfileJob, submitted_profile_job
         )
     return profile_jobs
 
@@ -202,16 +195,12 @@ def inference_model(
         print(
             f"Running inference for {component_name} on a hosted device with example inputs."
         )
-        job_name = f"{model_name}_{component_name}_{graph_name}"
-        submitted_inference_job = hub.submit_inference_job(
+        inference_jobs[(component_name, graph_name)] = hub.submit_inference_job(
             model=target_models[component_name],
             inputs=graph_inputs,
             device=device,
-            name=job_name,
+            name=f"{model_name}_{component_name}_{graph_name}",
             options=options.get((component_name, graph_name), ""),
-        )
-        inference_jobs[(component_name, graph_name)] = cast(
-            hub.client.InferenceJob, submitted_inference_job
         )
     return inference_jobs
 
@@ -416,6 +405,7 @@ def export_model(
             Model, first_component, additional_model_kwargs
         )
     )
+    source_models_to_compile = upload_model(model, input_specs, components)
 
     # 2. Compiles the model to an asset that can be run on device
     compile_result = compile_model(
@@ -423,8 +413,8 @@ def export_model(
         model_name,
         device,
         target_runtime,
-        precision=precision,
-        output_path=output_path,
+        precision,
+        source_models_to_compile,
         input_specs=input_specs,
         components=components,
         extra_options=compile_options,

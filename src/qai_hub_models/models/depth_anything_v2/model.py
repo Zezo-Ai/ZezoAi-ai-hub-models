@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import torch
 from transformers import AutoModelForDepthEstimation
 from typing_extensions import Self
@@ -18,6 +21,7 @@ from qai_hub_models.utils.input_spec import (
     InputSpec,
     IoType,
     TensorSpec,
+    make_torch_inputs,
 )
 
 MODEL_ID = __name__.split(".")[-2]
@@ -75,6 +79,19 @@ class DepthAnythingV2(DepthEstimationModel):
                 ),
             ),
         }
+
+    def serialize(
+        self,
+        output_dir: str | os.PathLike,
+        input_spec: InputSpec | None = None,
+    ) -> Path:
+        input_spec = input_spec or self.get_input_spec()
+        output_path = Path(output_dir) / f"{self.__class__.__name__}.pt2"
+        self.to("cpu").eval()
+        with torch.no_grad():
+            exported = torch.export.export(self, tuple(make_torch_inputs(input_spec)))
+        torch.export.save(exported, output_path)
+        return output_path
 
     def get_hub_quantize_options(
         self, precision: Precision, other_options: str | None = None

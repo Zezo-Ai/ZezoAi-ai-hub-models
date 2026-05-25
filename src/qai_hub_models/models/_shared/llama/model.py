@@ -17,7 +17,6 @@ from qai_hub.client import Device
 from qai_hub_models import (
     Precision,
     SampleInputsType,
-    SourceModelFormat,
     TargetRuntime,
 )
 from qai_hub_models.models._shared.llm.common import LLMIOType
@@ -395,9 +394,3 @@ class LlamaMixin(AimetEncodingLoaderMixin, BaseModel):
         for key, val in data.items():
             patched_inputs[key] = [val.detach().numpy()]
         return patched_inputs
-
-    def preferred_hub_source_model_format(
-        self, target_runtime: TargetRuntime
-    ) -> SourceModelFormat:
-        """Source model format preferred for conversion on AI Hub Workbench."""
-        return SourceModelFormat.ONNX

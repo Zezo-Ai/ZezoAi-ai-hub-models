@@ -25,7 +25,6 @@ __all__ = [
     "Precision",
     "QAIRTVersion",
     "SampleInputsType",
-    "SourceModelFormat",
     "TargetRuntime",
     "_FloatDtype",
 ]
@@ -1005,12 +1004,6 @@ Precision.q8_0 = Precision(None, None, _custom_name="q8_0")
 Precision.q4_0 = Precision(None, None, _custom_name="q4_0")
 Precision.mixed = Precision(None, None, _custom_name="mixed")
 Precision.mixed_with_float = Precision(None, None, _custom_name="mixed_with_float")
-
-
-@unique
-class SourceModelFormat(Enum):
-    ONNX = 0
-    TORCHSCRIPT = 1
 
 
 SampleInputsType = dict[str, list[np.ndarray]]

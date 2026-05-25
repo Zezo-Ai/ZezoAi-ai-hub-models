@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Sized
@@ -20,6 +19,7 @@ from typing import Any, NamedTuple, final
 from torch.utils.data import Dataset, default_collate
 
 from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.kwarg_helpers import cli_friendly_class_name
 
 __all__ = [
     "AugmentedLabelDataset",
@@ -151,9 +151,7 @@ class BaseDataset(Dataset, Sized, ABC):
         name = cls.__name__
         if name.lower().endswith("dataset"):
             name = name[:-7]
-        name = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)
-        name = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
-        return name.lower()
+        return cli_friendly_class_name(name)
 
     @staticmethod
     @abstractmethod

@@ -33,7 +33,7 @@ from qai_hub_models.models._shared.llm.model import (
     LLMInstantiationType,
     MainLLMInputType,
 )
-from qai_hub_models.models.common import Precision, TargetRuntime
+from qai_hub_models.models.common import Precision
 from qai_hub_models.models.llama_v3_2_3b_instruct import MODEL_ID
 from qai_hub_models.models.llama_v3_2_3b_instruct.model import (
     DEFAULT_CONTEXT_LENGTH,
@@ -160,15 +160,11 @@ if __name__ == "__main__":
                 main_input_name=main_input_name,
             )
 
-        def convert_to_hub_source_model(
+        def serialize(
             self,
-            target_runtime: TargetRuntime,
-            output_path: str | Path,
+            output_dir: str | os.PathLike,
             input_spec: InputSpec | None = None,
-            check_trace: bool = True,
-            external_onnx_weights: bool = False,
-            output_names: list[str] | None = None,
-        ) -> str | None:
+        ) -> Path:
             """Convert to a AI Hub Workbench source model appropriate for the export method."""
 
             def apply_piqaro_onnx(onnx_model: onnx.ModelProto) -> onnx.ModelProto:
@@ -180,19 +176,19 @@ if __name__ == "__main__":
             onnx_transforms = apply_piqaro_onnx if args.opt == "piqaro" else None
             dummy_input = tuple(make_torch_inputs(input_spec))
             # Need to export to {output_path}/model.onnx
-            output_dir = Path(output_path) / "llama_two_layer.onnx"
+            output_dir = Path(output_dir) / "llama_two_layer.onnx"
             output_dir.mkdir(parents=True, exist_ok=True)
             _ = export_torch_to_onnx_zip(
                 self,
                 output_dir,
                 dummy_input,
                 input_names=list(input_spec.keys()),
-                output_names=output_names,
+                output_names=self.get_output_names(),
                 onnx_transforms=onnx_transforms,
                 skip_zip=True,
             )
 
-            return str(output_dir)
+            return output_dir
 
         @staticmethod
         def get_output_names() -> list[str]:

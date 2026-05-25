@@ -6,15 +6,16 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Generator
+from pathlib import Path
 
 import numpy as np
 import pytest
-import qai_hub as hub
 import torch
 
 import qai_hub_models.models.sam2 as _model_module
-from qai_hub_models.common import Precision, TargetRuntime
+from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.models.sam2 import MODEL_ID, Model
 from qai_hub_models.models.sam2.export import (
     compile_model,
@@ -23,6 +24,7 @@ from qai_hub_models.models.sam2.export import (
     link_model,
     profile_model,
     quantize_model,
+    upload_model,
 )
 from qai_hub_models.scorecard import (
     ScorecardCompilePath,
@@ -55,6 +57,7 @@ from qai_hub_models.scorecard.utils.testing_export_eval import (
     torch_inference_for_accuracy_validation,
     torch_inference_for_accuracy_validation_outputs,
 )
+from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.validation import perform_runtime_model_validation
 
 # All runtime + precision pairs that are enabled for testing and are compatibile with this model.
@@ -114,6 +117,7 @@ def test_pre_quantize_compile() -> None:
         compile_model,
         MODEL_ID,
         Model.from_pretrained(),
+        upload_model,
     )
 
 
@@ -160,6 +164,7 @@ def test_compile(
             precision,
             scorecard_path,
             device,
+            upload_model=upload_model,
         )
     except CachedScorecardJobError as e:
         pytest.skip(str(e))
@@ -346,27 +351,31 @@ def test_export(
         pytest.skip(str(e))
 
 
-# Trace the model & upload to hub only once for all module + input pairs.
-# This speeds up tests and limits memory leaks for torch jit trace.
+# Serialize the model only once for all module + input pairs.
+# This speeds up tests and limits memory leaks.
 @pytest.fixture(scope="module", autouse=True)
-def cached_torch_trace_for_export() -> Generator[pytest.MonkeyPatch, None, None]:
+def cached_serialize_for_export(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[pytest.MonkeyPatch, None, None]:
+    cache_dir = tmp_path_factory.mktemp("serialize_cache")
     with pytest.MonkeyPatch.context() as mp:
-        model_cache: dict[str, hub.Model] = {}
-        torch_export = torch.export.export
+        model_cache: dict[str, Path] = {}
+        serialize_component = Model.serialize_component
 
-        def _cached_torch_export(
-            module: torch.nn.Module, inputs: torch.Tensor | tuple[torch.Tensor, ...]
-        ) -> hub.Model:
-            model_key = str(module) + str(
-                sorted([f"{x.shape}{x.type()}" for x in inputs])
-            )
-            model = model_cache.get(model_key)
-            if not model:
-                export = torch_export(module, inputs)  # type: ignore[arg-type]
-                model = hub.upload_model(export)
-                model_cache[model_key] = model
-            assert isinstance(model, hub.Model)
-            return model
+        def _cached_serialize_component(
+            self: Model,
+            component_name: str,
+            output_dir: str | os.PathLike,
+            input_spec: InputSpec | None = None,
+        ) -> Path:
+            model_key = component_name + str(input_spec)
+            cached = model_cache.get(model_key)
+            if not cached:
+                cached = serialize_component(
+                    self, component_name, cache_dir, input_spec
+                )
+                model_cache[model_key] = cached
+            return cached
 
-        mp.setattr(torch.export, "export", _cached_torch_export)
+        mp.setattr(Model, "serialize_component", _cached_serialize_component)
         yield mp

@@ -97,6 +97,22 @@ class AimetEncodingLoaderMixin(AIMETQuantizableModelProtocol):
             "AimetEncodingLoaderMixin does not support model quantization."
         )
 
+    def serialize(
+        self,
+        output_dir: str | os.PathLike,
+        input_spec: InputSpec | None = None,
+    ) -> Path:
+        assert isinstance(self, WorkbenchModel)
+        return Path(
+            self.convert_to_onnx_and_aimet_encodings(
+                output_dir=Path(output_dir),
+                input_spec=input_spec,
+                model_name=self.__class__.__name__,
+                external_weights=True,
+                output_names=self.get_output_names(),
+            )
+        )
+
     def convert_to_onnx_and_aimet_encodings(
         self,
         output_dir: str | Path,

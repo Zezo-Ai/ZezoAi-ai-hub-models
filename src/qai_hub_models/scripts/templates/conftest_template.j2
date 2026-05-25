@@ -6,9 +6,7 @@ from typing import Any
 import inspect
 import pytest
 import gc
-{%- if not enable_pt2 %}
 import torch.jit._trace
-{%- endif %}
 import warnings
 
 from qai_hub_models.models.{{ model_name }} import Model
@@ -19,9 +17,7 @@ from qai_hub_models.models.{{ model_name }} import Model
 def pytest_configure(config: pytest.Config) -> None:
     # pytest is unable to figure out how to silence several PyTorch warning types from pyproject.toml settings,
     # so we apply a manual warning filter here instead.
-{%- if not enable_pt2 %}
     warnings.filterwarnings(action="ignore", category=torch.jit._trace.TracerWarning)
-{%- endif %}
     warnings.filterwarnings(action='ignore', category=UserWarning, module="torch.*")
     warnings.filterwarnings(action='ignore', category=FutureWarning, module="torch.*")
     warnings.filterwarnings(action='ignore', category=DeprecationWarning, module="torch.*")

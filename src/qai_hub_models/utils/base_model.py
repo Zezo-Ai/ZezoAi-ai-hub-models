@@ -10,7 +10,6 @@ import re
 import shutil
 from collections.abc import Callable
 from contextlib import nullcontext
-from copy import deepcopy
 from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar, cast
 
@@ -21,7 +20,6 @@ from typing_extensions import Self
 from qai_hub_models import (
     Precision,
     SampleInputsType,
-    SourceModelFormat,
     TargetRuntime,
 )
 from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
@@ -69,7 +67,6 @@ class WorkbenchModel:
     """Base interface for AI Hub Workbench models."""
 
     # -- Subclasses must implement these --
-
     def get_input_spec(self, *args: Any, **kwargs: Any) -> InputSpec:
         """
         Returns a map from `{input_name -> (shape, dtype)}`
@@ -77,15 +74,11 @@ class WorkbenchModel:
         """
         raise NotImplementedError
 
-    def convert_to_hub_source_model(
+    def serialize(
         self,
-        target_runtime: TargetRuntime,
-        output_path: str | Path,
+        output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-        check_trace: bool = True,
-        external_onnx_weights: bool = False,
-        output_names: list[str] | None = None,
-    ) -> str | None:
+    ) -> Path:
         """Convert to an AI Hub Workbench source model appropriate for the export method."""
         raise NotImplementedError
 
@@ -118,7 +111,6 @@ class WorkbenchModel:
         return
 
     # -- Subclasses may override these --
-
     def get_channel_last_inputs(self) -> list[str]:
         """
         A list of input names that should be transposed to channel-last format
@@ -319,12 +311,6 @@ class BaseModel(
         """Gets a class for evaluating output of this model."""
         raise NotImplementedError("No evaluator is supported for this model.")
 
-    def preferred_hub_source_model_format(
-        self, target_runtime: TargetRuntime
-    ) -> SourceModelFormat:
-        """Source model format preferred for conversion on AI Hub Workbench."""
-        return SourceModelFormat.TORCHSCRIPT
-
     @classmethod
     def get_labels_file_name(cls) -> str | None:
         """
@@ -362,45 +348,25 @@ class BaseModel(
     def convert_to_torchscript(
         self, input_spec: InputSpec | None = None, check_trace: bool = True
     ) -> Any:
-        """
-        Converts the torch module to a torchscript trace, which
-        is the format expected by qai hub.
-
-        This is a default implementation that may be overriden by a subclass.
-        """
-        if not input_spec:
-            input_spec = self.get_input_spec()
-        # Torchscript should never be trained, so disable gradients for all parameters.
-        # Need to do this on a model copy, in case the original model is being trained.
-        model_copy = deepcopy(self)
-        for param in model_copy.parameters():
-            param.requires_grad = False
+        """Converts the torch module to a torchscript trace."""
+        input_spec = input_spec or self.get_input_spec()
+        self.to("cpu").eval()
         return torch.jit.trace(
-            model_copy, make_torch_inputs(input_spec), check_trace=check_trace
+            self, make_torch_inputs(input_spec), check_trace=check_trace
         )
 
-    def convert_to_hub_source_model(
+    def serialize(
         self,
-        target_runtime: TargetRuntime,
-        output_path: str | Path,
+        output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-        check_trace: bool = True,
-        external_onnx_weights: bool = False,
-        output_names: list[str] | None = None,
-    ) -> str | None:
-        """Convert to an AI Hub Workbench source model appropriate for the export method."""
-        from qai_hub_models.utils.inference import prepare_compile_zoo_model_to_hub
-
-        return prepare_compile_zoo_model_to_hub(
-            self,
-            source_model_format=SourceModelFormat.TORCHSCRIPT,
-            target_runtime=target_runtime,
-            output_path=output_path,
-            input_spec=input_spec,
-            check_trace=check_trace,
-            external_onnx_weights=external_onnx_weights,
-            output_names=output_names or self.get_output_names(),
+    ) -> Path:
+        """Serialize this model to disk. The serialized model will be uploaded to AI Hub Workbench during export."""
+        output_path = Path(output_dir) / f"{self.__class__.__name__}.pt"
+        torch.jit.save(
+            self.convert_to_torchscript(input_spec, check_trace=False),
+            output_path,
         )
+        return output_path
 
 
 class BasePrecompiledModel(WorkbenchModel, FromPrecompiledProtocol):
@@ -417,16 +383,12 @@ class BasePrecompiledModel(WorkbenchModel, FromPrecompiledProtocol):
     def get_target_model_path(self) -> str:
         return self.target_model_path
 
-    def convert_to_hub_source_model(
+    def serialize(
         self,
-        target_runtime: TargetRuntime,
-        output_path: str | Path,
+        output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-        check_trace: bool = True,
-        external_onnx_weights: bool = False,
-        output_names: list[str] | None = None,
-    ) -> str | None:
-        return self.target_model_path
+    ) -> Path:
+        return Path(self.target_model_path)
 
 
 ComponentT = TypeVar("ComponentT")
@@ -604,10 +566,21 @@ class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtoc
         """Dataset class used for calibration when quantizing collection components."""
         return None
 
+    def serialize_component(
+        self,
+        component_name: str,
+        output_dir: str | os.PathLike,
+        input_spec: InputSpec | None = None,
+    ) -> Path:
+        return self.components[component_name].serialize(output_dir, input_spec)
+
     # -- Per-component getters (delegate to the component) --
 
     def get_component_input_spec(self, component_name: str, **kwargs: Any) -> InputSpec:
         return self.components[component_name].get_input_spec(**kwargs)
+
+    def get_component_output_spec(self, component_name: str) -> OutputSpec:
+        return self.components[component_name].get_output_spec()
 
     def get_component_unsupported_reason(
         self, component_name: str, target_runtime: TargetRuntime, device: Device
@@ -630,13 +603,14 @@ class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtoc
         precision: Precision,
         other_compile_options: str = "",
         device: Device | None = None,
+        context_graph_name: str | None = None,
     ) -> str:
         return self.components[component_name].get_hub_compile_options(
             target_runtime,
             precision,
             other_compile_options,
             device,
-            context_graph_name=component_name,
+            context_graph_name=context_graph_name or component_name,
         )
 
     def get_component_hub_link_options(
@@ -669,7 +643,14 @@ class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtoc
             input_spec, use_channel_last_format
         )
 
-    def get_component_precisions(
+    def get_component_mixed_precision(
+        self,
+        component_name: str,
+        precision: Precision,
+    ) -> Precision:
+        return self.components[component_name].component_precision()
+
+    def get_mixed_precisions(
         self,
         precision: Precision,
     ) -> dict[str, Precision]:
@@ -838,6 +819,9 @@ class PrecompiledCollectionModel(
                 )
             components.append(component_cls.from_precompiled())
         return cls(*components)
+
+    def get_component_target_model_path(self, component_name: str) -> str:
+        return self.components[component_name].get_target_model_path()
 
     def get_component_hub_profile_options(
         self,

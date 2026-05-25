@@ -209,12 +209,9 @@ def export_model(
             )
 
             # Create source .aimet model
-            source_model = component.convert_to_hub_source_model(
-                target_runtime,
+            source_model = component.serialize(
                 output_path,
                 input_spec,
-                external_onnx_weights=True,
-                output_names=component.get_output_names(),
             )
 
             seq_length, context_length = input_spec["attention_mask"][0][-2:]

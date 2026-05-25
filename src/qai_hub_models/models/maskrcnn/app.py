@@ -180,9 +180,10 @@ class MaskRCNNApp(ProposalBasedDetectionApp):
         )
 
         # Run ROI Head
-        boxes_tensor, scores_tensor, classes_tensor, masks_tensor = self.roi_head(
-            features_0, features_1, features_2, features_3, normalized_proposals
-        )
+        with torch.no_grad():
+            boxes_tensor, scores_tensor, classes_tensor, masks_tensor = self.roi_head(
+                features_0, features_1, features_2, features_3, normalized_proposals
+            )
 
         # Paste masks to full resolution for each batch
         batch_size = boxes_tensor.shape[0]

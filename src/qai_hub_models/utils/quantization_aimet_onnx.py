@@ -188,12 +188,16 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel, FromPrecompiledProtocol):
         """
         return None
 
-    def convert_to_torchscript(
-        self, input_spec: InputSpec | None = None, check_trace: bool = True
-    ) -> Any:
-        # This must be defined by the PretrainedHubModelProtocol ABC
-        raise ValueError(
-            f"Cannot call convert_to_torchscript on {self.__class__.__name__}"
+    def serialize(
+        self,
+        output_dir: str | os.PathLike,
+        input_spec: InputSpec | None = None,
+    ) -> Path:
+        return Path(
+            self.convert_to_onnx_and_aimet_encodings(
+                output_dir=Path(output_dir),
+                model_name=self.__class__.__name__,
+            )
         )
 
     def get_calibration_data(

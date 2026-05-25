@@ -81,7 +81,6 @@ from typing_extensions import Self
 from qai_hub_models import (
     Precision,
     SampleInputsType,
-    SourceModelFormat,
     TargetRuntime,
 )
 from qai_hub_models.models._shared.llm.common import (
@@ -1423,12 +1422,6 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
                 "float32",
             )
         return input_spec
-
-    def preferred_hub_source_model_format(
-        self, target_runtime: TargetRuntime
-    ) -> SourceModelFormat:
-        """Source model format preferred for conversion on AI Hub Workbench."""
-        return SourceModelFormat.ONNX
 
     def get_calibration_data(
         self,

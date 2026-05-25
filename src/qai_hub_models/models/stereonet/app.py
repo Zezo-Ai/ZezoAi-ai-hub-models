@@ -94,7 +94,8 @@ class StereoNetApp:
         right_t, _, _ = resize_pad(right_t, (self.height, self.width))
 
         stack = torch.cat([left_t, right_t], dim=1)
-        disp_pred = self.model(stack)
+        with torch.no_grad():
+            disp_pred = self.model(stack)
 
         h, w = orig_img[0].shape
         disp_pred = undo_resize_pad(disp_pred, (w, h), scale, padding)
