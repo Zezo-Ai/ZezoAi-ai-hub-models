@@ -140,12 +140,7 @@ def compile_model(
         input_spec = all_input_specs[component_name]
 
         model_compile_options = model.get_component_hub_compile_options(
-            component_name,
-            target_runtime,
-            precision,
-            extra_options,
-            device,
-            f"{MODEL_ID}_{component_name.lower()}",
+            component_name, target_runtime, precision, extra_options, device
         )
         print(f"Optimizing model {component_name} to run on-device")
         compile_jobs[component_name] = hub.submit_compile_job(

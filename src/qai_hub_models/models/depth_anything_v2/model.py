@@ -86,7 +86,7 @@ class DepthAnythingV2(DepthEstimationModel):
         input_spec: InputSpec | None = None,
     ) -> Path:
         input_spec = input_spec or self.get_input_spec()
-        output_path = Path(output_dir) / f"{self.__class__.__name__}.pt2"
+        output_path = Path(output_dir) / f"{self.name}.pt2"
         self.to("cpu").eval()
         with torch.no_grad():
             exported = torch.export.export(self, tuple(make_torch_inputs(input_spec)))

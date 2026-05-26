@@ -292,7 +292,7 @@ def compile_model(
     {%- endif -%}
     {%- else %}
 
-    model_compile_options = {{ "model.get_component_hub_compile_options(component_name, " if is_collection_model else "model.get_hub_compile_options(" }}target_runtime, {{ "precision" if can_use_quantize_job else "Precision." + default_aihub_job_precision }}, extra_options, device, {{ 'f"{MODEL_ID}_{component_name.lower()}"' if is_collection_model else "MODEL_ID" }})
+    model_compile_options = {{ "model.get_component_hub_compile_options(component_name, " if is_collection_model else "model.get_hub_compile_options(" }}target_runtime, {{ "precision" if can_use_quantize_job else "Precision." + default_aihub_job_precision }}, extra_options, device)
     print(f"Optimizing model { {{- "component_name" if is_collection_model else "model_name" -}} } to run on-device")
     {%- if is_collection_model %}
     compile_jobs[component_name] = hub.submit_compile_job(

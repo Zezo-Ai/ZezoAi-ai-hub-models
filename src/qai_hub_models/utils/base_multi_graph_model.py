@@ -21,6 +21,7 @@ from qai_hub_models.protocols import FromPretrainedProtocol
 from qai_hub_models.utils.base_model import (
     BaseModel,
     CollectionModel,
+    _model_cls_name,
 )
 from qai_hub_models.utils.export_result import (
     ComponentGroup,
@@ -59,6 +60,9 @@ class MultiGraphWorkbenchModel(FromPretrainedProtocol):
     """
 
     # -- Subclasses must implement these --
+    @property
+    def name(self) -> str:
+        return _model_cls_name(self)
 
     @property
     def graph_names(self) -> list[str]:
@@ -290,6 +294,10 @@ class MultiGraphCollectionModel(
     """A collection model where one or more components have multiple graphs."""
 
     COMPONENT_BASE_TYPES = (BaseModel, MultiGraphWorkbenchModel)
+
+    @property
+    def name(self) -> str:
+        return _model_cls_name(self)
 
     @staticmethod
     def eval_datasets() -> list[str]:

@@ -40,6 +40,7 @@ from qai_hub_models.utils.input_spec import (
     make_torch_inputs,
 )
 from qai_hub_models.utils.kwarg_helpers import (
+    cli_friendly_class_name,
     filter_kwargs,
     filter_per_component_kwargs,
 )
@@ -61,6 +62,16 @@ __all__ = [
     "PretrainedCollectionModel",
     "WorkbenchModel",
 ]
+
+
+def _model_cls_name(cls_instance: Any) -> str:
+    """Model name."""
+    # Return the cls_instance ID. Match exactly: qai_hub_models.models.<model_id>.<module>
+    parts = type(cls_instance).__module__.split(".")
+    if len(parts) == 4 and parts[:2] == ["qai_hub_models", "models"]:
+        return parts[2]
+    # Class defined outside qai_hub_models.models
+    return cli_friendly_class_name(type(cls_instance).__name__)
 
 
 class WorkbenchModel:
@@ -111,6 +122,16 @@ class WorkbenchModel:
         return
 
     # -- Subclasses may override these --
+    @property
+    def name(self) -> str:
+        """Model name / identifier."""
+        return _model_cls_name(self)
+
+    @property
+    def context_graph_name(self) -> str:
+        """The default name used for the graph context when compiling to a QNN Context Binary. May be overriden in the parameters of get_compile_options."""
+        return self.name
+
     def get_channel_last_inputs(self) -> list[str]:
         """
         A list of input names that should be transposed to channel-last format
@@ -189,7 +210,7 @@ class WorkbenchModel:
             self.get_output_names(),
             self.get_channel_last_inputs(),
             self.get_channel_last_outputs(),
-            context_graph_name,
+            context_graph_name or self.context_graph_name,
             other_compile_options,
         )
 
@@ -361,7 +382,7 @@ class BaseModel(
         input_spec: InputSpec | None = None,
     ) -> Path:
         """Serialize this model to disk. The serialized model will be uploaded to AI Hub Workbench during export."""
-        output_path = Path(output_dir) / f"{self.__class__.__name__}.pt"
+        output_path = Path(output_dir) / f"{self.name}.pt"
         torch.jit.save(
             self.convert_to_torchscript(input_spec, check_trace=False),
             output_path,
@@ -556,6 +577,9 @@ class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtoc
     COMPONENT_BASE_TYPES = BaseModel
 
     # -- Subclasses may override these --
+    @property
+    def name(self) -> str:
+        return _model_cls_name(self)
 
     @classmethod
     def get_eval_dataset_classes(cls) -> list[type[BaseDataset]]:
@@ -572,7 +596,21 @@ class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtoc
         output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
     ) -> Path:
-        return self.components[component_name].serialize(output_dir, input_spec)
+        component = self.components[component_name]
+        component_dir = Path(output_dir) / component_name
+        component_dir.mkdir(parents=True, exist_ok=True)
+        return component.serialize(component_dir, input_spec)
+
+    def get_component_context_graph_name(self, component_name: str) -> str:
+        component = self.components[component_name]
+        if component.context_graph_name not in (
+            component.__class__.__name__,
+            self.name,
+        ):
+            return component.context_graph_name
+        # We'd like to always return component.context_graph_name, but this is legacy behavior.
+        # This is what the export script used before model classes determined their own graph name.
+        return f"{self.name}_{component_name.lower()}"
 
     # -- Per-component getters (delegate to the component) --
 
@@ -610,7 +648,8 @@ class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtoc
             precision,
             other_compile_options,
             device,
-            context_graph_name=context_graph_name or component_name,
+            context_graph_name=context_graph_name
+            or self.get_component_context_graph_name(component_name),
         )
 
     def get_component_hub_link_options(
@@ -628,9 +667,10 @@ class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtoc
         component_name: str,
         target_runtime: TargetRuntime,
         other_profile_options: str = "",
+        context_graph_name: str | None = None,
     ) -> str:
         return self.components[component_name].get_hub_profile_options(
-            target_runtime, other_profile_options
+            target_runtime, other_profile_options, context_graph_name
         )
 
     def get_component_sample_inputs(

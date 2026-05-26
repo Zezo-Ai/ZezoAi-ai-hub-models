@@ -102,7 +102,7 @@ def compile_model(
     input_spec = input_spec or model.get_input_spec()
 
     model_compile_options = model.get_hub_compile_options(
-        target_runtime, precision, extra_options, device, MODEL_ID
+        target_runtime, precision, extra_options, device
     )
     print(f"Optimizing model {model_name} to run on-device")
     return hub.submit_compile_job(
