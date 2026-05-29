@@ -3,12 +3,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 import os
+import re
 import subprocess
 import sys
 
 import pytest
 from appium import webdriver
 from appium.options.common import AppiumOptions
+
+# adb shell does not propagate the remote command's exit status on most
+# Android versions, so we tee an explicit marker and parse it out.
+_EXIT_MARKER = "__QDC_EXIT__"
 
 options = AppiumOptions()
 options.set_capability("automationName", "UiAutomator2")
@@ -38,9 +43,13 @@ class TestGenie:
             )
         full_genie_command = " && ".join(trial_commands)
         qairt_path = "/data/local/tmp/qairt/<<QAIRT_VERSION>>"
-        genie_script = f"""set -e
+        # The EXIT trap runs on every exit path (clean, set -e abort, signal),
+        # so $? captures the real rc and the host can parse it from stdout.
+        # Needed because adb shell always returns 0, hiding on-device failures.
+        genie_script = f"""trap 'rc=$?; echo {_EXIT_MARKER}$rc' EXIT
+set -e
 cd /data/local/tmp/genie_bundle
-curl -L -J --output /data/local/tmp/qairt.zip https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/<<QAIRT_VERSION>>/v<<QAIRT_VERSION>>.zip
+curl -L -J --fail --max-time 300 --retry 3 --retry-delay 5 --output /data/local/tmp/qairt.zip https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/<<QAIRT_VERSION>>/v<<QAIRT_VERSION>>.zip
 unzip /data/local/tmp/qairt.zip -d /data/local/tmp
 export QAIRT_HOME={qairt_path}
 export PATH={qairt_path}/bin/aarch64-android:${{PATH}}
@@ -70,19 +79,68 @@ fi
             check=True,
         )
 
-        # Run the shell script on the device
-        subprocess.run(
+        # Preflight: bail fast if the device can't reach the QAIRT download
+        # host. We've seen QDC SM8750 QRD boot with wifi degraded (logcat
+        # shows WifiHAL fatal_event + ENETDOWN), in which case the curl below
+        # would hang for ~20 minutes and the test would silently "pass".
+        preflight = subprocess.run(
             [
                 "adb",
                 "shell",
-                "sh",
-                "-c",
-                genie_script,
+                "curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "
+                "https://softwarecenter.qualcomm.com/",
             ],
+            check=False,
             capture_output=True,
             text=True,
-            check=True,
         )
+        http_code = preflight.stdout.strip()
+        if preflight.returncode != 0 or not http_code.startswith(("2", "3")):
+            pytest.fail(
+                "Device cannot reach softwarecenter.qualcomm.com "
+                f"(rc={preflight.returncode}, http_code={http_code!r}, "
+                f"stderr={preflight.stderr!r}). Likely QDC device-side wifi "
+                "failure — file a QDC infra ticket and re-run."
+            )
+
+        # Run the shell script on the device. adb shell does not propagate
+        # the remote exit code; the script's own EXIT trap echoes a marker
+        # we can parse out of stdout instead.
+        proc = subprocess.run(
+            ["adb", "shell", "sh", "-c", genie_script],
+            capture_output=True,
+            text=True,
+            check=True,  # only catches adb-side failures, not on-device ones
+        )
+        match = re.search(rf"{_EXIT_MARKER}(\d+)\s*$", proc.stdout)
+        if match is None:
+            pytest.fail(
+                "adb shell did not report an exit code.\n"
+                f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
+            )
+        rc = int(match.group(1))
+        if rc != 0:
+            pytest.fail(
+                f"On-device genie script exited with rc={rc}.\n"
+                f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
+            )
+
+        # Confirm the on-device script actually produced its outputs. A green
+        # pytest with no genie.log was the failure mode on QDC job 613912.
+        expected = ["/data/local/tmp/QDC_logs/genie.log"] + [
+            f"/data/local/tmp/QDC_logs/profile{i}.txt" for i in range(num_trials)
+        ]
+        ls = subprocess.run(
+            ["adb", "shell", "ls", "-l", *expected],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if ls.returncode != 0:
+            pytest.fail(
+                "Expected on-device outputs are missing:\n"
+                f"--- stdout ---\n{ls.stdout}\n--- stderr ---\n{ls.stderr}"
+            )
 
 
 if __name__ == "__main__":
