@@ -147,7 +147,7 @@ class ScorecardModelConfig(BaseQAIHMConfig):
 
     # The precision that the model's graph uses.
     # If float, skips this model on chipsets that support only quantized compute.
-    # See qai_hub_models.models.common.py::Precision for valid options
+    # See qai_hub_models.common.py::Precision for valid options
     precision: Precision = Precision.float
 
     # Model input spec (applicable only for TorchScript models)

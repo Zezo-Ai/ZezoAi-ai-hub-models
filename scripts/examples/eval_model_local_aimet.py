@@ -25,7 +25,7 @@ from aimet_onnx.utils import OrtInferenceSession, make_psnr_eval_fn
 from qai_hub.client import CompileJob
 from tqdm import tqdm
 
-from qai_hub_models.models.common import Precision, TargetRuntime
+from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.utils import quantization
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.evaluate import (

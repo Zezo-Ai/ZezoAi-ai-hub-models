@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 import torch
 from transformers import PretrainedConfig
 
+from qai_hub_models import Precision
 from qai_hub_models.models._shared.llama3.model import Llama3Base
 from qai_hub_models.models._shared.llm.export import export_model
 from qai_hub_models.models._shared.llm.model import (
@@ -33,7 +34,6 @@ from qai_hub_models.models._shared.llm.model import (
     LLMInstantiationType,
     MainLLMInputType,
 )
-from qai_hub_models.models.common import Precision
 from qai_hub_models.models.llama_v3_2_3b_instruct import MODEL_ID
 from qai_hub_models.models.llama_v3_2_3b_instruct.model import (
     DEFAULT_CONTEXT_LENGTH,

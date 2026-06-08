@@ -77,6 +77,10 @@ ignore = [
 [lint.per-file-ignores]
 "scripts/*" = ["INP", "PERF"]
 
+[lint.flake8-tidy-imports.banned-api]
+"qai_hub_models.models.common".msg = "Do not import from qai_hub_models.models.common. Import from qai_hub_models directly instead."
+"qai_hub_models.common".msg = "Do not import from qai_hub_models.common. Import from qai_hub_models directly instead."
+
 [lint.flake8-comprehensions]
 allow-dict-calls-with-keyword-arguments = true
 

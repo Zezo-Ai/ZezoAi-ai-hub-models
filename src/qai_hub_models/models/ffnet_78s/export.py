@@ -16,8 +16,7 @@ from typing import Any
 
 import qai_hub as hub
 
-from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.common import SampleInputsType
+from qai_hub_models import Precision, SampleInputsType, TargetRuntime
 from qai_hub_models.configs.model_metadata import (
     ChipsetAttributes,
     ModelFileMetadata,

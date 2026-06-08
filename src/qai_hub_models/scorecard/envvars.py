@@ -119,7 +119,7 @@ class EnabledPrecisionsEnvvar(QAIHMStrSetWithEnumEnvvar[SpecialPrecisionSetting]
         A comma-separated list of model IDs.
             Each element of the list can be either:
                 precision name:
-                    A name of a precision (as defined by qai_hub_models.models.common::Precision)
+                    A name of a precision (as defined by qai_hub_models.common::Precision)
                     examples: float, w8a8
 
                 Special Precision Settings:

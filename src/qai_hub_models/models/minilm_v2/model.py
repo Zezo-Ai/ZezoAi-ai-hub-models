@@ -11,7 +11,7 @@ import torch
 from transformers import AutoModel
 from typing_extensions import Self
 
-from qai_hub_models.common import SampleInputsType
+from qai_hub_models import SampleInputsType
 from qai_hub_models.models._shared.bert_hf.model_patches import (
     patch_get_extended_attention_mask,
 )
