@@ -1384,6 +1384,7 @@ class Qwen2_5_VL_7B_Collection(MultiGraphCollectionModel):
 
         image_processor = None
         llm_config = None
+        all_context_lengths: list[int] = [context_length]
         for comp in self.components.values():
             if isinstance(comp, Qwen2_5_VL_7B_PartBase):
                 presplit = comp._presplit
@@ -1391,6 +1392,7 @@ class Qwen2_5_VL_7B_Collection(MultiGraphCollectionModel):
                 llm_config = getattr(
                     presplit, "_original_llm_config", presplit.llm_config
                 )
+                all_context_lengths = sorted(comp._context_lengths)
                 break
 
         # Quantized presplit doesn't cache the image_processor — load from HF.
@@ -1603,7 +1605,7 @@ class Qwen2_5_VL_7B_Collection(MultiGraphCollectionModel):
 
         metadata.genie = GenieMetadata(
             chat_template=GenieChatTemplate(**chat_spec),
-            context_lengths=[context_length],
+            context_lengths=sorted(set(all_context_lengths)),
             supports_streaming=True,
             supports_vision=True,
             supports_thinking=False,
