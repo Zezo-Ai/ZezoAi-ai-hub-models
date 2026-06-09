@@ -23,7 +23,8 @@ OUTPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
 @skip_clone_repo_check
 def test_task() -> None:
     img = load_image(INPUT_IMAGE_ADDRESS)
-    app = DDColorApp(DDColor.from_pretrained())
+    model = DDColor.from_pretrained()
+    app = DDColorApp(model, input_spec=model.get_input_spec())
     out = app.predict(img)
     expected_out = load_image(OUTPUT_IMAGE_ADDRESS)
     assert_most_close(np.array(out), np.array(expected_out), 0.005, 0.0, 1e-4)

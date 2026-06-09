@@ -33,10 +33,16 @@ class NAFNetApp:
     def __init__(
         self,
         model: Callable[[torch.Tensor], torch.Tensor],
-        input_specs: InputSpec,
+        input_spec: InputSpec | None = None,
     ) -> None:
         self.model = model
-        (_, _, self.model_height, self.model_width) = input_specs["image"][0]
+        if input_spec is None and hasattr(model, "get_input_spec"):
+            input_spec = model.get_input_spec()
+        if input_spec is None:
+            raise ValueError(
+                "input_spec must be provided when model has no get_input_spec()"
+            )
+        (_, _, self.model_height, self.model_width) = input_spec["image"][0]
 
     @overload
     def restore_image(

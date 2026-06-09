@@ -13,6 +13,7 @@ import torch
 from PIL import Image
 
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
+from qai_hub_models.utils.input_spec import InputSpec
 
 
 class SelfieSegmentationApp:
@@ -29,21 +30,29 @@ class SelfieSegmentationApp:
     def __init__(
         self,
         model: Callable[[torch.Tensor], torch.Tensor],
-        img_shape: tuple[int, int],
         mask_threshold: float = 0.5,
+        input_spec: InputSpec | None = None,
     ) -> None:
         """
         Parameters
         ----------
         model
             A callable that takes in a image and outputs a segmentation mask.
-        img_shape
-            The expected input image shape for the model as (height, width).
         mask_threshold
             The threshold to use when generating the binary mask from the model's output.
+        input_spec
+            Model input spec. If None and model exposes ``get_input_spec()``,
+            shape is auto-detected from the model.
         """
         self.model = model
-        self.img_shape = img_shape
+        if input_spec is None and hasattr(model, "get_input_spec"):
+            input_spec = model.get_input_spec()
+        if input_spec is None:
+            raise ValueError(
+                "input_spec must be provided when model has no get_input_spec()"
+            )
+        _, _, h, w = input_spec["image"][0]
+        self.img_shape: tuple[int, int] = (h, w)
         self.mask_threshold = mask_threshold
 
     @overload

@@ -84,19 +84,17 @@ def main(is_test: bool = False) -> None:
         proposal_generator, roi_head = wrapper.proposal_generator, wrapper.roi_head
 
     input_spec = wrapper.proposal_generator.get_input_spec()
-    height, width = input_spec["image"][0][2:]
 
     app = MaskRCNNApp(
         proposal_generator,  # type: ignore[arg-type]
         roi_head,  # type: ignore[arg-type]
-        model_image_height=height,
-        model_image_width=width,
         proposal_iou_threshold=args.proposal_iou_threshold,
         boxes_iou_threshold=args.boxes_iou_threshold,
         boxes_score_threshold=args.boxes_score_threshold,
         mask_threshold=args.mask_threshold,
         max_det_pre_nms=args.max_det_pre_nms,
         max_det_post_nms=args.max_det_post_nms,
+        input_spec=input_spec,
     )
 
     img = load_image(args.image)

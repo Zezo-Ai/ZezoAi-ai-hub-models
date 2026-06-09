@@ -17,6 +17,7 @@ from qai_hub_models.models._shared.yolo.app import (
     YoloSegmentationApp,
 )
 from qai_hub_models.utils.draw import create_color_map
+from qai_hub_models.utils.input_spec import InputSpec
 
 
 def _process_masks_batch(
@@ -192,10 +193,6 @@ class YoloESegmentationApp(YoloSegmentationApp):
         Score threshold for non maximum suppression.
     nms_iou_threshold
         Intersection over Union threshold for non maximum suppression.
-    input_height
-        Input height for the model.
-    input_width
-        Input width for the model.
     filter_prompt
         List of class names to keep in the output (e.g. ["bus"]).
         When None, all detected classes are shown.
@@ -204,6 +201,8 @@ class YoloESegmentationApp(YoloSegmentationApp):
         (e.g. ["bus", "person"]).  Used together with filter_prompt to
         map class names to the integer indices produced by the model.
         When None, no class-based filtering is applied.
+    input_spec
+        Model input spec. If None, defaults to 640x640.
     """
 
     def __init__(
@@ -220,17 +219,15 @@ class YoloESegmentationApp(YoloSegmentationApp):
         ],
         nms_score_threshold: float = 0.45,
         nms_iou_threshold: float = 0.7,
-        input_height: int = 640,
-        input_width: int = 640,
         filter_prompt: list[str] | Any | None = None,
         model_classes: list[str] | Any | None = None,
+        input_spec: InputSpec | None = None,
     ) -> None:
         super().__init__(
             model,
             nms_score_threshold,
             nms_iou_threshold,
-            input_height,
-            input_width,
+            input_spec=input_spec,
         )
         # Build the set of class indices that should be kept.
         if filter_prompt is not None and model_classes is not None:

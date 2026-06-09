@@ -15,6 +15,8 @@ from torchvision import transforms
 
 from qai_hub_models.models.fcn_resnet50.model import NUM_CLASSES
 from qai_hub_models.utils.draw import create_color_map
+from qai_hub_models.utils.image_processing import pil_resize_pad, pil_undo_resize_pad
+from qai_hub_models.utils.input_spec import InputSpec
 
 
 def preprocess_image(image: Image) -> torch.Tensor:
@@ -43,13 +45,23 @@ class FCN_ResNet50App:
     perform end to end inference with FCN_ResNet50.
 
     For a given image input, the app will:
-        * Pre-process the image (normalize)
+        * Pre-process the image (resize + pad to model input shape)
         * Run image segmentation
         * Convert the raw output into probabilities using softmax
+        * Undo the resize/pad and overlay the segmentation mask onto the original image
     """
 
-    def __init__(self, model: Callable[[torch.Tensor], torch.Tensor]) -> None:
+    def __init__(
+        self,
+        model: Callable[[torch.Tensor], torch.Tensor],
+        input_spec: InputSpec | None = None,
+    ) -> None:
         self.model = model
+        if input_spec is not None:
+            _, _, h, w = input_spec["image"][0]
+            self.model_image_input_shape: tuple[int, int] | None = (h, w)
+        else:
+            self.model_image_input_shape = None
 
     def predict(self, image: Image, raw_output: bool = False) -> Image | np.ndarray:
         """
@@ -70,6 +82,11 @@ class FCN_ResNet50App:
             Otherwise:
                 Images with segmentation map overlaid with an alpha of 0.5.
         """
+        orig_size = None
+        if self.model_image_input_shape is not None:
+            orig_size = image.size
+            image, scale, padding = pil_resize_pad(image, self.model_image_input_shape)
+
         input_tensor = preprocess_image(image)
         output = self.model(input_tensor)
         output = output[0]
@@ -79,4 +96,9 @@ class FCN_ResNet50App:
             return predictions
 
         color_map = create_color_map(NUM_CLASSES)
-        return PIL.Image.blend(image, PIL.Image.fromarray(color_map[predictions]), 0.5)
+        blended = PIL.Image.blend(
+            image, PIL.Image.fromarray(color_map[predictions]), 0.5
+        )
+        if orig_size is not None:
+            blended = pil_undo_resize_pad(blended, orig_size, scale, padding)
+        return blended

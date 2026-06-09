@@ -13,7 +13,9 @@ from qai_hub_models.models._shared.super_resolution.model import IMAGE_ADDRESS
 from qai_hub_models.utils.args import (
     demo_model_from_cli_args,
     get_model_cli_parser,
+    get_model_input_spec_parser,
     get_on_device_demo_parser,
+    input_spec_from_cli_args,
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebAsset, load_image
@@ -34,6 +36,7 @@ def super_resolution_demo(
     if available_target_runtimes is None:
         available_target_runtimes = list(TargetRuntime.__members__.values())
     parser = get_model_cli_parser(model_cls)
+    parser = get_model_input_spec_parser(model_cls, parser)
     parser = get_on_device_demo_parser(
         parser,
         add_output_dir=True,
@@ -56,7 +59,7 @@ def super_resolution_demo(
         args,
     )
     image = load_image(args.image)
-    input_spec = inference_model.get_input_spec()
+    input_spec = input_spec_from_cli_args(inference_model, args)
 
     # Make sure the input image is consistent with the model.
     # Since we are demonstrating super-resolution, we do not want to do any

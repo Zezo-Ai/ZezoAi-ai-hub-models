@@ -19,7 +19,9 @@ from qai_hub_models.models._shared.yolo.app import (
 from qai_hub_models.utils.args import (
     demo_model_from_cli_args,
     get_model_cli_parser,
+    get_model_input_spec_parser,
     get_on_device_demo_parser,
+    input_spec_from_cli_args,
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebAsset, load_image
@@ -40,6 +42,7 @@ def yolo_detection_demo(
 ) -> None:
     # Demo parameters
     parser = get_model_cli_parser(model_type)
+    parser = get_model_input_spec_parser(model_type, parser)
     parser = get_on_device_demo_parser(parser, add_output_dir=True)
     image_help = "image file path or URL."
     if stride_multiple:
@@ -62,12 +65,14 @@ def yolo_detection_demo(
     validate_on_device_demo_args(args, model_id)
 
     model = demo_model_from_cli_args(model_type, model_id, args)
+    input_spec = input_spec_from_cli_args(model, args)
 
     app = app_type(
         model,
         args.score_threshold,
         args.iou_threshold,
         args.include_postprocessing,
+        input_spec=input_spec,
     )
 
     print("Model Loaded")

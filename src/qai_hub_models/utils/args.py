@@ -17,7 +17,7 @@ from functools import partial
 from itertools import chain
 from pathlib import Path
 from pydoc import locate
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import qai_hub as hub
 from numpydoc.docscrape import FunctionDoc
@@ -1010,16 +1010,16 @@ def get_component_input_spec_kwargs(
 
 def input_spec_from_cli_args(
     model: WorkbenchModel | OnDeviceModel, cli_args: argparse.Namespace
-) -> InputSpec | hub.InputSpecs:
+) -> InputSpec:
     """
     Create this model's input spec from an argparse namespace.
     Default behavior is to assume the CLI args have the same names as get_input_spec method args.
     Also, fetches shapes if demo is run on-device.
     """
     if isinstance(model, OnDeviceModel):
-        assert "on_device" in cli_args and cli_args.on_device
+        assert "eval_mode" in cli_args and cli_args.eval_mode == EvalMode.ON_DEVICE
         assert isinstance(model.model.producer, hub.CompileJob)
-        return model.model.producer.shapes
+        return cast(InputSpec, model.model.producer.shapes)
     return model.get_input_spec(**filter_kwargs(model.get_input_spec, vars(cli_args)))
 
 

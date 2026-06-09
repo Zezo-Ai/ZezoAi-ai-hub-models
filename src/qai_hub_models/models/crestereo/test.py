@@ -27,12 +27,12 @@ OUTPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
 
 
 def _run_test(model: CREStereo | torch.jit.ScriptModule) -> None:
-    height, width = 720, 1280
     left = load_image(DEFAULT_LEFT_IMAGE)
     right = load_image(DEFAULT_RIGHT_IMAGE)
 
     exp_disp = load_image(OUTPUT_IMAGE_ADDRESS)
-    disp = CREStereoApp(model, height=height, width=width).predict_disparity(
+    input_spec = CREStereo.from_pretrained().get_input_spec(height=720, width=1280)
+    disp = CREStereoApp(model, input_spec=input_spec).predict_disparity(
         left, right, raw_output=False
     )
     assert_most_close(

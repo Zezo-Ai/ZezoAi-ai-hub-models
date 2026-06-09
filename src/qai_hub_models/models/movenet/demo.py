@@ -13,7 +13,9 @@ from qai_hub_models.models.movenet.model import MODEL_ASSET_VERSION, MODEL_ID, M
 from qai_hub_models.utils.args import (
     demo_model_from_cli_args,
     get_model_cli_parser,
+    get_model_input_spec_parser,
     get_on_device_demo_parser,
+    input_spec_from_cli_args,
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
@@ -28,6 +30,7 @@ IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
 def movenet_demo(model_cls: type[Movenet], is_test: bool = False) -> None:
     # Demo parameters
     parser = get_model_cli_parser(model_cls)
+    parser = get_model_input_spec_parser(model_cls, parser)
     parser = get_on_device_demo_parser(parser, add_output_dir=True)
     parser.add_argument(
         "--image",
@@ -40,16 +43,12 @@ def movenet_demo(model_cls: type[Movenet], is_test: bool = False) -> None:
 
     # Load image & model
     model = demo_model_from_cli_args(model_cls, MODEL_ID, args)
+    input_spec = input_spec_from_cli_args(model, args)
     image = load_image(args.image)
 
     print("Model Loaded")
 
-    h, w = model_cls.from_pretrained().get_input_spec()["image"][0][2:4]
-    app = MovenetApp(
-        model,  # type: ignore[arg-type]
-        h,
-        w,
-    )
+    app = MovenetApp(model, input_spec=input_spec)  # type: ignore[arg-type]
     keypoints = app.predict_pose_keypoints(image)[0]
     if isinstance(keypoints, np.ndarray):
         keypoints = Image.fromarray(keypoints.astype(np.uint8))

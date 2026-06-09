@@ -17,6 +17,7 @@ from qai_hub_models.utils.image_processing import (
     app_to_net_image_inputs,
     numpy_image_to_torch,
 )
+from qai_hub_models.utils.input_spec import InputSpec
 
 
 class CREStereoApp:
@@ -25,12 +26,10 @@ class CREStereoApp:
     def __init__(
         self,
         model: Callable[..., torch.Tensor],
-        height: int = 240,
-        width: int = 320,
+        input_spec: InputSpec,
     ) -> None:
+        _, _, self.height, self.width = input_spec["left_image"][0]
         self.model = model
-        self.height = height
-        self.width = width
         self.check_image_size()
 
     def predict(

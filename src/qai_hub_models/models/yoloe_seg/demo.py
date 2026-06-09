@@ -21,7 +21,9 @@ from qai_hub_models.models.yoloe_seg.model import (
 from qai_hub_models.utils.args import (
     demo_model_from_cli_args,
     get_model_cli_parser,
+    get_model_input_spec_parser,
     get_on_device_demo_parser,
+    input_spec_from_cli_args,
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import (
@@ -47,6 +49,7 @@ def yolo_prompt_segmentation_demo(
 ) -> None:
     # Demo parameters
     parser = get_model_cli_parser(model_type)
+    parser = get_model_input_spec_parser(model_type, parser)
     parser = get_on_device_demo_parser(
         parser, available_target_runtimes=[TargetRuntime.TFLITE], add_output_dir=True
     )
@@ -103,6 +106,7 @@ def yolo_prompt_segmentation_demo(
 
     # Load image & model
     model = demo_model_from_cli_args(model_type, model_id, args)
+    input_spec = input_spec_from_cli_args(model, args)
 
     # Determine which class indices to keep after NMS.
     # - requested_classes : the classes the user wants to see
@@ -138,6 +142,7 @@ def yolo_prompt_segmentation_demo(
         args.iou_threshold,
         filter_prompt=requested_classes if requested_classes else None,
         model_classes=model_classes,
+        input_spec=input_spec,
     )
 
     print("Model Loaded")

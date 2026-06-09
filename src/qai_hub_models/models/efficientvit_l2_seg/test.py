@@ -20,7 +20,6 @@ from qai_hub_models.scorecard.utils.testing import (
     skip_clone_repo_check,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
-from qai_hub_models.utils.input_spec import to_hub_input_specs
 
 # This image showcases the Cityscapes classes (but is not from the dataset)
 TEST_CITYSCAPES_LIKE_IMAGE_NAME = "cityscapes_like_demo_2048x1024.jpg"
@@ -38,10 +37,7 @@ OUTPUT_IMAGE_ASSET = CachedWebModelAsset.from_asset_store(
 @skip_clone_repo_check
 def test_task() -> None:
     model = EfficientViT.from_pretrained()
-    app = CityscapesSegmentationApp(
-        model,
-        to_hub_input_specs(model.get_input_spec()),
-    )
+    app = CityscapesSegmentationApp(model, model.get_input_spec())
     # fetch and load images
     image = TEST_CITYSCAPES_LIKE_IMAGE_ASSET.fetch()
     orig_image = load_image(image)
@@ -60,7 +56,7 @@ def test_trace() -> None:
     model = EfficientViT.from_pretrained()
     app = CityscapesSegmentationApp(
         model.convert_to_torchscript(),
-        to_hub_input_specs(model.get_input_spec()),
+        model.get_input_spec(),
     )
     # fetch and load images
     image = TEST_CITYSCAPES_LIKE_IMAGE_ASSET.fetch()

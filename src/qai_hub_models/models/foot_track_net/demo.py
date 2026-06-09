@@ -12,7 +12,9 @@ from qai_hub_models.models.foot_track_net.model import (
 from qai_hub_models.utils.args import (
     demo_model_from_cli_args,
     get_model_cli_parser,
+    get_model_input_spec_parser,
     get_on_device_demo_parser,
+    input_spec_from_cli_args,
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
@@ -25,6 +27,7 @@ INPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
 
 def main(is_test: bool = False) -> None:
     parser = get_model_cli_parser(FootTrackNet)
+    parser = get_model_input_spec_parser(FootTrackNet, parser)
     parser = get_on_device_demo_parser(parser, add_output_dir=True)
     parser.add_argument(
         "--image",
@@ -33,15 +36,15 @@ def main(is_test: bool = False) -> None:
         help="image file path or URL",
     )
     args = parser.parse_args([] if is_test else None)
-    model = demo_model_from_cli_args(FootTrackNet, MODEL_ID, args)
     validate_on_device_demo_args(args, MODEL_ID)
 
+    model = demo_model_from_cli_args(FootTrackNet, MODEL_ID, args)
+    input_spec = input_spec_from_cli_args(model, args)
     # Load image
     print("Model Loaded")
-    (_, _, height, width) = model.get_input_spec()["image"][0]
     app = FootTrackNet_App(
         model,  # type: ignore[arg-type]
-        (height, width),
+        input_spec=input_spec,
     )
     image_out = app.predict_and_draw_bbox_landmarks(load_image(args.image))
     if not is_test:

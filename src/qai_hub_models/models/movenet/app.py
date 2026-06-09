@@ -19,6 +19,7 @@ from qai_hub_models.utils.image_processing import (
     denormalize_coordinates,
     resize_pad,
 )
+from qai_hub_models.utils.input_spec import InputSpec
 
 # Most code here is from the source repo https://github.com/lee-man/movenet-pytorch
 
@@ -79,12 +80,14 @@ class MovenetApp:
     def __init__(
         self,
         model: Callable[[torch.Tensor], torch.Tensor],
-        input_height: int,
-        input_width: int,
+        input_spec: InputSpec | None = None,
     ) -> None:
         self.model = model
-        self.input_height = input_height
-        self.input_width = input_width
+        if input_spec is not None:
+            _, _, self.input_height, self.input_width = input_spec["image"][0]
+        else:
+            self.input_height = 192
+            self.input_width = 192
 
     def predict(self, *args: Any, **kwargs: Any) -> list[Image.Image] | np.ndarray:
         # See predict_pose_keypoints.

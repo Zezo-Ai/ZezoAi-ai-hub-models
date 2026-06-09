@@ -28,6 +28,7 @@ from qai_hub_models.utils.draw import (
     draw_points,
 )
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resize_pad
+from qai_hub_models.utils.input_spec import InputSpec
 
 
 class YoloObjectDetectionApp:
@@ -57,6 +58,7 @@ class YoloObjectDetectionApp:
         nms_score_threshold: float = 0.45,
         nms_iou_threshold: float = 0.7,
         model_includes_postprocessing: bool = True,
+        input_spec: InputSpec | None = None,
     ) -> None:
         """
         Initialize a YoloObjectDetectionApp application.
@@ -86,11 +88,21 @@ class YoloObjectDetectionApp:
 
         model_includes_postprocessing
             Whether the model includes postprocessing steps beyond the detector.
+
+        input_spec
+            Model input spec. If provided, input images are resized to the
+            ``image`` input's (height, width) before inference.
+            If None, no resizing is performed.
         """
         self.model = model
         self.nms_score_threshold = nms_score_threshold
         self.nms_iou_threshold = nms_iou_threshold
         self.model_includes_postprocessing = model_includes_postprocessing
+        if input_spec is not None:
+            _, _, h, w = input_spec["image"][0]
+            self.model_image_input_shape: tuple[int, int] | None = (h, w)
+        else:
+            self.model_image_input_shape = None
 
     def check_image_size(self, pixel_values: torch.Tensor) -> None:
         """Verify image size is valid model input."""
@@ -178,6 +190,12 @@ class YoloObjectDetectionApp:
         NHWC_int_numpy_frames, NCHW_fp32_torch_frames = app_to_net_image_inputs(
             pixel_values_or_image
         )
+        scale = None
+        padding = None
+        if self.model_image_input_shape is not None:
+            NCHW_fp32_torch_frames, scale, padding = resize_pad(
+                NCHW_fp32_torch_frames, self.model_image_input_shape
+            )
         self.check_image_size(NCHW_fp32_torch_frames)
 
         # Run prediction
@@ -201,6 +219,15 @@ class YoloObjectDetectionApp:
                 pred_class_idx,
             )
         )
+
+        # Transform box coordinates back to original image space
+        if scale is not None and padding is not None:
+            pad_x, pad_y = padding
+            for i in range(len(pred_post_nms_boxes)):
+                boxes = pred_post_nms_boxes[i]
+                if boxes.numel() > 0:
+                    boxes[:, [0, 2]] = (boxes[:, [0, 2]] - pad_x) / scale
+                    boxes[:, [1, 3]] = (boxes[:, [1, 3]] - pad_y) / scale
 
         # Return raw output if requested
         if raw_output or isinstance(pixel_values_or_image, torch.Tensor):
@@ -275,8 +302,7 @@ class YoloSegmentationApp:
         ],
         nms_score_threshold: float = 0.45,
         nms_iou_threshold: float = 0.7,
-        input_height: int = 640,
-        input_width: int = 640,
+        input_spec: InputSpec | None = None,
     ) -> None:
         """
         Initialize a YoloSegmentationApp application.
@@ -308,17 +334,17 @@ class YoloSegmentationApp:
         nms_iou_threshold
             Intersection over Union threshold for non maximum suppression.
 
-        input_height
-            Input height for the model.
-
-        input_width
-            Input width for the model.
+        input_spec
+            Model input spec. If None, defaults to 640x640.
         """
         self.model = model
         self.nms_score_threshold = nms_score_threshold
         self.nms_iou_threshold = nms_iou_threshold
-        self.input_height = input_height
-        self.input_width = input_width
+        if input_spec is not None:
+            _, _, self.input_height, self.input_width = input_spec["image"][0]
+        else:
+            self.input_height = 640
+            self.input_width = 640
 
     def check_image_size(self, pixel_values: torch.Tensor) -> None:
         """Verify image size is valid model input."""
@@ -620,8 +646,7 @@ class YoloPoseApp:
         ],
         nms_score_threshold: float = 0.45,
         nms_iou_threshold: float = 0.7,
-        input_height: int = 640,
-        input_width: int = 640,
+        input_spec: InputSpec | None = None,
     ) -> None:
         """
         Initialize a YoloPoseApp application.
@@ -646,17 +671,17 @@ class YoloPoseApp:
         nms_iou_threshold
             IoU threshold for NMS duplicate suppression.
 
-        input_height
-            Input height for the model.
-
-        input_width
-            Input width for the model.
+        input_spec
+            Model input spec. If None, defaults to 640x640.
         """
         self.model = model
         self.nms_score_threshold = nms_score_threshold
         self.nms_iou_threshold = nms_iou_threshold
-        self.input_height = input_height
-        self.input_width = input_width
+        if input_spec is not None:
+            _, _, self.input_height, self.input_width = input_spec["image"][0]
+        else:
+            self.input_height = 640
+            self.input_width = 640
 
     def check_image_size(self, pixel_values: torch.Tensor) -> None:
         """Verify image size is valid model input."""
@@ -797,8 +822,7 @@ class YoloOBBApp:
         ],
         nms_score_threshold: float = 0.5,
         nms_iou_threshold: float = 0.1,
-        input_height: int = 640,
-        input_width: int = 640,
+        input_spec: InputSpec | None = None,
     ) -> None:
         """
         Initialize a YoloOBBApp application.
@@ -827,17 +851,17 @@ class YoloOBBApp:
         nms_iou_threshold
             Intersection over Union threshold for non maximum suppression.
 
-        input_height
-            Input height for the model.
-
-        input_width
-            Input width for the model.
+        input_spec
+            Model input spec. If None, defaults to 640x640.
         """
         self.model = model
         self.nms_score_threshold = nms_score_threshold
         self.nms_iou_threshold = nms_iou_threshold
-        self.input_height = input_height
-        self.input_width = input_width
+        if input_spec is not None:
+            _, _, self.input_height, self.input_width = input_spec["image"][0]
+        else:
+            self.input_height = 640
+            self.input_width = 640
 
     def check_image_size(self, pixel_values: torch.Tensor) -> None:
         """Verify image size is valid model input."""

@@ -44,10 +44,9 @@ def selfie_segmentation_demo(
         if isinstance(model, SelfieSegmentor)
         else model.get_input_spec()
     )
-    (_, _, height, width) = input_spec["image"][0]
 
     # Run app and display/save output
-    app = SelfieSegmentationApp(model, (height, width), model_cls.MASK_THRESHOLD)  # type: ignore[arg-type]
+    app = SelfieSegmentationApp(model, model_cls.MASK_THRESHOLD, input_spec=input_spec)  # type: ignore[arg-type]
     output = app.predict(input_image)[0]
     if not is_test:
         display_or_save_image(output, args.output_dir, "segmentation_demo_output.png")

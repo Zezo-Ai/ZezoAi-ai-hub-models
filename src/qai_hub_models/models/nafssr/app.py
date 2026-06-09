@@ -33,11 +33,11 @@ class NAFSSRApp:
     def __init__(
         self,
         model: Callable[..., torch.Tensor],
-        input_specs: InputSpec,
+        input_spec: InputSpec,
         scale_factor: int,
     ) -> None:
         self.model = model
-        (_, _, self.model_height, self.model_width) = input_specs["l_image"][0]
+        (_, _, self.model_height, self.model_width) = input_spec["l_image"][0]
         self.scale_factor = scale_factor
 
     @overload

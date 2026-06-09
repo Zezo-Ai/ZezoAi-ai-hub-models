@@ -17,6 +17,7 @@ from torchvision import transforms
 
 from qai_hub_models.utils.draw import draw_points
 from qai_hub_models.utils.image_processing import pil_resize_pad, pil_undo_resize_pad
+from qai_hub_models.utils.input_spec import InputSpec
 
 # Most code here is from the source repo https://github.com/rwightman/posenet-pytorch
 
@@ -571,12 +572,14 @@ class PosenetApp:
             [torch.Tensor],
             tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         ],
-        input_height: int,
-        input_width: int,
+        input_spec: InputSpec | None = None,
     ) -> None:
         self.model = model
-        self.input_height = input_height
-        self.input_width = input_width
+        if input_spec is not None:
+            _, _, self.input_height, self.input_width = input_spec["image"][0]
+        else:
+            self.input_height = 513
+            self.input_width = 257
 
     def predict(
         self, *args: Any, **kwargs: Any

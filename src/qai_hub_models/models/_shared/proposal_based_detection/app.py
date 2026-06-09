@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 
 from qai_hub_models.utils.bounding_box_processing import batched_nms
+from qai_hub_models.utils.input_spec import InputSpec
 
 
 class ProposalBasedDetectionApp:
@@ -21,16 +22,20 @@ class ProposalBasedDetectionApp:
 
     def __init__(
         self,
-        model_image_height: int = 800,
-        model_image_width: int = 800,
         proposal_iou_threshold: float = 0.7,
         boxes_iou_threshold: float = 0.5,
         boxes_score_threshold: float = 0.8,
         max_det_pre_nms: int = 6000,
         max_det_post_nms: int = 200,
+        input_spec: InputSpec | None = None,
     ) -> None:
-        self.model_image_height = model_image_height
-        self.model_image_width = model_image_width
+        if input_spec is not None:
+            _, _, self.model_image_height, self.model_image_width = input_spec["image"][
+                0
+            ]
+        else:
+            self.model_image_height = 800
+            self.model_image_width = 800
         self.proposal_iou_threshold = proposal_iou_threshold
         self.boxes_iou_threshold = boxes_iou_threshold
         self.boxes_score_threshold = boxes_score_threshold

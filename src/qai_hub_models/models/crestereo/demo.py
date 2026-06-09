@@ -16,7 +16,9 @@ from qai_hub_models.models.crestereo.model import (
 from qai_hub_models.utils.args import (
     demo_model_from_cli_args,
     get_model_cli_parser,
+    get_model_input_spec_parser,
     get_on_device_demo_parser,
+    input_spec_from_cli_args,
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
@@ -32,6 +34,7 @@ DEFAULT_RIGHT_IMAGE = CachedWebModelAsset.from_asset_store(
 
 def main(is_test: bool = False) -> None:
     parser = get_model_cli_parser(CREStereo)
+    parser = get_model_input_spec_parser(CREStereo, parser)
     parser = get_on_device_demo_parser(parser, add_output_dir=True)
     parser.add_argument(
         "--stereo-left",
@@ -50,14 +53,13 @@ def main(is_test: bool = False) -> None:
     validate_on_device_demo_args(args, MODEL_ID)
 
     model = demo_model_from_cli_args(CREStereo, MODEL_ID, args)
+    input_spec = input_spec_from_cli_args(model, args)
     print("Model Loaded")
 
     left_orig = load_image(args.stereo_left)
     right_orig = load_image(args.stereo_right)
 
-    h, w = CREStereo.from_pretrained().get_input_spec()["left_image"][0][2:]
-
-    app = CREStereoApp(model=model, height=h, width=w)  # type: ignore[arg-type]
+    app = CREStereoApp(model=model, input_spec=input_spec)  # type: ignore[arg-type]
 
     out_image = app.predict_disparity(left_orig, right_orig)
     assert isinstance(out_image, Image.Image)

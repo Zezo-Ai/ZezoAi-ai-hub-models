@@ -59,14 +59,13 @@ class Detectron2DetectionApp(
             [torch.Tensor, torch.Tensor],
             tuple[torch.Tensor, torch.Tensor, torch.Tensor],
         ],
-        model_image_height: int = 800,
-        model_image_width: int = 800,
         proposal_iou_threshold: float = 0.7,
         boxes_iou_threshold: float = 0.5,
         boxes_score_threshold: float = 0.8,
         max_det_pre_nms: int = 6000,
         max_det_post_nms: int = 200,
         max_vis_boxes: int = 100,
+        input_spec: InputSpec | None = None,
     ) -> None:
         """
         Initialize Detectron2DetectionApp.
@@ -77,10 +76,6 @@ class Detectron2DetectionApp(
             Callable that generates proposals from image tensor.
         roi_head
             Callable that processes ROI features and proposals.
-        model_image_height
-            Height of model input images.
-        model_image_width
-            Width of model input images.
         proposal_iou_threshold
             IOU threshold for proposal filtering.
         boxes_iou_threshold
@@ -93,15 +88,16 @@ class Detectron2DetectionApp(
             Maximum detections after NMS.
         max_vis_boxes
             Maximum boxes to visualize.
+        input_spec
+            Model input spec. If None, defaults to 800x800.
         """
         super().__init__(
-            model_image_height,
-            model_image_width,
             proposal_iou_threshold,
             boxes_iou_threshold,
             boxes_score_threshold,
             max_det_pre_nms,
             max_det_post_nms,
+            input_spec=input_spec,
         )
         self.proposal_generator = proposal_generator
         self.roi_head = roi_head
@@ -271,6 +267,7 @@ class Detectron2DetectionApp(
                 app = cls(
                     proposal_generator=proposal_generator,
                     roi_head=model,
+                    input_spec=pg_spec,
                 )
                 padded_proposals = app.filter_proposals(
                     [proposals], [objectness_logits]

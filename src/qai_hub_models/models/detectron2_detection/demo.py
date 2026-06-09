@@ -81,19 +81,17 @@ def main(is_test: bool = False) -> None:
         proposal_generator, roi_head = wrapper.proposal_generator, wrapper.roi_head
 
     input_spec = wrapper.proposal_generator.get_input_spec()
-    height, width = input_spec["image"][0][2:]
 
     app = Detectron2DetectionApp(
         proposal_generator,  # type: ignore[arg-type]
         roi_head,  # type: ignore[arg-type]
-        height,
-        width,
-        args.proposal_iou_threshold,
-        args.boxes_iou_threshold,
-        args.boxes_score_threshold,
-        args.max_det_pre_nms,
-        args.max_det_post_nms,
-        args.max_vis_boxes,
+        proposal_iou_threshold=args.proposal_iou_threshold,
+        boxes_iou_threshold=args.boxes_iou_threshold,
+        boxes_score_threshold=args.boxes_score_threshold,
+        max_det_pre_nms=args.max_det_pre_nms,
+        max_det_post_nms=args.max_det_post_nms,
+        max_vis_boxes=args.max_vis_boxes,
+        input_spec=input_spec,
     )
 
     img = load_image(args.image)

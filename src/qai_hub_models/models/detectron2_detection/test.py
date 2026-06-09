@@ -48,8 +48,7 @@ def test_task() -> None:
     proposal_generator, roi_head = wrapper.proposal_generator, wrapper.roi_head
     img = load_image(IMAGE_ADDRESS)
     input_spec = wrapper.proposal_generator.get_input_spec()
-    height, width = input_spec["image"][0][2:]
-    app = Detectron2DetectionApp(proposal_generator, roi_head, height, width)
+    app = Detectron2DetectionApp(proposal_generator, roi_head, input_spec=input_spec)
     boxes, scores, labels = app.predict(img, raw_output=True)
 
     assert_most_close(
@@ -85,11 +84,10 @@ def test_trace() -> None:
     input_spec = roi_head.get_input_spec()
     traced_roi_head = roi_head.convert_to_torchscript(input_spec)
     input_spec = proposal_generator.get_input_spec()
-    height, width = input_spec["image"][0][2:]
     traced_proposal_generator = proposal_generator.convert_to_torchscript(input_spec)
     img = load_image(IMAGE_ADDRESS)
     app = Detectron2DetectionApp(
-        traced_proposal_generator, traced_roi_head, height, width
+        traced_proposal_generator, traced_roi_head, input_spec=input_spec
     )
     boxes, scores, labels = app.predict(img, raw_output=True)
 

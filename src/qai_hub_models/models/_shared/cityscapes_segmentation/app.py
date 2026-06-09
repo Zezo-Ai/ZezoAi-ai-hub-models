@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
 
 import numpy as np
 import torch
@@ -24,6 +23,7 @@ from qai_hub_models.models._shared.ffnet.external_repos.ffnet.ffnet_datasets.cit
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.image_processing import pil_resize_pad, pil_undo_resize_pad
+from qai_hub_models.utils.input_spec import InputSpec
 
 
 def _load_cityscapes_loader(cityscapes_path: str | None = None) -> object:
@@ -73,11 +73,11 @@ class CityscapesSegmentationApp:
     def __init__(
         self,
         model: torch.nn.Module,
-        input_specs: Mapping[str, tuple[tuple[int, ...], str]],
+        input_spec: InputSpec,
     ) -> None:
         self.model = model
         self.color_mapping = _load_cityscapes_loader().dataset.color_mapping  # type: ignore[attr-defined]
-        (_, _, self.model_height, self.model_width) = input_specs["image"][0]
+        (_, _, self.model_height, self.model_width) = input_spec["image"][0]
 
     def predict(self, image: Image, raw_output: bool = False) -> Image | np.ndarray:
         """

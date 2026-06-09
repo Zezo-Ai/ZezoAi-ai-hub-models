@@ -15,8 +15,7 @@ def selfie_model_and_app_test_e2e(
     input_image: np.ndarray | Image.Image,
     expected_output_image: np.ndarray | Image.Image,
 ) -> None:
-    (_, _, height, width) = model.get_input_spec()["image"][0]
-    app = SelfieSegmentationApp(model, (height, width), model.MASK_THRESHOLD)
+    app = SelfieSegmentationApp(model, model.MASK_THRESHOLD)
     output_img = app.predict(input_image)[0]
     output = np.asarray(output_img, dtype=np.float32)
     expected_output = np.asarray(expected_output_image, np.float32)

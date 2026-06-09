@@ -19,6 +19,7 @@ from PIL.Image import fromarray as pil_image_from_array
 from qai_hub_models.utils.bounding_box_processing import get_iou
 from qai_hub_models.utils.draw import draw_box_from_xyxy, draw_points
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resize_pad
+from qai_hub_models.utils.input_spec import InputSpec
 
 GREEN_COLOR = (170, 255, 0)
 RED_COLOR = (255, 0, 0)
@@ -459,24 +460,32 @@ class FootTrackNet_App:
             [torch.Tensor],
             tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         ],
-        compiled_image_input_size: tuple[int, int] | None = None,
         if_norm: bool = True,
+        input_spec: InputSpec | None = None,
     ) -> None:
         """
         Parameters
         ----------
         model
             The input model
-        compiled_image_input_size
-            Model input size (H, W)
         if_norm
             If do the image normalization
+        input_spec
+            Model input spec. If None and model exposes ``get_input_spec()``,
+            shape is auto-detected from the model. If None and model has no
+            ``get_input_spec()`` (e.g. a traced model), no resize is performed.
         """
+        if input_spec is None and hasattr(model, "get_input_spec"):
+            input_spec = model.get_input_spec()
+        if input_spec is not None:
+            _, _, h, w = input_spec["image"][0]
+            self.compiled_image_input_size: tuple[int, int] | None = (h, w)
+        else:
+            self.compiled_image_input_size = None
         self.model = model
         self.threshhold = [0.6, 0.7, 0.7]  # threshold for each detector, 0.6 original
         self.iou_thr = [0.2, 0.5, 0.5]  # iou threshold
         self.if_norm = if_norm
-        self.compiled_image_input_size = compiled_image_input_size
 
     def predict(
         self, *args: Any, **kwargs: Any

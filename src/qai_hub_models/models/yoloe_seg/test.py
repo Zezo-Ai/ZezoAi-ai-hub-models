@@ -96,3 +96,72 @@ def test_trace() -> None:
 def test_demo() -> None:
     """Run demo and verify it does not crash."""
     demo_main(is_test=True)
+
+
+@skip_clone_repo_check
+def test_app_with_larger_image() -> None:
+    """Test that app resizes larger image to model size and resizes masks back."""
+    model = YoloESegmentor.from_pretrained(PROMPT_TEXT, WEIGHTS)
+    app = YoloESegmentationApp(
+        model,
+        nms_score_threshold=0.25,
+        input_spec=model.get_input_spec(),
+    )
+
+    # Resize image LARGER than model expects (1280x1280 > 640x640)
+    image = load_image(IMAGE_ADDRESS).resize((1280, 1280))
+
+    _, _, masks, _ = cast(
+        tuple[
+            list[torch.Tensor],
+            list[torch.Tensor],
+            list[torch.Tensor],
+            list[torch.Tensor],
+        ],
+        app.predict_segmentation_from_image_yoloe(image, raw_output=True),
+    )
+
+    # Masks should be resized back to original input dimensions.
+    assert masks[0].shape == (5, 1280, 1280)
+
+    # Per-detection mask area (sum of mask values) — sensitive to correct resize.
+    expected_areas = np.array(
+        [499340.0, 90312.0, 63024.0, 41176.0, 17192.0], dtype=np.float32
+    )
+    np.testing.assert_allclose(
+        masks[0].sum(dim=(1, 2)).numpy(), expected_areas, rtol=1e-3
+    )
+
+
+@skip_clone_repo_check
+def test_app_with_non_square_image() -> None:
+    """Test that app correctly handles non-square images."""
+    model = YoloESegmentor.from_pretrained(PROMPT_TEXT, WEIGHTS)
+    app = YoloESegmentationApp(
+        model,
+        nms_score_threshold=0.25,
+        input_spec=model.get_input_spec(),
+    )
+
+    # Non-square image (wider than tall) - requires padding
+    image = load_image(IMAGE_ADDRESS).resize((1280, 640))
+
+    _, _, masks, _ = cast(
+        tuple[
+            list[torch.Tensor],
+            list[torch.Tensor],
+            list[torch.Tensor],
+            list[torch.Tensor],
+        ],
+        app.predict_segmentation_from_image_yoloe(image, raw_output=True),
+    )
+
+    # Masks should be resized back to original input dimensions [H, W].
+    assert masks[0].shape == (5, 640, 1280)
+
+    expected_areas = np.array(
+        [249670.0, 45008.0, 31714.0, 20584.0, 8482.0], dtype=np.float32
+    )
+    np.testing.assert_allclose(
+        masks[0].sum(dim=(1, 2)).numpy(), expected_areas, rtol=1e-3
+    )

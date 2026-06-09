@@ -12,6 +12,8 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
+from qai_hub_models.utils.input_spec import InputSpec
+
 
 class DDColorApp:
     """Wraps DDColor model for image preprocessing and postprocessing."""
@@ -19,10 +21,11 @@ class DDColorApp:
     def __init__(
         self,
         model: Callable[[torch.Tensor], torch.Tensor],
-        model_input_shape: tuple[int, int] = (256, 256),
+        input_spec: InputSpec,
     ) -> None:
+        _, _, h, w = input_spec["image"][0]
+        self.model_input_shape: tuple[int, int] = (h, w)
         self.model = model
-        self.model_input_shape = model_input_shape
 
     def predict(self, *args: Any, **kwargs: Any) -> Image.Image:
         """

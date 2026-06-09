@@ -58,14 +58,12 @@ def test_task() -> None:
     proposal_generator, roi_head = wrapper.proposal_generator, wrapper.roi_head
     img = load_image(IMAGE_ADDRESS)
     input_spec = wrapper.proposal_generator.get_input_spec()
-    height, width = input_spec["image"][0][2:]
 
     app = MaskRCNNApp(
         proposal_generator,
         roi_head,
-        height,
-        width,
         boxes_score_threshold=0.9,
+        input_spec=input_spec,
     )
     result = app.predict(img, raw_output=True)
     assert isinstance(result, tuple), "Expected tuple output when raw_output=True"
@@ -117,16 +115,14 @@ def test_trace() -> None:
     traced_roi_head = roi_head.convert_to_torchscript(input_spec)
 
     input_spec = proposal_generator.get_input_spec()
-    height, width = input_spec["image"][0][2:]
     traced_proposal_generator = proposal_generator.convert_to_torchscript(input_spec)
 
     img = load_image(IMAGE_ADDRESS)
     app = MaskRCNNApp(
         traced_proposal_generator,
         traced_roi_head,
-        height,
-        width,
         boxes_score_threshold=0.9,
+        input_spec=input_spec,
     )
     result = app.predict(img, raw_output=True)
     assert isinstance(result, tuple), "Expected tuple output when raw_output=True"

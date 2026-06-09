@@ -13,6 +13,7 @@ import torch
 from PIL import Image
 
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resize_pad
+from qai_hub_models.utils.input_spec import InputSpec
 
 
 class FaceAttribNetApp:
@@ -31,7 +32,7 @@ class FaceAttribNetApp:
     def __init__(
         self,
         model: Callable[[torch.Tensor], torch.Tensor],
-        model_input_shape: tuple[int, int],
+        input_spec: InputSpec | None = None,
     ) -> None:
         """
         FaceAttribNetApp constructor
@@ -41,9 +42,14 @@ class FaceAttribNetApp:
         model
             A callable object representing the FaceAttribNet model
 
-        model_input_shape
-            model input shape (H, W)
+        input_spec
+            Model input spec. If None, defaults to 128x128.
         """
+        if input_spec is not None:
+            _, _, h, w = input_spec["image"][0]
+            model_input_shape = (h, w)
+        else:
+            model_input_shape = (128, 128)
         self.model = model
         self.model_input_shape = model_input_shape
 
