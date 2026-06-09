@@ -353,7 +353,7 @@ def generate_code_for_model(model_name: str) -> list[str]:
         os.remove(conftest_path)
 
     evaluate_path = model_dir / "evaluate.py"
-    if not export_options.is_precompiled and not export_options.is_collection_model:
+    if not export_options.is_precompiled and not export_options.skip_evaluate:
         generated_files.append(
             _generate_evaluate(
                 environment,

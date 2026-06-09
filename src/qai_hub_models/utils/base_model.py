@@ -596,6 +596,10 @@ class CollectionModel(Generic[ComponentT]):
         )
         return filter_per_component_kwargs(funcs, per_component_kwargs, global_kwargs)
 
+    def get_evaluator(self) -> BaseEvaluator:
+        """Gets a class for evaluating output of this model."""
+        raise NotImplementedError("No evaluator is supported for this model.")
+
 
 class PretrainedCollectionModel(CollectionModel[BaseModel], FromPretrainedProtocol):
     COMPONENT_BASE_TYPES = BaseModel

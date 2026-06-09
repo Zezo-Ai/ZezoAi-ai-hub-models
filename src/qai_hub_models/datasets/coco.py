@@ -316,3 +316,16 @@ class CocoDataset(BaseDataset, CocoDetection):
             link="https://cocodataset.org/",
             split_description="val2017 split",
         )
+
+
+class Coco180Dataset(CocoDataset):
+    """Wrapper class around CocoDataset for 180 samples_per_job"""
+
+    @staticmethod
+    def default_samples_per_job() -> int:
+        """The default value for how many samples to run in each inference job."""
+        return 180
+
+    @staticmethod
+    def dataset_name() -> str:
+        return "coco_180"

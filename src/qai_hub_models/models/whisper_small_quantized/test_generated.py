@@ -47,11 +47,7 @@ from qai_hub_models.scorecard.utils.testing_export_eval import (
     export_test_e2e,
     inference_via_export,
     link_via_export,
-    on_device_inference_for_accuracy_validation,
     profile_via_export,
-    split_and_group_accuracy_validation_output_batches,
-    torch_inference_for_accuracy_validation,
-    torch_inference_for_accuracy_validation_outputs,
 )
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.validation import perform_runtime_model_validation
@@ -199,35 +195,16 @@ def test_inference(
 ) -> None:
     skip_invalid_runtime_device(Model, scorecard_path.runtime, device)
     try:
-        if HAS_EVAL_DATASET:
-            on_device_inference_for_accuracy_validation(
-                Model,
-                Model.get_eval_dataset_classes()[0],
-                MODEL_ID,
-                precision,
-                scorecard_path,
-                device,
-            )
-        else:
-            inference_via_export(
-                inference_model,
-                MODEL_ID,
-                Model.from_pretrained(),
-                precision,
-                scorecard_path,
-                device,
-            )
+        inference_via_export(
+            inference_model,
+            MODEL_ID,
+            Model.from_pretrained(),
+            precision,
+            scorecard_path,
+            device,
+        )
     except CachedScorecardJobError as e:
         pytest.skip(str(e))
-
-
-@pytest.mark.inference
-def test_val_data_torch() -> None:
-    if not HAS_EVAL_DATASET:
-        return
-    torch_inference_for_accuracy_validation(
-        Model.from_pretrained(), Model.get_eval_dataset_classes()[0], MODEL_ID
-    )
 
 
 @pytest.fixture(scope="module")
@@ -236,9 +213,8 @@ def torch_val_outputs() -> list[np.ndarray]:
     Because the below method downloads a dataset over the internet,
     it is called in a fixture so it can be reused.
     """
-    if not HAS_EVAL_DATASET:
-        return []
-    return torch_inference_for_accuracy_validation_outputs(MODEL_ID)
+    # Collection models are not torch-accuracy validated in the scorecard.
+    return []
 
 
 @pytest.fixture(scope="module")
@@ -249,9 +225,8 @@ def torch_evaluate_mock_outputs(
     Because the below method does some memory movement,
     it is called in a fixture so its output can be reused.
     """
-    if not HAS_EVAL_DATASET:
-        return []
-    return split_and_group_accuracy_validation_output_batches(torch_val_outputs)
+    # Collection models are not torch-accuracy validated in the scorecard.
+    return []
 
 
 @pytest.mark.parametrize(

@@ -296,7 +296,7 @@ def perform_runtime_model_validation(
         The model identifier used to load code-gen.yaml.
     app_cls
         For collection models, the App class so calibration checks
-        can verify CollectionAppProtocol compliance. Passing ``None``
+        can verify CollectionAppQuantizeProtocol compliance. Passing ``None``
         is safe for models without quantized precisions; for models
         with quantized precisions, ``None`` will produce an error
         indicating the missing App.

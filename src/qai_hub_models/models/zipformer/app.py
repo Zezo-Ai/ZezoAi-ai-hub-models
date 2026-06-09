@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 
 from qai_hub_models.datasets import DatasetSplit, instantiate_dataset
 from qai_hub_models.models.zipformer.model import HfZipformer
-from qai_hub_models.utils.base_app import CollectionAppProtocol
+from qai_hub_models.utils.base_app import CollectionAppQuantizeProtocol
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.input_spec import InputSpec, get_batch_size
 from qai_hub_models.utils.qai_hub_helpers import make_hub_dataset_entries
@@ -79,7 +79,7 @@ def streaming_greedy_search(
     return text.replace("▁", " ").strip()
 
 
-class ZipformerApp(CollectionAppProtocol):
+class ZipformerApp(CollectionAppQuantizeProtocol):
     """
     ZipformerApp runs Zipformer encoder, decoder and
         joiner to transcribe audio.

@@ -93,6 +93,7 @@ from qai_hub_models.utils.base_multi_graph_model import (
 )
 from qai_hub_models.utils.evaluate import (
     DEFAULT_NUM_EVAL_SAMPLES,
+    _load_quant_cpu_onnx,
     evaluate_on_dataset,
     get_torch_val_dataloader,
 )
@@ -111,6 +112,7 @@ from qai_hub_models.utils.hub_clients import (
     get_default_hub_deployment,
 )
 from qai_hub_models.utils.inference import AsyncOnDeviceModel
+from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 from qai_hub_models.utils.qai_hub_helpers import assert_success_and_get_target_models
 
@@ -2010,17 +2012,23 @@ def accuracy_on_dataset_via_evaluate_and_export(
 
     # Run eval script to collect accuracy metrics
     num_samples = get_num_eval_samples(dataset_cls)
+    inference_job = next(iter(inference_jobs))
+    on_device_model = AsyncOnDeviceModel(
+        model=inference_job.model,
+        input_names=None,
+        device=inference_job.device,
+    )
+    input_spec = on_device_model.get_input_spec()
     with (
         cache_path_patch,
         dataset_download_patch,
         on_device_call_patch,
         torch_call_patch,
     ):
-        inference_job = next(iter(inference_jobs))
         evaluate_result = evaluate_on_dataset(
             evaluator_func=model.get_evaluator,
-            compiled_model=inference_job.model,
-            hub_device=inference_job.device,
+            model_executors={"on-device": on_device_model},
+            input_spec=input_spec,
             dataset_cls=dataset_cls,
             use_cache=True,
             num_samples=num_samples,
@@ -2127,10 +2135,12 @@ def torch_accuracy_on_dataset(
         dataset_cls, scorecard_path, model.__class__
     )
     num_samples = get_num_eval_samples(dataset_cls)
+    input_spec = model.get_input_spec()
     with torch_call_patch, cache_path_patch:
         evaluate_result = evaluate_on_dataset(
             evaluator_func=lambda: evaluator,
-            torch_model=model,
+            model_executors={"torch": model},
+            input_spec=input_spec,
             use_cache=True,
             dataset_cls=dataset_cls,
             num_samples=num_samples,
@@ -2193,10 +2203,15 @@ def sim_accuracy_on_dataset(
     )
     quantize_jobs = [x.job for x in quantize_sc_jobs.values() if x is not None]
     num_samples = get_num_eval_samples(dataset_cls)
+    quantized_hub_model = next(iter(quantize_jobs)).get_target_model()
+    assert quantized_hub_model is not None
+    assert isinstance(quantized_hub_model.producer, (hub.QuantizeJob, hub.CompileJob))
+    input_spec = cast(InputSpec, quantized_hub_model.producer.shapes)
     with cache_path_patch:
         evaluate_result = evaluate_on_dataset(
             evaluator_func=model.get_evaluator,
-            quantized_model=next(iter(quantize_jobs)).get_target_model(),
+            model_executors={"quant cpu": _load_quant_cpu_onnx(quantized_hub_model)},
+            input_spec=input_spec,
             dataset_cls=dataset_cls,
             use_cache=True,
             num_samples=num_samples,

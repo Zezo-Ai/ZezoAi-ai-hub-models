@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator, Sequence
 
 import numpy as np
 import torch
@@ -17,24 +17,35 @@ from qai_hub_models.datasets import DatasetSplit, instantiate_dataset
 from qai_hub_models.models._shared.proposal_based_detection.app import (
     ProposalBasedDetectionApp,
 )
+from qai_hub_models.models.protocols import ExecutableModelProtocol
+from qai_hub_models.utils.base_app import (
+    CollectionAppEvaluateProtocol,
+    CollectionAppQuantizeProtocol,
+    CollectionModelEvalGenerator,
+)
 from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.bounding_box_processing import batched_nms
 from qai_hub_models.utils.draw import create_color_map, draw_box_from_xyxy
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resize_pad
+from qai_hub_models.utils.inference import AsyncOnDeviceModel, AsyncOnDeviceResult
 from qai_hub_models.utils.input_spec import InputSpec, get_batch_size
 from qai_hub_models.utils.path_helpers import QAIHM_PACKAGE_ROOT
 from qai_hub_models.utils.qai_hub_helpers import make_hub_dataset_entries
 
 
-class Detectron2DetectionApp(ProposalBasedDetectionApp):
+class Detectron2DetectionApp(
+    ProposalBasedDetectionApp,
+    CollectionAppEvaluateProtocol,
+    CollectionAppQuantizeProtocol,
+):
     """
     This class consists of light-weight "app code" that is required to
-    perform end to end inference with Detectron2_detection.
+    perform end to end inference with Detectron2 Detection.
 
     For a given image input, the app will:
         * Preprocess the image (normalize, resize, etc).
-        * Run Detectron2_detection Inference.
+        * Run Detectron2 Detection Inference.
         * Convert the raw output into box coordinates and corresponding label and confidence.
         * Return numpy image with boxes.
     """
@@ -271,3 +282,34 @@ class Detectron2DetectionApp(ProposalBasedDetectionApp):
             else:
                 inputs[0].append(sample_input)
         return make_hub_dataset_entries(tuple(inputs), list(input_spec.keys()))
+
+    def run_model_for_eval(
+        self,
+        model_input: Generator[AsyncOnDeviceResult] | tuple[torch.Tensor, ...],
+        model_batch_size: int,
+    ) -> CollectionModelEvalGenerator:
+        model_output = self.proposal_generator(*model_input)
+        yield model_output
+        if isinstance(model_output, AsyncOnDeviceResult):
+            features, proposals, objectness_logits = model_output.wait()
+        else:
+            features, proposals, objectness_logits = model_output
+        padded_proposals = self.filter_proposals([proposals], [objectness_logits])[0]
+        model_inputs = (features, padded_proposals)
+        model_output = (
+            self.roi_head(*(x.split(model_batch_size, dim=0) for x in model_inputs))
+            if isinstance(model_output, AsyncOnDeviceResult)
+            else self.roi_head(*model_inputs)
+        )
+        yield model_output
+        return model_output
+
+    @classmethod
+    def from_components(
+        cls,
+        models: Sequence[ExecutableModelProtocol] | Sequence[AsyncOnDeviceModel],
+    ) -> Detectron2DetectionApp:
+        return cls(
+            proposal_generator=models[0],  # type: ignore[arg-type]
+            roi_head=models[1],  # type: ignore[arg-type]
+        )

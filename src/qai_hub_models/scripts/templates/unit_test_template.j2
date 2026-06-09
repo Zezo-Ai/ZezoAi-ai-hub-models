@@ -1,6 +1,5 @@
 {% import 'common_template.j2' as common %}
 {% set has_skipped_runtime = not supports_tflite or not supports_qnn or not supports_onnx -%}
-{% set optional_s = "s" if is_collection_model else "" -%}
 {% set is_llm = (test_split.value == "llm") -%}
 {{ header }}
 
@@ -72,19 +71,22 @@ from qai_hub_models.scorecard.utils.testing_export_eval import (
 from qai_hub_models.scorecard.utils.testing_export_eval import sim_accuracy_on_dataset
 {%- endif %}
 {%- endif %}
-{%- if not is_collection_model %}
+{%- if not is_collection_model and not skip_evaluate %}
 from qai_hub_models.scorecard.utils.testing_export_eval import torch_accuracy_on_dataset
 {%- endif %}
+
 
 from qai_hub_models.scorecard.errors import CachedScorecardJobError
 from qai_hub_models.scorecard.utils.testing_export_eval import (
     inference_via_export,
     accuracy_on_sample_inputs_via_export,
+    {%- if not is_collection_model %}
     accuracy_on_dataset_via_evaluate_and_export,
+    {%- endif %}
     on_device_inference_for_accuracy_validation,
     torch_inference_for_accuracy_validation,
     torch_inference_for_accuracy_validation_outputs,
-    split_and_group_accuracy_validation_output_batches
+    split_and_group_accuracy_validation_output_batches,
 )
 
 # All runtime + precision pairs that are enabled for testing and are compatibile with this model.
@@ -215,6 +217,7 @@ def test_profile(precision: Precision, scorecard_path: ScorecardProfilePath, dev
 def test_inference(precision: Precision, scorecard_path: ScorecardProfilePath, device: ScorecardDevice) -> None:
     skip_invalid_runtime_device(Model, scorecard_path.runtime, device)
     try:
+        {%- if not is_collection_model %}
         if HAS_EVAL_DATASET:
             on_device_inference_for_accuracy_validation(
                 Model,
@@ -237,10 +240,25 @@ def test_inference(precision: Precision, scorecard_path: ScorecardProfilePath, d
                 scorecard_path,
                 device,
             )
+        {%- else %}
+        inference_via_export(
+            inference_model,
+            MODEL_ID,
+            {%- if separate_quantize_script %}
+            Model.from_pretrained(checkpoint=f"DEFAULT_{str(precision).upper()}"),
+            {%- else %}
+            Model.from_pretrained(),
+            {%- endif %}
+            precision,
+            scorecard_path,
+            device,
+        )
+        {%- endif %}
     except CachedScorecardJobError as e:
         pytest.skip(str(e))
 {%- endif %}
 
+{%- if not is_collection_model %}
 @pytest.mark.inference
 def test_val_data_torch() -> None:
     if not HAS_EVAL_DATASET:
@@ -248,6 +266,7 @@ def test_val_data_torch() -> None:
     torch_inference_for_accuracy_validation(
         Model.from_pretrained(), Model.get_eval_dataset_classes()[0], MODEL_ID
     )
+{%- endif %}
 {%- endif %}
 
 
@@ -257,9 +276,14 @@ def torch_val_outputs() -> list[np.ndarray]:
     Because the below method downloads a dataset over the internet,
     it is called in a fixture so it can be reused.
     """
+    {%- if is_collection_model %}
+    # Collection models are not torch-accuracy validated in the scorecard.
+    return []
+    {%- else %}
     if not HAS_EVAL_DATASET:
         return []
     return torch_inference_for_accuracy_validation_outputs(MODEL_ID)
+    {%- endif %}
 
 
 @pytest.fixture(scope="module")
@@ -268,11 +292,16 @@ def torch_evaluate_mock_outputs(torch_val_outputs: list[np.ndarray]) -> list[tor
     Because the below method does some memory movement,
     it is called in a fixture so its output can be reused.
     """
+    {%- if is_collection_model %}
+    # Collection models are not torch-accuracy validated in the scorecard.
+    return []
+    {%- else %}
     if not HAS_EVAL_DATASET:
         return []
     return split_and_group_accuracy_validation_output_batches(torch_val_outputs)
+    {%- endif %}
 
-{% if not is_collection_model -%}
+{%- if not is_collection_model and not skip_evaluate %}
 {%- if not is_llm %}
 @pytest.mark.inference
 def test_torch_accuracy(torch_evaluate_mock_outputs: list[torch.Tensor | tuple[torch.Tensor, ...]]) -> None:
@@ -284,9 +313,10 @@ def test_torch_accuracy(torch_evaluate_mock_outputs: list[torch.Tensor | tuple[t
         torch_evaluate_mock_outputs,
         MODEL_ID,
     )
+{%- endif %}
 
 
-{%- if can_use_quantize_job %}
+{%- if not is_collection_model and can_use_quantize_job %}
 @pytest.mark.parametrize(
     "precision",
     get_quantize_parameterized_pytest_config(MODEL_ID, ENABLED_PRECISION_RUNTIMES, PASSING_PRECISION_RUNTIMES),
@@ -305,7 +335,6 @@ def test_sim_accuracy(precision: Precision, torch_evaluate_mock_outputs: list[to
         )
     except CachedScorecardJobError as e:
         pytest.skip(str(e))
-{%- endif %}
 {%- endif %}
 {%- endif %}
 

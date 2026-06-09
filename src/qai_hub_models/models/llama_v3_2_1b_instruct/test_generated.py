@@ -41,8 +41,6 @@ from qai_hub_models.scorecard.utils.testing_export_eval import (
     compile_via_export,
     export_test_e2e,
     link_via_export,
-    split_and_group_accuracy_validation_output_batches,
-    torch_inference_for_accuracy_validation_outputs,
 )
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.validation import perform_runtime_model_validation
@@ -155,9 +153,8 @@ def torch_val_outputs() -> list[np.ndarray]:
     Because the below method downloads a dataset over the internet,
     it is called in a fixture so it can be reused.
     """
-    if not HAS_EVAL_DATASET:
-        return []
-    return torch_inference_for_accuracy_validation_outputs(MODEL_ID)
+    # Collection models are not torch-accuracy validated in the scorecard.
+    return []
 
 
 @pytest.fixture(scope="module")
@@ -168,9 +165,8 @@ def torch_evaluate_mock_outputs(
     Because the below method does some memory movement,
     it is called in a fixture so its output can be reused.
     """
-    if not HAS_EVAL_DATASET:
-        return []
-    return split_and_group_accuracy_validation_output_batches(torch_val_outputs)
+    # Collection models are not torch-accuracy validated in the scorecard.
+    return []
 
 
 @pytest.mark.parametrize(

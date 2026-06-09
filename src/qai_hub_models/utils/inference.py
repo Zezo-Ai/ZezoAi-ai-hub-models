@@ -18,6 +18,7 @@ from qai_hub.public_rest_api import DatasetEntries
 from qai_hub_models import TargetRuntime
 from qai_hub_models.models.protocols import ExecutableModelProtocol
 from qai_hub_models.utils.asset_loaders import ModelZooAssetConfig, VersionType
+from qai_hub_models.utils.export_result import CollectionExportResult
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.qai_hub_helpers import (
     _AIHUB_NAME,
@@ -40,7 +41,7 @@ def compile_model_from_args(
     cli_args: argparse.Namespace,
     model_kwargs: Mapping[str, Any],
     component: str | None = None,
-) -> hub.Model:
+) -> hub.Model | list[hub.Model]:
     """
     Parameters
     ----------
@@ -58,8 +59,8 @@ def compile_model_from_args(
 
     Returns
     -------
-    model : hub.Model
-        The compiled hub.Model object.
+    hub.Model | list[hub.Model]
+        The compiled hub.Model object(s).
     """
     model_kwargs_dict = dict(model_kwargs)
     cli_str = ""
@@ -109,10 +110,19 @@ def compile_model_from_args(
         raise NotImplementedError(
             f"Please sign-up for {_AIHUB_NAME} to continue the demo with on-device inference."
         )
-
-    export_output = (
-        export_output if component is None else export_output.components[component]
-    )
+    if isinstance(export_output, CollectionExportResult):
+        assert export_output.compile_jobs is not None
+        if component is not None:
+            compile_job = export_output.compile_jobs[component]
+            target_model = compile_job.get_target_model()
+            assert target_model is not None
+            return target_model
+        target_model_list: list[hub.Model] = []
+        for compile_job in export_output.compile_jobs.values():
+            model = compile_job.get_target_model()
+            assert model is not None
+            target_model_list.append(model)
+        return target_model_list
     target_model = export_output.compile_job.get_target_model()
     assert target_model is not None
     return target_model

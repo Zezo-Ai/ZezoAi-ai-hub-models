@@ -11,7 +11,8 @@ import gc
 import math
 import os
 import shutil
-from collections.abc import Callable, Iterator, Sized
+from collections import defaultdict
+from collections.abc import Callable, Iterator, Mapping, Sized
 from dataclasses import dataclass
 from enum import Enum, unique
 from pathlib import Path
@@ -39,6 +40,10 @@ from qai_hub_models.utils.asset_loaders import (
     load_h5,
     load_raw_file,
     qaihm_temp_dir,
+)
+from qai_hub_models.utils.base_app import (
+    CollectionAppEvaluateProtocol,
+    CollectionModelEvalGenerator,
 )
 from qai_hub_models.utils.base_dataset import get_folder_name
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
@@ -616,7 +621,9 @@ class HubDataset(Dataset):
 def evaluate(
     dataloader: DataLoader,
     evaluator_func: Callable[..., BaseEvaluator],
-    models: dict[str, ExecutableModelProtocol | AsyncOnDeviceModel],
+    model_executors: Mapping[
+        str, ExecutableModelProtocol | CollectionAppEvaluateProtocol
+    ],
     model_batch_size: int | None = None,
     verbose: bool = False,
 ) -> dict[str, BaseEvaluator]:
@@ -629,8 +636,8 @@ def evaluate(
         Batched data loader.
     evaluator_func
         Function that returns a new evaluator instance to use for eval.
-    models
-        Models to evaluate, keyed by model identifier.
+    model_executors
+        Models or apps to evaluate, keyed by model identifier.
     model_batch_size
         If set, models will always execute with this batch size.
         If None, all models run with the dataloader batch size.
@@ -647,19 +654,26 @@ def evaluate(
     evaluators : dict[str, BaseEvaluator]
         Evaluator results, keyed by model identifier.
     """
-    ai_hub_inference_models = {
-        n: m for n, m in models.items() if isinstance(m, AsyncOnDeviceModel)
-    }
-    local_inference_models = {
-        n: m for n, m in models.items() if not isinstance(m, AsyncOnDeviceModel)
-    }
+    ai_hub_inference_models: dict[str, AsyncOnDeviceModel] = {}
+    collection_inference_models: dict[str, CollectionAppEvaluateProtocol] = {}
+    local_inference_models: dict[
+        str, ExecutableModelProtocol | CollectionAppEvaluateProtocol
+    ] = {}
+    for n, m in model_executors.items():
+        if isinstance(m, CollectionAppEvaluateProtocol) and m.uses_ondevice_model:
+            collection_inference_models[n] = m
+        elif isinstance(m, AsyncOnDeviceModel):
+            ai_hub_inference_models[n] = m
+        else:
+            local_inference_models[n] = m
 
-    evaluators = {name: evaluator_func() for name in models}
-    ai_hub_async_inference_outputs: dict[str, list[AsyncOnDeviceResult]] = {
-        name: []
-        for name, model in models.items()
-        if isinstance(model, AsyncOnDeviceModel)
+    evaluators = {name: evaluator_func() for name in model_executors}
+    async_outputs: dict[str, list[AsyncOnDeviceResult]] = {
+        name: [] for name in {**ai_hub_inference_models, **collection_inference_models}
     }
+    collection_model_generators: dict[str, list[CollectionModelEvalGenerator]] = (
+        defaultdict(list)
+    )
     batch_size = dataloader.batch_size or 1
     model_batch_size = model_batch_size or batch_size
 
@@ -668,47 +682,57 @@ def evaluate(
             "The model batch size must evenly divide the DataLoader's batch size. It is otherwise impossible to evaluate the whole dataset on the same batch size."
         )
 
+    def _torch_io_to_tuple(
+        val: list | tuple | torch.Tensor,
+    ) -> tuple[torch.Tensor, ...]:
+        """Convert torch model I/O of any type to a tuple of inputs / outputs."""
+        if isinstance(val, (list, tuple)):
+            return tuple(val)
+        return (val,)
+
     # Get each sample from the dataloader. Each sample has batch size batch_size.
     for batch_idx, sample in enumerate(dataloader):
         model_inputs, ground_truth_values, *_ = sample
         cumulative_samples = len(model_inputs) + batch_idx * batch_size
 
-        def _torch_io_to_tuple(
-            val: list | tuple | torch.Tensor,
-        ) -> tuple[torch.Tensor, ...]:
-            """Convert torch model I/O of any type to a tuple of inputs / outputs."""
-            if isinstance(val, tuple):
-                return val
-            if isinstance(val, list):
-                return tuple(val)
-            return (val,)
-
         model_inputs = _torch_io_to_tuple(model_inputs)
         ground_truth_values = _torch_io_to_tuple(ground_truth_values)
 
-        # On device output is computed on the entire batch,
-        # Run all on-device models first.
-        for model_name, async_model in ai_hub_inference_models.items():
+        # Run all on-device models first (output is computed asynchronously).
+        for model_name, async_model_executor in ai_hub_inference_models.items():
             if isinstance(dataloader.dataset, HubDataset):
-                # If the dataloader is a cached dataset, we can just use the cached Hub dataset
-                # instead of uploading the inputs to Hub again.
-                assert async_model.input_names == dataloader.dataset.input_names
+                # Use the cached Hub dataset instead of uploading inputs again.
                 assert (
-                    async_model.channel_last_input
+                    async_model_executor.input_names == dataloader.dataset.input_names
+                )
+                assert (
+                    async_model_executor.channel_last_input
                     == dataloader.dataset.channel_last_input
                 )
                 hub_dataset = hub.get_dataset(dataloader.dataset.input_ids[batch_idx])
-                async_output = async_model(hub_dataset)
+                async_output = async_model_executor(hub_dataset)
             else:
                 device_inputs = (
                     (x.split(model_batch_size, dim=0) for x in model_inputs)
                     if model_batch_size
                     else model_inputs
                 )
-                async_output = async_model(*device_inputs)
+                async_output = async_model_executor(*device_inputs)
+            async_outputs[model_name].append(async_output)
 
-            # On device output is computed asynchronously on AI Hub Workbench, so save it for later.
-            ai_hub_async_inference_outputs[model_name].append(async_output)
+        # Run collection on-device models (multi-component pipelines).
+        for model_name, collection_executor in collection_inference_models.items():
+            device_inputs = (
+                (x.split(model_batch_size, dim=0) for x in model_inputs)
+                if model_batch_size
+                else model_inputs
+            )
+            output_gen = collection_executor.run_model_for_eval(
+                device_inputs, model_batch_size
+            )
+            # Advance past the first yield so the first component's hub job is submitted.
+            next(output_gen)
+            collection_model_generators[model_name].append(output_gen)
 
         # Run the remaining local models separately.
         if len(local_inference_models) == 0:
@@ -719,15 +743,24 @@ def evaluate(
         local_dataloader = DataLoader(local_dataset, model_batch_size)
         for sample in tqdm(local_dataloader, disable=IsOnCIEnvvar.get()):
             local_model_inputs, local_ground_truth_values, *_ = sample
+            local_model_inputs = _torch_io_to_tuple(local_model_inputs)
 
             # Run inference on this smaller batch, add to evaluator.
-            for model_name, local_model in local_inference_models.items():
-                if type(local_model_inputs) in [list, tuple]:
-                    batch_output = local_model(*local_model_inputs)
+            for model_name, local_model_executor in local_inference_models.items():
+                if isinstance(local_model_executor, CollectionAppEvaluateProtocol):
+                    batch_output_gen = local_model_executor.run_model_for_eval(
+                        local_model_inputs, model_batch_size=1
+                    )
+                    # Exhaust the generator without retaining intermediate yields.
+                    try:
+                        while True:
+                            next(batch_output_gen)
+                    except StopIteration as e:
+                        batch_output = e.value
                 else:
-                    batch_output = local_model(local_model_inputs)
+                    batch_output = local_model_executor(*local_model_inputs)
                 evaluators[model_name].add_batch(
-                    batch_output,  # type: ignore[arg-type]
+                    batch_output,
                     local_ground_truth_values,
                 )
 
@@ -738,15 +771,26 @@ def evaluate(
                     f"{evaluators[model_name].formatted_accuracy()}"
                 )
 
-    # Collect on device accuracy
-    if len(ai_hub_inference_models) > 0:
-        for batch_idx, sample in enumerate(dataloader):
-            _, ground_truth_values, *_ = sample
-            for (
-                model_name,
-                batched_async_model_outputs,
-            ) in ai_hub_async_inference_outputs.items():
-                model_output = batched_async_model_outputs[batch_idx].wait()
+    # Drain collection model generators round-robin until all have returned
+    # their final AsyncOnDeviceResult (via StopIteration.value).
+    for model_name, gens in collection_model_generators.items():
+        pending = set(range(len(gens)))
+        while pending:
+            for i in list(pending):
+                try:
+                    next(gens[i])
+                except StopIteration as e:  # noqa: PERF203
+                    async_outputs[model_name].append(e.value)
+                    pending.discard(i)
+
+    # Collect on-device accuracy.
+    if async_outputs:
+        for model_name, batched_outputs in async_outputs.items():
+            for batch_idx, sample in enumerate(dataloader):
+                _, ground_truth_values, *_ = sample
+                async_model_output = batched_outputs[batch_idx]
+                assert isinstance(async_model_output, AsyncOnDeviceResult)
+                model_output = async_model_output.wait()
                 evaluators[model_name].add_batch(model_output, ground_truth_values)
 
                 cumulative_samples = (
@@ -771,15 +815,14 @@ def evaluate(
 def evaluate_on_dataset(
     dataset_cls: type[BaseDataset],
     evaluator_func: Callable[..., BaseEvaluator],
-    input_spec: InputSpec | None = None,
-    torch_model: torch.nn.Module | BaseModel | None = None,
-    compiled_model: hub.Model | None = None,
-    quantized_model: hub.Model | None = None,
-    hub_device: hub.Device | None = None,
+    model_executors: Mapping[
+        str,
+        ExecutableModelProtocol | CollectionAppEvaluateProtocol,
+    ],
+    input_spec: InputSpec,
     samples_per_job: int | None = None,
     num_samples: int | None = None,
     seed: int | None = None,
-    profile_options: str = "",
     use_cache: bool = False,
 ) -> EvaluateResult:
     """
@@ -791,27 +834,11 @@ def evaluate_on_dataset(
         The dataset class to use for evaluation.
     evaluator_func
         Function that returns a new evaluator instance to use for eval.
+    model_executors
+        Models or apps to evaluate, keyed by model identifier.
     input_spec
-        If set, uses this as the desired model input spec.
-        Input types are unused; only the shapes and order are considered.
-        The input spec should always be in channel first format.
-        If None, extracts the input_spec from the compiled model if provided,
-        or from the quantized model if provided, or from torch_model if provided.
-    torch_model
-        The torch model to evaluate locally to compare accuracy.
-        If None, torch accuracy is skipped.
-    compiled_model
-        A hub.Model object pointing to compiled model on AI Hub Workbench.
-        This is what will be used to compute accuracy on device.
-        If None, on-device accuracy is skipped.
-    quantized_model
-        A quantized hub.Model object. This can point to any model that is downstream of
-        an AI Hub Workbench Quantize Job. This function will find the appropriate
-        upstream ONNX asset to use. This is used to compute quantized accuracy on your local CPU.
-        If this is set to None, this CPU-based accuracy step is skipped.
-    hub_device
-        Which device to use for on device measurement.
-        If None, on-device accuracy is skipped.
+        Desired model input spec. Input types are unused; only shapes and
+        order are considered. Always in channel-first format.
     samples_per_job
         Limit on the number of samples to submit in a single inference job.
         If not specified, uses the default value set on the dataset.
@@ -820,8 +847,6 @@ def evaluate_on_dataset(
         If not set, uses the minimum of the samples_per_job and DEFAULT_NUM_EVAL_SAMPLES.
     seed
         The random seed to use when subsampling the dataset. If not set, creates a deterministic subset.
-    profile_options
-        Options to set when running inference on device. For example, which compute unit to use.
     use_cache
         If set, will upload the full dataset to hub and store a local copy.
         This prevents re-uploading data to hub for each evaluation, with the
@@ -834,33 +859,9 @@ def evaluate_on_dataset(
         Quant cpu accuracy is the accuracy from running the quantized ONNX on the CPU.
         If any accuracy was not computed, its value will be None.
     """
-    on_device_model: AsyncOnDeviceModel | None = None
-    if compiled_model is not None:
-        if compiled_model.producer is None:
-            raise ValueError(
-                "Compiled models must be compiled with AI Hub Workbench; they cannot be uploaded manually."
-            )
-        if hub_device is None:
-            raise ValueError("Must specify a device to evaluate a compiled model.")
-        on_device_model = AsyncOnDeviceModel(
-            model=compiled_model,
-            input_names=list(input_spec) if input_spec else None,
-            device=hub_device,
-            inference_options=profile_options,
-        )
-
-    if input_spec is None:
-        if on_device_model is not None:
-            input_spec = on_device_model.get_input_spec()
-        elif quantized_model is not None and quantized_model.producer is not None:
-            assert isinstance(
-                quantized_model.producer, (hub.QuantizeJob, hub.CompileJob)
-            )
-            input_spec = cast(InputSpec, quantized_model.producer.shapes)
-        elif isinstance(torch_model, BaseModel):
-            input_spec = torch_model.get_input_spec()
-        else:
-            raise ValueError("Cannot extract input spec.")
+    torch_executor_local = model_executors.get("torch")
+    on_device_model = model_executors.get("on-device")
+    quantized_executor = model_executors.get("quant cpu")
 
     dataset_name = dataset_cls.dataset_name()
     samples_per_job = samples_per_job or dataset_cls.default_samples_per_job()
@@ -869,10 +870,10 @@ def evaluate_on_dataset(
     if use_cache:
         input_names = list(input_spec)
         channel_last_input = []
-        if on_device_model is not None:
+        if isinstance(on_device_model, AsyncOnDeviceModel):
             channel_last_input = on_device_model.channel_last_input
             if channel_last_input and (
-                torch_model is not None or quantized_model is not None
+                torch_executor_local is not None or quantized_executor is not None
             ):
                 raise ValueError(
                     "If cache is enabled, a compiled model with channel last input cannot be evaluated alongside a torch / quantized onnx model."
@@ -928,18 +929,10 @@ def evaluate_on_dataset(
 
     print(f"Evaluating on {num_samples} samples.")
 
-    models: dict[str, ExecutableModelProtocol | AsyncOnDeviceModel] = {}
-    if quantized_model is not None:
-        models["quant cpu"] = _load_quant_cpu_onnx(quantized_model)
-    if on_device_model is not None:
-        models["on-device"] = on_device_model
-    if torch_model is not None:
-        models["torch"] = torch_model
-
     results = evaluate(
         dataloader,
         evaluator_func,
-        models=models,
+        model_executors=model_executors,
         model_batch_size=1,
         verbose=True,
     )

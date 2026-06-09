@@ -20,7 +20,7 @@ from qai_hub_models.datasets import DatasetSplit, instantiate_dataset
 from qai_hub_models.models._shared.sam2.model_patches import (
     mask_postprocessing,
 )
-from qai_hub_models.utils.base_app import CollectionAppProtocol
+from qai_hub_models.utils.base_app import CollectionAppQuantizeProtocol
 from qai_hub_models.utils.base_model import PretrainedCollectionModel
 from qai_hub_models.utils.draw import create_color_map
 from qai_hub_models.utils.evaluate import sample_dataset
@@ -103,7 +103,7 @@ class EdgeTAMApp:
         return results[0]
 
 
-class EdgeTAMVideoApp(CollectionAppProtocol):
+class EdgeTAMVideoApp(CollectionAppQuantizeProtocol):
     """
     App for video object tracking using EdgeTAM.
 

@@ -13,7 +13,7 @@ from qai_hub.client import DatasetEntries
 from torch.utils.data import DataLoader
 
 from qai_hub_models.datasets import DatasetSplit, instantiate_dataset
-from qai_hub_models.utils.base_app import CollectionAppProtocol
+from qai_hub_models.utils.base_app import CollectionAppQuantizeProtocol
 from qai_hub_models.utils.base_model import BaseModel, PretrainedCollectionModel
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.input_spec import (
@@ -56,7 +56,7 @@ def get_calibration_data(
         Additional options to pass to the dataset constructor.
     app
         The model's app used with collection models to fetch calibration data
-        via app.get_calibration_data() if it is instance of CollectionAppProtocol.
+        via app.get_calibration_data() if it is instance of CollectionAppQuantizeProtocol.
 
     Returns
     -------
@@ -75,7 +75,7 @@ def get_calibration_data(
         assert component_name is not None, (
             "component_name is required for collection models"
         )
-        if isinstance(app, CollectionAppProtocol):
+        if isinstance(app, CollectionAppQuantizeProtocol):
             return app.get_calibration_data(
                 model,
                 component_name,

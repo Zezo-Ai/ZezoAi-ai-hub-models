@@ -33,7 +33,7 @@ from qai_hub_models.models._shared.voiceai_tts.language import (
     BERT_MODEL_IDS,
     TTSLanguage,
 )
-from qai_hub_models.utils.base_app import CollectionAppProtocol
+from qai_hub_models.utils.base_app import CollectionAppQuantizeProtocol
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.input_spec import InputSpec, get_batch_size
 from qai_hub_models.utils.qai_hub_helpers import make_hub_dataset_entries
@@ -59,7 +59,7 @@ def get_text_for_tts_infer(
     return get_text_for_tts_infer(*args, **kwargs)
 
 
-class MeloTTSApp(CollectionAppProtocol):
+class MeloTTSApp(CollectionAppQuantizeProtocol):
     def __init__(
         self,
         encoder: Encoder,

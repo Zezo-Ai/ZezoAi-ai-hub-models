@@ -141,6 +141,9 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # If set, disables generating `export.py`.
     skip_export: bool = False
 
+    # If set, disables generating `evaluate.py` (export.py and tests are still generated).
+    skip_evaluate: bool = False
+
     # When possible, package versions in a model's specific `requirements.txt`
     # should match the versions in `qai_hub_models/global_requirements.txt`.
     # When this is not possible, set this field to indicate an inconsistency.

@@ -854,6 +854,7 @@ def demo_model_from_cli_args(
                 additional_kwargs,
                 component,
             )
+            assert isinstance(target_model, hub.Model)
             input_names = list(inference_model.get_input_spec().keys())
             inference_model = OnDeviceModel(
                 target_model,

@@ -4,6 +4,9 @@
 # ---------------------------------------------------------------------
 
 # isort: off
+from qai_hub_models.models._shared.stable_diffusion.app import (
+    StableDiffusionApp as App,
+)
 from qai_hub_models.models.controlnet_canny.model import (
     MODEL_ID,
 )
@@ -11,6 +14,6 @@ from qai_hub_models.models.controlnet_canny.model import (
     ControlNetCannyQuantized as Model,
 )
 
-__all__ = ["MODEL_ID", "Model"]
+__all__ = ["MODEL_ID", "App", "Model"]
 
 # isort: on

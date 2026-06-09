@@ -15,7 +15,9 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.datasets.coco import CocoDataset
+from qai_hub_models.datasets.coco import Coco180Dataset, CocoDataset
+from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.evaluators.detection_evaluator import DetectionEvaluator
 from qai_hub_models.models._shared.detectron2.model import Detectron2
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_model import (
@@ -260,3 +262,11 @@ class Detectron2Detection(PretrainedCollectionModel):
             Detectron2ProposalGenerator.from_pretrained(config),
             Detectron2ROIHead.from_pretrained(config),
         )
+
+    @classmethod
+    def get_eval_dataset_classes(cls) -> list[type[BaseDataset]]:
+        return [Coco180Dataset]
+
+    def get_evaluator(self) -> BaseEvaluator:
+        h, w = self.proposal_generator.get_input_spec()["image"][0][2:]
+        return DetectionEvaluator(h, w, score_threshold=0.05, nms_iou_threshold=0.5)
