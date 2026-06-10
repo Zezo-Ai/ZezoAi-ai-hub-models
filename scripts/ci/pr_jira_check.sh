@@ -7,14 +7,13 @@
 # Orchestrates team membership check, JIRA fetch, validation, and labeling.
 #
 # Required env:
-#   GH_TOKEN        - GitHub token with org:read for team membership
-#   GH_WRITE_TOKEN  - GitHub token with pull-requests:write for labeling
 #   JIRA_TOKEN      - Bearer token for JIRA API
 #   PR_AUTHOR       - GitHub username of the PR author
 #   PR_TITLE        - PR title string
 #   PR_NUMBER       - PR number
 #
 # Optional env:
+#   GH_TOKEN        - GitHub token with org:read for team membership. Needed if not logged in to the GitHub CLI.
 #   JIRA_PROJECT    - JIRA project key (default: TETRAAI)
 #   REPO            - GitHub repository (default: qcom-ai-hub/ai-hub-models-internal)
 #   EXEMPT_TEAMS    - Space-separated team slugs (default: ai-hub-models-reviewers tetra-developers)
@@ -30,15 +29,16 @@ UTIL_DIR="$(cd "$SCRIPT_DIR/../util" && pwd)"
 
 # 1. Check team membership
 # shellcheck disable=SC2086
-SKIP=$("$UTIL_DIR/check_github_team_membership.sh" "$GH_TOKEN" "$PR_AUTHOR" $EXEMPT_TEAMS)
+SKIP=$("$UTIL_DIR/check_github_team_membership.sh" "$PR_AUTHOR" $EXEMPT_TEAMS)
 
 # 2. Extract ticket from title
-TICKET=$(echo "$PR_TITLE" | grep -oP "${JIRA_PROJECT}-\d+" | head -1)
+TICKET=$(echo "$PR_TITLE" | grep -oP "${JIRA_PROJECT}-\d+" | head -1 || true)
 if [ -z "$TICKET" ]; then
   if [ "$SKIP" != "true" ]; then
     echo "::error::PR title must contain a JIRA ticket (e.g., ${JIRA_PROJECT}-123). Current title: '$PR_TITLE'"
     exit 1
   fi
+  echo "No JIRA found in PR title.  Current title: '$PR_TITLE'"
   exit 0
 fi
 echo "Found JIRA ticket: $TICKET"

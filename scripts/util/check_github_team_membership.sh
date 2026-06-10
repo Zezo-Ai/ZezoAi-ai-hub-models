@@ -5,21 +5,19 @@
 # ---------------------------------------------------------------------
 # Check if a GitHub user is a member of any specified team.
 #
-# Usage: check_github_team_membership.sh <gh_token> <username> <team1> [team2...]
+# Usage: check_github_team_membership.sh <username> <team1> [team2...]
 #
+# Optional env: GH_TOKEN (if not set, uses existing gh auth)
 # Prints "true" if the user is in any listed team, "false" otherwise.
 
 set -euo pipefail
 
-GH_TOKEN="$1"
-USERNAME="$2"
+USERNAME="$1"
 ORG="qcom-ai-hub"
 
-export GH_TOKEN
-
 RESULT="false"
-for team in "${@:3}"; do
-  if gh api "orgs/${ORG}/teams/${team}/memberships/${USERNAME}" --jq '.state' 2>/dev/null; then
+for team in "${@:2}"; do
+  if [ "$(gh api "orgs/${ORG}/teams/${team}/memberships/${USERNAME}" --jq '.state' || true)" = "active" ]; then
     echo "Author '${USERNAME}' is in ${ORG}/${team}." >&2
     RESULT="true"
     break
