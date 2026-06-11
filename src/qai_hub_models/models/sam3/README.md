@@ -14,7 +14,7 @@ Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.
 ### 1. Install the package
 Install the package via pip:
 ```bash
-# NOTE: 3.10 <= PYTHON_VERSION < 3.14 is supported.
+# NOTE: 3.10 <= PYTHON_VERSION < 3.13 is supported.
 pip install "qai-hub-models[sam3]" git+https://github.com/facebookresearch/sam3.git@f66a2514dff3c032534fe236640c1e7c0f5c7677
 ```
 
