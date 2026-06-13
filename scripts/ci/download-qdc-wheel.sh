@@ -17,7 +17,7 @@ REPO_ROOT="$1"
 TMP_ZIP=/tmp/qualcomm_device_cloud_sdk.zip
 TMP_DIR=/tmp/qualcomm_device_cloud_sdk
 
-curl -fSL --max-time 120 -o "$TMP_ZIP" "$QDC_SDK_URL"
+curl -fSL --max-time 120 --retry 5 --retry-delay 5 --retry-all-errors -o "$TMP_ZIP" "$QDC_SDK_URL"
 echo "$QDC_SDK_SHA256  $TMP_ZIP" | sha256sum -c -
 unzip -q "$TMP_ZIP" -d "$TMP_DIR"
 
