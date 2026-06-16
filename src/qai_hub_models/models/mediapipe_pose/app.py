@@ -26,8 +26,11 @@ from qai_hub_models.models.mediapipe_pose.model import (
     ROTATION_VECTOR_OFFSET_RADS,
     MediaPipePose,
 )
+from qai_hub_models.utils.base_collection_model import (
+    CollectionModel,
+    WorkbenchModelCollection,
+)
 from qai_hub_models.utils.base_dataset import DatasetSplit
-from qai_hub_models.utils.base_model import CollectionModel, PretrainedCollectionModel
 from qai_hub_models.utils.bounding_box_processing import (
     compute_box_corners_with_rotation,
 )
@@ -203,7 +206,7 @@ class MediaPipePoseApp(MediaPipeApp):
     @classmethod
     def get_calibration_data(
         cls,
-        collection_model: PretrainedCollectionModel,
+        collection_model: WorkbenchModelCollection,
         component_name: str,
         input_specs: dict[str, InputSpec] | None = None,
         num_samples: int | None = None,

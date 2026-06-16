@@ -60,7 +60,6 @@ def stable_diffusion_quantize(
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--component",
-        choices=model_cls.component_class_names,
         required=True,
     )
     parser.add_argument(

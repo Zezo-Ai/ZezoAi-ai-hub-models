@@ -21,8 +21,10 @@ import itertools
 import json
 import logging
 
+from qai_hub_models.utils.base_multi_graph_collection_model import (
+    MultiGraphWorkbenchModelCollection,
+)
 from qai_hub_models.utils.base_multi_graph_model import (
-    MultiGraphCollectionModel,
     MultiGraphWorkbenchModel,
 )
 
@@ -87,7 +89,7 @@ from qai_hub_models.utils.base_model import (
     BaseModel,
 )
 from qai_hub_models.utils.checkpoint import CheckpointType
-from qai_hub_models.utils.export_result import MultiGraphGroup
+from qai_hub_models.utils.export_result import MultiGraphComponentGroup, MultiGraphGroup
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.onnx.helpers import ONNXBundle, mock_torch_onnx_inference
 
@@ -1172,28 +1174,7 @@ class Qwen2_5_VL_7B_Part5_Of_5(Qwen2_5_VL_7B_PartBase):
 # ---------------------------------------------------------------------------
 # Collection Class
 # ---------------------------------------------------------------------------
-
-
-@MultiGraphCollectionModel.add_component(
-    Qwen2_5_VL_7B_VisionEncoder,
-    "vision_encoder",
-)
-@MultiGraphCollectionModel.add_component(
-    Qwen2_5_VL_7B_Part1_Of_5, "part1_of_5", cli_args_prefix=""
-)
-@MultiGraphCollectionModel.add_component(
-    Qwen2_5_VL_7B_Part2_Of_5, "part2_of_5", cli_args_prefix=""
-)
-@MultiGraphCollectionModel.add_component(
-    Qwen2_5_VL_7B_Part3_Of_5, "part3_of_5", cli_args_prefix=""
-)
-@MultiGraphCollectionModel.add_component(
-    Qwen2_5_VL_7B_Part4_Of_5, "part4_of_5", cli_args_prefix=""
-)
-@MultiGraphCollectionModel.add_component(
-    Qwen2_5_VL_7B_Part5_Of_5, "part5_of_5", cli_args_prefix=""
-)
-class Qwen2_5_VL_7B_Collection(MultiGraphCollectionModel):
+class Qwen2_5_VL_7B_Collection(MultiGraphWorkbenchModelCollection):
     """
     Unified Collection with 5 text Parts + 1 Vision Encoder for Qwen2.5-VL-7B.
 
@@ -1202,6 +1183,35 @@ class Qwen2_5_VL_7B_Collection(MultiGraphCollectionModel):
     """
 
     _checkpoint: str
+
+    def __init__(
+        self,
+        vision_encoder: Qwen2_5_VL_7B_VisionEncoder,
+        part1: Qwen2_5_VL_7B_Part1_Of_5,
+        part2: Qwen2_5_VL_7B_Part2_Of_5,
+        part3: Qwen2_5_VL_7B_Part3_Of_5,
+        part4: Qwen2_5_VL_7B_Part4_Of_5,
+        part5: Qwen2_5_VL_7B_Part5_Of_5,
+    ) -> None:
+        super().__init__(
+            {
+                "vision_encoder": vision_encoder,
+                "part1_of_5": part1,
+                "part2_of_5": part2,
+                "part3_of_5": part3,
+                "part4_of_5": part4,
+                "part5_of_5": part5,
+            }
+        )
+
+    def get_input_spec(
+        self,
+        image_height: int = DEFAULT_IMAGE_HEIGHT,
+        image_width: int = DEFAULT_IMAGE_WIDTH,
+    ) -> MultiGraphComponentGroup[InputSpec]:
+        return super().get_input_spec(
+            image_height=image_height, image_width=image_width
+        )
 
     @classmethod
     def from_pretrained(
@@ -1250,7 +1260,14 @@ class Qwen2_5_VL_7B_Collection(MultiGraphCollectionModel):
             _skip_quantsim_creation=_skip_quantsim_creation,
         )
         parts: list[BaseModel | MultiGraphWorkbenchModel] = []
-        for part_cls in cls.component_classes.values():
+        for part_cls in [
+            Qwen2_5_VL_7B_VisionEncoder,
+            Qwen2_5_VL_7B_Part1_Of_5,
+            Qwen2_5_VL_7B_Part2_Of_5,
+            Qwen2_5_VL_7B_Part3_Of_5,
+            Qwen2_5_VL_7B_Part4_Of_5,
+            Qwen2_5_VL_7B_Part5_Of_5,
+        ]:
             if issubclass(part_cls, Qwen2_5_VL_7B_VisionEncoder):
                 parts.append(
                     part_cls.from_pretrained(
@@ -1262,8 +1279,8 @@ class Qwen2_5_VL_7B_Collection(MultiGraphCollectionModel):
                     )
                 )
             else:
-                parts.append(part_cls.from_pretrained(**part_kwargs))
-        instance = cls(*parts)
+                parts.append(part_cls.from_pretrained(**part_kwargs))  # type: ignore[attr-defined]
+        instance = cls(*parts)  # type: ignore[arg-type]
         # Use the resolved checkpoint path (not the "DEFAULT" sentinel) so
         # downstream supplementary-file copies find tokenizer.json etc.
         resolved_checkpoint: str | Path = checkpoint

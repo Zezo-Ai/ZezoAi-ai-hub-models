@@ -2,7 +2,6 @@
 # Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
-
 from __future__ import annotations
 
 import contextlib
@@ -27,6 +26,7 @@ from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
 from qai_hub_models.configs.release_assets_yaml import QAIHMModelReleaseAssets
 from qai_hub_models.configs.tool_versions import ToolVersions
+from qai_hub_models.datasets.common import BaseDataset
 from qai_hub_models.scorecard import (
     ScorecardCompilePath,
     ScorecardDevice,
@@ -60,37 +60,22 @@ from qai_hub_models.scorecard.results.yaml import (
     ScorecardJobYaml,
     ToolVersionsByPathYaml,
 )
-from qai_hub_models.scorecard.utils.testing import (
-    get_and_sync_datasets_cache_dir,
-    get_hub_val_dataset,
-    mock_get_calibration_data,
-    mock_on_device_model_call,
-    mock_tabulate_fn,
-)
-from qai_hub_models.scorecard.utils.testing_async_utils import (
-    CompileJobsAreIdenticalCache,
-    append_line_to_file,
-    cache_dataset,
-    callable_side_effect,
-    get_cached_dataset_entries,
-    write_accuracy,
-)
 from qai_hub_models.utils.asset_loaders import load_yaml
 from qai_hub_models.utils.aws import (
     QAIHM_PRIVATE_S3_BUCKET,
     get_qaihm_s3,
     s3_multipart_upload,
 )
-from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
+from qai_hub_models.utils.base_collection_model import (
     CollectionModel,
-    PretrainedCollectionModel,
+    WorkbenchModelCollection,
 )
-from qai_hub_models.utils.base_multi_graph_model import (
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.base_multi_graph_collection_model import (
     MultiGraphCollectionModel,
-    MultiGraphWorkbenchModel,
+    MultiGraphWorkbenchModelCollection,
 )
+from qai_hub_models.utils.base_multi_graph_model import MultiGraphWorkbenchModel
 from qai_hub_models.utils.evaluate import (
     DEFAULT_NUM_EVAL_SAMPLES,
     _load_quant_cpu_onnx,
@@ -115,6 +100,21 @@ from qai_hub_models.utils.inference import AsyncOnDeviceModel
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 from qai_hub_models.utils.qai_hub_helpers import assert_success_and_get_target_models
+from qai_hub_models.utils.testing import (
+    get_and_sync_datasets_cache_dir,
+    get_hub_val_dataset,
+    mock_get_calibration_data,
+    mock_on_device_model_call,
+    mock_tabulate_fn,
+)
+from qai_hub_models.utils.testing_async_utils import (
+    CompileJobsAreIdenticalCache,
+    append_line_to_file,
+    cache_dataset,
+    callable_side_effect,
+    get_cached_dataset_entries,
+    write_accuracy,
+)
 
 __all__ = [
     "ExportFunc",
@@ -161,24 +161,38 @@ def _get_components_and_graph_names(
 
     if isinstance(model, type):
         # A model does not support getting the input spec without being instantiated.
-        # Try to collect the cached graph names from disk instead.
-        if issubclass(model, CollectionModel):
-            components = model.component_class_names
-            if issubclass(model, MultiGraphCollectionModel):
+        # Try to collect the cached component/graph names from disk instead.
+        if issubclass(model, MultiGraphCollectionModel):
+            components = ComponentNamesYaml.from_test_artifacts().get(model_id)
+            if components:
                 gn_cache = GraphNamesYaml.from_test_artifacts()
                 cgns = {cn: gn_cache.get(model_id, cn) for cn in components}
                 component_graph_names = ComponentGroup(
                     {k: v for k, v in cgns.items() if v is not None}
                 )
+        elif issubclass(model, CollectionModel):
+            components = ComponentNamesYaml.from_test_artifacts().get(model_id)
         elif issubclass(model, MultiGraphWorkbenchModel):
             graph_names = GraphNamesYaml.from_test_artifacts().get(model_id)
 
-    elif isinstance(model, CollectionModel):
-        components = model.component_class_names
+    elif isinstance(model, MultiGraphCollectionModel):
+        components = model.component_names
         cgn = ComponentGroup[list[str]]({})
-        for component_name, component in model.components.items():
-            if isinstance(component, MultiGraphWorkbenchModel):
-                cgn[component_name] = component.graph_names
+        if isinstance(model, MultiGraphWorkbenchModelCollection):
+            for component_name, component in model.components.items():
+                if isinstance(component, MultiGraphWorkbenchModel):
+                    cgn[component_name] = component.graph_names
+                else:
+                    cgn[component_name] = [component.context_graph_name]
+        if cgn:
+            component_graph_names = cgn
+    elif isinstance(model, CollectionModel):
+        components = model.component_names
+        cgn = ComponentGroup[list[str]]({})
+        if isinstance(model, WorkbenchModelCollection):
+            for component_name, component in model.components.items():
+                if isinstance(component, MultiGraphWorkbenchModel):
+                    cgn[component_name] = component.graph_names
         if cgn:
             component_graph_names = cgn
     elif isinstance(model, MultiGraphWorkbenchModel):
@@ -521,7 +535,7 @@ def pre_quantize_compile_via_export(
         | MultiGraphComponentGroup[hub.CompileJob],
     ],
     model_id: str,
-    model: PretrainedCollectionModel | BaseModel,
+    model: QAIHMModelT,
     upload_model: Callable[..., Any] | None = None,
 ) -> None:
     """
@@ -561,7 +575,6 @@ def pre_quantize_compile_via_export(
         component_graph_names=component_graph_names,
     )
 
-    # Upload model
     assert upload_model is not None
     source_models = upload_model(model)
 
@@ -586,7 +599,7 @@ def quantize_via_export(
         ..., hub.QuantizeJob | ComponentGroup[hub.QuantizeJob] | None
     ],
     model_id: str,
-    model: CollectionModel | BaseModel,
+    model: QAIHMModelT,
     precision: Precision,
 ) -> None:
     """
@@ -665,7 +678,7 @@ def compile_via_export(
         | MultiGraphComponentGroup[hub.CompileJob],
     ],
     model_id: str,
-    model: PretrainedCollectionModel | MultiGraphCollectionModel | BaseModel,
+    model: QAIHMModelT,
     precision: Precision,
     scorecard_path: ScorecardCompilePath,
     device: ScorecardDevice,
@@ -790,7 +803,7 @@ def compile_via_export(
 def link_via_export(
     link_model: Callable[..., hub.LinkJob | ComponentGroup[hub.LinkJob]],
     model_id: str,
-    model: CollectionModel | BaseModel,
+    model: QAIHMModelT,
     precision: Precision,
     scorecard_path: ScorecardCompilePath,
     device: ScorecardDevice,
@@ -1057,7 +1070,7 @@ def profile_via_export(
         | MultiGraphComponentGroup[hub.ProfileJob],
     ],
     model_id: str,
-    model: PretrainedCollectionModel | MultiGraphCollectionModel | BaseModel,
+    model: QAIHMModelT,
     precision: Precision,
     scorecard_path: ScorecardProfilePath,
     device: ScorecardDevice,
@@ -1142,7 +1155,7 @@ def inference_via_export(
         | MultiGraphComponentGroup[hub.InferenceJob],
     ],
     model_id: str,
-    model: PretrainedCollectionModel | MultiGraphCollectionModel | BaseModel,
+    model: QAIHMModelT,
     precision: Precision,
     scorecard_path: ScorecardProfilePath,
     device: ScorecardDevice,
@@ -1244,7 +1257,7 @@ def _all_cached_profile_jobs_succeeded(test_params: ScExportTestParams) -> bool:
 
 def export_test_e2e(
     export_model: ExportFunc,
-    model_cls: type[BaseModel | CollectionModel],
+    model_cls: type[QAIHMModelT],
     model_id: str,
     precision: Precision,
     scorecard_path: ScorecardProfilePath,
@@ -1336,7 +1349,7 @@ def export_test_e2e(
             mock.MagicMock(return_value=mock.MagicMock(spec=hub.Model)),
         )
     )
-    if issubclass(model_cls, PretrainedCollectionModel):
+    if issubclass(model_cls, CollectionModel):
         mocks.append(
             mock.patch.object(
                 model_cls,
@@ -1493,7 +1506,12 @@ def export_test_e2e(
 
 
 def on_device_inference_for_accuracy_validation(
-    model: type[BaseModel | CollectionModel],
+    model: type[
+        BaseModel
+        | CollectionModel
+        | MultiGraphWorkbenchModel
+        | MultiGraphCollectionModel
+    ],
     dataset_cls: type[BaseDataset],
     model_id: str,
     precision: Precision,
@@ -1576,7 +1594,7 @@ def on_device_inference_for_accuracy_validation(
 
 
 def torch_inference_for_accuracy_validation(
-    model: BaseModel | CollectionModel, dataset_cls: type[BaseDataset], model_id: str
+    model: QAIHMModelT, dataset_cls: type[BaseDataset], model_id: str
 ) -> None:
     """
     Runs torch inference job on the given dataset.
@@ -1751,7 +1769,7 @@ def split_and_group_accuracy_validation_output_batches(
 def accuracy_on_sample_inputs_via_export(
     export_model: ExportFunc,
     model_id: str,
-    model: BaseModel | CollectionModel,
+    model: QAIHMModelT,
     precision: Precision,
     scorecard_path: ScorecardProfilePath,
     device: ScorecardDevice,

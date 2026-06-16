@@ -8,13 +8,17 @@ import inspect
 
 from qai_hub_models import Precision
 from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
-from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
+from qai_hub_models.datasets.common import BaseDataset
+from qai_hub_models.models.protocols import FromPretrainedProtocol
+from qai_hub_models.utils.base_collection_model import (
     CollectionModel,
-    PretrainedCollectionModel,
+    WorkbenchModelCollection,
 )
-from qai_hub_models.utils.base_multi_graph_model import MultiGraphCollectionModel
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.base_multi_graph_collection_model import (
+    MultiGraphCollectionModel,
+    MultiGraphWorkbenchModelCollection,
+)
 
 
 def _is_valid_dataset_class(dataset_cls: type) -> bool:
@@ -73,7 +77,7 @@ def validate_io_names(instance: BaseModel) -> list[str]:
 
 
 def validate_io_names_collection(
-    model: CollectionModel | MultiGraphCollectionModel,
+    model: WorkbenchModelCollection | MultiGraphWorkbenchModelCollection,
 ) -> list[str]:
     """
     Run I/O name validation on each component of a collection model.
@@ -99,7 +103,7 @@ def validate_io_names_collection(
 
 
 def validate_eval_datasets(
-    model: BaseModel | PretrainedCollectionModel,
+    model: BaseModel | CollectionModel | MultiGraphCollectionModel,
 ) -> list[str]:
     """
     Validate that all dataset classes returned by get_eval_dataset_classes() are valid.
@@ -198,7 +202,7 @@ def _component_precision_implemented(component: BaseModel) -> bool:
 
 
 def validate_component_precision(
-    model: CollectionModel | MultiGraphCollectionModel,
+    model: WorkbenchModelCollection | MultiGraphWorkbenchModelCollection,
     code_gen: QAIHMModelCodeGen,
 ) -> list[str]:
     """
@@ -252,7 +256,7 @@ def validate_component_precision(
 
 
 def perform_runtime_model_validation(
-    model_cls: type[BaseModel | PretrainedCollectionModel | MultiGraphCollectionModel],
+    model_cls: type,
     model_id: str,
     app_cls: type | None = None,
 ) -> None:
@@ -282,24 +286,22 @@ def perform_runtime_model_validation(
     code_gen = QAIHMModelCodeGen.from_model(model_id)
     errors: list[str] = []
 
+    assert issubclass(model_cls, FromPretrainedProtocol)
     model = model_cls.from_pretrained()
-    if isinstance(model, MultiGraphCollectionModel):
+    if isinstance(
+        model,
+        (WorkbenchModelCollection, MultiGraphWorkbenchModelCollection),
+    ):
         errors.extend(validate_io_names_collection(model))
         errors.extend(validate_component_precision(model, code_gen))
-        # MultiGraphCollectionModel doesn't support new dataset API yet, skip dataset validation
-    elif isinstance(model, PretrainedCollectionModel):
-        errors.extend(validate_io_names_collection(model))
-        errors.extend(validate_component_precision(model, code_gen))
-        errors.extend(validate_eval_datasets(model))
-    elif isinstance(model, CollectionModel):
-        errors.extend(validate_io_names_collection(model))
-        errors.extend(validate_component_precision(model, code_gen))
-        # Other CollectionModel types don't support dataset validation yet
-    else:
+    elif isinstance(model, BaseModel):
         errors.extend(validate_io_names(model))
         errors.extend(validate_mixed_precision_litemp(model, code_gen))
         errors.extend(validate_eval_datasets_have_evaluator(model))
-        errors.extend(validate_eval_datasets(model))
+    else:
+        raise NotImplementedError()
+
+    errors.extend(validate_eval_datasets(model))
 
     if errors:
         header = (

@@ -30,8 +30,11 @@ from qai_hub_models.models.mediapipe_hand_gesture.model import (
     GESTURE_LABELS,
     MediaPipeHandGesture,
 )
+from qai_hub_models.utils.base_collection_model import (
+    CollectionModel,
+    WorkbenchModelCollection,
+)
 from qai_hub_models.utils.base_dataset import DatasetSplit
-from qai_hub_models.utils.base_model import CollectionModel, PretrainedCollectionModel
 from qai_hub_models.utils.bounding_box_processing import (
     compute_box_affine_crop_resize_matrix,
 )
@@ -437,7 +440,7 @@ class MediaPipeHandGestureApp(MediaPipeApp):
     @classmethod
     def get_calibration_data(
         cls,
-        collection_model: PretrainedCollectionModel,
+        collection_model: WorkbenchModelCollection,
         component_name: str,
         input_specs: dict[str, InputSpec] | None = None,
         num_samples: int | None = None,

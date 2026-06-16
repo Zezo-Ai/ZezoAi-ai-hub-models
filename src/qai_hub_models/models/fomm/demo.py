@@ -17,7 +17,6 @@ from qai_hub_models.utils.args import (
     demo_model_components_from_cli_args,
     get_model_cli_parser,
     get_on_device_demo_parser,
-    model_from_cli_args,
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import (
@@ -26,7 +25,6 @@ from qai_hub_models.utils.asset_loaders import (
     load_path,
     qaihm_temp_dir,
 )
-from qai_hub_models.utils.evaluate import EvalMode
 
 SOURCE_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "test_source_image.png"
@@ -73,19 +71,12 @@ def main(is_test: bool = False) -> None:
 
     print(f"Loaded {len(driving_frames)} driving frames.")
 
-    python_model = model_from_cli_args(FOMM, args)
+    python_model, (detector_compiled, generator_compiled) = (
+        demo_model_components_from_cli_args(FOMM, MODEL_ID, args)
+    )
     app = FOMMApp(python_model)
-
-    if args.eval_mode == EvalMode.ON_DEVICE:
-        if not args.hub_model_id:
-            raise ValueError("--hub-model-id is required for on-device mode.")
-
-        detector_compiled, generator_compiled = demo_model_components_from_cli_args(
-            FOMM, MODEL_ID, args
-        )
-
-        app.kp_detector = detector_compiled  # type: ignore[assignment]
-        app.generator = generator_compiled  # type: ignore[assignment]
+    app.kp_detector = detector_compiled  # type: ignore[assignment]
+    app.generator = generator_compiled  # type: ignore[assignment]
 
     print("Running FOMM animation...")
     output_frames = app.copy_motion_to_video(source_image, driving_frames)

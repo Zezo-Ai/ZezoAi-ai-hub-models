@@ -18,7 +18,6 @@ from qai_hub_models.utils.args import (
     get_on_device_demo_parser,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.evaluate import EvalMode
 
 TEST_AUDIO_PATH = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "audio/jfk.npz"
@@ -56,14 +55,9 @@ def hf_whisper_demo(model_cls: type[HfWhisper], model_id: str, is_test: bool) ->
     if (args.stream_audio_device is not None) and (args.audio_file is not None):
         raise ValueError("Cannot set both audio-file and stream-audio-device")
 
-    model = model_cls.from_pretrained()
-
-    if args.eval_mode == EvalMode.ON_DEVICE:
-        encoder, decoder = demo_model_components_from_cli_args(
-            model_cls, model_id, args
-        )
-    else:
-        encoder, decoder = model.encoder, model.decoder
+    _, (encoder, decoder) = demo_model_components_from_cli_args(
+        model_cls, model_id, args
+    )
 
     app = HfWhisperApp(
         encoder,  # type: ignore[arg-type]

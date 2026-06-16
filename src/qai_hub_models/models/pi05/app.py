@@ -25,7 +25,7 @@ from qai_hub_models.models.pi05.model import (
     Pi05PaliGemmaVision,
 )
 from qai_hub_models.protocols import ExecutableModelProtocol
-from qai_hub_models.utils.base_model import PretrainedCollectionModel
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.image_processing import resize_and_normalize
 from qai_hub_models.utils.inference import OnDeviceModel
@@ -514,7 +514,7 @@ class Pi05App(torch.nn.Module):
     @classmethod
     def get_calibration_data(
         cls,
-        collection_model: PretrainedCollectionModel,
+        collection_model: WorkbenchModelCollection,
         component_name: str,
         input_specs: dict[str, InputSpec] | None = None,
         num_samples: int | None = None,

@@ -12,8 +12,11 @@ from typing import Protocol, runtime_checkable
 import torch
 from qai_hub.public_rest_api import DatasetEntries
 
-from qai_hub_models.protocols import ExecutableModelProtocol
-from qai_hub_models.utils.base_model import PretrainedCollectionModel
+from qai_hub_models.models.protocols import ExecutableModelProtocol
+from qai_hub_models.utils.base_collection_model import (
+    CollectionModel,
+    WorkbenchModelCollection,
+)
 from qai_hub_models.utils.inference import AsyncOnDeviceModel, AsyncOnDeviceResult
 from qai_hub_models.utils.input_spec import InputSpec
 
@@ -37,7 +40,7 @@ class BaseCollectionApp(ABC):
 
     @classmethod
     @abstractmethod
-    def from_pretrained(cls, model: PretrainedCollectionModel) -> BaseCollectionApp:
+    def from_pretrained(cls, model: CollectionModel) -> BaseCollectionApp:
         pass
 
 
@@ -48,7 +51,7 @@ class CollectionAppQuantizeProtocol(Protocol):
     @classmethod
     def get_calibration_data(
         cls,
-        collection_model: PretrainedCollectionModel,
+        collection_model: WorkbenchModelCollection,
         component_name: str,
         input_specs: dict[str, InputSpec] | None = None,
         num_samples: int | None = None,

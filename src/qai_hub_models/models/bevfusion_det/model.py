@@ -33,15 +33,13 @@ from qai_hub_models.utils.asset_loaders import (
     CachedWebModelAsset,
     load_torch,
 )
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.bounding_box_processing_3d import (
     circle_nms as patched_circle_nms,
 )
 from qai_hub_models.utils.bounding_box_processing_3d import onnx_atan2
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.image_processing import (
     normalize_image_torchvision,
 )
@@ -405,11 +403,7 @@ class BEVFusionDecoder(BaseModel):
         return compile_options
 
 
-@CollectionModel.add_component(BEVFusionEncoder1, "encoder_1")
-@CollectionModel.add_component(BEVFusionEncoder2, "encoder_2")
-@CollectionModel.add_component(BEVFusionEncoder3, "encoder_3")
-@CollectionModel.add_component(BEVFusionDecoder, "decoder")
-class BEVFusion(PretrainedCollectionModel):
+class BEVFusion(WorkbenchModelCollection):
     def __init__(
         self,
         encoder1: BEVFusionEncoder1,
@@ -417,12 +411,27 @@ class BEVFusion(PretrainedCollectionModel):
         encoder3: BEVFusionEncoder3,
         decoder: BEVFusionDecoder,
     ) -> None:
-        super().__init__(encoder1, encoder2, encoder3, decoder)
+        super().__init__(
+            {
+                "encoder_1": encoder1,
+                "encoder_2": encoder2,
+                "encoder_3": encoder3,
+                "decoder": decoder,
+            }
+        )
         self.encoder1 = encoder1
         self.encoder2 = encoder2
         self.encoder3 = encoder3
 
         self.decoder = decoder
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+        height: int = 256,
+        width: int = 704,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size, height=height, width=width)
 
     @staticmethod
     def load_model(

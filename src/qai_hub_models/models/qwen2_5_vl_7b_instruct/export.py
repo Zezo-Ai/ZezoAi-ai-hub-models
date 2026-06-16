@@ -31,12 +31,11 @@ from qai_hub_models.models.qwen2_5_vl_7b_instruct import (
 )
 from qai_hub_models.utils.args import (
     export_parser,
-    get_component_input_spec_kwargs,
     get_export_model_name,
     get_model_kwargs,
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
-from qai_hub_models.utils.base_multi_graph_model import (
+from qai_hub_models.utils.base_multi_graph_collection_model import (
     MultiGraphCollectionModel,
 )
 from qai_hub_models.utils.checkpoint import CheckpointType
@@ -47,6 +46,7 @@ from qai_hub_models.utils.export_result import (
 )
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
 from qai_hub_models.utils.input_spec import InputSpec, to_hub_input_specs
+from qai_hub_models.utils.kwarg_helpers import filter_kwargs
 from qai_hub_models.utils.onnx.helpers import download_and_unzip_workbench_onnx_model
 from qai_hub_models.utils.path_helpers import get_next_free_path
 from qai_hub_models.utils.printing import (
@@ -80,7 +80,7 @@ def upload_model(
                 )
             )
         uploaded[(comp_name, graph_name)] = hub_model
-        if model.component_has_shared_source_model(comp_name):
+        if model.get_component_has_shared_source_model(comp_name):
             shared[comp_name] = hub_model
     return uploaded
 
@@ -365,11 +365,6 @@ def export_model(
     assert precision in [
         Precision.w4a16,
     ], f"Precision {precision!s} is not supported by {model_name}"
-    component_arg = components
-    components = components or Model.component_class_names
-    for component_name in components:
-        if component_name not in Model.component_class_names:
-            raise ValueError(f"Invalid component {component_name}.")
     if fetch_static_assets or not can_access_qualcomm_ai_hub():
         static_model_path = export_without_hub_access(
             MODEL_ID,
@@ -382,7 +377,7 @@ def export_model(
             target_runtime,
             precision,
             compile_options + profile_options,
-            component_arg,
+            components,
             qaihm_version_tag=fetch_static_assets,
         )
         return MultiGraphCollectionExportResult(download_path=static_model_path)
@@ -397,11 +392,12 @@ def export_model(
 
     # 1. Instantiates a PyTorch model and converts it to a traced TorchScript format
     model = Model.from_pretrained(**get_model_kwargs(Model, additional_model_kwargs))
-    first_component = next(iter(Model.component_classes))  # type: ignore[misc]
+    components = components or model.component_names
+    for component_name in components:
+        if component_name not in model.component_names:
+            raise ValueError(f"Invalid component {component_name}.")
     input_specs = model.get_input_spec(
-        **get_component_input_spec_kwargs(
-            Model, first_component, additional_model_kwargs
-        )
+        **filter_kwargs(model.get_input_spec, additional_model_kwargs)
     )
     source_models_to_compile = upload_model(model, input_specs, components)
 

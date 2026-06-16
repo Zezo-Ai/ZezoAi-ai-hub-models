@@ -22,7 +22,6 @@ from qai_hub_models.utils.args import (
 )
 from qai_hub_models.utils.asset_loaders import load_image
 from qai_hub_models.utils.display import display_or_save_image
-from qai_hub_models.utils.evaluate import EvalMode
 
 
 # Run Detectron2 app end-to-end on a sample image.
@@ -71,14 +70,9 @@ def main(is_test: bool = False) -> None:
     args = parser.parse_args([] if is_test else None)
     validate_on_device_demo_args(args, MODEL_ID)
 
-    wrapper = Detectron2Detection.from_pretrained()
-
-    if args.eval_mode == EvalMode.ON_DEVICE:
-        proposal_generator, roi_head = demo_model_components_from_cli_args(
-            Detectron2Detection, MODEL_ID, args
-        )
-    else:
-        proposal_generator, roi_head = wrapper.proposal_generator, wrapper.roi_head
+    wrapper, (proposal_generator, roi_head) = demo_model_components_from_cli_args(
+        Detectron2Detection, MODEL_ID, args
+    )
 
     input_spec = wrapper.proposal_generator.get_input_spec()
 

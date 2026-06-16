@@ -20,7 +20,6 @@ from qai_hub_models.utils.args import (
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
-from qai_hub_models.utils.evaluate import EvalMode
 
 
 def sam2_demo_main(
@@ -84,15 +83,9 @@ def sam2_demo_main(
 
     coordinates: list[str] = list(filter(None, args.point_coordinates.split(";")))
 
-    wrapper = model_cls.from_pretrained(args.model_type)
-
-    if args.eval_mode == EvalMode.ON_DEVICE:
-        sam2_encoder, sam2_decoder = demo_model_components_from_cli_args(
-            model_cls, model_id, args
-        )
-    else:
-        sam2_encoder = wrapper.encoder
-        sam2_decoder = wrapper.decoder
+    wrapper, (sam2_encoder, sam2_decoder) = demo_model_components_from_cli_args(
+        model_cls, model_id, args
+    )
 
     app = SAM2App(
         encoder_input_img_size=wrapper.encoder.sam2.image_size,

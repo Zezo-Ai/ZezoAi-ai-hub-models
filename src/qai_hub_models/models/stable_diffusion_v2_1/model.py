@@ -19,7 +19,6 @@ from qai_hub_models.models._shared.stable_diffusion.model import (
     UnetQuantizableBase,
     VaeDecoderQuantizableBase,
 )
-from qai_hub_models.utils.base_model import CollectionModel
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 
 if TYPE_CHECKING:
@@ -76,11 +75,32 @@ class VaeDecoderQuantizable(VaeDecoderQuantizableBase):
 
 
 # Align component names with Huggingface's repo's subfolder names
-@CollectionModel.add_component(TextEncoderQuantizable, "text_encoder")
-@CollectionModel.add_component(UnetQuantizable, "unet")
-@CollectionModel.add_component(VaeDecoderQuantizable, "vae")
 class StableDiffusionV2_1_Quantized(StableDiffusionBase):
     hf_repo_id = HF_REPO
+    component_classes = {
+        "text_encoder": TextEncoderQuantizable,
+        "unet": UnetQuantizable,
+        "vae": VaeDecoderQuantizable,
+    }
+
+    def __init__(
+        self,
+        text_encoder: TextEncoderQuantizable,
+        unet: UnetQuantizable,
+        vae: VaeDecoderQuantizable,
+    ) -> None:
+        super().__init__(text_encoder, unet, vae)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        checkpoint: str = "DEFAULT",
+    ) -> StableDiffusionV2_1_Quantized:
+        return cls(
+            TextEncoderQuantizable.from_pretrained(checkpoint=checkpoint),
+            UnetQuantizable.from_pretrained(checkpoint=checkpoint),
+            VaeDecoderQuantizable.from_pretrained(checkpoint=checkpoint),
+        )
 
     @staticmethod
     def make_tokenizer() -> CLIPTokenizer:

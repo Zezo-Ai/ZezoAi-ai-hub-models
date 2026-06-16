@@ -24,9 +24,9 @@ from qai_hub_models.utils.input_spec import InputSpec, to_hub_input_specs
 {%- if is_collection_model %}
 {%- if not is_precompiled %}
 {%- if has_multi_graph %}
-from qai_hub_models.utils.base_multi_graph_model import MultiGraphCollectionModel, MultiGraphWorkbenchModel
+from qai_hub_models.utils.base_multi_graph_collection_model import MultiGraphCollectionModel
 {%- else %}
-from qai_hub_models.utils.base_model import PretrainedCollectionModel
+from qai_hub_models.utils.base_collection_model import CollectionModel
 {%- endif %}
 {%- endif %}
 from qai_hub_models.models.{{ model_name }} import App
@@ -35,7 +35,8 @@ from qai_hub_models.models.{{ model_name }} import App
 {%- if not is_precompiled %}
 from qai_hub_models.utils.base_model import BaseModel
 {%- else %}
-from qai_hub_models.utils.base_model import BaseModel, BasePrecompiledModel, PrecompiledCollectionModel
+from qai_hub_models.utils.base_model import BaseModel, BasePrecompiledModel
+from qai_hub_models.utils.base_collection_model import PrecompiledCollectionModel
 {%- endif %}
 import tempfile
 from pathlib import Path
@@ -51,11 +52,11 @@ from qai_hub_models.utils.checkpoint import CheckpointType
 from qai_hub_models.utils.args import (
     export_parser,
     get_export_model_name,
-    {{ "get_component_input_spec_kwargs," if is_collection_model else "" }}
     {%- if not is_precompiled %}
     get_model_kwargs,
     {%- endif %}
 )
+from qai_hub_models.utils.kwarg_helpers import filter_kwargs
 from qai_hub_models import SampleInputsType
 {%- if is_collection_model and has_multi_graph %}
 from qai_hub_models.utils.export_result import MultiGraphCollectionExportResult, MultiGraphComponentGroup, ComponentGroup
@@ -93,7 +94,7 @@ from qai_hub_models.configs.model_metadata import ChipsetAttributes, ModelFileMe
 {%- if can_use_quantize_job %}
 def quantize_model(
     precision: {{ "Precision | dict[str, Precision]" if is_collection_model else "Precision" }},
-    model: {{ "MultiGraphCollectionModel" if has_multi_graph and is_collection_model else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "MultiGraphCollectionModel" if has_multi_graph and is_collection_model else "CollectionModel" if is_collection_model else "BaseModel" }},
     model_name: str,
     onnx_model{{ optional_s }}: {{ "ComponentGroup[hub.Model]" if is_collection_model else "hub.Model" }},
     num_calibration_samples: int | None,
@@ -106,12 +107,16 @@ def quantize_model(
     {%- endif %}
 ) -> {{ "ComponentGroup[hub.client.QuantizeJob]" if is_collection_model else "hub.client.QuantizeJob" }}:
     {%- if is_collection_model %}
-    component_precisions = model.get_mixed_precisions(precision) if isinstance(precision, Precision) else precision
+    if isinstance(precision, Precision):
+        component_precisions = model.get_mixed_precisions(precision) \
+            if precision in [Precision.mixed, Precision.mixed_with_float] \
+            else {component_name: precision for component_name in (components or onnx_models)}
+    else:
+        component_precisions = precision
+
     quantize_jobs: ComponentGroup[hub.client.QuantizeJob] = ComponentGroup()
     input_specs = input_specs or model.get_input_spec()
-    for component_name in (components or Model.component_class_names):
-        component_precision = component_precisions[component_name]
-
+    for component_name, component_precision in component_precisions.items():
         if component_precision != Precision.float:
     {%- else %}
     input_spec = input_spec or model.get_input_spec()
@@ -148,7 +153,7 @@ def quantize_model(
 
 {% if not is_precompiled %}
 def upload_model(
-    model: {{ "MultiGraphCollectionModel" if has_multi_graph and is_collection_model else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "MultiGraphCollectionModel" if has_multi_graph and is_collection_model else "CollectionModel" if is_collection_model else "BaseModel" }},
     {%- if not is_collection_model %}
     input_spec{{ "s: MultiGraphGroup[InputSpec] | None" if has_multi_graph else ": InputSpec | None" }} = None,
     {%- else %}
@@ -174,12 +179,12 @@ def upload_model(
         with tempfile.TemporaryDirectory() as tmpdir:
             hub_model = hub.upload_model(str(model.serialize_component_graph(comp_name, graph_name, tmpdir, spec)))
         uploaded[(comp_name, graph_name)] = hub_model
-        if model.component_has_shared_source_model(comp_name):
+        if model.get_component_has_shared_source_model(comp_name):
             shared[comp_name] = hub_model
     {%- else %}
     all_input_specs = input_specs or model.get_input_spec()
     uploaded: ComponentGroup[hub.Model] = ComponentGroup()
-    for name in (components or Model.component_class_names):
+    for name in (components or model.component_names):
         spec = all_input_specs[name]
         with tempfile.TemporaryDirectory() as tmpdir:
             uploaded[name] = hub.upload_model(str(model.serialize_component(name, tmpdir, spec)))
@@ -209,7 +214,7 @@ def upload_model(
 
 
 def compile_model(
-    model: {{ "MultiGraphCollectionModel" if has_multi_graph and is_collection_model else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "MultiGraphCollectionModel" if has_multi_graph and is_collection_model else "CollectionModel" if is_collection_model else "BaseModel" }},
     model_name: str,
     device: hub.Device,
     target_runtime: TargetRuntime,
@@ -250,7 +255,7 @@ def compile_model(
     all_compile_options = model.get_hub_compile_options(target_runtime, precision, extra_options, device)
     {%- endif %}
     {%- if not has_multi_graph %}
-    for component_name in (components or Model.component_class_names):
+    for component_name in (components or model.component_names):
         input_spec = all_input_specs[component_name]
     {%- endif %}
     {%- if has_multi_graph %}
@@ -327,7 +332,7 @@ def link_model(
     {%- endif %}
     device: hub.Device,
     model_name: str,
-    model: {{ "MultiGraphCollectionModel" if has_multi_graph and is_collection_model else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "PrecompiledCollectionModel" if is_precompiled else "MultiGraphCollectionModel" if has_multi_graph and is_collection_model else "CollectionModel" if is_collection_model else "BaseModel" }},
     target_runtime: TargetRuntime,
     extra_options: str = "",
 ) -> {{ "ComponentGroup[hub.client.LinkJob]" if is_collection_model else "hub.client.LinkJob" }}:
@@ -435,7 +440,7 @@ def profile_model(
 ) -> {{ "ComponentGroup[hub.client.ProfileJob]" if is_collection_model else "hub.client.ProfileJob" }}:
     {%- if is_collection_model %}
     profile_jobs: ComponentGroup[hub.client.ProfileJob] = ComponentGroup()
-    for component_name in (components or Model.component_class_names):
+    for component_name in (components or options):
         print(f"Profiling model {component_name} on a hosted device.")
     {%- else %}
     print(f"Profiling model {model_name} on a hosted device.")
@@ -530,7 +535,7 @@ def inference_model(
 ) -> {{ "ComponentGroup[hub.client.InferenceJob]" if is_collection_model else "hub.client.InferenceJob" }}:
     {%- if is_collection_model %}
     inference_jobs: ComponentGroup[hub.client.InferenceJob] = ComponentGroup()
-    for component_name in (components or Model.component_class_names):
+    for component_name in (components or options):
         print(f"Running inference for {component_name} on a hosted device with example inputs.")
     {%- else %}
     print(f"Running inference for {model_name} on a hosted device with example inputs.")
@@ -562,7 +567,7 @@ def inference_model(
 {% if not is_precompiled %}
 def download_model(
     output_dir: os.PathLike | str,
-    model: {{ "MultiGraphCollectionModel" if has_multi_graph and is_collection_model else "PretrainedCollectionModel" if is_collection_model else "BaseModel" }},
+    model: {{ "MultiGraphCollectionModel" if has_multi_graph and is_collection_model else "CollectionModel" if is_collection_model else "BaseModel" }},
     runtime: TargetRuntime,
     precision: Precision,
     tool_versions: ToolVersions,
@@ -816,13 +821,6 @@ def export_model(
     {%- if not is_precompiled and not can_use_quantize_job %}
     assert precision in [{% for precision in supported_precisions %}{{ "Precision." + precision.__str__() }},{% endfor %}], f"Precision {str(precision)} is not supported by {model_name}"
     {%- endif %}
-    {%- if is_collection_model %}
-    component_arg = components
-    components = components or Model.component_class_names
-    for component_name in components:
-        if component_name not in Model.component_class_names:
-            raise ValueError(f"Invalid component {component_name}.")
-    {%- endif %}
     {% if model_display_name is defined -%}
     if fetch_static_assets or not can_access_qualcomm_ai_hub():
         static_model_path = export_without_hub_access(
@@ -836,7 +834,7 @@ def export_model(
             target_runtime,
             precision,
             {{ "quantize_options + " if can_use_quantize_job else "" }}{{ "compile_options + " if not is_precompiled else "" }}profile_options,
-            {%- if is_collection_model %}component_arg,{%- endif %}
+            {%- if is_collection_model %}components,{%- endif %}
             qaihm_version_tag=fetch_static_assets,
         )
         {%- if is_collection_model and has_multi_graph %}
@@ -864,6 +862,13 @@ def export_model(
     model = Model.from_pretrained(**get_model_kwargs(Model, dict(**additional_model_kwargs, precision=precision)))
     {%- endif %}
 
+    {%- if is_collection_model %}
+    components = components or model.component_names
+    for component_name in components:
+        if component_name not in model.component_names:
+            raise ValueError(f"Invalid component {component_name}.")
+    {%- endif %}
+
     {%- if is_precompiled %}
 
     # {{ steps.upload }}
@@ -874,26 +879,7 @@ def export_model(
             path = model.get_component_target_model_path(component_name)
             uploaded_models[component_name] = hub.upload_model(path)
     {%- else %}
-
-    {%- if not is_collection_model %}
-    input_spec = model.get_input_spec(
-        **filter_kwargs(model.get_input_spec, additional_model_kwargs)
-    )
-    {%- else %}
-    {%- if has_multi_graph %}
-    first_component = next(iter(Model.component_classes))  # type: ignore[misc]
-    input_specs = model.get_input_spec(
-        **get_component_input_spec_kwargs(Model, first_component, additional_model_kwargs)
-    )
-    {%- else %}
-    input_specs: ComponentGroup[InputSpec] = ComponentGroup({
-        name: model.components[name].get_input_spec(
-            **get_component_input_spec_kwargs(Model, name, additional_model_kwargs)
-        )
-        for name in components
-    })
-    {%- endif %}
-    {%- endif %}
+    input_spec{{ optional_s }} = model.get_input_spec(**filter_kwargs(model.get_input_spec, additional_model_kwargs))
     source_model{{ optional_s }}_to_compile = upload_model(model, input_spec{{ optional_s }}{{ ", components" if is_collection_model else "" }})
 
     {% if can_use_quantize_job %}
@@ -914,7 +900,9 @@ def export_model(
             {%- endif %}
         else:
             {%- if is_collection_model %}
-            component_precisions = model.get_mixed_precisions(precision)
+            component_precisions = model.get_mixed_precisions(precision) \
+                if precision in [Precision.mixed, Precision.mixed_with_float] \
+                else {component_name: precision for component_name in components}
             {%- endif %}
             onnx_compile_result = compile_model(
                 model,

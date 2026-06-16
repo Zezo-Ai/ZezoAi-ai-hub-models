@@ -42,17 +42,15 @@ from qai_hub_models.models._shared.stable_diffusion.model_adaptation import (
     monkey_patch_model,
 )
 from qai_hub_models.utils.aimet.config_loader import get_aimet_config_path
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    IndependentComponentFromPretrainedMixin,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.checkpoint import (
     CheckpointSpec,
     CheckpointType,
     FromPretrainedMixin,
     hf_repo_exists,
 )
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 from qai_hub_models.utils.qai_hub_helpers import ensure_hexagon_version
@@ -96,6 +94,8 @@ class TextEncoderBase(BaseModel, FromPretrainedMixin):
 
 class TextEncoderQuantizableBase(AIMETOnnxQuantizableMixin, TextEncoderBase):
     """Exportable CLIP Text Encoder that can be quantized by AIMET-ONNX."""
+
+    default_subfolder = "text_encoder"
 
     def __init__(
         self,
@@ -246,6 +246,8 @@ class UnetBase(BaseModel, FromPretrainedMixin):
 class UnetQuantizableBase(AIMETOnnxQuantizableMixin, UnetBase):
     """Exportable Unet that can be quantized by AIMET-ONNX."""
 
+    default_subfolder = "unet"
+
     def __init__(
         self,
         sim_model: QuantSimOnnx,
@@ -362,6 +364,8 @@ class VaeDecoderBase(BaseModel, FromPretrainedMixin):
 
 class VaeDecoderQuantizableBase(AIMETOnnxQuantizableMixin, VaeDecoderBase):
     """Exportable VaeDecoder that can be quantized by AIMET-ONNX."""
+
+    default_subfolder = "vae"
 
     def __init__(
         self,
@@ -483,14 +487,34 @@ def make_scheduler(
     return scheduler_cls.from_config(cfg)
 
 
-class StableDiffusionBase(
-    IndependentComponentFromPretrainedMixin, PretrainedCollectionModel
-):
+class StableDiffusionBase(WorkbenchModelCollection):
     """Put glue modules here to aid app/demo code."""
 
     guidance_scale: float = 7.5
     default_num_steps: int = 20
     hf_repo_id: str = ""
+    component_classes: dict[str, type[BaseModel]] = {
+        "text_encoder": TextEncoderBase,
+        "unet": UnetBase,
+        "vae": VaeDecoderBase,
+    }
+
+    def __init__(
+        self,
+        text_encoder: BaseModel,
+        unet: BaseModel,
+        vae: BaseModel,
+    ) -> None:
+        super().__init__({"text_encoder": text_encoder, "unet": unet, "vae": vae})
+        self.text_encoder = text_encoder
+        self.unet = unet
+        self.vae = vae
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size)
 
     @staticmethod
     def make_tokenizer() -> Tokenizer:

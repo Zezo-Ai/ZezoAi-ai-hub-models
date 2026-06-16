@@ -18,7 +18,6 @@ from qai_hub_models.utils.args import (
     demo_model_components_from_cli_args,
     get_model_cli_parser,
     get_on_device_demo_parser,
-    model_from_cli_args,
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
@@ -81,20 +80,14 @@ def mediapipe_hand_gesture_demo(
     if args.use_default_image or is_test:
         args.image = INPUT_IMAGE_ADDRESS
 
-    torch_model = model_from_cli_args(model_cls, args)
-    if args.eval_mode == EvalMode.ON_DEVICE:
-        if not args.image:
-            raise ValueError(
-                "On-device demo mode is not supported with camera input. "
-                "Please provide an image using --image or --use-default-image."
-            )
-        palm_detector, landmark_detector, gesture_classifier = (
-            demo_model_components_from_cli_args(MediaPipeHandGesture, MODEL_ID, args)
+    if args.eval_mode == EvalMode.ON_DEVICE and not args.image:
+        raise ValueError(
+            "On-device demo mode is not supported with camera input. "
+            "Please provide an image using --image or --use-default-image."
         )
-    else:
-        palm_detector = torch_model.palm_detector
-        landmark_detector = torch_model.hand_landmark_detector
-        gesture_classifier = torch_model.gesture_classifier
+    torch_model, (palm_detector, landmark_detector, gesture_classifier) = (
+        demo_model_components_from_cli_args(MediaPipeHandGesture, MODEL_ID, args)
+    )
 
     # Load app
     app = MediaPipeHandGestureApp(

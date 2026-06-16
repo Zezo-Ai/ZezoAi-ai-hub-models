@@ -31,11 +31,9 @@ from qai_hub_models.models._shared.voiceai_tts.t5_g2p import (
     T5Encoder,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 SAMPLE_RATE = 22050
@@ -399,7 +397,7 @@ class Decoder(BaseModel):
         )
 
 
-class PiperTTS(PretrainedCollectionModel):
+class PiperTTS(WorkbenchModelCollection):
     def __init__(
         self,
         encoder: Encoder,
@@ -409,7 +407,16 @@ class PiperTTS(PretrainedCollectionModel):
         charsiu_encoder: T5Encoder,
         charsiu_decoder: T5Decoder,
     ) -> None:
-        super().__init__(encoder, sdp, flow, decoder, charsiu_encoder, charsiu_decoder)
+        super().__init__(
+            {
+                "encoder": encoder,
+                "sdp": sdp,
+                "flow": flow,
+                "decoder": decoder,
+                "charsiu_encoder": charsiu_encoder,
+                "charsiu_decoder": charsiu_decoder,
+            }
+        )
         self.encoder = encoder
         self.sdp = sdp
         self.flow = flow

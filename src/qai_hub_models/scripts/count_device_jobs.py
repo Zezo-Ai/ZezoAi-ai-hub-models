@@ -31,6 +31,7 @@ from qai_hub_models.scorecard.execution_helpers import (
     get_model_test_parameterizations,
 )
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
+from qai_hub_models.scorecard.results.yaml import ComponentNamesYaml
 from qai_hub_models.scorecard.static.list_models import (
     validate_and_split_enabled_models,
 )
@@ -39,7 +40,6 @@ from qai_hub_models.scorecard.static.model_exec import (
     get_static_model_test_parameterizations,
 )
 from qai_hub_models.scripts.run_codegen import _extract_runtime_and_precision_options
-from qai_hub_models.utils.collection_model_helpers import get_components
 
 # Scorecard limits
 SC_DAYTIME_START_TIME = time(17, 0)  # 5:00 PM
@@ -63,7 +63,12 @@ def _extract_codegen_test_options(
     options = _extract_runtime_and_precision_options(cj)
     return (
         cj.skip_hub_tests_and_scorecard or cj.skip_scorecard,
-        get_components(model_id) if cj.is_collection_model else None,
+        (
+            ComponentNamesYaml.from_intermediates().get(model_id)
+            or ["dummy_single_component"]
+        )
+        if cj.is_collection_model
+        else None,
         {
             Precision.parse(precision_name): [
                 TargetRuntime(rt_name.lower()) for rt_name in rt_names

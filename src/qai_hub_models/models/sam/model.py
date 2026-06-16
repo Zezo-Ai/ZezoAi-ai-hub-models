@@ -31,11 +31,9 @@ from qai_hub_models.models.sam.model_patches import (
     SplitHeadSAMEncoderAttention,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,
@@ -518,14 +516,35 @@ class SAMLoader:
         return encoder_splits
 
 
-class SAM(PretrainedCollectionModel):
+class SAM(WorkbenchModelCollection):
+    num_encoder_splits: int = 0
+
     def __init__(
         self, sam: Sam, encoder_splits: list[SAMEncoderPart], decoder: SAMDecoder
     ) -> None:
-        super().__init__(*[*encoder_splits, decoder])
+        if len(encoder_splits) == 1:
+            components: dict[str, BaseModel] = {"sam_encoder": encoder_splits[0]}
+        else:
+            components = {
+                f"sam_encoder_part_{i + 1}": enc for i, enc in enumerate(encoder_splits)
+            }
+        components["sam_decoder"] = decoder
+        super().__init__(components)
         self.sam = sam
         self.encoder_splits = encoder_splits
         self.decoder = decoder
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+        has_mask_input: bool = False,
+        num_of_points: int = 2,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(
+            batch_size=batch_size,
+            has_mask_input=has_mask_input,
+            num_of_points=num_of_points,
+        )
 
     @staticmethod
     def from_pretrained(
@@ -544,34 +563,18 @@ class SAM(PretrainedCollectionModel):
             *SAMLoader.load(
                 model_type,
                 single_mask_mode,
-                num_encoder_splits=len(cls.component_class_names) - 2,
+                num_encoder_splits=cls.num_encoder_splits,
             )
         )
 
 
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder")
-@CollectionModel.add_component(SAMDecoder, "sam_decoder")
 class _SAMBase(SAM):
-    pass
+    num_encoder_splits = 0
 
 
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_1")
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_2")
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_3")
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_4")
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_5")
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_6")
-@CollectionModel.add_component(SAMDecoder, "sam_decoder")
 class _SAMLarge(SAM):
-    pass
+    num_encoder_splits = 5
 
 
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_1")
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_2")
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_3")
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_4")
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_5")
-@CollectionModel.add_component(SAMEncoderPart, "sam_encoder_part_6")
-@CollectionModel.add_component(SAMDecoder, "sam_decoder")
 class _SAMHuge(SAM):
-    pass
+    num_encoder_splits = 5

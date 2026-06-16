@@ -320,9 +320,10 @@ class ScorecardJobYaml(ScorecardYamlFile[str], Generic[ScorecardJobTypeVar]):
 
         if has_graph_names:
             if has_components:
-                mgcg_components: dict[tuple[str, str | None], JobTypeVar] = {}
+                mgcg_components: dict[tuple[str, str], JobTypeVar] = {}
                 for job_params, sc_job in all_jobs.items():
                     assert job_params.component is not None
+                    assert job_params.graph_name is not None
                     if sc_job is None:
                         continue
                     mgcg_components[(job_params.component, job_params.graph_name)] = (

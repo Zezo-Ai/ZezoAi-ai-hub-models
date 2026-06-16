@@ -26,7 +26,7 @@ from qai_hub.client import DatasetEntries
 from torch.utils.data import DataLoader
 
 from qai_hub_models.datasets import DatasetSplit, instantiate_dataset
-from qai_hub_models.utils.base_model import PretrainedCollectionModel
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.draw import draw_box_from_corners, draw_box_from_xyxy
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.image_processing import (
@@ -666,7 +666,7 @@ class EasyOCRApp:
     @classmethod
     def get_calibration_data(
         cls,
-        collection_model: PretrainedCollectionModel,
+        collection_model: WorkbenchModelCollection,
         component_name: str,
         input_specs: dict[str, InputSpec] | None = None,
         num_samples: int | None = None,

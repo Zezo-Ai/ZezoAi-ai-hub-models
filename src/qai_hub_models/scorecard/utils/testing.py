@@ -25,7 +25,7 @@ from qai_hub.client import SourceModelType
 from tabulate import tabulate
 
 from qai_hub_models import TargetRuntime
-from qai_hub_models.protocols import FromPretrainedProtocol
+from qai_hub_models.protocols import FromPrecompiledProtocol, FromPretrainedProtocol
 from qai_hub_models.scorecard import ScorecardDevice
 from qai_hub_models.scorecard.artifacts import ScorecardArtifact
 from qai_hub_models.scorecard.envvars import ArtifactsDirEnvvar, DeploymentEnvvar
@@ -35,12 +35,14 @@ from qai_hub_models.utils.asset_loaders import (
     load_yaml,
     qaihm_temp_dir,
 )
+from qai_hub_models.utils.base_collection_model import CollectionModel
 from qai_hub_models.utils.base_dataset import BaseDataset, get_folder_name
 from qai_hub_models.utils.base_model import (
     BaseModel,
     BasePrecompiledModel,
-    CollectionModel,
-    PretrainedCollectionModel,
+)
+from qai_hub_models.utils.base_multi_graph_collection_model import (
+    MultiGraphCollectionModel,
 )
 from qai_hub_models.utils.base_multi_graph_model import MultiGraphWorkbenchModel
 from qai_hub_models.utils.evaluate import (
@@ -80,6 +82,15 @@ __all__ = [
     "skip_clone_repo_check_fixture",
     "skip_invalid_runtime_device",
 ]
+
+AnyModel = (
+    BaseModel
+    | MultiGraphWorkbenchModel
+    | BasePrecompiledModel
+    | CollectionModel
+    | MultiGraphCollectionModel
+)
+AnyModelCls = type[AnyModel]
 
 
 def skip_clone_repo_check(func: Callable) -> Callable:
@@ -380,7 +391,7 @@ def get_and_sync_datasets_cache_dir(
 
 
 def mock_get_calibration_data(
-    model: BaseModel | PretrainedCollectionModel,
+    model: BaseModel | CollectionModel,
     input_spec_arg: InputSpec | dict[str, InputSpec] | None = None,
     num_samples: int | None = None,
     component_name: str | None = None,
@@ -419,7 +430,7 @@ def mock_get_calibration_data(
     """
     # Resolve component spec for cache key
     component_spec: InputSpec | None = None
-    if isinstance(model, PretrainedCollectionModel):
+    if isinstance(model, CollectionModel):
         assert component_name is not None and is_input_spec_dict(input_spec_arg)
         component_spec = input_spec_arg.get(component_name)
         cache_prefix_name = f"{model.__class__.__name__}_{component_name}"
@@ -483,7 +494,7 @@ def get_val_dataset_id_keys(
 def get_hub_val_dataset(
     dataset_cls: type[BaseDataset],
     ids_file: Path,
-    model_cls: type[BaseModel | CollectionModel],
+    model_cls: AnyModelCls,
     apply_channel_transpose: bool,
     num_samples: int | None = None,
 ) -> hub.Dataset:
@@ -680,35 +691,18 @@ def has_get_unsupported_reason(cls: type, stop_at_classes: list[type]) -> bool:
     return False
 
 
-def _skip_if_unsupported_reason(
-    model_cls: type[BaseModel | MultiGraphWorkbenchModel | BasePrecompiledModel],
+def skip_invalid_runtime_device(
+    model_cls: AnyModelCls,
     runtime: TargetRuntime,
     device: ScorecardDevice,
 ) -> None:
-    if not has_get_unsupported_reason(model_cls, [BaseModel, BasePrecompiledModel]):
-        return
-    # check get_unsupported_reason
-    model: BaseModel | BasePrecompiledModel | MultiGraphWorkbenchModel
+    model: AnyModel
     if issubclass(model_cls, FromPretrainedProtocol):
         model = model_cls.from_pretrained()
-    else:
+    elif issubclass(model_cls, FromPrecompiledProtocol):
         model = model_cls.from_precompiled()
-    hub_device = device.execution_device
-    reason = model.get_unsupported_reason(runtime, hub_device)
-    if reason:
+    else:
+        raise NotImplementedError()
+
+    if reason := model.get_unsupported_reason(runtime, device.execution_device):
         pytest.xfail(reason)
-
-
-def skip_invalid_runtime_device(
-    model_cls: type[
-        BaseModel | MultiGraphWorkbenchModel | BasePrecompiledModel | CollectionModel
-    ],
-    runtime: TargetRuntime,
-    device: ScorecardDevice,
-) -> None:
-    if issubclass(model_cls, CollectionModel):
-        for component_cls in model_cls.component_classes.values():
-            _skip_if_unsupported_reason(component_cls, runtime, device)
-        return
-    # BaseModel or BasePrecompiledModel
-    _skip_if_unsupported_reason(model_cls, runtime, device)

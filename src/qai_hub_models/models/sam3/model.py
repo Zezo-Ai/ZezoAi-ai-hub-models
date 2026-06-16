@@ -33,12 +33,12 @@ from qai_hub_models.models.sam3.model_patches import (
     patch_decoder_last_layer_only,
     patch_decoder_rpb_device,
 )
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_model import (
     BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
     SerializationSettings,
 )
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.window_partitioning import (
     window_partition_5d,
@@ -432,9 +432,7 @@ class SAM3Loader:
         patch_decoder_last_layer_only(sam3.transformer.decoder)
 
 
-@CollectionModel.add_component(SAM3VisionBackbone, "vision_backbone")
-@CollectionModel.add_component(SAM3Head, "head")
-class SAM3(PretrainedCollectionModel):
+class SAM3(WorkbenchModelCollection):
     """SAM3: Segment Anything Model 3 with vision-language grounding."""
 
     def __init__(
@@ -443,10 +441,34 @@ class SAM3(PretrainedCollectionModel):
         vision_backbone: SAM3VisionBackbone,
         head: SAM3Head,
     ) -> None:
-        super().__init__(vision_backbone, head)
+        super().__init__({"vision_backbone": vision_backbone, "head": head})
         self.sam3 = sam3
-        self.vision_backbone = vision_backbone
         self.head = head
+        self.vision_backbone = vision_backbone
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+        img_height: int = 1008,
+        img_width: int = 1008,
+        seq_len: int = 32,
+        d_model: int = 256,
+        fpn_h: int = 72,
+        fpn_w: int = 72,
+        mask_h: int = 288,
+        mask_w: int = 288,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(
+            batch_size=batch_size,
+            img_height=img_height,
+            img_width=img_width,
+            seq_len=seq_len,
+            d_model=d_model,
+            fpn_h=fpn_h,
+            fpn_w=fpn_w,
+            mask_h=mask_h,
+            mask_w=mask_w,
+        )
 
     @classmethod
     def from_pretrained(

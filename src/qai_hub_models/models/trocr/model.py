@@ -18,11 +18,9 @@ from transformers.models.trocr.modeling_trocr import (
 )
 from typing_extensions import Self
 
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,
@@ -308,9 +306,7 @@ class TrOCRDecoder(BaseModel):
         return cls(cast(TrOCRForCausalLM, TrOCR.load_source_model().decoder))
 
 
-@CollectionModel.add_component(TrOCRDecoder, "decoder")
-@CollectionModel.add_component(TrOCREncoder, "encoder")
-class TrOCR(PretrainedCollectionModel):
+class TrOCR(WorkbenchModelCollection):
     def __init__(
         self,
         encoder: BaseModel,
@@ -324,7 +320,7 @@ class TrOCR(PretrainedCollectionModel):
         decoder_attention_heads: int = 8,
         embeddings_per_head: int = 32,
     ) -> None:
-        super().__init__(decoder, encoder)
+        super().__init__({"decoder": decoder, "encoder": encoder})
         self.encoder = encoder
         self.decoder = decoder
         self.io_processor = io_processor
@@ -340,6 +336,11 @@ class TrOCR(PretrainedCollectionModel):
         self.num_decoder_layers = num_decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.embeddings_per_head = embeddings_per_head
+
+    def get_input_spec(
+        self, batch_size: int = TROCR_BATCH_SIZE
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size)
 
     @classmethod
     def load_source_model(

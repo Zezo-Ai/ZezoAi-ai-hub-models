@@ -23,11 +23,9 @@ from qai_hub_models.models._shared.sam.model_patches import (
     sam_decoder_predict_masks,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,
@@ -322,16 +320,26 @@ class MobileSAMLoader:
             block.mlp = Conv2DInplaceLinearSAMTransformerMLPBlock(block.mlp)
 
 
-@CollectionModel.add_component(MobileSAMEncoder, "encoder")
-@CollectionModel.add_component(MobileSAMDecoder, "decoder")
-class MobileSAM(PretrainedCollectionModel):
+class MobileSAM(WorkbenchModelCollection):
     def __init__(
         self, sam: Sam, encoder: MobileSAMEncoder, decoder: MobileSAMDecoder
     ) -> None:
-        super().__init__(encoder, decoder)
+        super().__init__({"encoder": encoder, "decoder": decoder})
         self.sam = sam
         self.encoder = encoder
         self.decoder = decoder
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+        has_mask_input: bool = False,
+        num_of_points: int = 1,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(
+            batch_size=batch_size,
+            has_mask_input=has_mask_input,
+            num_of_points=num_of_points,
+        )
 
     @classmethod
     def from_pretrained(

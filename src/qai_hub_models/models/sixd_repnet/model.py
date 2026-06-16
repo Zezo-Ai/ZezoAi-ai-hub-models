@@ -17,11 +17,9 @@ from qai_hub_models.models.sixd_repnet.external_repos.sixdrepnet.sixdrepnet.mode
     SixDRepNet as UpstreamSixDRepNet,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import InputSpec
 
@@ -194,9 +192,7 @@ class PoseEstimator(BaseModel):
         return ["image"]
 
 
-@CollectionModel.add_component(RetinaFaceDetector, "face_detector")
-@CollectionModel.add_component(PoseEstimator, "pose_estimator")
-class SixDRepNet(PretrainedCollectionModel):
+class SixDRepNet(WorkbenchModelCollection):
     """
     Two-component head pose estimation pipeline:
       1. RetinaFaceDetector — detects face bounding boxes in the scene image.
@@ -208,9 +204,16 @@ class SixDRepNet(PretrainedCollectionModel):
         face_detector: RetinaFaceDetector,
         pose_estimator: PoseEstimator,
     ) -> None:
-        super().__init__(face_detector, pose_estimator)
+        super().__init__(
+            {"face_detector": face_detector, "pose_estimator": pose_estimator}
+        )
         self.face_detector = face_detector
         self.pose_estimator = pose_estimator
+
+    def get_input_spec(
+        self, batch_size: int = 1, height: int = 640, width: int = 640
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size, height=height, width=width)
 
     @classmethod
     def from_pretrained(

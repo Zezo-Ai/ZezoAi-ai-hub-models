@@ -19,11 +19,9 @@ from qai_hub_models import (
     TargetRuntime,
 )
 from qai_hub_models.models.maskrcnn.model_patches import _onnx_merge_levels_optimized
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import (
     BboxFormat,
@@ -402,9 +400,7 @@ class MaskRCNNROIHead(BaseModel):
         return compile_options
 
 
-@CollectionModel.add_component(MaskRCNNProposalGenerator, "proposal_generator")
-@CollectionModel.add_component(MaskRCNNROIHead, "roi_head")
-class MaskRCNN(PretrainedCollectionModel):
+class MaskRCNN(WorkbenchModelCollection):
     """MaskRCNN Instance Segmentation Model"""
 
     def __init__(
@@ -412,9 +408,22 @@ class MaskRCNN(PretrainedCollectionModel):
         proposal_generator: MaskRCNNProposalGenerator,
         roi_head: MaskRCNNROIHead,
     ) -> None:
-        super().__init__(*[proposal_generator, roi_head])
+        super().__init__(
+            {"proposal_generator": proposal_generator, "roi_head": roi_head}
+        )
         self.proposal_generator = proposal_generator
         self.roi_head = roi_head
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+        height: int = 800,
+        width: int = 800,
+        num_boxes: int = 200,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(
+            batch_size=batch_size, height=height, width=width, num_boxes=num_boxes
+        )
 
     @classmethod
     def from_pretrained(

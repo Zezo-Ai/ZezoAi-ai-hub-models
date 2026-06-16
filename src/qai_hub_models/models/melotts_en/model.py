@@ -16,7 +16,6 @@ from qai_hub_models.models._shared.melotts.model import (
     get_tts_object,
 )
 from qai_hub_models.models._shared.voiceai_tts.language import TTSLanguage
-from qai_hub_models.utils.base_model import CollectionModel
 
 MODEL_ID = __name__.split(".")[-2]
 
@@ -45,12 +44,6 @@ class BertWrapper_EN(BertWrapper):
         return super().from_pretrained(TTSLanguage.ENGLISH)
 
 
-@CollectionModel.add_component(Encoder_EN, "encoder")
-@CollectionModel.add_component(Flow_EN, "flow")
-@CollectionModel.add_component(Decoder_EN, "decoder")
-@CollectionModel.add_component(BertWrapper_EN, "bert_wrapper")
-@CollectionModel.add_component(T5Encoder, "t5_encoder")
-@CollectionModel.add_component(T5Decoder, "t5_decoder")
 class MeloTTS_EN(MeloTTS):
     @classmethod
     def get_language(cls) -> TTSLanguage:
@@ -63,7 +56,7 @@ class MeloTTS_EN(MeloTTS):
             Encoder_EN.from_pretrained(),
             Flow_EN.from_pretrained(),
             Decoder_EN.from_pretrained(),
-            BertWrapper_EN.from_pretrained(),
-            T5Encoder.from_pretrained(),
-            T5Decoder.from_pretrained(),
+            bert_wrapper=BertWrapper_EN.from_pretrained(),
+            t5_encoder=T5Encoder.from_pretrained(),
+            t5_decoder=T5Decoder.from_pretrained(),
         )

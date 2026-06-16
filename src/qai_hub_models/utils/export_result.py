@@ -26,10 +26,10 @@ class ComponentGroup(dict[str, ValT]):
     """Groups a value per component for a collection model."""
 
 
-class MultiGraphComponentGroup(dict[tuple[str, str | None], ValT]):
+class MultiGraphComponentGroup(dict[tuple[str, str], ValT]):
     """Groups a value per (component, graph_name) for a collection model with multi-graph components."""
 
-    def by_component(self, component_name: str) -> dict[str | None, ValT]:
+    def by_component(self, component_name: str) -> dict[str, ValT]:
         """Return {graph_name: value} for entries matching the given component."""
         return {gn: v for (comp, gn), v in self.items() if comp == component_name}
 

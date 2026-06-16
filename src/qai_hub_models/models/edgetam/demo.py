@@ -27,7 +27,6 @@ from qai_hub_models.utils.args import (
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.evaluate import EvalMode
 
 VIDEO_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "demo.mp4"
@@ -208,18 +207,9 @@ def main(is_test: bool = False, image_path: str | None = None) -> None:
             frames = frames[:3]
 
     print("\n** Loading EdgeTAM model... **\n")
-    model = EdgeTAM.from_pretrained(args.model_type)
-    if args.eval_mode == EvalMode.ON_DEVICE:
-        if not args.hub_model_id:
-            raise ValueError("--hub-model-id is required for on-device mode.")
-
-        encoder, memory_encoder, video_decoder = demo_model_components_from_cli_args(
-            EdgeTAM, MODEL_ID, args
-        )
-    else:
-        encoder = model.encoder
-        memory_encoder = model.memory_encoder
-        video_decoder = model.video_decoder
+    model, (encoder, memory_encoder, video_decoder) = (
+        demo_model_components_from_cli_args(EdgeTAM, MODEL_ID, args)
+    )
 
     common_kwargs = dict(
         encoder=encoder,

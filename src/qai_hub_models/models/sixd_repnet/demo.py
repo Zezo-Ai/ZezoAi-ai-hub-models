@@ -18,7 +18,6 @@ from qai_hub_models.utils.args import (
 )
 from qai_hub_models.utils.asset_loaders import load_image
 from qai_hub_models.utils.display import display_or_save_image
-from qai_hub_models.utils.evaluate import EvalMode
 
 
 def main(is_test: bool = False) -> None:
@@ -33,16 +32,9 @@ def main(is_test: bool = False) -> None:
     args = parser.parse_args([] if is_test else None)
     validate_on_device_demo_args(args, MODEL_ID)
 
-    if args.eval_mode == EvalMode.ON_DEVICE:
-        face_detector, pose_estimator = demo_model_components_from_cli_args(
-            SixDRepNet, MODEL_ID, args
-        )
-    else:
-        model = SixDRepNet.from_pretrained(
-            **{k: v for k, v in vars(args).items() if k in ("gpu_id", "pose_weights")}
-        )
-        face_detector = model.face_detector
-        pose_estimator = model.pose_estimator
+    _, (face_detector, pose_estimator) = demo_model_components_from_cli_args(
+        SixDRepNet, MODEL_ID, args
+    )
 
     if args.image:
         image = load_image(args.image).convert("RGB")

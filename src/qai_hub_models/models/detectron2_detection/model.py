@@ -19,11 +19,9 @@ from qai_hub_models.datasets.coco import Coco180Dataset, CocoDataset
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.evaluators.detection_evaluator import DetectionEvaluator
 from qai_hub_models.models._shared.detectron2.model import Detectron2
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     BboxFormat,
     BboxMetadata,
@@ -241,20 +239,36 @@ class Detectron2ROIHead(Detectron2):
         return compile_options
 
 
-@CollectionModel.add_component(Detectron2ProposalGenerator, "proposal_generator")
-@CollectionModel.add_component(Detectron2ROIHead, "roi_head")
-class Detectron2Detection(PretrainedCollectionModel):
+class Detectron2Detection(WorkbenchModelCollection):
     def __init__(
         self,
         proposal_generator: Detectron2ProposalGenerator,
         roi_head: Detectron2ROIHead,
     ) -> None:
-        super().__init__(*[proposal_generator, roi_head])
+        super().__init__(
+            {"proposal_generator": proposal_generator, "roi_head": roi_head}
+        )
         self.proposal_generator = proposal_generator
         self.roi_head = roi_head
 
     def get_calibration_dataset_cls(self) -> type[BaseDataset]:
         return CocoDataset
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+        height: int = 800,
+        width: int = 800,
+        num_boxes: int = 200,
+    ) -> ComponentGroup[InputSpec]:
+        return ComponentGroup(
+            {
+                "proposal_generator": self.proposal_generator.get_input_spec(
+                    batch_size=batch_size, height=height, width=width
+                ),
+                "roi_head": self.roi_head.get_input_spec(num_boxes=num_boxes),
+            }
+        )
 
     @classmethod
     def from_pretrained(cls, config: str = DEFAULT_CONFIG) -> Self:

@@ -17,12 +17,12 @@ from easyocr.model.vgg_model import Model as VGGRecognizer
 from typing_extensions import Self
 
 from qai_hub_models.datasets.icdar2015 import ICDAR2015Dataset
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_model import (
     BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
 )
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
@@ -188,22 +188,36 @@ class EasyOCRRecognizer(BaseModel):
         return ["image"]
 
 
-@CollectionModel.add_component(EasyOCRDetector, "detector")
-@CollectionModel.add_component(EasyOCRRecognizer, "recognizer")
-class EasyOCR(PretrainedCollectionModel):
+class EasyOCR(WorkbenchModelCollection):
     def __init__(
         self,
         detector: EasyOCRDetector,
         recognizer: EasyOCRRecognizer,
         lang_list: list[str],
     ) -> None:
-        super().__init__(detector, recognizer)
+        super().__init__({"detector": detector, "recognizer": recognizer})
         self.lang_list = lang_list
         self.detector = detector
         self.recognizer = recognizer
 
     def get_calibration_dataset_cls(self) -> type[BaseDataset]:
         return ICDAR2015Dataset
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+        height: int = 608,
+        width: int = 800,
+        max_detection_height: int = 64,
+        max_detection_width: int = 800,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(
+            batch_size=batch_size,
+            height=height,
+            width=width,
+            max_detection_height=max_detection_height,
+            max_detection_width=max_detection_width,
+        )
 
     @classmethod
     def from_pretrained(

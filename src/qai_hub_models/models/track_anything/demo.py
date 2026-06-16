@@ -29,7 +29,6 @@ from qai_hub_models.utils.args import (
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.display import generate_video_from_frames
-from qai_hub_models.utils.evaluate import EvalMode
 
 VIDEO_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "demo.mp4"
@@ -149,19 +148,15 @@ def main(is_test: bool = False) -> None:
     generated_mask = generated_mask_pt.squeeze(0).squeeze(0).numpy()
 
     # load TrackAnything Application
-    wrapper = TrackAnythingWrapper.from_pretrained()
-    if args.eval_mode == EvalMode.ON_DEVICE:
+    (
+        wrapper,
         (
             encode_key_with_shrinkage,
             encode_value,
             encode_key_without_shrinkage,
             segment,
-        ) = demo_model_components_from_cli_args(TrackAnythingWrapper, MODEL_ID, args)
-    else:
-        encode_key_with_shrinkage = wrapper.EncodeKeyWithShrinkage
-        encode_value = wrapper.EncodeValue
-        encode_key_without_shrinkage = wrapper.EncodeKeyWithoutShrinkage
-        segment = wrapper.Segment
+        ),
+    ) = demo_model_components_from_cli_args(TrackAnythingWrapper, MODEL_ID, args)
 
     enc_shape = wrapper.EncodeValue.get_input_spec()["image"][0]
     input_shape = (enc_shape[-2], enc_shape[-1])

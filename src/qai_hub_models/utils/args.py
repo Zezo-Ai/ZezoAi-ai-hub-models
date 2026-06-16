@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import inspect
 import sys
 from collections.abc import Callable, Mapping
@@ -29,16 +28,15 @@ from qai_hub_models.protocols import (
     FromPretrainedProtocol,
     FromPretrainedTypeVar,
 )
+from qai_hub_models.utils.base_collection_model import (
+    CollectionModel,
+    WorkbenchModelCollection,
+)
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_model import (
     BaseModel,
     BasePrecompiledModel,
-    CollectionModel,
-    PretrainedCollectionModel,
     WorkbenchModel,
-)
-from qai_hub_models.utils.base_multi_graph_model import (
-    MultiGraphCollectionModel,
 )
 from qai_hub_models.utils.envvars import DevModeEnvvar
 from qai_hub_models.utils.evaluate import EvalMode
@@ -247,21 +245,11 @@ class QAIHMArgumentParser(argparse.ArgumentParser):
             else:
                 # CollectionModel
                 components = getattr(parsed, "components", None)
-                components = (
-                    components if components else self.model_cls.component_class_names
-                )
-
                 model_ids = [
                     s.strip() for s in quantized_model_id_arg.split(",") if s.strip()
                 ]
-                if len(model_ids) != len(components):
-                    raise ValueError(
-                        "For collection models, --quantized-model-id must provide exactly one id per selected component. "
-                        f"Expected {len(components)} ids, got {len(model_ids)}."
-                    )
-
                 parsed.quantized_model_id = dict(
-                    zip(components, model_ids, strict=True)
+                    zip(components or [], model_ids, strict=True)
                 )
 
         if self.supported_precision_runtimes:
@@ -695,15 +683,11 @@ def get_model_cli_parser(
 
 
 def add_input_spec_args(
-    cls: type[FromPretrainedTypeVar],
+    cls: type[BaseModel | CollectionModel],
     parser: QAIHMArgumentParser,
 ) -> QAIHMArgumentParser:
     """Adds arguments from get_input_spec."""
-    if issubclass(cls, BaseModel):
-        parser = get_model_input_spec_parser(cls, parser)
-    elif issubclass(cls, CollectionModel):
-        parser = get_collection_model_input_spec_parser(cls, parser)
-    return parser
+    return get_model_input_spec_parser(cls, parser)
 
 
 def get_model_kwargs(
@@ -774,45 +758,79 @@ def model_from_cli_args(
     return model_cls.from_pretrained(**get_model_kwargs(model_cls, vars(cli_args)))
 
 
+WorkbenchModelCollectionT = TypeVar(
+    "WorkbenchModelCollectionT", bound=WorkbenchModelCollection
+)
+
+
 def demo_model_components_from_cli_args(
-    model_cls: type[PretrainedCollectionModel],
+    model_cls: type[WorkbenchModelCollectionT],
     model_id: str,
     cli_args: argparse.Namespace,
-) -> tuple[FromPretrainedProtocol | OnDeviceModel, ...]:
+) -> tuple[WorkbenchModelCollectionT, tuple[WorkbenchModel | OnDeviceModel, ...]]:
     """
-    Similar to demo_model_from_cli_args, but for component models.
+    Load a collection model and its components for an on-device or local demo.
+
+    Instantiates the collection via from_pretrained, then wraps each component
+    in OnDeviceModel if on-device mode is active.
 
     Parameters
     ----------
     model_cls
-        Collection model class containing components.
+        WorkbenchModelCollection subclass (must implement FromPretrainedProtocol).
     model_id
-        Model ID string.
+        Model ID string used for compilation/export naming.
     cli_args
-        Command line arguments namespace.
+        Command line arguments namespace (from get_on_device_demo_parser).
 
     Returns
     -------
-    components : tuple[FromPretrainedProtocol | OnDeviceModel, ...]
-        Model instances for each component.
+    collection : WorkbenchModelCollectionT
+        The instantiated collection model (from from_pretrained).
+    components : tuple[WorkbenchModel | OnDeviceModel, ...]
+        Model instances for each component (ordered by collection.component_names).
+        Wrapped in OnDeviceModel when on-device mode is active.
     """
-    res = []
-    component_classes = model_cls.component_classes
-    if cli_args.hub_model_id and len(cli_args.hub_model_id.split(",")) != len(
-        component_classes
-    ):
-        raise ValueError(
-            f"Expected {len(component_classes)} components in hub-model-id, but got {cli_args.hub_model_id}"
+    assert issubclass(model_cls, FromPretrainedProtocol)
+    collection = model_from_cli_args(model_cls, cli_args)
+    component_names = collection.component_names
+    is_on_device = "eval_mode" in cli_args and cli_args.eval_mode == EvalMode.ON_DEVICE
+
+    res: list[WorkbenchModel | OnDeviceModel] = []
+    if not is_on_device:
+        res.extend([collection.components[comp_name] for comp_name in component_names])
+    else:
+        hub_model_ids = (
+            cli_args.hub_model_id.split(",") if cli_args.hub_model_id else None
         )
+        if hub_model_ids:
+            assert len(hub_model_ids) == len(component_names)
 
-    cli_args_comp = copy.deepcopy(cli_args)
+        for i, comp_name in enumerate(component_names):
+            component = collection.components[comp_name]
+            if hub_model_ids:
+                target_model = hub.get_model(hub_model_ids[i])
+            else:
+                cli_dict = vars(cli_args)
+                additional_kwargs = dict(
+                    get_model_kwargs(type(component), args_dict=cli_dict),
+                    **filter_kwargs(component.get_input_spec, cli_dict),
+                )
+                target_model = compile_model_from_args(  # type: ignore[assignment]
+                    model_id, cli_args, additional_kwargs, comp_name
+                )
+                assert not isinstance(target_model, list)
+                print(f"Exported asset: {model_id}::{comp_name}\n")
+            res.append(
+                OnDeviceModel(
+                    target_model,
+                    list(component.get_input_spec().keys()),
+                    cli_args.device,
+                    cli_args.inference_options,
+                )
+            )
 
-    for i, (comp, cls) in enumerate(model_cls.component_classes.items()):
-        if cli_args.hub_model_id:
-            cli_args_comp.hub_model_id = cli_args.hub_model_id.split(",")[i]
-        res.append(demo_model_from_cli_args(cls, model_id, cli_args_comp, comp))
-
-    return tuple(res)
+    return collection, tuple(res)
 
 
 def demo_model_from_cli_args(
@@ -877,7 +895,8 @@ def _parse_int_list(value: str) -> list[int]:
 
 
 def _resolve_param_type(
-    param: inspect.Parameter, model_cls: type[BaseModel | BasePrecompiledModel]
+    param: inspect.Parameter,
+    model_cls: type[BaseModel | BasePrecompiledModel | CollectionModel],
 ) -> type | Callable:
     """
     Resolve a parameter annotation to a concrete type or callable for argparse.
@@ -911,7 +930,8 @@ def _resolve_param_type(
 
 
 def get_model_input_spec_parser(
-    model_cls: type[BaseModel], parser: QAIHMArgumentParser | None = None
+    model_cls: type[BaseModel | CollectionModel],
+    parser: QAIHMArgumentParser | None = None,
 ) -> QAIHMArgumentParser:
     """
     Generate the argument parser to get this model's input spec from an argparse namespace.
@@ -938,74 +958,6 @@ def get_model_input_spec_parser(
             help=help_str,
         )
     return parser
-
-
-def get_collection_model_input_spec_parser(
-    model_cls: type[PretrainedCollectionModel],
-    parser: QAIHMArgumentParser | None = None,
-) -> QAIHMArgumentParser:
-    """
-    Generate CLI arguments for per-component input spec customization.
-
-    For each component, adds ``--{component_name}-{param_name}`` arguments.
-    """
-    if not parser:
-        parser = get_parser()
-
-    for comp_name, comp_cls in model_cls.component_classes.items():
-        params = get_params(comp_cls.get_input_spec)
-        cli_prefix = comp_cls.cli_args_prefix  # type: ignore[attr-defined]
-        if cli_prefix:
-            cli_prefix += "-"
-
-        input_spec_docs = {
-            param.name: "\n".join(param.desc)
-            for param in FunctionDoc(func=comp_cls.get_input_spec)["Parameters"]
-        }
-
-        for param_name, param in params.items():
-            cli_name = f"--{cli_prefix.replace('_', '-')}{param_name.replace('_', '-')}"
-            resolved_type = _resolve_param_type(param, comp_cls)
-            if input_spec_docs.get(param_name):
-                help_text = input_spec_docs[param_name]
-            elif not comp_cls.cli_args_prefix:  #  type: ignore[attr-defined]
-                help_text = f"Set {param_name}"
-            else:
-                help_text = f"Set {param_name} for {comp_name}"
-
-            default = (
-                param.default if param.default is not inspect.Parameter.empty else None
-            )
-            parser.add_argument(
-                cli_name,
-                type=resolved_type,
-                default=default,
-                help=help_text,
-            )
-
-    return parser
-
-
-def get_component_input_spec_kwargs(
-    model_cls: type[PretrainedCollectionModel | MultiGraphCollectionModel],
-    component_name: str,
-    args_dict: Mapping[str, Any],
-) -> dict[str, Any]:
-    """
-    Extract input spec kwargs for a specific component from CLI args.
-
-    For each parameter in the component's ``get_input_spec`` signature:
-    - Use the CLI-arg key (``{cli_args_prefix}_{param_name}`` or just
-      ``{param_name}`` when ``cli_args_prefix`` is empty) if set
-    - Else skip (component uses its default)
-    """
-    comp_cls = model_cls.component_classes[component_name]
-    cli_prefix = getattr(comp_cls, "cli_args_prefix", component_name)
-    kwargs: dict[str, Any] = filter_kwargs(comp_cls.get_input_spec, args_dict)
-    return {
-        f"{cli_prefix}_{param_name}" if cli_prefix else param_name: kwarg
-        for param_name, kwarg in kwargs.items()
-    }
 
 
 def input_spec_from_cli_args(
@@ -1057,7 +1009,7 @@ def _evaluate_export_common_parser(
         # TODO: #9408 Refactor BaseModel, BasePrecompiledModel to fetch
         # parameters from compiled model
         parser = get_model_cli_parser(model_cls, parser)
-        parser = add_input_spec_args(model_cls, parser)
+        parser = add_input_spec_args(model_cls, parser)  # type: ignore[arg-type]
 
         supported_precisions = {
             precision
@@ -1217,15 +1169,11 @@ def export_parser(
     add_export_function_args(export_fn, parser, force_fetch_static_assets, zip_assets)
     _add_device_args(parser, default_device=default_export_device)
     if components is not None or issubclass(model_cls, CollectionModel):
-        choices = components or []
-        if not choices and issubclass(model_cls, CollectionModel):
-            choices = model_cls.component_class_names
         parser.add_argument(
             "--components",
             nargs="+",
             type=str,
             default=None,
-            choices=choices,
             help="Which components of the model to be exported.",
         )
 

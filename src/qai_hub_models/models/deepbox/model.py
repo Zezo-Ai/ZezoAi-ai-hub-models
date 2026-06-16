@@ -17,13 +17,13 @@ from qai_hub_models.models.deepbox.external_repos.boundingbox_3d.torch_lib impor
 )
 from qai_hub_models.models.yolov3.model import YoloV3
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_torch
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_model import (
     BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
     SerializationSettings,
 )
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
@@ -158,18 +158,32 @@ class VGG3DDetection(BaseModel):
         return ["image"]
 
 
-@CollectionModel.add_component(Yolo2DDetection, "yolo_2d_detection")
-@CollectionModel.add_component(VGG3DDetection, "vgg_3d_detection")
-class DeepBox(PretrainedCollectionModel):
+class DeepBox(WorkbenchModelCollection):
     def __init__(
         self, yolo_2d_det: Yolo2DDetection, vgg_3d_det: VGG3DDetection
     ) -> None:
-        super().__init__(yolo_2d_det, vgg_3d_det)
+        super().__init__(
+            {"yolo_2d_detection": yolo_2d_det, "vgg_3d_detection": vgg_3d_det}
+        )
         self.yolo_2d_det = yolo_2d_det
         self.vgg_3d_det = vgg_3d_det
 
     def get_calibration_dataset_cls(self) -> type[BaseDataset]:
         return KittiDataset
+
+    def get_input_spec(
+        self, batch_size: int = 1, height: int = 224, width: int = 640
+    ) -> ComponentGroup[InputSpec]:
+        return ComponentGroup(
+            {
+                "yolo_2d_detection": self.yolo_2d_det.get_input_spec(
+                    batch_size=batch_size, height=height, width=width
+                ),
+                "vgg_3d_detection": self.vgg_3d_det.get_input_spec(
+                    batch_size=batch_size
+                ),
+            }
+        )
 
     @classmethod
     def from_pretrained(

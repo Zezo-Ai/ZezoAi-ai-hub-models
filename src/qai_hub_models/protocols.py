@@ -2,7 +2,6 @@
 # Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
-
 """
 This file defines type helpers. Specifically, those helpers are python Protocols.
 
@@ -32,7 +31,6 @@ __all__ = [
     "FromPrecompiledTypeVar",
     "FromPretrainedProtocol",
     "FromPretrainedTypeVar",
-    "QuantizableModelProtocol",
 ]
 
 FromPretrainedTypeVar = TypeVar("FromPretrainedTypeVar", bound="FromPretrainedProtocol")
@@ -42,12 +40,7 @@ FromPrecompiledTypeVar = TypeVar(
 
 
 @runtime_checkable
-class QuantizableModelProtocol(Protocol):
-    """Minimum required methods to export a model that can be quantized."""
-
-
-@runtime_checkable
-class AIMETQuantizableModelProtocol(QuantizableModelProtocol, Protocol):
+class AIMETQuantizableModelProtocol(Protocol):
     """Methods required for a model to be quantizable."""
 
     def quantize(
@@ -121,6 +114,7 @@ class FromPretrainedProtocol(Protocol):
         ...
 
 
+@runtime_checkable
 class FromPrecompiledProtocol(Protocol):
     """Models follow this protocol if they can be initiated from a precompiled model."""
 

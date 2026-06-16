@@ -20,10 +20,9 @@ from qai_hub_models.models._shared.opus_mt.model_adaptation import (
     QcMarianEncoder,
     apply_model_adaptations,
 )
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 MODEL_ID = "opus_mt_shared"
@@ -108,9 +107,8 @@ class OpusMTDecoder(BaseModel):
         super().__init__()
         self.decoder = model
         self.num_layers = len(model.layers)
-        attn = model.layers[0].self_attn
-        self.num_heads = attn.num_heads
-        self.attention_dim = attn.embed_dim
+        self.num_heads = model.layers[0].self_attn.num_heads
+        self.head_dim = model.layers[0].self_attn.head_dim
 
     @classmethod
     def from_pretrained(
@@ -151,10 +149,6 @@ class OpusMTDecoder(BaseModel):
         Returns the input specification (name -> (shape, type)). This can be
         used to submit profiling job on Qualcomm AI Hub.
         """
-        num_layers = self.num_layers
-        num_heads = self.num_heads
-        head_dim = self.attention_dim // num_heads
-
         specs: InputSpec = {
             "input_ids": TensorSpec(shape=(1, 1), dtype="int32"),
             "encoder_attention_mask": TensorSpec(
@@ -164,21 +158,21 @@ class OpusMTDecoder(BaseModel):
             "position": TensorSpec(shape=(1,), dtype="int32"),
         }
 
-        for i in range(num_layers):
+        for i in range(self.num_layers):
             specs[f"block_{i}_past_self_key_states"] = TensorSpec(
-                shape=(1, num_heads, MAX_SEQ_LEN_DEC - 1, head_dim),
+                shape=(1, self.num_heads, MAX_SEQ_LEN_DEC - 1, self.head_dim),
                 dtype="float32",
             )
             specs[f"block_{i}_past_self_value_states"] = TensorSpec(
-                shape=(1, num_heads, MAX_SEQ_LEN_DEC - 1, head_dim),
+                shape=(1, self.num_heads, MAX_SEQ_LEN_DEC - 1, self.head_dim),
                 dtype="float32",
             )
             specs[f"block_{i}_cross_key_states"] = TensorSpec(
-                shape=(1, num_heads, MAX_SEQ_LEN_ENC, head_dim),
+                shape=(1, self.num_heads, MAX_SEQ_LEN_ENC, self.head_dim),
                 dtype="float32",
             )
             specs[f"block_{i}_cross_value_states"] = TensorSpec(
-                shape=(1, num_heads, MAX_SEQ_LEN_ENC, head_dim),
+                shape=(1, self.num_heads, MAX_SEQ_LEN_ENC, self.head_dim),
                 dtype="float32",
             )
 
@@ -193,7 +187,7 @@ class OpusMTDecoder(BaseModel):
         return output_names
 
 
-class OpusMT(PretrainedCollectionModel):
+class OpusMT(WorkbenchModelCollection):
     """
     Base OpusMT translation model.
 
@@ -207,10 +201,13 @@ class OpusMT(PretrainedCollectionModel):
         decoder: OpusMTDecoder,
         hf_source: str,
     ) -> None:
-        super().__init__(encoder, decoder)
+        super().__init__({"encoder": encoder, "decoder": decoder})
         self.encoder = encoder
         self.decoder = decoder
         self.hf_source = hf_source
+
+    def get_input_spec(self) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec()
 
     @classmethod
     @abstractmethod

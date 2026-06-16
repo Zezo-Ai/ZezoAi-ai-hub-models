@@ -231,6 +231,8 @@ class ControlUnetBase(BaseModel, FromPretrainedMixin):
 
 
 class ControlUnetQuantizableBase(AIMETOnnxQuantizableMixin, ControlUnetBase):  # type: ignore[misc]
+    default_subfolder = "unet"
+
     def __init__(
         self,
         sim_model: QuantSimOnnx,
@@ -383,6 +385,8 @@ class ControlNetBase(BaseModel, FromPretrainedMixin):
 
 class ControlNetQuantizableBase(AIMETOnnxQuantizableMixin, ControlNetBase):  # type: ignore[misc]
     """Exportable ControlNet that can be quantized by AIMET-ONNX."""
+
+    default_subfolder = "controlnet"
 
     def __init__(
         self,

@@ -29,16 +29,16 @@ from qai_hub_models.models.edgetam import MODEL_ID, App, Model
 from qai_hub_models.utils import quantization as quantization_utils
 from qai_hub_models.utils.args import (
     export_parser,
-    get_component_input_spec_kwargs,
     get_export_model_name,
     get_model_kwargs,
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
-from qai_hub_models.utils.base_model import PretrainedCollectionModel
+from qai_hub_models.utils.base_collection_model import CollectionModel
 from qai_hub_models.utils.compare import torch_inference
 from qai_hub_models.utils.export_result import CollectionExportResult, ComponentGroup
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
 from qai_hub_models.utils.input_spec import InputSpec, to_hub_input_specs
+from qai_hub_models.utils.kwarg_helpers import filter_kwargs
 from qai_hub_models.utils.onnx.helpers import download_and_unzip_workbench_onnx_model
 from qai_hub_models.utils.path_helpers import get_next_free_path
 from qai_hub_models.utils.printing import (
@@ -55,7 +55,7 @@ from qai_hub_models.utils.qai_hub_helpers import (
 
 def quantize_model(
     precision: Precision | dict[str, Precision],
-    model: PretrainedCollectionModel,
+    model: CollectionModel,
     model_name: str,
     onnx_models: ComponentGroup[hub.Model],
     num_calibration_samples: int | None,
@@ -63,16 +63,18 @@ def quantize_model(
     input_specs: dict[str, InputSpec] | None = None,
     components: list[str] | None = None,
 ) -> ComponentGroup[hub.client.QuantizeJob]:
-    component_precisions = (
-        model.get_mixed_precisions(precision)
-        if isinstance(precision, Precision)
-        else precision
-    )
+    if isinstance(precision, Precision):
+        component_precisions = (
+            model.get_mixed_precisions(precision)
+            if precision in [Precision.mixed, Precision.mixed_with_float]
+            else dict.fromkeys(components or onnx_models, precision)
+        )
+    else:
+        component_precisions = precision
+
     quantize_jobs: ComponentGroup[hub.client.QuantizeJob] = ComponentGroup()
     input_specs = input_specs or model.get_input_spec()
-    for component_name in components or Model.component_class_names:
-        component_precision = component_precisions[component_name]
-
+    for component_name, component_precision in component_precisions.items():
         if component_precision != Precision.float:
             print(f"Quantizing {component_name}.")
             if (
@@ -104,13 +106,13 @@ def quantize_model(
 
 
 def upload_model(
-    model: PretrainedCollectionModel,
+    model: CollectionModel,
     input_specs: dict[str, InputSpec] | None = None,
     components: list[str] | None = None,
 ) -> ComponentGroup[hub.Model]:
     all_input_specs = input_specs or model.get_input_spec()
     uploaded: ComponentGroup[hub.Model] = ComponentGroup()
-    for name in components or Model.component_class_names:
+    for name in components or model.component_names:
         spec = all_input_specs[name]
         with tempfile.TemporaryDirectory() as tmpdir:
             uploaded[name] = hub.upload_model(
@@ -120,7 +122,7 @@ def upload_model(
 
 
 def compile_model(
-    model: PretrainedCollectionModel,
+    model: CollectionModel,
     model_name: str,
     device: hub.Device,
     target_runtime: TargetRuntime,
@@ -132,7 +134,7 @@ def compile_model(
 ) -> ComponentGroup[hub.client.CompileJob]:
     compile_jobs: ComponentGroup[hub.client.CompileJob] = ComponentGroup()
     all_input_specs = input_specs or model.get_input_spec()
-    for component_name in components or Model.component_class_names:
+    for component_name in components or model.component_names:
         input_spec = all_input_specs[component_name]
 
         model_compile_options = model.get_component_hub_compile_options(
@@ -153,7 +155,7 @@ def link_model(
     compiled_models: ComponentGroup[hub.Model],
     device: hub.Device,
     model_name: str,
-    model: PretrainedCollectionModel,
+    model: CollectionModel,
     target_runtime: TargetRuntime,
     extra_options: str = "",
 ) -> ComponentGroup[hub.client.LinkJob]:
@@ -184,7 +186,7 @@ def profile_model(
     components: list[str] | None = None,
 ) -> ComponentGroup[hub.client.ProfileJob]:
     profile_jobs: ComponentGroup[hub.client.ProfileJob] = ComponentGroup()
-    for component_name in components or Model.component_class_names:
+    for component_name in components or options:
         print(f"Profiling model {component_name} on a hosted device.")
         profile_jobs[component_name] = hub.submit_profile_job(
             model=target_models[component_name],
@@ -204,7 +206,7 @@ def inference_model(
     components: list[str] | None = None,
 ) -> ComponentGroup[hub.client.InferenceJob]:
     inference_jobs: ComponentGroup[hub.client.InferenceJob] = ComponentGroup()
-    for component_name in components or Model.component_class_names:
+    for component_name in components or options:
         print(
             f"Running inference for {component_name} on a hosted device with example inputs."
         )
@@ -220,7 +222,7 @@ def inference_model(
 
 def download_model(
     output_dir: os.PathLike | str,
-    model: PretrainedCollectionModel,
+    model: CollectionModel,
     runtime: TargetRuntime,
     precision: Precision,
     tool_versions: ToolVersions,
@@ -393,11 +395,6 @@ def export_model(
     )
 
     output_path = Path(output_dir or Path.cwd() / "export_assets")
-    component_arg = components
-    components = components or Model.component_class_names
-    for component_name in components:
-        if component_name not in Model.component_class_names:
-            raise ValueError(f"Invalid component {component_name}.")
     if fetch_static_assets or not can_access_qualcomm_ai_hub():
         static_model_path = export_without_hub_access(
             MODEL_ID,
@@ -410,7 +407,7 @@ def export_model(
             target_runtime,
             precision,
             quantize_options + compile_options + profile_options,
-            component_arg,
+            components,
             qaihm_version_tag=fetch_static_assets,
         )
         return CollectionExportResult(download_path=static_model_path)
@@ -427,13 +424,12 @@ def export_model(
     model = Model.from_pretrained(
         **get_model_kwargs(Model, dict(**additional_model_kwargs, precision=precision))
     )
-    input_specs: ComponentGroup[InputSpec] = ComponentGroup(
-        {
-            name: model.components[name].get_input_spec(
-                **get_component_input_spec_kwargs(Model, name, additional_model_kwargs)
-            )
-            for name in components
-        }
+    components = components or model.component_names
+    for component_name in components:
+        if component_name not in model.component_names:
+            raise ValueError(f"Invalid component {component_name}.")
+    input_specs = model.get_input_spec(
+        **filter_kwargs(model.get_input_spec, additional_model_kwargs)
     )
     source_models_to_compile = upload_model(model, input_specs, components)
 
@@ -451,7 +447,11 @@ def export_model(
                 }
             )
         else:
-            component_precisions = model.get_mixed_precisions(precision)
+            component_precisions = (
+                model.get_mixed_precisions(precision)
+                if precision in [Precision.mixed, Precision.mixed_with_float]
+                else dict.fromkeys(components, precision)
+            )
             onnx_compile_result = compile_model(
                 model,
                 model_name,

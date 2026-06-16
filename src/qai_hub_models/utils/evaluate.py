@@ -40,6 +40,7 @@ from qai_hub_models.utils.base_app import (
     CollectionAppEvaluateProtocol,
     CollectionModelEvalGenerator,
 )
+from qai_hub_models.utils.base_collection_model import CollectionModel
 from qai_hub_models.utils.base_dataset import (
     BaseDataset,
     DatasetSplit,
@@ -47,7 +48,7 @@ from qai_hub_models.utils.base_dataset import (
     instantiate_dataset,
 )
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.envvars import IsOnCIEnvvar
 from qai_hub_models.utils.inference import (
     AsyncOnDeviceModel,

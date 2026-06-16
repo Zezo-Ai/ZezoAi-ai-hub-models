@@ -33,12 +33,10 @@ from qai_hub_models.models.edgetam.external_repos.edgetam.sam2.modeling.sam2_bas
     SAM2Base as Sam2,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import InputSpec
 
 MODEL_ID = __name__.split(".")[-2]
@@ -266,15 +264,7 @@ class EdgeTAMLoader(SAM2LoaderBase):
         )
 
 
-@CollectionModel.add_component(EdgeTAMEncoder, "encoder")
-@CollectionModel.add_component(EdgeTAMMemoryEncoder, "memory_encoder")
-@CollectionModel.add_component(EdgeTAMVideoDecoder, "video_decoder")
-class EdgeTAM(PretrainedCollectionModel):
-    """EdgeTAM video object tracking model."""
-
-    def get_calibration_dataset_cls(self) -> type[BaseDataset]:
-        return SaVDataset
-
+class EdgeTAM(WorkbenchModelCollection):
     def __init__(
         self,
         sam2: Sam2,
@@ -282,15 +272,30 @@ class EdgeTAM(PretrainedCollectionModel):
         memory_encoder: EdgeTAMMemoryEncoder,
         video_decoder: EdgeTAMVideoDecoder,
     ) -> None:
-        super().__init__(encoder, memory_encoder, video_decoder)
+        super().__init__(
+            {
+                "encoder": encoder,
+                "memory_encoder": memory_encoder,
+                "video_decoder": video_decoder,
+            }
+        )
         self.sam2 = sam2
         self.encoder = encoder
         self.memory_encoder = memory_encoder
         self.video_decoder = video_decoder
 
-    @staticmethod
-    def calibration_dataset_name() -> str:
-        return "sav"
+    def get_calibration_dataset_cls(self) -> type[BaseDataset]:
+        return SaVDataset
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+        num_points: int = 2,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(
+            batch_size=batch_size,
+            num_points=num_points,
+        )
 
     @classmethod
     def from_pretrained(cls, model_type: str = DEFAULT_MODEL_TYPE) -> EdgeTAM:

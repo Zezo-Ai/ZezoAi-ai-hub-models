@@ -9,12 +9,10 @@ from qai_hub_models.utils.args import (
     demo_model_components_from_cli_args,
     get_model_cli_parser,
     get_on_device_demo_parser,
-    model_from_cli_args,
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.display import display_or_save_image
-from qai_hub_models.utils.evaluate import EvalMode
 
 INPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "gracewood.png"
@@ -38,14 +36,9 @@ def main(is_test: bool = False) -> None:
 
     # Load app and image
     image = load_image(args.image)
-    python_model = model_from_cli_args(EasyOCR, args)
-    if args.eval_mode == EvalMode.ON_DEVICE:
-        detector, recognizer = demo_model_components_from_cli_args(
-            EasyOCR, MODEL_ID, args
-        )
-    else:
-        detector = python_model.detector
-        recognizer = python_model.recognizer
+    python_model, (detector, recognizer) = demo_model_components_from_cli_args(
+        EasyOCR, MODEL_ID, args
+    )
 
     app = EasyOCRApp(
         detector,  # type: ignore[arg-type]

@@ -16,11 +16,9 @@ from qai_hub_models.utils.asset_loaders import (
     load_path,
     qaihm_temp_dir,
 )
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,
@@ -221,15 +219,18 @@ class FOMMGenerator(BaseModel):
         return ["image"]
 
 
-@CollectionModel.add_component(FOMMDetector, "detector")
-@CollectionModel.add_component(FOMMGenerator, "generator")
-class FOMM(PretrainedCollectionModel):
+class FOMM(WorkbenchModelCollection):
     """Exportable FOMM for Image Editing"""
 
     def __init__(self, detector: FOMMDetector, generator: FOMMGenerator) -> None:
-        super().__init__(detector, generator)
+        super().__init__({"detector": detector, "generator": generator})
         self.detector = detector
         self.generator = generator
+
+    def get_input_spec(
+        self, batch_size: int = 1, height: int = 256, width: int = 256
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size, height=height, width=width)
 
     @classmethod
     def get_fomm_model(

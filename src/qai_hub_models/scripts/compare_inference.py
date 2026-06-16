@@ -31,7 +31,8 @@ from qai_hub_models.utils.args import (
     get_model_kwargs,
     get_parser,
 )
-from qai_hub_models.utils.base_model import BaseModel, CollectionModel
+from qai_hub_models.utils.base_collection_model import CollectionModel
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.compare import METRICS_FUNCTIONS, torch_inference
 from qai_hub_models.utils.kwarg_helpers import filter_kwargs
 from qai_hub_models.utils.path_helpers import MODEL_IDS
@@ -92,16 +93,9 @@ def compare_inference(
 
     # Validate component argument
     if issubclass(model_cls, CollectionModel):
-        if component and component not in model_cls.component_class_names:
-            print(
-                f"Unknown component: {component}. "
-                f"Available: {model_cls.component_class_names}"
-            )
-            sys.exit(1)
         if not component:
             print(
-                f"Model {model_id} is a collection model with components: "
-                f"{model_cls.component_class_names}. Use --component to specify one."
+                f"Model {model_id} is a collection model with components. Use --component to specify one."
             )
             sys.exit(1)
     elif component:

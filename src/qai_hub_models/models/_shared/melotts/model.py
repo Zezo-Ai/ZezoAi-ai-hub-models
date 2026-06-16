@@ -51,11 +51,9 @@ from qai_hub_models.models._shared.voiceai_tts.t5_g2p import (
 from qai_hub_models.models._shared.voiceai_tts.t5_g2p import (
     T5Encoder as _T5EncoderBase,
 )
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 if TYPE_CHECKING:
@@ -753,15 +751,17 @@ class BertWrapper(BaseModel):
         return Precision.float
 
 
-class MeloTTS(PretrainedCollectionModel):
+class MeloTTS(WorkbenchModelCollection):
     def __init__(
         self,
         encoder: Encoder,
         flow: Flow,
         decoder: Decoder,
-        *extra_components: BaseModel,
+        **extra_components: BaseModel,
     ) -> None:
-        super().__init__(encoder, flow, decoder, *extra_components)
+        super().__init__(
+            {"encoder": encoder, "flow": flow, "decoder": decoder, **extra_components}
+        )
         self.encoder = encoder
         self.flow = flow
         self.decoder = decoder

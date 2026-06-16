@@ -23,11 +23,9 @@ from qai_hub_models.models._shared.mediapipe.utils import (
     mediapipe_detector_postprocess,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_numpy
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,
@@ -267,17 +265,23 @@ class HandLandmarkDetector(BaseModel):
         return {"image": [load_numpy(numpy_inputs)]}
 
 
-@CollectionModel.add_component(HandDetector, "hand_detector")
-@CollectionModel.add_component(HandLandmarkDetector, "hand_landmark_detector")
-class MediaPipeHand(PretrainedCollectionModel):
+class MediaPipeHand(WorkbenchModelCollection):
     def __init__(
         self,
         hand_detector: HandDetector,
         hand_landmark_detector: HandLandmarkDetector,
     ) -> None:
-        super().__init__(hand_detector, hand_landmark_detector)
+        super().__init__(
+            {
+                "hand_detector": hand_detector,
+                "hand_landmark_detector": hand_landmark_detector,
+            }
+        )
         self.hand_detector = hand_detector
         self.hand_landmark_detector = hand_landmark_detector
+
+    def get_input_spec(self, batch_size: int = BATCH_SIZE) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size)
 
     @classmethod
     def from_pretrained(

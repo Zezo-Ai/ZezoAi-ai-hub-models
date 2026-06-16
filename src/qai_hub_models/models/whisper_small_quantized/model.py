@@ -39,7 +39,7 @@ from qai_hub_models.models._shared.hf_whisper_quantized.model import (
 )
 from qai_hub_models.models.whisper_small.model import WhisperSmall
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.base_model import CollectionModel, PretrainedCollectionModel
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 2
@@ -101,9 +101,7 @@ class WhisperSmallDecoderQuantizable(WhisperDecoderQuantizableBase):
         return onnx_file, aimet_encodings
 
 
-@CollectionModel.add_component(WhisperSmallEncoderQuantizable, "encoder")
-@CollectionModel.add_component(WhisperSmallDecoderQuantizable, "decoder")
-class WhisperSmallQuantized(PretrainedCollectionModel):
+class WhisperSmallQuantized(WorkbenchModelCollection):
     def __init__(
         self,
         encoder: WhisperEncoderQuantizableBase,
@@ -111,7 +109,7 @@ class WhisperSmallQuantized(PretrainedCollectionModel):
         config: WhisperConfig,
         hf_source: str,
     ) -> None:
-        super().__init__(encoder, decoder)
+        super().__init__({"encoder": encoder, "decoder": decoder})
         self.encoder = encoder
         self.decoder = decoder
         self.config = config

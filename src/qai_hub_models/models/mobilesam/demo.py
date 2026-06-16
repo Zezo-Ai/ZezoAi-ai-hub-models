@@ -22,7 +22,6 @@ from qai_hub_models.utils.args import (
     validate_on_device_demo_args,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
-from qai_hub_models.utils.evaluate import EvalMode
 
 IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
     MODEL_ID, MODEL_ASSET_VERSION, "truck.jpg"
@@ -54,14 +53,9 @@ def main(is_test: bool = False) -> None:
     coordinates = [coord for coord in args.point_coordinates.split(";") if coord]
 
     # Load Application
-    wrapper = MobileSAM.from_pretrained(model_type=args.model_type)
-    if args.eval_mode == EvalMode.ON_DEVICE:
-        encoder, decoder = demo_model_components_from_cli_args(
-            MobileSAM, MODEL_ID, args
-        )
-    else:
-        encoder = wrapper.encoder
-        decoder = wrapper.decoder
+    wrapper, (encoder, decoder) = demo_model_components_from_cli_args(
+        MobileSAM, MODEL_ID, args
+    )
     app = SAMApp(
         wrapper.sam.image_encoder.img_size,
         wrapper.sam.mask_threshold,

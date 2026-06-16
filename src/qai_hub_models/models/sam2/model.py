@@ -33,11 +33,10 @@ from qai_hub_models.models._shared.sam2.model import (
     SAM2Loader as SAM2LoaderBase,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
 
 BASE_PLUS_MODEL_TYPE = "base_plus"
@@ -157,17 +156,25 @@ class SAM2Loader(SAM2LoaderBase):
         )
 
 
-@CollectionModel.add_component(SAM2Encoder, "encoder")
-@CollectionModel.add_component(SAM2Decoder, "decoder")
-class SAM2(PretrainedCollectionModel):
-    def get_calibration_dataset_cls(self) -> type[BaseDataset]:
-        return SaVDataset
-
+class SAM2(WorkbenchModelCollection):
     def __init__(self, sam2: Sam2, encoder: SAM2Encoder, decoder: SAM2Decoder) -> None:
-        super().__init__(*[encoder, decoder])
+        super().__init__({"encoder": encoder, "decoder": decoder})
         self.sam2 = sam2
         self.encoder = encoder
         self.decoder = decoder
+
+    def get_calibration_dataset_cls(self) -> type[BaseDataset]:
+        return SaVDataset
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+        num_points: int = 2,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(
+            batch_size=batch_size,
+            num_points=num_points,
+        )
 
     @classmethod
     def from_pretrained(cls, model_type: str = DEFAULT_MODEL_TYPE) -> Self:

@@ -28,7 +28,6 @@ from qai_hub_models.models._shared.llm.model import SplitForwardMixin
 from qai_hub_models.models._shared.lm_driver.generator import (
     HubCompatibleGenerator,
 )
-from qai_hub_models.utils.base_multi_graph_model import MultiGraphCollectionModel
 
 logger = logging.getLogger(__name__)
 
@@ -157,18 +156,14 @@ class FPSplitModelWrapper(SplitForwardMixin, Llama3_2_3B_PreSplit):
         return _SPLIT_PART_CLASSES
 
 
-@MultiGraphCollectionModel.add_component(
-    Llama3_2_3B_Part1_Of_3, "part1_of_3", cli_args_prefix=""
-)
-@MultiGraphCollectionModel.add_component(
-    Llama3_2_3B_Part2_Of_3, "part2_of_3", cli_args_prefix=""
-)
-@MultiGraphCollectionModel.add_component(
-    Llama3_2_3B_Part3_Of_3, "part3_of_3", cli_args_prefix=""
-)
 class Llama3_2_3B_Collection(LlamaPreSplitCollectionBase):
     """Unified Collection with 3 Parts for Llama 3.2 3B."""
 
     hf_repo_name = HF_REPO_NAME
     fp_presplit_cls = Llama3_2_3B_PreSplit
     part_base_cls = Llama3_2_3B_PartBase
+    parts = {
+        "part1_of_3": Llama3_2_3B_Part1_Of_3,
+        "part2_of_3": Llama3_2_3B_Part2_Of_3,
+        "part3_of_3": Llama3_2_3B_Part3_Of_3,
+    }

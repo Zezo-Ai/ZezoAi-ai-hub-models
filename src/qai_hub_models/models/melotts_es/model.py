@@ -14,7 +14,6 @@ from qai_hub_models.models._shared.melotts.model import (
     get_tts_object,
 )
 from qai_hub_models.models._shared.voiceai_tts.language import TTSLanguage
-from qai_hub_models.utils.base_model import CollectionModel
 
 MODEL_ID = __name__.split(".")[-2]
 
@@ -37,11 +36,6 @@ class Decoder_ES(Decoder):
         return cls(get_tts_object(TTSLanguage.SPANISH))
 
 
-@CollectionModel.add_component(Encoder_ES, "encoder")
-@CollectionModel.add_component(Flow_ES, "flow")
-@CollectionModel.add_component(Decoder_ES, "decoder")
-@CollectionModel.add_component(T5Encoder, "t5_encoder")
-@CollectionModel.add_component(T5Decoder, "t5_decoder")
 class MeloTTS_ES(MeloTTS):
     @classmethod
     def get_language(cls) -> TTSLanguage:
@@ -53,6 +47,6 @@ class MeloTTS_ES(MeloTTS):
             Encoder_ES.from_pretrained(),
             Flow_ES.from_pretrained(),
             Decoder_ES.from_pretrained(),
-            T5Encoder.from_pretrained(),
-            T5Decoder.from_pretrained(),
+            t5_encoder=T5Encoder.from_pretrained(),
+            t5_decoder=T5Decoder.from_pretrained(),
         )

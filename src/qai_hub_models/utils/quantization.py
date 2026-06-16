@@ -13,8 +13,15 @@ from qai_hub.client import DatasetEntries
 from torch.utils.data import DataLoader
 
 from qai_hub_models.utils.base_app import CollectionAppQuantizeProtocol
+from qai_hub_models.utils.base_collection_model import (
+    CollectionModel,
+    WorkbenchModelCollection,
+)
 from qai_hub_models.utils.base_dataset import DatasetSplit, instantiate_dataset
-from qai_hub_models.utils.base_model import BaseModel, PretrainedCollectionModel
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.base_multi_graph_collection_model import (
+    MultiGraphCollectionModel,
+)
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.input_spec import (
     InputSpec,
@@ -27,7 +34,7 @@ from qai_hub_models.utils.qai_hub_helpers import make_hub_dataset_entries
 
 
 def get_calibration_data(
-    model: BaseModel | PretrainedCollectionModel,
+    model: BaseModel | CollectionModel | MultiGraphCollectionModel,
     input_spec_arg: InputSpec | dict[str, InputSpec] | None = None,
     num_samples: int | None = None,
     component_name: str | None = None,
@@ -71,7 +78,7 @@ def get_calibration_data(
     elif is_input_spec(input_spec_arg):
         input_spec = input_spec_arg
 
-    if isinstance(model, PretrainedCollectionModel):
+    if isinstance(model, WorkbenchModelCollection):
         assert component_name is not None, (
             "component_name is required for collection models"
         )

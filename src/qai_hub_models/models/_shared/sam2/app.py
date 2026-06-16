@@ -18,7 +18,8 @@ from torchvision.transforms.functional import resize
 
 from qai_hub_models.datasets import DatasetSplit, instantiate_dataset
 from qai_hub_models.models._shared.sam2.model_patches import mask_postprocessing
-from qai_hub_models.utils.base_model import BaseModel, PretrainedCollectionModel
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.evaluate import sample_dataset
 from qai_hub_models.utils.image_processing import (
     numpy_image_to_torch,
@@ -318,7 +319,7 @@ class SAM2App:
     @classmethod
     def get_calibration_data(
         cls,
-        collection_model: PretrainedCollectionModel,
+        collection_model: WorkbenchModelCollection,
         component_name: str,
         input_specs: dict[str, InputSpec] | None = None,
         num_samples: int | None = None,

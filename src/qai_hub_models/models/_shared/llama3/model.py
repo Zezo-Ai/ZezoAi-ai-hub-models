@@ -88,8 +88,10 @@ from qai_hub_models.models._shared.llm.model import (
 )
 from qai_hub_models.utils.aimet.encodings import propagate_memory_encodings
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, CachedWebModelAsset
+from qai_hub_models.utils.base_multi_graph_collection_model import (
+    MultiGraphWorkbenchModelCollection,
+)
 from qai_hub_models.utils.base_multi_graph_model import (
-    MultiGraphCollectionModel,
     MultiGraphWorkbenchModel,
 )
 from qai_hub_models.utils.checkpoint import CheckpointType
@@ -1139,7 +1141,7 @@ class LlamaPartBase(LLMPartBase, torch.nn.Module, MultiGraphWorkbenchModel):
         )
 
 
-class LlamaPreSplitCollectionBase(MultiGraphCollectionModel):
+class LlamaPreSplitCollectionBase(MultiGraphWorkbenchModelCollection):
     """
     Unified Collection base with N Parts for a Llama3 model.
 
@@ -1155,6 +1157,7 @@ class LlamaPreSplitCollectionBase(MultiGraphCollectionModel):
     hf_repo_name: str = ""
     fp_presplit_cls: type[LlamaPreSplitBase]
     part_base_cls: type[LlamaPartBase]
+    parts: dict[str, type[LlamaPartBase]]
 
     @classmethod
     def from_pretrained(
@@ -1187,17 +1190,18 @@ class LlamaPreSplitCollectionBase(MultiGraphCollectionModel):
         Self
             The Collection with all Parts.
         """
-        parts = [
-            part_cls.from_pretrained(
-                checkpoint=checkpoint,
-                host_device=host_device,
-                _skip_quantsim_creation=_skip_quantsim_creation,
-                sequence_lengths=sequence_lengths,
-                context_lengths=context_lengths,
-            )
-            for part_cls in cls.component_classes.values()
-        ]
-        return cls(*parts)
+        return cls(
+            {
+                part_name: part_cls.from_pretrained(
+                    checkpoint=checkpoint,
+                    host_device=host_device,
+                    _skip_quantsim_creation=_skip_quantsim_creation,
+                    sequence_lengths=sequence_lengths,
+                    context_lengths=context_lengths,
+                )
+                for part_name, part_cls in cls.parts.items()
+            }
+        )
 
     def write_supplementary_files(
         self,

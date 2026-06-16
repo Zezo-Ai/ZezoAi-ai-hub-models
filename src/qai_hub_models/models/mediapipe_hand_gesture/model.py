@@ -21,12 +21,10 @@ from qai_hub_models.models.mediapipe_hand.model import (
     HandDetector,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_numpy
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,
@@ -1056,10 +1054,7 @@ class CannedGestureClassifier(BaseModel):
 # ------------------------------------------------------------------------------------
 
 
-@CollectionModel.add_component(PalmDetector, "palm_detector")
-@CollectionModel.add_component(HandLandmarkDetector, "hand_landmark_detector")
-@CollectionModel.add_component(CannedGestureClassifier, "canned_gesture_classifier")
-class MediaPipeHandGesture(PretrainedCollectionModel):
+class MediaPipeHandGesture(WorkbenchModelCollection):
     """Collection model that wires detector, landmark, embedder, classifier."""
 
     def get_calibration_dataset_cls(self) -> type[BaseDataset]:
@@ -1072,13 +1067,18 @@ class MediaPipeHandGesture(PretrainedCollectionModel):
         hand_gesture_classifier: CannedGestureClassifier,
     ) -> None:
         super().__init__(
-            palm_detector,
-            hand_landmark_detector,
-            hand_gesture_classifier,
+            {
+                "palm_detector": palm_detector,
+                "hand_landmark_detector": hand_landmark_detector,
+                "canned_gesture_classifier": hand_gesture_classifier,
+            },
         )
         self.palm_detector = palm_detector
         self.hand_landmark_detector = hand_landmark_detector
         self.gesture_classifier = hand_gesture_classifier
+
+    def get_input_spec(self, batch_size: int = BATCH_SIZE) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size)
 
     @classmethod
     def from_pretrained(

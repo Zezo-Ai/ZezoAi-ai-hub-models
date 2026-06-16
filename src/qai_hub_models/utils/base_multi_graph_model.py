@@ -16,18 +16,10 @@ from qai_hub_models import (
     SampleInputsType,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
-from qai_hub_models.protocols import FromPretrainedProtocol
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    _model_cls_name,
-)
-from qai_hub_models.utils.export_result import (
-    ComponentGroup,
-    MultiGraphComponentGroup,
-    MultiGraphGroup,
-)
+from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.models.protocols import FromPretrainedProtocol
+from qai_hub_models.utils.base_model import _model_cls_name
+from qai_hub_models.utils.export_result import MultiGraphGroup
 from qai_hub_models.utils.input_spec import InputSpec, make_torch_inputs
 from qai_hub_models.utils.qai_hub_helpers import (
     build_compile_options,
@@ -38,7 +30,6 @@ from qai_hub_models.utils.qai_hub_helpers import (
 from qai_hub_models.utils.transpose_channel import transpose_channel_first_to_last
 
 __all__ = [
-    "MultiGraphCollectionModel",
     "MultiGraphWorkbenchModel",
 ]
 
@@ -60,10 +51,6 @@ class MultiGraphWorkbenchModel(FromPretrainedProtocol):
     """
 
     # -- Subclasses must implement these --
-    @property
-    def name(self) -> str:
-        return _model_cls_name(self)
-
     @property
     def graph_names(self) -> list[str]:
         raise NotImplementedError
@@ -89,6 +76,9 @@ class MultiGraphWorkbenchModel(FromPretrainedProtocol):
         raise NotImplementedError()
 
     # -- Subclasses may override these --
+    @property
+    def name(self) -> str:
+        return _model_cls_name(self)
 
     def get_graph_channel_last_input(self, graph_name: str) -> list[str]:
         return []
@@ -105,6 +95,13 @@ class MultiGraphWorkbenchModel(FromPretrainedProtocol):
 
     def component_precision(self) -> Precision:
         raise NotImplementedError()
+
+    def write_supplementary_files(
+        self,
+        output_dir: str | os.PathLike,
+        metadata: ModelMetadata,
+    ) -> None:
+        return None
 
     def get_graph_sample_inputs(
         self,
@@ -286,262 +283,3 @@ class MultiGraphWorkbenchModel(FromPretrainedProtocol):
                 for graph_name, spec in input_specs.items()
             }
         )
-
-
-class MultiGraphCollectionModel(
-    CollectionModel[BaseModel | MultiGraphWorkbenchModel], FromPretrainedProtocol
-):
-    """A collection model where one or more components have multiple graphs."""
-
-    COMPONENT_BASE_TYPES = (BaseModel, MultiGraphWorkbenchModel)
-
-    @property
-    def name(self) -> str:
-        return _model_cls_name(self)
-
-    @staticmethod
-    def eval_datasets() -> list[str]:
-        return []
-
-    @classmethod
-    def get_eval_dataset_classes(cls) -> list[type]:
-        """Returns list of dataset classes on which this model can be evaluated."""
-        return []
-
-    def serialize_component_graph(
-        self,
-        component_name: str,
-        graph_name: str | None,
-        output_dir: str | os.PathLike,
-        input_spec: InputSpec | None = None,
-    ) -> Path:
-        component = self.components[component_name]
-        if isinstance(component, MultiGraphWorkbenchModel):
-            assert graph_name is not None
-            return component.serialize_graph(graph_name, output_dir, input_spec)
-        return component.serialize(output_dir, input_spec)
-
-    # -- Per-component-graph getters --
-
-    def get_component_graph_hub_quantize_options(
-        self,
-        component_name: str,
-        graph_name: str | None,
-        precision: Precision,
-        other_quantize_options: str = "",
-    ) -> str:
-        component = self.components[component_name]
-        if isinstance(component, MultiGraphWorkbenchModel):
-            assert graph_name is not None
-            return component.get_graph_hub_quantize_options(
-                graph_name, precision, other_quantize_options
-            )
-        return component.get_hub_quantize_options(precision, other_quantize_options)
-
-    def component_has_shared_source_model(self, component_name: str) -> bool:
-        component = self.components[component_name]
-        if not isinstance(component, MultiGraphWorkbenchModel):
-            return True
-        return component.shared_source_model
-
-    def get_component_graph_hub_compile_options(
-        self,
-        component_name: str,
-        graph_name: str | None,
-        target_runtime: TargetRuntime,
-        precision: Precision,
-        other_compile_options: str = "",
-        device: Device | None = None,
-    ) -> str:
-        component = self.components[component_name]
-        if isinstance(component, MultiGraphWorkbenchModel):
-            assert graph_name is not None
-            return component.get_graph_hub_compile_options(
-                graph_name, target_runtime, precision, other_compile_options, device
-            )
-        return component.get_hub_compile_options(
-            target_runtime, precision, other_compile_options, device, component_name
-        )
-
-    def get_component_hub_link_options(
-        self,
-        component_name: str,
-        target_runtime: TargetRuntime,
-        other_link_options: str = "",
-    ) -> str:
-        return self.components[component_name].get_hub_link_options(
-            target_runtime, other_link_options
-        )
-
-    def get_component_graph_hub_profile_options(
-        self,
-        component_name: str,
-        graph_name: str | None,
-        target_runtime: TargetRuntime,
-        other_profile_options: str = "",
-    ) -> str:
-        component = self.components[component_name]
-        if isinstance(component, MultiGraphWorkbenchModel):
-            assert graph_name is not None
-            return component.get_graph_hub_profile_options(
-                graph_name, target_runtime, other_profile_options
-            )
-        return component.get_hub_profile_options(
-            target_runtime, other_profile_options, component_name
-        )
-
-    # -- All-component getters --
-
-    def get_input_spec(
-        self,
-        per_component_kwargs: ComponentGroup[dict[str, Any]] | None = None,
-        **kwargs: Any,
-    ) -> MultiGraphComponentGroup[InputSpec]:
-        filtered = self._filter_kwargs_for_each_component(
-            "get_input_spec", per_component_kwargs, kwargs
-        )
-        out: MultiGraphComponentGroup[InputSpec] = MultiGraphComponentGroup()
-        for comp_name, component in self.components.items():
-            comp_kwargs = filtered.get(comp_name, {})
-            if isinstance(component, MultiGraphWorkbenchModel):
-                for graph_name, spec in component.get_input_spec(**comp_kwargs).items():
-                    out[(comp_name, graph_name)] = spec
-            else:
-                out[(comp_name, None)] = component.get_input_spec(**comp_kwargs)
-        return out
-
-    def get_unsupported_reason(
-        self,
-        target_runtime: TargetRuntime,
-        device: Device,
-    ) -> str | None:
-        for comp_name, component in self.components.items():
-            if reason := component.get_unsupported_reason(target_runtime, device):
-                return f"Component {comp_name}: {reason}"
-        return None
-
-    def get_hub_quantize_options(
-        self,
-        precision: Precision,
-        other_quantize_options: str = "",
-        per_component_quantize_options: ComponentGroup[str] | None = None,
-    ) -> MultiGraphComponentGroup[str]:
-        per_component_quantize_options = (
-            per_component_quantize_options or ComponentGroup()
-        )
-        out: MultiGraphComponentGroup[str] = MultiGraphComponentGroup()
-        for comp_name, component in self.components.items():
-            comp_opts = (
-                other_quantize_options
-                + f" {per_component_quantize_options.get(comp_name, '')}"
-            )
-            if isinstance(component, MultiGraphWorkbenchModel):
-                for graph_name, opts in component.get_hub_quantize_options(
-                    precision, comp_opts
-                ).items():
-                    out[(comp_name, graph_name)] = opts
-            else:
-                out[(comp_name, None)] = component.get_hub_quantize_options(
-                    precision, comp_opts
-                )
-        return out
-
-    def get_hub_compile_options(
-        self,
-        target_runtime: TargetRuntime,
-        precision: Precision,
-        other_compile_options: str = "",
-        device: Device | None = None,
-        per_component_compile_options: ComponentGroup[str] | None = None,
-    ) -> MultiGraphComponentGroup[str]:
-        per_component_compile_options = (
-            per_component_compile_options or ComponentGroup()
-        )
-        out: MultiGraphComponentGroup[str] = MultiGraphComponentGroup()
-        for comp_name, component in self.components.items():
-            comp_opts = (
-                other_compile_options
-                + f" {per_component_compile_options.get(comp_name, '')}"
-            )
-            if isinstance(component, MultiGraphWorkbenchModel):
-                for graph_name, opts in component.get_hub_compile_options(
-                    target_runtime, precision, comp_opts, device
-                ).items():
-                    out[(comp_name, graph_name)] = opts
-            else:
-                out[(comp_name, None)] = component.get_hub_compile_options(
-                    target_runtime, precision, comp_opts, device, comp_name
-                )
-        return out
-
-    def get_hub_link_options(
-        self,
-        target_runtime: TargetRuntime,
-        other_link_options: str = "",
-        per_component_link_options: ComponentGroup[str] | None = None,
-    ) -> ComponentGroup[str]:
-        per_component_link_options = per_component_link_options or ComponentGroup()
-        out: ComponentGroup[str] = ComponentGroup()
-        for comp_name, component in self.components.items():
-            comp_opts = (
-                other_link_options + f" {per_component_link_options.get(comp_name, '')}"
-            )
-            if isinstance(component, MultiGraphWorkbenchModel):
-                out[comp_name] = component.get_hub_link_options(
-                    target_runtime, comp_opts
-                )
-            else:
-                out[comp_name] = component.get_hub_link_options(
-                    target_runtime, comp_opts
-                )
-        return out
-
-    def get_hub_profile_options(
-        self,
-        target_runtime: TargetRuntime,
-        other_profile_options: str = "",
-        per_component_profile_options: ComponentGroup[str] | None = None,
-    ) -> MultiGraphComponentGroup[str]:
-        per_component_profile_options = (
-            per_component_profile_options or ComponentGroup()
-        )
-        out: MultiGraphComponentGroup[str] = MultiGraphComponentGroup()
-        for comp_name, component in self.components.items():
-            comp_opts = (
-                other_profile_options
-                + f" {per_component_profile_options.get(comp_name, '')}"
-            )
-            if isinstance(component, MultiGraphWorkbenchModel):
-                for graph_name, opts in component.get_hub_profile_options(
-                    target_runtime, comp_opts
-                ).items():
-                    out[(comp_name, graph_name)] = opts
-            else:
-                out[(comp_name, None)] = component.get_hub_profile_options(
-                    target_runtime, comp_opts, comp_name
-                )
-        return out
-
-    def sample_inputs(
-        self,
-        input_spec: MultiGraphComponentGroup[InputSpec] | None = None,
-        use_channel_last_format: bool = True,
-    ) -> MultiGraphComponentGroup[SampleInputsType]:
-        input_specs = input_spec or self.get_input_spec()
-        out: MultiGraphComponentGroup[SampleInputsType] = MultiGraphComponentGroup()
-        for comp_name, component in self.components.items():
-            if isinstance(component, MultiGraphWorkbenchModel):
-                graph_specs: MultiGraphGroup[InputSpec] = MultiGraphGroup()
-                for graph_name in component.graph_names:
-                    key = (comp_name, graph_name)
-                    if spec := input_specs.get(key):
-                        graph_specs[graph_name] = spec
-                for graph_name, sample in component.sample_inputs(
-                    graph_specs or None, use_channel_last_format
-                ).items():
-                    out[(comp_name, graph_name)] = sample
-            else:
-                out[(comp_name, None)] = component.sample_inputs(
-                    input_specs.get((comp_name, None)), use_channel_last_format
-                )
-        return out

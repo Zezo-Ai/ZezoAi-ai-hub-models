@@ -29,6 +29,7 @@ from typing_extensions import Self
 
 from qai_hub_models import (
     Precision,
+    SampleInputsType,
     TargetRuntime,
 )
 from qai_hub_models.models._shared.llm._utils import (
@@ -44,18 +45,15 @@ from qai_hub_models.models.pi05.model_adaptation import (
 from qai_hub_models.utils.aimet.aimet_dummy_model import zip_aimet_model
 from qai_hub_models.utils.aimet.config_loader import get_aimet_config_path
 from qai_hub_models.utils.aimet.encodings import apply_propagate_memory_encodings
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    IndependentComponentFromPretrainedMixin,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.checkpoint import (
     CheckpointSpec,
     CheckpointType,
     FromPretrainedMixin,
 )
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,
@@ -376,7 +374,6 @@ class Pi05PaliGemmaVisionQuantizable(
         precision: Precision = Precision.w8a16,
         torch_from_pretrained_kwargs: dict[str, Any] | None = None,
         cls_kwargs: dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> Self:
         host_device = torch.device(host_device)
         subfolder = subfolder or cls.default_subfolder
@@ -645,8 +642,8 @@ class Pi05PaliGemmaTokenEmbed(LoadPolicyMixin, BaseModel):
         return self.get_input_spec_static(batch_size)
 
     def _sample_inputs_impl(
-        self, input_spec: InputSpec | None = None, **kwargs: Any
-    ) -> dict[str, list[Any]]:
+        self, input_spec: InputSpec | None = None
+    ) -> SampleInputsType:
         if not input_spec:
             input_spec = self.get_input_spec()
         inputs = make_torch_inputs(input_spec)
@@ -1553,7 +1550,6 @@ class Pi05PaliGemmaBackboneQuantizable(
         precision: Precision = Precision.w4a16,
         torch_from_pretrained_kwargs: dict[str, Any] | None = None,
         cls_kwargs: dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> Self:
         host_device = torch.device(host_device)
         subfolder = subfolder or cls.default_subfolder
@@ -1655,7 +1651,6 @@ class Pi05ActionExpertQuantizable(
         precision: Precision = Precision.w8a16,
         torch_from_pretrained_kwargs: dict[str, Any] | None = None,
         cls_kwargs: dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> Self:
         host_device = torch.device(host_device)
         ckpt_type = CheckpointType.from_checkpoint(checkpoint, subfolder="")
@@ -1849,15 +1844,7 @@ class _Pi05LiberoCalibrationMixin:
         return LiberoDataset
 
 
-@CollectionModel.add_component(Pi05PaliGemmaVision, "vision_encoder")
-@CollectionModel.add_component(Pi05PaliGemmaTokenEmbed, "token_emb")
-@CollectionModel.add_component(Pi05ActionExpert, "action_expert")
-@CollectionModel.add_component(Pi05PaliGemmaBackbone, "backbone")
-class Pi05Collection(
-    _Pi05LiberoCalibrationMixin,
-    IndependentComponentFromPretrainedMixin,
-    PretrainedCollectionModel,
-):
+class Pi05Collection(_Pi05LiberoCalibrationMixin, WorkbenchModelCollection):
     """
     Float (non-quantized) Pi05 collection. Its components are plain torch
     modules that run float forward passes, so Pi05App.get_calibration_data can
@@ -1866,14 +1853,84 @@ class Pi05Collection(
     so no duplicate float weights are materialized.
     """
 
+    def __init__(
+        self,
+        vision_encoder: Pi05PaliGemmaVision,
+        token_emb: Pi05PaliGemmaTokenEmbed,
+        action_expert: Pi05ActionExpert,
+        backbone: Pi05PaliGemmaBackbone,
+    ) -> None:
+        super().__init__(
+            {
+                "vision_encoder": vision_encoder,
+                "token_emb": token_emb,
+                "action_expert": action_expert,
+                "backbone": backbone,
+            }
+        )
 
-@CollectionModel.add_component(Pi05PaliGemmaVisionQuantizable, "vision_encoder")
-@CollectionModel.add_component(Pi05PaliGemmaTokenEmbed, "token_emb")
-@CollectionModel.add_component(Pi05ActionExpertQuantizable, "action_expert")
-@CollectionModel.add_component(Pi05PaliGemmaBackboneQuantizable, "backbone")
-class Pi05CollectionQuantized(
-    _Pi05LiberoCalibrationMixin,
-    IndependentComponentFromPretrainedMixin,
-    PretrainedCollectionModel,
-):
-    pass
+    def get_input_spec(self, batch_size: int = 1) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        checkpoint: str = "DEFAULT",
+        host_device: torch.device | str = torch.device("cpu"),
+    ) -> Pi05Collection:
+        return cls(
+            Pi05PaliGemmaVision.from_pretrained(
+                checkpoint=checkpoint, host_device=host_device
+            ),
+            Pi05PaliGemmaTokenEmbed.from_pretrained(
+                checkpoint=checkpoint, host_device=host_device
+            ),
+            Pi05ActionExpert.from_pretrained(
+                checkpoint=checkpoint, host_device=host_device
+            ),
+            Pi05PaliGemmaBackbone.from_pretrained(
+                checkpoint=checkpoint, host_device=host_device
+            ),
+        )
+
+
+class Pi05CollectionQuantized(_Pi05LiberoCalibrationMixin, WorkbenchModelCollection):
+    def __init__(
+        self,
+        vision_encoder: Pi05PaliGemmaVisionQuantizable,
+        token_emb: Pi05PaliGemmaTokenEmbed,
+        action_expert: Pi05ActionExpertQuantizable,
+        backbone: Pi05PaliGemmaBackboneQuantizable,
+    ) -> None:
+        super().__init__(
+            {
+                "vision_encoder": vision_encoder,
+                "token_emb": token_emb,
+                "action_expert": action_expert,
+                "backbone": backbone,
+            }
+        )
+
+    def get_input_spec(self, batch_size: int = 1) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        checkpoint: str = "DEFAULT",
+        host_device: torch.device | str = torch.device("cpu"),
+    ) -> Pi05CollectionQuantized:
+        return cls(
+            Pi05PaliGemmaVisionQuantizable.from_pretrained(
+                checkpoint=checkpoint, host_device=host_device
+            ),
+            Pi05PaliGemmaTokenEmbed.from_pretrained(
+                checkpoint=checkpoint, host_device=host_device
+            ),
+            Pi05ActionExpertQuantizable.from_pretrained(
+                checkpoint=checkpoint, host_device=host_device
+            ),
+            Pi05PaliGemmaBackboneQuantizable.from_pretrained(
+                checkpoint=checkpoint, host_device=host_device
+            ),
+        )

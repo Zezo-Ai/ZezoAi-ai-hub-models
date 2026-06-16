@@ -95,8 +95,8 @@ def main(is_test: bool = False) -> None:
             sam3_head,
         ) = demo_model_components_from_cli_args(SAM3, MODEL_ID, args)
     else:
-        sam3_vision_backbone = wrapper.vision_backbone
-        sam3_head = wrapper.head
+        sam3_vision_backbone = wrapper.vision_backbone  # type: ignore[assignment]
+        sam3_head = wrapper.head  # type: ignore[assignment]
 
     image_height, image_width = wrapper.vision_backbone.get_input_spec()["image"][0][
         -2:

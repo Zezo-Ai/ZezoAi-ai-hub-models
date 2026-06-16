@@ -22,12 +22,23 @@ import torch
 from qai_hub.client import Device
 from qai_hub.public_rest_api import DatasetEntries
 
-from qai_hub_models import Precision, QAIRTVersion, TargetRuntime
+from qai_hub_models import (
+    Precision,
+    QAIRTVersion,
+    SampleInputsType,
+    TargetRuntime,
+)
 from qai_hub_models.utils.asset_loaders import qaihm_temp_dir
 from qai_hub_models.utils.export_result import (
     ComponentGroup,
     MultiGraphComponentGroup,
     MultiGraphGroup,
+)
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    broadcast_data_to_multi_batch,
+    get_batch_size,
+    make_torch_inputs,
 )
 from qai_hub_models.utils.onnx.helpers import (
     safe_torch_onnx_export,
@@ -602,3 +613,29 @@ def build_profile_options(
             f" --qnn_options context_enable_graphs={context_graph_name}"
         )
     return other_profile_options
+
+
+def make_sample_inputs(input_spec: InputSpec) -> SampleInputsType:
+    """
+    Default implementation that returns a single random data array
+    for each input name based on the shapes and dtypes in `get_input_spec`.
+
+    A subclass may choose to override this and fetch a batch of real input data
+    from a data source.
+    """
+    inputs_dict = {}
+    inputs_list = make_torch_inputs(input_spec)
+    for i, input_name in enumerate(input_spec.keys()):
+        inputs_dict[input_name] = [inputs_list[i].numpy()]
+    return inputs_dict
+
+
+def expand_to_batch_size(
+    sample_inputs: SampleInputsType,
+    input_spec: InputSpec,
+) -> SampleInputsType:
+    """Expand single-batch sample inputs to match a multi-batch input spec."""
+    batch_size = get_batch_size(input_spec)
+    if batch_size is not None and batch_size > 1:
+        return broadcast_data_to_multi_batch(input_spec, sample_inputs)
+    return sample_inputs

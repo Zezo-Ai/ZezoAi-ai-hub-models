@@ -25,12 +25,10 @@ from qai_hub_models.utils.asset_loaders import (
     CachedWebModelAsset,
     load_numpy,
 )
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,
@@ -404,20 +402,26 @@ class FaceLandmarkDetector(BaseModel):
         return {"image": [load_numpy(LANDMARK_DETECTOR_SAMPLE_INPUTS_ADDRESS)]}
 
 
-@CollectionModel.add_component(FaceDetector, "face_detector")
-@CollectionModel.add_component(FaceLandmarkDetector, "face_landmark_detector")
-class MediaPipeFace(PretrainedCollectionModel):
+class MediaPipeFace(WorkbenchModelCollection):
     def __init__(
         self,
         face_detector: FaceDetector,
         face_landmark_detector: FaceLandmarkDetector,
     ) -> None:
-        super().__init__(face_detector, face_landmark_detector)
+        super().__init__(
+            {
+                "face_detector": face_detector,
+                "face_landmark_detector": face_landmark_detector,
+            }
+        )
         self.face_detector = face_detector
         self.face_landmark_detector = face_landmark_detector
 
     def get_calibration_dataset_cls(self) -> type[BaseDataset]:
         return HumanFacesDataset
+
+    def get_input_spec(self, batch_size: int = BATCH_SIZE) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size)
 
     @classmethod
     def from_pretrained(

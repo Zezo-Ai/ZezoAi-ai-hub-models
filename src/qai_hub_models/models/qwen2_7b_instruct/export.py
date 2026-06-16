@@ -23,9 +23,7 @@ from qai_hub_models.utils.args import (
     export_parser,
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
-from qai_hub_models.utils.base_model import (
-    PrecompiledCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import PrecompiledCollectionModel
 from qai_hub_models.utils.export_result import CollectionExportResult, ComponentGroup
 from qai_hub_models.utils.export_without_hub_access import export_without_hub_access
 from qai_hub_models.utils.path_helpers import get_next_free_path
@@ -46,7 +44,7 @@ def profile_model(
     components: list[str] | None = None,
 ) -> ComponentGroup[hub.client.ProfileJob]:
     profile_jobs: ComponentGroup[hub.client.ProfileJob] = ComponentGroup()
-    for component_name in components or Model.component_class_names:
+    for component_name in components or options:
         print(f"Profiling model {component_name} on a hosted device.")
         profile_jobs[component_name] = hub.submit_profile_job(
             model=uploaded_models[component_name],
@@ -154,11 +152,6 @@ def export_model(
     precision = Precision.w4a16
     target_runtime = TargetRuntime.QNN_CONTEXT_BINARY
 
-    component_arg = components
-    components = components or Model.component_class_names
-    for component_name in components:
-        if component_name not in Model.component_class_names:
-            raise ValueError(f"Invalid component {component_name}.")
     if fetch_static_assets or not can_access_qualcomm_ai_hub():
         static_model_path = export_without_hub_access(
             MODEL_ID,
@@ -171,7 +164,7 @@ def export_model(
             target_runtime,
             precision,
             profile_options,
-            component_arg,
+            components,
             qaihm_version_tag=fetch_static_assets,
         )
         return CollectionExportResult(download_path=static_model_path)
@@ -187,6 +180,10 @@ def export_model(
     # 1. Initialize model
     print("Initializing model class")
     model = Model.from_precompiled()
+    components = components or model.component_names
+    for component_name in components:
+        if component_name not in model.component_names:
+            raise ValueError(f"Invalid component {component_name}.")
 
     # 2. Upload model assets to hub
     uploaded_models: dict[str, hub.Model] = {}

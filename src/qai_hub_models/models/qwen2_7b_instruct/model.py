@@ -10,10 +10,10 @@ import os
 from qai_hub_models import TargetRuntime
 from qai_hub_models.models._shared.llm.llm_helpers import get_kv_cache_names
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.base_model import (
-    BasePrecompiledModel,
-    PrecompiledCollectionModel,
+from qai_hub_models.utils.base_collection_model import (
+    PrecompiledWorkbenchModelCollection,
 )
+from qai_hub_models.utils.base_model import BasePrecompiledModel
 from qai_hub_models.utils.input_spec import InputSpec
 
 MODEL_ID = __name__.split(".")[-2]
@@ -391,31 +391,7 @@ class TokenGenerator_Part4(BasePrecompiledModel):
         )
 
 
-@PrecompiledCollectionModel.add_component(
-    PromptProcessor_Part1, "prompt_processor_part_1"
-)
-@PrecompiledCollectionModel.add_component(
-    PromptProcessor_Part2, "prompt_processor_part_2"
-)
-@PrecompiledCollectionModel.add_component(
-    PromptProcessor_Part3, "prompt_processor_part_3"
-)
-@PrecompiledCollectionModel.add_component(
-    PromptProcessor_Part4, "prompt_processor_part_4"
-)
-@PrecompiledCollectionModel.add_component(
-    TokenGenerator_Part1, "token_generator_part_1"
-)
-@PrecompiledCollectionModel.add_component(
-    TokenGenerator_Part2, "token_generator_part_2"
-)
-@PrecompiledCollectionModel.add_component(
-    TokenGenerator_Part3, "token_generator_part_3"
-)
-@PrecompiledCollectionModel.add_component(
-    TokenGenerator_Part4, "token_generator_part_4"
-)
-class Qwen2_7B_Instruct(PrecompiledCollectionModel):
+class Qwen2_7B_Instruct(PrecompiledWorkbenchModelCollection):
     """
     Qwen2_7B_Instruct class consists of
          - Prompt Processor (split into 4 parts)
@@ -424,3 +400,40 @@ class Qwen2_7B_Instruct(PrecompiledCollectionModel):
      All models are pre-trained, quantized (int4/int8 weight, float32 activations)
      and compiled into serialized binary for Qualcomm Snapdragon 8 Elite.
     """
+
+    def __init__(
+        self,
+        prompt_processor_part_1: PromptProcessor_Part1,
+        prompt_processor_part_2: PromptProcessor_Part2,
+        prompt_processor_part_3: PromptProcessor_Part3,
+        prompt_processor_part_4: PromptProcessor_Part4,
+        token_generator_part_1: TokenGenerator_Part1,
+        token_generator_part_2: TokenGenerator_Part2,
+        token_generator_part_3: TokenGenerator_Part3,
+        token_generator_part_4: TokenGenerator_Part4,
+    ) -> None:
+        super().__init__(
+            {
+                "prompt_processor_part_1": prompt_processor_part_1,
+                "prompt_processor_part_2": prompt_processor_part_2,
+                "prompt_processor_part_3": prompt_processor_part_3,
+                "prompt_processor_part_4": prompt_processor_part_4,
+                "token_generator_part_1": token_generator_part_1,
+                "token_generator_part_2": token_generator_part_2,
+                "token_generator_part_3": token_generator_part_3,
+                "token_generator_part_4": token_generator_part_4,
+            }
+        )
+
+    @classmethod
+    def from_precompiled(cls) -> Qwen2_7B_Instruct:
+        return cls(
+            PromptProcessor_Part1.from_precompiled(),
+            PromptProcessor_Part2.from_precompiled(),
+            PromptProcessor_Part3.from_precompiled(),
+            PromptProcessor_Part4.from_precompiled(),
+            TokenGenerator_Part1.from_precompiled(),
+            TokenGenerator_Part2.from_precompiled(),
+            TokenGenerator_Part3.from_precompiled(),
+            TokenGenerator_Part4.from_precompiled(),
+        )

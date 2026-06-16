@@ -20,7 +20,6 @@ from qai_hub_models.models._shared.hf_whisper.model import (
 from qai_hub_models.models.distil_whisper.model_patch import (
     monkey_patch_distil_whisper_model,
 )
-from qai_hub_models.utils.base_model import CollectionModel
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -79,8 +78,6 @@ class DistilWhisperDecoder(HfWhisperDecoder):
         return compile_options
 
 
-@CollectionModel.add_component(DistilWhisperEncoder, "encoder")
-@CollectionModel.add_component(DistilWhisperDecoder, "decoder")
 class DistilWhisper(HfWhisper):
     @classmethod
     def get_hf_whisper_version(cls) -> str:

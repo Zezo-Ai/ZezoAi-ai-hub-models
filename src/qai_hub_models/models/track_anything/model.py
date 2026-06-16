@@ -13,12 +13,12 @@ from qai_hub_models.models.track_anything.external_repos.track_anything.tracker.
     XMem,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_yaml
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_model import (
     BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
     SerializationSettings,
 )
+from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
@@ -346,15 +346,7 @@ class TrackAnythingSegment(TrackAnything):
         return ["masks", "hidden"]
 
 
-@CollectionModel.add_component(
-    TrackAnythingEncodeKeyWithShrinkage, "encode_key_with_shrinkage"
-)
-@CollectionModel.add_component(TrackAnythingEncodeValue, "encode_value")
-@CollectionModel.add_component(
-    TrackAnythingEncodeKeyWithoutShrinkage, "encode_key_without_shrinkage"
-)
-@CollectionModel.add_component(TrackAnythingSegment, "segment")
-class TrackAnythingWrapper(PretrainedCollectionModel):
+class TrackAnythingWrapper(WorkbenchModelCollection):
     def __init__(
         self,
         EncodeKeyWithShrinkage: TrackAnythingEncodeKeyWithShrinkage,
@@ -364,13 +356,26 @@ class TrackAnythingWrapper(PretrainedCollectionModel):
         config: dict,
     ) -> None:
         super().__init__(
-            EncodeKeyWithShrinkage, EncodeValue, EncodeKeyWithoutShrinkage, Segment
+            {
+                "encode_key_with_shrinkage": EncodeKeyWithShrinkage,
+                "encode_value": EncodeValue,
+                "encode_key_without_shrinkage": EncodeKeyWithoutShrinkage,
+                "segment": Segment,
+            },
         )
         self.EncodeKeyWithShrinkage = EncodeKeyWithShrinkage
         self.EncodeValue = EncodeValue
         self.EncodeKeyWithoutShrinkage = EncodeKeyWithoutShrinkage
         self.Segment = Segment
         self.config = config
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+        height: int = 320,
+        width: int = 576,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size, height=height, width=width)
 
     @classmethod
     def from_pretrained(cls) -> Self:

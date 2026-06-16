@@ -37,12 +37,9 @@ from qai_hub_models.models.zipformer.external_repos.icefall.icefall.checkpoint i
 from qai_hub_models.models.zipformer.model_adaption import (
     Modify_EncoderModule,
 )
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    CollectionModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
@@ -387,17 +384,14 @@ class ZipformerJoiner(BaseModel):
         return Precision.w16a16
 
 
-@CollectionModel.add_component(ZipformerEncoder, "encoder")
-@CollectionModel.add_component(ZipformerDecoder, "decoder")
-@CollectionModel.add_component(ZipformerJoiner, "joiner")
-class HfZipformer(PretrainedCollectionModel):
+class HfZipformer(WorkbenchModelCollection):
     def __init__(
         self,
         encoder: ZipformerEncoder,
         decoder: ZipformerDecoder,
         joiner: ZipformerJoiner,
     ) -> None:
-        super().__init__(encoder, decoder, joiner)
+        super().__init__({"encoder": encoder, "decoder": decoder, "joiner": joiner})
         self.encoder = encoder
         self.decoder = decoder
         self.joiner = joiner

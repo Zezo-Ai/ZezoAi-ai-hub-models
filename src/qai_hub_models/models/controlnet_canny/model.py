@@ -22,7 +22,8 @@ from qai_hub_models.models._shared.stable_diffusion.model import (
     TextEncoderQuantizableBase,
     VaeDecoderQuantizableBase,
 )
-from qai_hub_models.utils.base_model import CollectionModel
+from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 
 if TYPE_CHECKING:
@@ -95,13 +96,43 @@ class ControlNetQuantizable(ControlNetQuantizableBase):
 
 
 # Align component names with Huggingface's repo's subfolder names
-@CollectionModel.add_component(TextEncoderQuantizable, "text_encoder")
-@CollectionModel.add_component(ControlUnetQuantizable, "unet")
-@CollectionModel.add_component(VaeDecoderQuantizable, "vae")
-# subfolder_hf="" because HF_REPO_CN repo does not use subfolder
-@CollectionModel.add_component(ControlNetQuantizable, "controlnet", subfolder_hf="")
 class ControlNetCannyQuantized(StableDiffusionBase):
     hf_repo_id = HF_REPO_SD
+    component_classes = {
+        "text_encoder": TextEncoderQuantizable,
+        "unet": ControlUnetQuantizable,
+        "vae": VaeDecoderQuantizable,
+        "controlnet": ControlNetQuantizable,
+    }
+
+    def __init__(
+        self,
+        text_encoder: TextEncoderQuantizable,
+        unet: ControlUnetQuantizable,
+        vae: VaeDecoderQuantizable,
+        controlnet: ControlNetQuantizable,
+    ) -> None:
+        super().__init__(text_encoder, unet, vae)
+        self.components["controlnet"] = controlnet
+        self.controlnet = controlnet
+
+    def get_input_spec(
+        self,
+        batch_size: int = 1,
+    ) -> ComponentGroup[InputSpec]:
+        return super().get_input_spec(batch_size=batch_size)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        checkpoint: str = "DEFAULT",
+    ) -> ControlNetCannyQuantized:
+        return cls(
+            TextEncoderQuantizable.from_pretrained(checkpoint=checkpoint),
+            ControlUnetQuantizable.from_pretrained(checkpoint=checkpoint),
+            VaeDecoderQuantizable.from_pretrained(checkpoint=checkpoint),
+            ControlNetQuantizable.from_pretrained(checkpoint=checkpoint),
+        )
 
     @staticmethod
     def make_tokenizer() -> CLIPTokenizer:

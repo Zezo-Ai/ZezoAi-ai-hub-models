@@ -31,8 +31,11 @@ from qai_hub_models.models.deepbox.model import (
     VGG3DDetection,
     Yolo2DDetection,
 )
+from qai_hub_models.utils.base_collection_model import (
+    CollectionModel,
+    WorkbenchModelCollection,
+)
 from qai_hub_models.utils.base_dataset import DatasetSplit
-from qai_hub_models.utils.base_model import CollectionModel, PretrainedCollectionModel
 from qai_hub_models.utils.bounding_box_processing import batched_nms
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
 from qai_hub_models.utils.input_spec import InputSpec
@@ -278,7 +281,7 @@ class DeepBoxApp:
     @classmethod
     def get_calibration_data(
         cls,
-        collection_model: PretrainedCollectionModel,
+        collection_model: WorkbenchModelCollection,
         component_name: str,
         input_specs: dict[str, InputSpec] | None = None,
         num_samples: int | None = None,

@@ -23,7 +23,7 @@ from qai_hub_models.utils.base_app import (
     CollectionAppQuantizeProtocol,
     CollectionModelEvalGenerator,
 )
-from qai_hub_models.utils.base_model import PretrainedCollectionModel
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.bounding_box_processing import batched_nms
 from qai_hub_models.utils.draw import create_color_map, draw_box_from_xyxy
 from qai_hub_models.utils.evaluate import sample_dataset
@@ -228,7 +228,7 @@ class Detectron2DetectionApp(
     @classmethod
     def get_calibration_data(
         cls,
-        collection_model: PretrainedCollectionModel,
+        collection_model: WorkbenchModelCollection,
         component_name: str,
         input_specs: dict[str, InputSpec] | None = None,
         num_samples: int | None = None,

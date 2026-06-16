@@ -160,11 +160,13 @@ def stable_diffusion_demo(
     else:
         cli_args = copy.copy(args)
         cli_args.host_device = host_device
-        models = demo_model_components_from_cli_args(model_cls, model_id, cli_args)
+        _, components = demo_model_components_from_cli_args(
+            model_cls, model_id, cli_args
+        )
         if use_controlnet:
-            text_encoder, unet, vae_decoder, controlnet = models  # type: ignore[assignment]
+            text_encoder, unet, vae_decoder, controlnet = components  # type: ignore[assignment]
         else:
-            text_encoder, unet, vae_decoder = models  # type: ignore[assignment]
+            text_encoder, unet, vae_decoder = components  # type: ignore[assignment]
 
     assert issubclass(model_cls, StableDiffusionBase)
     tokenizer = model_cls.make_tokenizer()

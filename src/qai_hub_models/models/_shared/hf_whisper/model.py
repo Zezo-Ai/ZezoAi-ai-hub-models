@@ -26,10 +26,8 @@ from qai_hub_models.models._shared.hf_whisper.model_adaptation import (
 from qai_hub_models.utils.asset_loaders import (
     CachedWebModelAsset,
 )
-from qai_hub_models.utils.base_model import (
-    BaseModel,
-    PretrainedCollectionModel,
-)
+from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 MODEL_ID = "hf_whisper_asr_shared"
@@ -305,7 +303,7 @@ class HfWhisperDecoder(BaseModel):
         return compile_options
 
 
-class HfWhisper(PretrainedCollectionModel):
+class HfWhisper(WorkbenchModelCollection):
     def __init__(
         self,
         encoder: HfWhisperEncoder,
@@ -313,7 +311,7 @@ class HfWhisper(PretrainedCollectionModel):
         config: WhisperConfig,
         hf_source: str,
     ) -> None:
-        super().__init__(encoder, decoder)
+        super().__init__({"encoder": encoder, "decoder": decoder})
         self.encoder = encoder
         self.decoder = decoder
         self.config = config
