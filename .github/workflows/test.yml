@@ -242,6 +242,7 @@ jobs:
 
       - name: Run CLI Tests
         id: run-cli-tests
+        if: ${{ !cancelled() }}
         env:
           QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/test-results/qaihm-cli-tests-junit.xml
         run: |

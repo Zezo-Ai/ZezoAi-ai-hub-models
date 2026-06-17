@@ -115,13 +115,17 @@ def _validate_urls_exist(urls: list[tuple[str, str]]) -> None:
 
     def _check(url: str, label: str) -> str | None:
         try:
-            status = session.head(url, allow_redirects=True, timeout=10).status_code
-            # Some sites reject HEAD requests (IEEE: 418, qwen.ai: 405). We ignore those.
+            # IEEE requires a header or rejects all head requests with error 418.
+            headers = {"User-Agent": "QAIHM Test Suite"}
+            status = session.head(
+                url, allow_redirects=True, timeout=10, headers=headers
+            ).status_code
+            # Some sites respond to HEAD requests differently (IEEE: 202, qwen.ai: 405). We also ignore those.
             if status not in [
                 requests.codes.ok,
+                requests.codes.accepted,
                 requests.codes.too_many_requests,
-                405,
-                418,
+                requests.codes.method_not_allowed,
             ]:
                 return f"{label} at {url} (status: {status})"
         except requests.RequestException as e:
