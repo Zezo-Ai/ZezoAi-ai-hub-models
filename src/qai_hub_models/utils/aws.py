@@ -2,6 +2,7 @@
 # Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
+from __future__ import annotations
 
 import contextlib
 import functools
@@ -9,8 +10,6 @@ import logging
 import os
 import re
 import sys
-from collections.abc import Callable
-from typing import TypeVar
 
 import boto3
 import botocore.exceptions
@@ -18,22 +17,38 @@ import tqdm
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError, NoCredentialsError
 from mypy_boto3_s3.service_resource import Bucket, ObjectSummary
+from qai_hub_models_cli._internal.aws import (
+    QAIHM_PRIVATE_S3_BUCKET,
+    NoAWSCredsError,
+    attempt_with_s3_credentials_warning,
+)
+from qai_hub_models_cli._internal.aws import (
+    s3_download as _cli_s3_download,
+)
+from qai_hub_models_cli._internal.aws import (
+    s3_file_exists as _cli_s3_file_exists,
+)
 
-from qai_hub_models.utils.envvars import IsOnCIEnvvar
+__all__ = [
+    "QAIHM_AWS_PROFILE",
+    "QAIHM_PRIVATE_S3_BUCKET",
+    "QAIHM_PUBLIC_S3_BUCKET",
+    "NoAWSCredsError",
+    "attempt_with_s3_credentials_warning",
+    "can_access_private_s3",
+    "get_files_to_upload_remove",
+    "get_qaihm_s3",
+    "get_qaihm_s3_or_exit",
+    "get_s3_url",
+    "list_s3_files_in_folder_recursive",
+    "s3_copy",
+    "s3_download",
+    "s3_file_exists",
+    "s3_multipart_upload",
+]
 
 QAIHM_PUBLIC_S3_BUCKET = "qaihub-public-assets"
-QAIHM_PRIVATE_S3_BUCKET = "qai-hub-models-private-assets"
 QAIHM_AWS_PROFILE = "qaihm"
-
-
-class NoAWSCredsError(ValueError):
-    def __init__(self) -> None:
-        super().__init__(
-            "S3 credentials not found or expired. Run `python scripts/build_and_test.py validate_aws_credentials` and retry."
-        )
-
-
-CallableRetT = TypeVar("CallableRetT")
 
 
 @functools.cache
@@ -43,25 +58,6 @@ def can_access_private_s3() -> bool:
         get_qaihm_s3(QAIHM_PRIVATE_S3_BUCKET)
         return True
     return False
-
-
-def attempt_with_s3_credentials_warning(
-    s3_call: Callable[[], CallableRetT],
-) -> CallableRetT:
-    """
-    Attempt to call the given function. Wrap the failure with a helpful warning about missing credentials.
-
-    Typically you would call this like so:
-        list_s3_files_in_folder_recursive(lambda: get_s3_url(args))
-    """
-    try:
-        return s3_call()
-    except (ClientError, NoCredentialsError) as e:
-        if isinstance(e, NoCredentialsError) or e.response.get("Error", {}).get(
-            "Code", None
-        ) in ["400", "ExpiredToken"]:
-            raise NoAWSCredsError() from e
-        raise
 
 
 def get_s3_url(bucket_name: str, key: str) -> str:
@@ -88,18 +84,7 @@ def s3_download(
     bucket: Bucket, key: str, local_file_path: str | os.PathLike, verbose: bool = True
 ) -> None:
     """Download file at s3://<bucket>/<key> to local_file_path."""
-    obj = bucket.Object(key)
-    with tqdm.tqdm(
-        total=obj.content_length, unit="B", unit_scale=True, disable=not verbose
-    ) as t:
-        attempt_with_s3_credentials_warning(
-            lambda: obj.download_file(
-                str(local_file_path),
-                Callback=t.update if not IsOnCIEnvvar.get() else None,
-            )
-        )
-        if IsOnCIEnvvar.get():
-            t.update(obj.content_length)
+    _cli_s3_download(key, local_file_path, bucket_name=bucket.name, quiet=not verbose)
 
 
 def s3_file_exists(bucket: Bucket, key: str) -> bool:
@@ -118,14 +103,7 @@ def s3_file_exists(bucket: Bucket, key: str) -> bool:
     exists : bool
         True if the file exists, False otherwise.
     """
-    try:
-        attempt_with_s3_credentials_warning(lambda: bucket.Object(key).load())
-        return True
-    except ClientError as e:
-        if e.response.get("Error", {}).get("Code", None) == "404":
-            # The object does not exist.
-            return False
-        raise
+    return _cli_s3_file_exists(key, bucket_name=bucket.name)
 
 
 def s3_multipart_upload(

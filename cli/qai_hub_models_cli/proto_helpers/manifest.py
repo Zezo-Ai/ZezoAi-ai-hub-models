@@ -10,6 +10,7 @@ from pathlib import Path
 
 from packaging.version import Version
 
+from qai_hub_models_cli._internal.utils import use_internal_releases
 from qai_hub_models_cli.common import STORE_URL
 from qai_hub_models_cli.proto.manifest_pb2 import (
     ManifestModelEntry,
@@ -63,8 +64,15 @@ def get_manifest(
     UnsupportedVersionError
         If *version* is not a supported release (when *local_path* is None).
     """
+    if use_internal_releases():
+        from qai_hub_models_cli._internal.aws import QAIHM_PRIVATE_S3_BUCKET
+
+        url_prefix = f"s3://{QAIHM_PRIVATE_S3_BUCKET}/"
+    else:
+        url_prefix = STORE_URL
+
     url = os.path.join(
-        STORE_URL, "qai-hub-models", "releases", f"v{version}", "manifest.pb"
+        url_prefix, "qai-hub-models", "releases", f"v{version}", "manifest.pb"
     )
     return fetch_release_proto(
         version,

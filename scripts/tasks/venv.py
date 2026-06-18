@@ -287,12 +287,12 @@ class InstallCLITask(RunCommandsWithVenvTask):
     ) -> None:
         if cli_wheel_dir is not None:
             commands = [
-                f"{get_pip()} install $(ls {cli_wheel_dir}/qai_hub_models_cli-*.whl)",
+                f'WHL=$(ls {cli_wheel_dir}/qai_hub_models_cli-*.whl) && {get_pip()} install "${{WHL}}[internal]"',
             ]
             install_method = "wheel"
         else:
             commands = [
-                f'{get_pip()} install -e "{PY_CLI_INSTALL_ROOT}"',
+                f'{get_pip()} install -e "{PY_CLI_INSTALL_ROOT}[internal]"',
             ]
             install_method = "editable"
         super().__init__(

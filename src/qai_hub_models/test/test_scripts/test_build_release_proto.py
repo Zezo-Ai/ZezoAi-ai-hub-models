@@ -95,48 +95,52 @@ def test_cmd_aws(output_dir: Path) -> None:
     cmd_aws(args)
 
     assert output_dir.exists()
-    assert (output_dir / "platform.json").exists()
-    assert (output_dir / "platform.pb").exists()
-    manifest_json = output_dir / "manifest.json"
-    manifest_pb = output_dir / "manifest.pb"
-    assert manifest_json.exists()
-    assert manifest_pb.exists()
 
-    for manifest_path, ext in [(manifest_json, ".json"), (manifest_pb, ".pb")]:
-        manifest = manifest_pb2.ReleaseManifest()
-        if ext == ".json":
-            Parse(manifest_path.read_text(), manifest)
-        else:
-            manifest.ParseFromString(manifest_path.read_bytes())
+    for variant in ["public", "internal"]:
+        variant_dir = output_dir / variant
+        assert variant_dir.exists()
+        assert (variant_dir / "platform.json").exists()
+        assert (variant_dir / "platform.pb").exists()
+        manifest_json = variant_dir / "manifest.json"
+        manifest_pb = variant_dir / "manifest.pb"
+        assert manifest_json.exists()
+        assert manifest_pb.exists()
 
-        assert manifest.version == __version__
-        assert manifest.platform_url.endswith(f"platform{ext}")
+        for manifest_path, ext in [(manifest_json, ".json"), (manifest_pb, ".pb")]:
+            manifest = manifest_pb2.ReleaseManifest()
+            if ext == ".json":
+                Parse(manifest_path.read_text(), manifest)
+            else:
+                manifest.ParseFromString(manifest_path.read_bytes())
 
-        model_ids_in_manifest = {entry.id for entry in manifest.models}
+            assert manifest.version == __version__
+            assert manifest.platform_url.endswith(f"platform{ext}")
+
+            model_ids_in_manifest = {entry.id for entry in manifest.models}
+            for model_id in sorted(SAMPLE_MODELS):
+                assert model_id in model_ids_in_manifest
+
+            for entry in manifest.models:
+                assert entry.display_name
+                assert entry.domain
+                assert entry.manifest_urls.info.endswith(f"/info{ext}")
+
         for model_id in sorted(SAMPLE_MODELS):
-            assert model_id in model_ids_in_manifest
+            model_dir = variant_dir / "models" / model_id
+            assert model_dir.exists()
+            assert (model_dir / "info.json").exists()
+            assert (model_dir / "info.pb").exists()
 
-        for entry in manifest.models:
-            assert entry.display_name
-            assert entry.domain
-            assert entry.manifest_urls.info.endswith(f"/info{ext}")
-
-    for model_id in sorted(SAMPLE_MODELS):
-        model_dir = output_dir / "models" / model_id
-        assert model_dir.exists()
-        assert (model_dir / "info.json").exists()
-        assert (model_dir / "info.pb").exists()
-
-        release_assets_json = model_dir / "release-assets.json"
-        if release_assets_json.exists():
-            data = json.loads(release_assets_json.read_text())
-            for asset in data.get("assets", []):
-                assert asset["precision"].startswith("PRECISION_"), (
-                    f"JSON should preserve proto enum names, got {asset['precision']}"
-                )
-                assert asset["runtime"].startswith("RUNTIME_"), (
-                    f"JSON should preserve proto enum names, got {asset['runtime']}"
-                )
+            release_assets_json = model_dir / "release-assets.json"
+            if release_assets_json.exists():
+                data = json.loads(release_assets_json.read_text())
+                for asset in data.get("assets", []):
+                    assert asset["precision"].startswith("PRECISION_"), (
+                        f"JSON should preserve proto enum names, got {asset['precision']}"
+                    )
+                    assert asset["runtime"].startswith("RUNTIME_"), (
+                        f"JSON should preserve proto enum names, got {asset['runtime']}"
+                    )
 
 
 def test_restricted_model_excludes_release_assets(output_dir: Path) -> None:

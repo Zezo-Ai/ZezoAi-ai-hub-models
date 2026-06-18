@@ -4,6 +4,7 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import os
 from collections.abc import Callable
@@ -13,6 +14,7 @@ from typing import TypeVar
 from google.protobuf.message import Message
 from packaging.version import Version
 
+from qai_hub_models_cli._internal.utils import use_internal_releases
 from qai_hub_models_cli.common import CACHE_DIR
 from qai_hub_models_cli.envvars import FORCE_MANIFEST_ROOT_ENVVAR
 from qai_hub_models_cli.utils import download
@@ -25,10 +27,12 @@ from qai_hub_models_cli.versions import (
 _M = TypeVar("_M", bound=Message)
 
 
-def get_release_cache_dir(version: Version) -> Path:
+def get_release_cache_dir(version: Version, internal: bool | None = None) -> Path:
+    if internal is None:
+        internal = use_internal_releases()
     if path := os.environ.get(FORCE_MANIFEST_ROOT_ENVVAR):
         return Path(path)
-    return CACHE_DIR / "releases" / f"v{version}"
+    return CACHE_DIR / ("internal_releases" if internal else "releases") / f"v{version}"
 
 
 def read_proto(path: Path, proto_type: type[_M]) -> _M:
@@ -45,14 +49,18 @@ def write_proto(path: Path, msg: Message) -> None:
 
 
 def fetch_proto(url: str, cache_path: Path, proto_type: type[_M]) -> _M:
-    """Fetch a protobuf file from a URL, caching it on disk."""
+    """Download a protobuf file (from URL or S3 key) and cache it on disk."""
     if not cache_path.exists():
         download(url, cache_path, quiet=True)
     return read_proto(cache_path, proto_type)
 
 
-def model_cache_path(version: Version, model_id: str, filename: str) -> Path:
-    return get_release_cache_dir(version) / "models" / model_id / filename
+def model_cache_path(
+    version: Version, model_id: str, filename: str, internal: bool | None = None
+) -> Path:
+    if internal is None:
+        internal = use_internal_releases()
+    return get_release_cache_dir(version, internal) / "models" / model_id / filename
 
 
 def use_aihm_source(version: Version) -> bool:
@@ -104,7 +112,10 @@ def fetch_release_proto(
     else:
         from qai_hub_models._version import __version__ as models_version
 
-        cache_path = get_release_cache_dir(Version(models_version)) / cache_filename
+        cache_path = (
+            get_release_cache_dir(Version(models_version), internal=True)
+            / cache_filename
+        )
         if cache_path.exists():
             return read_proto(cache_path, proto_type)
 
@@ -169,7 +180,9 @@ def fetch_model_proto(
     if use_aihm_source(version):
         from qai_hub_models._version import __version__ as models_version
 
-        cache_path = model_cache_path(Version(models_version), entry.id, cache_filename)
+        cache_path = model_cache_path(
+            Version(models_version), entry.id, cache_filename, internal=True
+        )
         if cache_path.exists():
             return read_proto(cache_path, proto_type)
 

@@ -17,14 +17,12 @@ from qai_hub_models_cli.common import (
 )
 from qai_hub_models_cli.proto.shared.precision_pb2 import Precision
 from qai_hub_models_cli.proto.shared.runtime_pb2 import Runtime
-from qai_hub_models_cli.proto_helpers._common import use_aihm_source
-from qai_hub_models_cli.proto_helpers.manifest import get_manifest_entry
 from qai_hub_models_cli.proto_helpers.platform import (
     precision_proto_to_str,
     runtime_proto_to_str,
 )
 from qai_hub_models_cli.proto_helpers.release_assets import get_model_asset_details
-from qai_hub_models_cli.utils import download, extract_zip_file, get_next_free_path
+from qai_hub_models_cli.utils import download, get_next_free_path
 from qai_hub_models_cli.versions import (
     CURRENT_VERSION,
 )
@@ -111,9 +109,8 @@ def get_asset_url(
         If the asset does not exist on the server.
     """
     if version >= Version("0.50.1"):
-        return get_model_asset_details(
-            model, runtime, precision, chipset, version
-        ).download_url
+        asset = get_model_asset_details(model, runtime, precision, chipset, version)
+        return asset.download_url
 
     # Legacy: No manifest was published for these releases.
     def _head(url: str) -> int:
@@ -190,43 +187,14 @@ def fetch(
     FileNotFoundError
         If the asset does not exist on the server.
     """
-    # This runs first (even though the result is unused for dev releases),
-    # as it will throw with a good error message if the asset is missing.
     url = get_asset_url(model, runtime, precision, version, chipset)
 
-    if use_aihm_source(version):
-        from qai_hub_models import Precision as QAIHM_Precision
-        from qai_hub_models import TargetRuntime as QAIHM_TargetRuntime
-        from qai_hub_models.utils.fetch_prerelease_assets import fetch_prerelease_assets
-
-        # Map CLI string values to models types.
-        tgt_runtime = QAIHM_TargetRuntime(_normalize_runtime(runtime))
-        tgt_precision = getattr(QAIHM_Precision, _normalize_precision(precision))
-
-        entry = get_manifest_entry(model, version)
-        result = fetch_prerelease_assets(
-            model_id=entry.id,
-            runtime_or_path=tgt_runtime,
-            precision=tgt_precision,
-            device_or_chipset=chipset,
-            output_folder=output_dir,
-            verbose=not quiet,
-        )
-
-        if extract:
-            zip_path = result
-            extract_dir = get_next_free_path(zip_path.parent / zip_path.stem)
-            result = extract_zip_file(zip_path, extract_dir)
-            zip_path.unlink()
-        return result
-
-    filename = url.rsplit("/", 1)[-1]
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
+    filename = url.removeprefix("s3://").rsplit("/", 1)[-1]
     if extract:
         dst = get_next_free_path(out / Path(filename).stem)
     else:
         dst = get_next_free_path(out / filename)
-
     return download(url, dst, extract=extract, quiet=quiet)

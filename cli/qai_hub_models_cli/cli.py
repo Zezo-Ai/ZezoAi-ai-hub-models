@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 import argparse
-import os
 import sys
 from importlib.metadata import PackageNotFoundError, version
 
@@ -11,9 +10,16 @@ from packaging.version import Version
 from packaging.version import parse as parse_version
 from prettytable import PrettyTable
 
+from qai_hub_models_cli._internal.utils import is_internal_repo, use_internal_releases
 from qai_hub_models_cli._version import __version__
-from qai_hub_models_cli.common import AIHUB_MODELS_URL, model_repo_url
-from qai_hub_models_cli.envvars import VERBOSE_EXCEPTIONS_ENVVAR
+from qai_hub_models_cli.common import (
+    AIHUB_MODELS_URL,
+    model_repo_url,
+)
+from qai_hub_models_cli.envvars import (
+    VERBOSE_EXCEPTIONS_ENVVAR,
+    bool_envvar_value,
+)
 from qai_hub_models_cli.fetch import fetch, get_asset_url
 from qai_hub_models_cli.proto.info_pb2 import ModelDomain
 from qai_hub_models_cli.proto.manifest_pb2 import ManifestModelEntry
@@ -352,7 +358,7 @@ def _run_info(args: argparse.Namespace) -> None:
             )
         )
         print(
-            f"Most models can be further customized beyond what is offered by standard model downloads. Scripts that can export the model from source are available at at {model_repo_url(info.id, args.qaihm_version)}"
+            f"Most models can be further customized beyond what is offered by standard model downloads. Scripts that can export the model from source are available at {model_repo_url(info.id, args.qaihm_version)}"
         )
     except FileNotFoundError as e:
         err_table = PrettyTable()
@@ -423,6 +429,26 @@ def add_versions_parser(
     return parser
 
 
+def _run_validate_aws(args: argparse.Namespace) -> None:
+    from qai_hub_models_cli._internal.aws import validate_credentials
+
+    validate_credentials()
+
+
+def add_validate_aws_parser(
+    subparsers: argparse._SubParsersAction,
+) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser(
+        "validate_aws_credentials",
+        help="Validate and refresh AWS credentials for internal release access.",
+        description="Ensure the 'qaihm' AWS profile has valid credentials. "
+        "If credentials are expired, refreshes them via saml2aws. "
+        "Requires the [internal] extra (pip install qai_hub_models_cli[internal]).",
+    )
+    parser.set_defaults(func=_run_validate_aws)
+    return parser
+
+
 def main(args: list[str] | None = None) -> None:
     _check_version_match()
 
@@ -440,6 +466,8 @@ def main(args: list[str] | None = None) -> None:
     add_fetch_parser(subparsers)
     add_info_parser(subparsers)
     add_list_models_parser(subparsers)
+    if use_internal_releases() or is_internal_repo():
+        add_validate_aws_parser(subparsers)
     add_versions_parser(subparsers)
 
     parsed = parser.parse_args(args)
@@ -447,7 +475,7 @@ def main(args: list[str] | None = None) -> None:
         try:
             parsed.func(parsed)
         except Exception as e:
-            if os.environ.get(VERBOSE_EXCEPTIONS_ENVVAR, "0") == "1":
+            if bool_envvar_value(VERBOSE_EXCEPTIONS_ENVVAR):
                 raise
             print(e)
             sys.exit(1)

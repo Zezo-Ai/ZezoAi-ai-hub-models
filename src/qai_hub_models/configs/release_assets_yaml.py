@@ -107,17 +107,17 @@ class QAIHMModelReleaseAssets(BaseQAIHMConfig):
         return self.precisions[precision].universal_assets.get(path)
 
     def to_proto(
-        self, aihm_version: str, model_id: str, include_internal_assets: bool = False
+        self, aihm_version: str, model_id: str
     ) -> release_assets_pb2.ModelReleaseAssets:
         assets: list[release_assets_pb2.ModelReleaseAssets.AssetDetails] = []
         for precision, prec_details in self.precisions.items():
             for path, asset in prec_details.universal_assets.items():
-                if asset.download_url or include_internal_assets:
+                if asset.download_url:
                     assets.append(
                         release_assets_pb2.ModelReleaseAssets.AssetDetails(
                             precision=precision_to_proto(precision),
                             runtime=runtime_to_proto(path.runtime),
-                            download_url=asset.download_url or asset.s3_key,
+                            download_url=asset.download_url,
                             tool_versions=asset.tool_versions.to_proto()
                             if asset.tool_versions
                             else None,
@@ -125,13 +125,13 @@ class QAIHMModelReleaseAssets(BaseQAIHMConfig):
                     )
             for chipset, path_dict in prec_details.chipset_assets.items():
                 for path, asset in path_dict.items():
-                    if asset.download_url or include_internal_assets:
+                    if asset.download_url:
                         assets.append(
                             release_assets_pb2.ModelReleaseAssets.AssetDetails(
                                 precision=precision_to_proto(precision),
                                 runtime=runtime_to_proto(path.runtime),
                                 chipset=chipset,
-                                download_url=asset.download_url or asset.s3_key,
+                                download_url=asset.download_url,
                                 tool_versions=asset.tool_versions.to_proto()
                                 if asset.tool_versions
                                 else None,

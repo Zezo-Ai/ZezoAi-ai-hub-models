@@ -17,6 +17,7 @@ from google.protobuf.json_format import MessageToDict, MessageToJson
 from google.protobuf.message import Message
 from mypy_boto3_s3.service_resource import Bucket
 from qai_hub_models_cli.proto import manifest_pb2
+from qai_hub_models_cli.proto.release_assets_pb2 import ModelReleaseAssets
 
 from qai_hub_models._version import __version__
 from qai_hub_models.configs._info_yaml_enums import MODEL_STATUS
@@ -32,6 +33,7 @@ from qai_hub_models.scorecard.static.list_models import (
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.aws import (
+    QAIHM_PRIVATE_S3_BUCKET,
     QAIHM_PUBLIC_S3_BUCKET,
     get_qaihm_s3_or_exit,
     s3_multipart_upload,
@@ -98,25 +100,51 @@ def _write_proto_multi(msg: Message, path: Path, fmts: list[Format]) -> list[Pat
 def _build_release_assets_proto(
     model_id: str,
     aihm_version: str,
-    output_dir: Path,
-    fmts: list[Format],
-) -> list[Path]:
+    internal: bool = False,
+) -> ModelReleaseAssets | None:
     release_assets = QAIHMModelReleaseAssets.from_model(model_id, not_exists_ok=True)
     if release_assets.empty:
-        return []
+        return None
 
     for precision, prec_details in release_assets.precisions.items():
         for path, asset in prec_details.universal_assets.items():
-            asset.download_url = ASSET_CONFIG.get_release_asset_url(
-                model_id, aihm_version, path.runtime, precision, None
-            )
+            if not internal or asset.download_url:
+                asset.download_url = (
+                    asset.download_url
+                    or ASSET_CONFIG.get_release_asset_url(
+                        model_id, aihm_version, path.runtime, precision, None
+                    )
+                )
+            elif internal and asset.s3_key:
+                asset.download_url = f"s3://{QAIHM_PRIVATE_S3_BUCKET}/{asset.s3_key}"
         for chipset, path_dict in prec_details.chipset_assets.items():
             for path, asset in path_dict.items():
-                asset.download_url = ASSET_CONFIG.get_release_asset_url(
-                    model_id, aihm_version, path.runtime, precision, chipset
-                )
+                if not internal or asset.download_url:
+                    asset.download_url = (
+                        asset.download_url
+                        or ASSET_CONFIG.get_release_asset_url(
+                            model_id, aihm_version, path.runtime, precision, chipset
+                        )
+                    )
+                elif internal and asset.s3_key:
+                    asset.download_url = (
+                        f"s3://{QAIHM_PRIVATE_S3_BUCKET}/{asset.s3_key}"
+                    )
 
-    proto_msg = release_assets.to_proto(aihm_version, model_id)
+    return release_assets.to_proto(aihm_version, model_id)
+
+
+def _write_release_assets_proto(
+    model_id: str,
+    aihm_version: str,
+    output_dir: Path,
+    fmts: list[Format],
+    internal: bool = False,
+) -> list[Path]:
+    proto_msg = _build_release_assets_proto(model_id, aihm_version, internal)
+    if not proto_msg:
+        return []
+
     result: list[Path] = []
     for fmt in fmts:
         if fmt == "yaml":
@@ -136,9 +164,10 @@ def _build_model_protos(
     aihm_version: str,
     output_dir: Path,
     fmts: list[Format],
+    internal: bool = False,
 ) -> tuple[list[Path], str | None]:
     info = QAIHMModelInfo.from_model(model_id)
-    if info.status != MODEL_STATUS.PUBLISHED:
+    if not internal and info.status != MODEL_STATUS.PUBLISHED:
         return [], f"status={info.status.value}"
 
     written: list[Path] = []
@@ -166,9 +195,11 @@ def _build_model_protos(
             )
         )
 
-    if not info.restrict_model_sharing:
+    if internal or not info.restrict_model_sharing:
         written.extend(
-            _build_release_assets_proto(model_id, aihm_version, output_dir, fmts)
+            _write_release_assets_proto(
+                model_id, aihm_version, output_dir, fmts, internal=internal
+            )
         )
 
     return written, None
@@ -256,7 +287,7 @@ def cmd_website(args: argparse.Namespace) -> None:
                 dst_yml.unlink()
         else:
             written += len(
-                _build_release_assets_proto(model_id, args.version, model_dst, ["yaml"])
+                _write_release_assets_proto(model_id, args.version, model_dst, ["yaml"])
             )
 
         return written, (None if written else "no yamls found")
@@ -270,9 +301,9 @@ def cmd_website(args: argparse.Namespace) -> None:
 def _build_manifest(
     version: str,
     model_written_paths: dict[str, list[Path]],
-    platform_s3_url: str,
     output_dir: Path,
     fmts: list[Format],
+    internal: bool = False,
 ) -> list[Path]:
     _STEM_TO_FIELD = [
         ("info", "info"),
@@ -281,27 +312,39 @@ def _build_manifest(
         ("release-assets", "release_assets"),
     ]
 
+    global_s3_folder = ASSET_CONFIG.get_global_release_s3_folder(version)
+
     model_infos: list[tuple[str, set[str], QAIHMModelInfo, str]] = []
     for model_id, written in model_written_paths.items():
         info = QAIHMModelInfo.from_model(model_id)
         written_stems = {p.stem for p in written}
-        s3_folder_url = ASSET_CONFIG.get_asset_url(
-            ASSET_CONFIG.get_release_s3_folder(model_id, version)
+        s3_folder = ASSET_CONFIG.get_release_s3_folder(model_id, version)
+        model_infos.append(
+            (
+                model_id,
+                written_stems,
+                info,
+                f"s3://{QAIHM_PRIVATE_S3_BUCKET}/{s3_folder}"
+                if internal
+                else ASSET_CONFIG.get_asset_url(s3_folder),
+            )
         )
-        model_infos.append((model_id, written_stems, info, s3_folder_url))
 
     result: list[Path] = []
     for fmt in fmts:
         ext = _EXT[fmt]
+        platform_ref = os.path.join(global_s3_folder, f"platform{ext}")
         manifest = manifest_pb2.ReleaseManifest(
             version=version,
-            platform_url=platform_s3_url.replace(".json", ext),
+            platform_url=f"s3://{QAIHM_PRIVATE_S3_BUCKET}/{platform_ref}"
+            if internal
+            else ASSET_CONFIG.get_asset_url(platform_ref),
         )
-        for model_id, written_stems, info, s3_folder_url in model_infos:
+        for model_id, written_stems, info, s3_folder in model_infos:
             url_kwargs: dict[str, str] = {}
             for stem, field in _STEM_TO_FIELD:
                 if stem in written_stems:
-                    url_kwargs[field] = os.path.join(s3_folder_url, f"{stem}{ext}")
+                    url_kwargs[field] = os.path.join(s3_folder, f"{stem}{ext}")
             manifest.models.append(
                 manifest_pb2.ManifestModelEntry(
                     id=model_id,
@@ -315,18 +358,22 @@ def _build_manifest(
     return result
 
 
-def cmd_aws(args: argparse.Namespace) -> None:
-    bucket: Bucket | None = None
-    if args.upload:
-        bucket, _ = get_qaihm_s3_or_exit(QAIHM_PUBLIC_S3_BUCKET)
+def _build_and_collect(
+    version: str,
+    output_root: Path,
+    model_ids: list[str],
+    internal: bool,
+) -> list[tuple[Path, str]]:
+    """Build protos for a single variant (public or internal) and return (path, s3_key) pairs."""
+    fmts: list[Format] = ["json", "proto"]
+    suffix = "internal" if internal else "public"
+    variant_root = output_root / suffix
+    variant_root.mkdir(parents=True, exist_ok=True)
 
-    output_root = Path(args.output_dir)
-    output_root.mkdir(parents=True, exist_ok=True)
     all_files: list[tuple[Path, str]] = []
+    global_s3_folder = ASSET_CONFIG.get_global_release_s3_folder(version)
 
-    aws_fmts: list[Format] = ["json", "proto"]
-    global_s3_folder = ASSET_CONFIG.get_global_release_s3_folder(args.version)
-    platform_paths = _build_platform_proto(args.version, output_root, aws_fmts)
+    platform_paths = _build_platform_proto(version, variant_root, fmts)
     all_files.extend(
         (path, os.path.join(global_s3_folder, path.name)) for path in platform_paths
     )
@@ -335,49 +382,84 @@ def cmd_aws(args: argparse.Namespace) -> None:
 
     def build_model(model_id: str) -> tuple[int, str | None]:
         written, skip_reason = _build_model_protos(
-            model_id, args.version, output_root / "models" / model_id, aws_fmts
+            model_id,
+            version,
+            variant_root / "models" / model_id,
+            fmts,
+            internal=internal,
         )
         if written:
-            s3_folder = ASSET_CONFIG.get_release_s3_folder(model_id, args.version)
+            s3_folder = ASSET_CONFIG.get_release_s3_folder(model_id, version)
             all_files.extend(
                 (path, os.path.join(s3_folder, path.name)) for path in written
             )
             model_written_paths[model_id] = written
         return len(written), skip_reason
 
-    enabled, _ = validate_and_split_enabled_models(args.models)
-    model_ids = sorted(enabled)
+    print(f"\n[{suffix}]")
     _for_each_model(build_model, model_ids)
 
-    platform_s3_url = ASSET_CONFIG.get_asset_url(
-        os.path.join(global_s3_folder, "platform.json")
-    )
     manifest_paths = _build_manifest(
-        args.version, model_written_paths, platform_s3_url, output_root, aws_fmts
+        version, model_written_paths, variant_root, fmts, internal=internal
     )
     all_files.extend(
         (path, os.path.join(global_s3_folder, path.name)) for path in manifest_paths
     )
 
-    print(f"Built proto JSON for {len(model_ids)} models in {output_root}")
+    print(f"Built {suffix} proto for {len(model_ids)} models in {variant_root}")
+    return all_files
+
+
+def cmd_aws(args: argparse.Namespace) -> None:
+    public_bucket: Bucket | None = None
+    private_bucket: Bucket | None = None
+    if args.upload:
+        public_bucket, _ = get_qaihm_s3_or_exit(QAIHM_PUBLIC_S3_BUCKET)
+        private_bucket, _ = get_qaihm_s3_or_exit(QAIHM_PRIVATE_S3_BUCKET)
+
+    output_root = Path(args.output_dir)
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    enabled, _ = validate_and_split_enabled_models(args.models)
+    model_ids = sorted(enabled)
+
+    public_files = _build_and_collect(
+        args.version, output_root, model_ids, internal=False
+    )
+    internal_files = _build_and_collect(
+        args.version, output_root, model_ids, internal=True
+    )
 
     if args.upload:
-        assert bucket
+        assert public_bucket
+        assert private_bucket
         with ThreadPoolExecutor(max_workers=64) as pool:
             futures = [
                 pool.submit(
                     s3_multipart_upload,
-                    bucket,
+                    public_bucket,
                     s3_key,
                     local_path,
                     make_public=True,
                     disable_progress=True,
                 )
-                for local_path, s3_key in all_files
+                for local_path, s3_key in public_files
+            ]
+            futures += [
+                pool.submit(
+                    s3_multipart_upload,
+                    private_bucket,
+                    s3_key,
+                    local_path,
+                    make_public=False,
+                    disable_progress=True,
+                )
+                for local_path, s3_key in internal_files
             ]
             for f in futures:
                 f.result()
-        print(f"Uploaded {len(all_files)} files to s3://{QAIHM_PUBLIC_S3_BUCKET}")
+        print(f"Uploaded {len(public_files)} files to s3://{QAIHM_PUBLIC_S3_BUCKET}")
+        print(f"Uploaded {len(internal_files)} files to s3://{QAIHM_PRIVATE_S3_BUCKET}")
 
 
 def main() -> None:
@@ -387,7 +469,7 @@ def main() -> None:
     parser.add_argument(
         "mode",
         choices=["website", "aws"],
-        help="Build mode: 'website' for YAML files, 'aws' for proto JSON.",
+        help="Build mode: 'website' for YAML files, 'aws' for proto JSON (builds and uploads both public and internal).",
     )
     parser.add_argument(
         "--output-dir",
@@ -408,13 +490,13 @@ def main() -> None:
         "--upload",
         "-u",
         action="store_true",
-        help="Upload proto JSON files to S3 after building (aws mode only).",
+        help="Upload proto files to S3 after building (aws mode only).",
     )
 
     args = parser.parse_args()
     if args.mode == "website":
         cmd_website(args)
-    elif args.mode == "aws":
+    else:
         cmd_aws(args)
 
 

@@ -29,6 +29,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[project.optional-dependencies]
+internal = ["boto3>=1.26,<=1.40.0", "botocore>=1.26,<=1.40.0", "boto3-stubs[s3]>=1.26,<=1.40.0"]
+
 [project.scripts]
 qai_hub_models = "qai_hub_models_cli.cli:main"
 qai-hub-models = "qai_hub_models_cli.cli:main"

@@ -175,6 +175,25 @@ def download(
     ConnectionError
         If the download is incomplete after all retries.
     """
+    if url.startswith("s3://"):
+        from qai_hub_models_cli._internal.aws import s3_download
+
+        without_scheme = url.removeprefix("s3://")
+        bucket_name, s3_key = without_scheme.split("/", 1)
+        dst = Path(dst_path)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_fp = Path(tmp_dir) / dst.name
+            s3_download(s3_key, tmp_fp, bucket_name=bucket_name, quiet=quiet)
+
+            if extract:
+                return extract_zip_file(tmp_fp, dst.parent / dst.stem)
+
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(tmp_fp, dst)
+
+        return dst
+
     dst = Path(dst_path)
     if dst.exists():
         raise FileExistsError(f"Destination already exists: {dst}")

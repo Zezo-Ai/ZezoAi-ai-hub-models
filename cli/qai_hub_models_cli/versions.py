@@ -14,12 +14,17 @@ import requests
 from packaging.version import Version
 from packaging.version import parse as parse_version
 
+from qai_hub_models_cli._internal.utils import use_internal_releases
 from qai_hub_models_cli._version import __version__
 from qai_hub_models_cli.common import CACHE_DIR
-from qai_hub_models_cli.envvars import FORCE_VERSION_ENVVAR
+from qai_hub_models_cli.envvars import (
+    FORCE_VERSION_ENVVAR,
+    USE_INTERNAL_RELEASES_ENVVAR,
+)
 
 CURRENT_VERSION = parse_version(os.environ.get(FORCE_VERSION_ENVVAR, __version__))
 MIN_SUPPORTED_VERSION = Version("0.44.0")
+MIN_INTERNAL_REGISTRY_VERSION = Version("0.56.0")
 PYPI_VERSIONS_URL = "https://pypi.org/pypi/qai-hub-models/json"
 
 
@@ -162,6 +167,12 @@ def verify_version_supported(version: Version) -> None:
         raise UnsupportedVersionError(
             f"Version {version} is not supported. Minimum supported version is {MIN_SUPPORTED_VERSION}.\n"
             "Run `qai-hub-models versions` to see all supported versions."
+        )
+
+    if use_internal_releases() and version < MIN_INTERNAL_REGISTRY_VERSION:
+        raise UnsupportedVersionError(
+            f"Version {version} does not have an internal release. Unset {USE_INTERNAL_RELEASES_ENVVAR} to use the public release instead."
+            f" An internal release is available for v{MIN_INTERNAL_REGISTRY_VERSION} and above."
         )
 
     if version > CURRENT_VERSION:
