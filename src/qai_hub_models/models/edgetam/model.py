@@ -14,7 +14,7 @@ from qai_hub.client import Device
 from typing_extensions import Self
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.datasets.sav import SaVDataset
 from qai_hub_models.models._shared.sam2.model import (
@@ -38,7 +38,7 @@ from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.export_result import ComponentGroup
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 2
@@ -148,11 +148,13 @@ class EdgeTAMMemoryEncoder(BaseModel):
 
     def get_input_spec(self) -> InputSpec:
         return {
-            "pix_feat": (
-                (1, self._hidden_dim, self._feat_hw, self._feat_hw),
-                "float32",
+            "pix_feat": TensorSpec(
+                shape=(1, self._hidden_dim, self._feat_hw, self._feat_hw),
+                dtype="float32",
             ),
-            "mask_for_mem": ((1, 1, self._image_size, self._image_size), "float32"),
+            "mask_for_mem": TensorSpec(
+                shape=(1, 1, self._image_size, self._image_size), dtype="float32"
+            ),
         }
 
     def get_output_spec(self) -> OutputSpec:

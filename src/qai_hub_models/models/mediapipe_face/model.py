@@ -10,7 +10,6 @@ from collections.abc import Callable
 import torch
 
 from qai_hub_models import Precision, SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.human_faces import HumanFacesDataset
 from qai_hub_models.models._shared.mediapipe.external_repos import EXTERNAL_REPO_PATHS
 from qai_hub_models.models._shared.mediapipe.external_repos.mediapipe.blazeface import (
@@ -35,6 +34,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 from qai_hub_models.utils.set_env import set_temp_env
@@ -322,6 +322,7 @@ class FaceDetector(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -332,9 +333,6 @@ class FaceDetector(BaseModel):
             "box_scores_1": TensorSpec(),
             "box_scores_2": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None
@@ -393,6 +391,7 @@ class FaceLandmarkDetector(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -401,9 +400,6 @@ class FaceLandmarkDetector(BaseModel):
             "scores": TensorSpec(),
             "landmarks": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

@@ -16,7 +16,6 @@ from torch import nn
 from transformers import AutoConfig
 
 from qai_hub_models import TargetRuntime
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.evaluators.lerobot_evaluator import LeRobotEvaluator
@@ -52,7 +51,7 @@ from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.checkpoint import CheckpointSpec, FromPretrainedMixin
-from qai_hub_models.utils.input_spec import InputSpec, make_torch_inputs
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, make_torch_inputs
 from qai_hub_models.utils.qai_hub_helpers import (
     ensure_hexagon_version,
     export_torch_to_onnx_zip,

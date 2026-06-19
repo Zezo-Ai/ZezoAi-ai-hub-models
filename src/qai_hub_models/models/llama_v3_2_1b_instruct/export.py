@@ -29,6 +29,7 @@ from qai_hub_models.models.llama_v3_2_1b_instruct import (
     MODEL_ID,
     Model,
 )
+from qai_hub_models.utils.ai_hub_access import can_access_qualcomm_ai_hub
 from qai_hub_models.utils.args import (
     export_parser,
     get_export_model_name,
@@ -53,10 +54,7 @@ from qai_hub_models.utils.printing import (
     print_profile_metrics_from_job,
     print_tool_versions,
 )
-from qai_hub_models.utils.qai_hub_helpers import (
-    assert_success_and_get_target_models,
-    can_access_qualcomm_ai_hub,
-)
+from qai_hub_models.utils.qai_hub_helpers import assert_success_and_get_target_models
 
 
 def upload_model(
@@ -242,7 +240,9 @@ def download_model(
             # Merge semantic metadata from get_input_spec()
             all_input_specs = model.get_input_spec()
             for _graph_spec in all_input_specs.by_component(component_name).values():
-                merge_input_metadata(model_file_metadata[model_file_name], _graph_spec)
+                merge_input_metadata(
+                    model_file_metadata[model_file_name], _graph_spec, runtime
+                )
 
         # Extract and save metadata alongside downloaded model
         metadata_path = dst_path / "metadata.json"

@@ -13,8 +13,9 @@ exported model.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+import qai_hub as hub
 from qai_hub_models_cli.proto import model_metadata_pb2, platform_pb2
 
 from qai_hub_models import Precision, TargetRuntime
@@ -27,15 +28,7 @@ from qai_hub_models.configs.tensor_spec import (
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
-
-if TYPE_CHECKING:
-    import qai_hub as hub
-
-    from qai_hub_models.utils.input_spec import InputSpec
-
-# Output spec: maps output name -> TensorSpec with metadata only (shape/dtype
-# come from the compiled model). Used by model.get_output_spec().
-OutputSpec = dict[str, TensorSpec]
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 
 
 class ModelFileMetadata(BaseQAIHMConfig):
@@ -64,8 +57,8 @@ class ModelFileMetadata(BaseQAIHMConfig):
         metadata: ModelFileMetadata
             Created model file metadata
         """
-        inputs = {}
-        outputs = {}
+        inputs: dict[str, TensorSpec] = {}
+        outputs: dict[str, TensorSpec] = {}
 
         # Extract inputs from hub.Model.input_spec
         for tensor_specs in hub_model.input_spec.values():
@@ -391,6 +384,7 @@ class ModelMetadata(BaseQAIHMConfig):
 def merge_input_metadata(
     model_file_metadata: ModelFileMetadata,
     input_spec: InputSpec,
+    target_runtime: TargetRuntime,
 ) -> None:
     """
     Merge semantic metadata from get_input_spec() into ModelFileMetadata.
@@ -410,6 +404,8 @@ def merge_input_metadata(
     input_spec
         The InputSpec from model.get_input_spec(). TensorSpec entries with
         metadata fields will have their metadata merged.
+    target_runtime
+        The runtime for which the model was compiled.
 
     Raises
     ------
@@ -451,6 +447,7 @@ def merge_input_metadata(
 def merge_output_metadata(
     model_file_metadata: ModelFileMetadata,
     output_spec: OutputSpec,
+    target_runtime: TargetRuntime,
 ) -> None:
     """
     Merge semantic metadata from get_output_spec() into ModelFileMetadata.
@@ -466,6 +463,8 @@ def merge_output_metadata(
     output_spec
         The OutputSpec from model.get_output_spec(). TensorSpec entries with
         metadata fields will have their metadata merged.
+    target_runtime
+        The runtime for which the model was compiled.
 
     Raises
     ------

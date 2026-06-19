@@ -163,7 +163,7 @@ class TestSharedFieldCoverage:
             TensorSpec,
             tensor_spec_pb2.TensorSpec.DESCRIPTOR,
             proto_only={"name"},
-            pydantic_only={"bbox_metadata", "softmax_applied", "labels_file"},
+            pydantic_only={"apply_runtime_channel_reordering"},
         )
 
     def test_quantization_parameters(self) -> None:

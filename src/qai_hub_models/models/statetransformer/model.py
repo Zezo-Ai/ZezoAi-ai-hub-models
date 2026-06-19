@@ -17,14 +17,18 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models.statetransformer.external_repos.statetransformer.transformer4planning.models.backbone.str_base import (
     build_model_from_path,
 )
 from qai_hub_models.models.statetransformer.model_patch import custom_one_hot
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_model import BaseModel, SerializationSettings
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    IoType,
+    OutputSpec,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 3
@@ -172,11 +176,13 @@ class StateTransformer(BaseModel):
                 shape=(batch_size, 224, 224, 58),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
             "low_res_raster": TensorSpec(
                 shape=(batch_size, 224, 224, 58),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
             "context_actions": TensorSpec(
                 shape=(batch_size, 4, 7),
@@ -201,9 +207,6 @@ class StateTransformer(BaseModel):
         return super().get_hub_compile_options(
             target_runtime, precision, other_compile_options, device, context_graph_name
         )
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["high_res_raster", "low_res_raster"]
 
     def get_output_spec(self) -> OutputSpec:
         """

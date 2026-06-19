@@ -19,7 +19,6 @@ from transformers import AutoModel
 from transformers.utils.hub import HF_MODULES_CACHE
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.amazon_counterfactual import (
     AmazonCounterfactualClassificationDataset,
 )
@@ -30,7 +29,7 @@ from qai_hub_models.utils.asset_loaders import PathLike
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import BaseModel, SerializationSettings
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, OutputSpec, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1

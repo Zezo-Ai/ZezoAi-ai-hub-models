@@ -18,7 +18,6 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models.maskrcnn.model_patches import _onnx_merge_levels_optimized
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_model import BaseModel
@@ -31,6 +30,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -159,6 +159,7 @@ class MaskRCNNProposalGenerator(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -174,9 +175,6 @@ class MaskRCNNProposalGenerator(BaseModel):
                 "objectness_logits",
             ]
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class MaskRCNNROIHead(BaseModel):
@@ -340,21 +338,25 @@ class MaskRCNNROIHead(BaseModel):
                 shape=(1, 256, height, width),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
             "features_1": TensorSpec(
                 shape=(1, 256, height // 2, width // 2),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
             "features_2": TensorSpec(
                 shape=(1, 256, height // 4, width // 4),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
             "features_3": TensorSpec(
                 shape=(1, 256, height // 8, width // 8),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
             "proposals_boxes": TensorSpec(
                 shape=(1, num_boxes, 4),
@@ -383,9 +385,6 @@ class MaskRCNNROIHead(BaseModel):
                 description="Instance segmentation masks",
             ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["features_0", "features_1", "features_2", "features_3"]
 
     def get_hub_compile_options(
         self,

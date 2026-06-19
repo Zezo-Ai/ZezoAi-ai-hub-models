@@ -11,8 +11,8 @@ from torch import nn
 from torchpack.utils.config import configs
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.extern.mmdet import patch_mmdet_no_build_deps
+from qai_hub_models.utils.input_spec import OutputSpec
 
 with patch_mmdet_no_build_deps():
     from mmdet.models.layers import PatchMerging

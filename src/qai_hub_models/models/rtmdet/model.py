@@ -18,7 +18,6 @@ with patch_mmdet_no_build_deps():
     from mmdet.apis import init_detector
     from mmdet.models.detectors.rtmdet import RTMDet as mmdet_RTMDET
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.extern.mmengine import (
     patch_mmengine_pkgresources,
     patch_mmengine_torch_load_no_weights_only,
@@ -26,7 +25,7 @@ from qai_hub_models.extern.mmengine import (
 from qai_hub_models.models._shared.yolo.model import Yolo
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_model import SerializationSettings
-from qai_hub_models.utils.input_spec import IoType, TensorSpec
+from qai_hub_models.utils.input_spec import IoType, OutputSpec, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1

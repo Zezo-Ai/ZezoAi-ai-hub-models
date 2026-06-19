@@ -14,7 +14,7 @@ from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, DatasetSplit
 from qai_hub_models.utils.bounding_box_processing import box_xywh_to_cs
 from qai_hub_models.utils.image_processing import pre_process_with_affine
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 COFW_VERSION = 2
 
@@ -32,7 +32,9 @@ class COFWDataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.VAL,
         input_spec: InputSpec | None = None,
     ) -> None:
-        input_spec = input_spec or {"image": ((1, 3, 256, 256), "float32")}
+        input_spec = input_spec or {
+            "image": TensorSpec(shape=(1, 3, 256, 256), dtype="float32")
+        }
         self.target_h = int(input_spec["image"][0][2])
         self.target_w = int(input_spec["image"][0][3])
 

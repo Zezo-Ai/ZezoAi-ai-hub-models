@@ -4,7 +4,6 @@
 """Qwen-2.5-VL model class"""
 
 import torch
-
 from transformers import AutoConfig, AutoProcessor, PreTrainedModel, ProcessorMixin
 from transformers.models.qwen2_5_vl import modeling_qwen2_5_vl
 

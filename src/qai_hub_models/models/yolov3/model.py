@@ -12,13 +12,13 @@ from typing_extensions import Self
 from ultralytics.models import YOLO as ultralytics_YOLO
 from ultralytics.nn.tasks import DetectionModel
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.models._shared.ultralytics.detect_patches import (
     patch_ultralytics_detection_head,
 )
 from qai_hub_models.models._shared.yolo.model import Yolo, yolo_detect_postprocess
 from qai_hub_models.utils.base_model import SerializationSettings
+from qai_hub_models.utils.input_spec import OutputSpec
 
 MODEL_ID = __name__.split(".")[-2]
 DEFAULT_WEIGHTS = "yolov3-tinyu.pt"

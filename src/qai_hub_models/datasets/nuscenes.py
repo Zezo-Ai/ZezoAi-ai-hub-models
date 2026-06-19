@@ -21,7 +21,7 @@ from qai_hub_models.utils.image_processing import (
     app_to_net_image_inputs,
     get_post_rot_and_tran,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 NUSCENE_ID = "nuscenes"
@@ -110,7 +110,7 @@ class NuscenesDataset(BaseDataset):
             self.data_infos = self._fill_infos(splits.mini_train)
         else:
             self.data_infos = self._fill_infos(splits.mini_val)
-        input_spec = input_spec or {"image": ((1, 3, 256, 704), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 256, 704))}
         self.input_height = input_spec["image"][0][2]
         self.input_width = input_spec["image"][0][3]
 

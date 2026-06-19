@@ -15,7 +15,7 @@ from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, DatasetSplit
 from qai_hub_models.utils.bounding_box_processing import box_xywh_to_cs
 from qai_hub_models.utils.image_processing import pre_process_with_affine
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.printing import suppress_stdout
 
 COCO_FOLDER_NAME = "coco-wholebody"
@@ -59,7 +59,7 @@ class CocoBodyDataset(BaseDataset):
         input_spec: InputSpec | None = None,
         num_samples: int = -1,
     ) -> None:
-        input_spec = input_spec or {"image": ((1, 3, 256, 192), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 256, 192))}
         self.target_h = input_spec["image"][0][2]
         self.target_w = input_spec["image"][0][3]
         self.samples = num_samples

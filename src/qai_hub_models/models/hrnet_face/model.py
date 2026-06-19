@@ -11,7 +11,6 @@ import torch
 from torch import nn
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.cofw import COFWDataset
 from qai_hub_models.evaluators.hrnet_face_evaluator import HRNetFaceEvaluator
 from qai_hub_models.models.hrnet_face.external_repos import EXTERNAL_REPO_PATHS
@@ -31,6 +30,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -122,8 +122,6 @@ class HRNetFace(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]

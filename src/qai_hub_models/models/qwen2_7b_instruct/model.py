@@ -8,7 +8,6 @@ from __future__ import annotations
 import os
 
 from qai_hub_models import TargetRuntime
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.models._shared.llm.llm_helpers import get_kv_cache_names
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
@@ -16,7 +15,7 @@ from qai_hub_models.utils.base_collection_model import (
     PrecompiledWorkbenchModelCollection,
 )
 from qai_hub_models.utils.base_model import BasePrecompiledModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 2
@@ -42,7 +41,7 @@ class PromptProcessor_Part1(BasePrecompiledModel):
         return PromptProcessor_Part1(get_cached_asset(part=1))
 
     def get_input_spec(self) -> InputSpec:
-        return {"input_ids": ((1, 128), "int32")}
+        return {"input_ids": TensorSpec(shape=(1, 128), dtype="int32")}
 
     def get_output_spec(self) -> OutputSpec:
         return {
@@ -74,24 +73,26 @@ class PromptProcessor_Part2(BasePrecompiledModel):
 
     def get_input_spec(self) -> InputSpec:
         return {
-            "_model_embed_tokens_Gather_Gather_output_0": ((1, 128, 3584), "uint16"),
-            "past_key_0_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_0_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_2_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_2_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_3_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_3_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_4_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_4_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_5_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_5_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_6_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_6_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_1_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_1_in": ((4, 1, 3968, 128), "uint8"),
-            "position_ids_cos": ((1, 1, 128, 64), "uint16"),
-            "position_ids_sin": ((1, 1, 128, 64), "uint16"),
-            "attention_mask": ((1, 1, 128, 4096), "uint16"),
+            "_model_embed_tokens_Gather_Gather_output_0": TensorSpec(
+                shape=(1, 128, 3584), dtype="uint16"
+            ),
+            "past_key_0_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_0_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_2_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_2_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_3_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_3_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_4_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_4_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_5_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_5_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_6_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_6_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_1_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_1_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "position_ids_cos": TensorSpec(shape=(1, 1, 128, 64), dtype="uint16"),
+            "position_ids_sin": TensorSpec(shape=(1, 1, 128, 64), dtype="uint16"),
+            "attention_mask": TensorSpec(shape=(1, 1, 128, 4096), dtype="uint16"),
         }
 
     def get_output_spec(self) -> OutputSpec:
@@ -128,24 +129,26 @@ class PromptProcessor_Part3(BasePrecompiledModel):
 
     def get_input_spec(self) -> InputSpec:
         return {
-            "_model_layers_6_Add_1_Add_output_0": ((1, 128, 3584), "uint16"),
-            "past_key_7_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_7_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_9_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_9_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_10_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_10_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_11_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_11_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_12_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_12_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_13_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_13_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_8_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_8_in": ((4, 1, 3968, 128), "uint8"),
-            "position_ids_cos": ((1, 1, 128, 64), "uint16"),
-            "position_ids_sin": ((1, 1, 128, 64), "uint16"),
-            "attention_mask": ((1, 1, 128, 4096), "uint16"),
+            "_model_layers_6_Add_1_Add_output_0": TensorSpec(
+                shape=(1, 128, 3584), dtype="uint16"
+            ),
+            "past_key_7_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_7_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_9_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_9_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_10_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_10_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_11_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_11_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_12_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_12_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_13_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_13_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_8_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_8_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "position_ids_cos": TensorSpec(shape=(1, 1, 128, 64), dtype="uint16"),
+            "position_ids_sin": TensorSpec(shape=(1, 1, 128, 64), dtype="uint16"),
+            "attention_mask": TensorSpec(shape=(1, 1, 128, 4096), dtype="uint16"),
         }
 
     def get_output_spec(self) -> OutputSpec:
@@ -182,24 +185,26 @@ class PromptProcessor_Part4(BasePrecompiledModel):
 
     def get_input_spec(self) -> InputSpec:
         return {
-            "_model_layers_13_Add_1_Add_output_0": ((1, 128, 3584), "uint16"),
-            "past_key_14_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_14_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_16_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_16_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_17_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_17_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_18_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_18_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_19_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_19_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_20_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_20_in": ((4, 1, 3968, 128), "uint8"),
-            "past_key_15_in": ((4, 1, 128, 3968), "uint8"),
-            "past_value_15_in": ((4, 1, 3968, 128), "uint8"),
-            "position_ids_cos": ((1, 1, 128, 64), "uint16"),
-            "position_ids_sin": ((1, 1, 128, 64), "uint16"),
-            "attention_mask": ((1, 1, 128, 4096), "uint16"),
+            "_model_layers_13_Add_1_Add_output_0": TensorSpec(
+                shape=(1, 128, 3584), dtype="uint16"
+            ),
+            "past_key_14_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_14_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_16_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_16_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_17_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_17_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_18_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_18_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_19_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_19_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_20_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_20_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "past_key_15_in": TensorSpec(shape=(4, 1, 128, 3968), dtype="uint8"),
+            "past_value_15_in": TensorSpec(shape=(4, 1, 3968, 128), dtype="uint8"),
+            "position_ids_cos": TensorSpec(shape=(1, 1, 128, 64), dtype="uint16"),
+            "position_ids_sin": TensorSpec(shape=(1, 1, 128, 64), dtype="uint16"),
+            "attention_mask": TensorSpec(shape=(1, 1, 128, 4096), dtype="uint16"),
         }
 
     def get_output_spec(self) -> OutputSpec:
@@ -235,7 +240,7 @@ class TokenGenerator_Part1(BasePrecompiledModel):
         return TokenGenerator_Part1(get_cached_asset(part=1))
 
     def get_input_spec(self) -> InputSpec:
-        return {"input_ids": ((1, 1), "int32")}
+        return {"input_ids": TensorSpec(shape=(1, 1), dtype="int32")}
 
     def get_output_spec(self) -> OutputSpec:
         return {
@@ -267,24 +272,26 @@ class TokenGenerator_Part2(BasePrecompiledModel):
 
     def get_input_spec(self) -> InputSpec:
         return {
-            "_model_embed_tokens_Gather_Gather_output_0": ((1, 1, 3584), "uint16"),
-            "past_key_0_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_0_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_2_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_2_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_3_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_3_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_4_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_4_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_5_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_5_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_6_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_6_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_1_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_1_in": ((4, 1, 4095, 128), "uint8"),
-            "position_ids_cos": ((1, 1, 1, 64), "uint16"),
-            "position_ids_sin": ((1, 1, 1, 64), "uint16"),
-            "attention_mask": ((1, 1, 1, 4096), "uint16"),
+            "_model_embed_tokens_Gather_Gather_output_0": TensorSpec(
+                shape=(1, 1, 3584), dtype="uint16"
+            ),
+            "past_key_0_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_0_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_2_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_2_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_3_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_3_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_4_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_4_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_5_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_5_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_6_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_6_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_1_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_1_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "position_ids_cos": TensorSpec(shape=(1, 1, 1, 64), dtype="uint16"),
+            "position_ids_sin": TensorSpec(shape=(1, 1, 1, 64), dtype="uint16"),
+            "attention_mask": TensorSpec(shape=(1, 1, 1, 4096), dtype="uint16"),
         }
 
     def get_output_spec(self) -> OutputSpec:
@@ -321,24 +328,26 @@ class TokenGenerator_Part3(BasePrecompiledModel):
 
     def get_input_spec(self) -> InputSpec:
         return {
-            "_model_layers_6_Add_1_Add_output_0": ((1, 1, 3584), "uint16"),
-            "past_key_7_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_7_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_9_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_9_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_10_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_10_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_11_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_11_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_12_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_12_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_13_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_13_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_8_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_8_in": ((4, 1, 4095, 128), "uint8"),
-            "position_ids_cos": ((1, 1, 1, 64), "uint16"),
-            "position_ids_sin": ((1, 1, 1, 64), "uint16"),
-            "attention_mask": ((1, 1, 1, 4096), "uint16"),
+            "_model_layers_6_Add_1_Add_output_0": TensorSpec(
+                shape=(1, 1, 3584), dtype="uint16"
+            ),
+            "past_key_7_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_7_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_9_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_9_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_10_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_10_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_11_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_11_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_12_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_12_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_13_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_13_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_8_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_8_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "position_ids_cos": TensorSpec(shape=(1, 1, 1, 64), dtype="uint16"),
+            "position_ids_sin": TensorSpec(shape=(1, 1, 1, 64), dtype="uint16"),
+            "attention_mask": TensorSpec(shape=(1, 1, 1, 4096), dtype="uint16"),
         }
 
     def get_output_spec(self) -> OutputSpec:
@@ -375,24 +384,26 @@ class TokenGenerator_Part4(BasePrecompiledModel):
 
     def get_input_spec(self) -> InputSpec:
         return {
-            "_model_layers_13_Add_1_Add_output_0": ((1, 1, 3584), "uint16"),
-            "past_key_14_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_14_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_16_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_16_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_17_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_17_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_18_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_18_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_19_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_19_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_20_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_20_in": ((4, 1, 4095, 128), "uint8"),
-            "past_key_15_in": ((4, 1, 128, 4095), "uint8"),
-            "past_value_15_in": ((4, 1, 4095, 128), "uint8"),
-            "position_ids_cos": ((1, 1, 1, 64), "uint16"),
-            "position_ids_sin": ((1, 1, 1, 64), "uint16"),
-            "attention_mask": ((1, 1, 1, 4096), "uint16"),
+            "_model_layers_13_Add_1_Add_output_0": TensorSpec(
+                shape=(1, 1, 3584), dtype="uint16"
+            ),
+            "past_key_14_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_14_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_16_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_16_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_17_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_17_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_18_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_18_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_19_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_19_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_20_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_20_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "past_key_15_in": TensorSpec(shape=(4, 1, 128, 4095), dtype="uint8"),
+            "past_value_15_in": TensorSpec(shape=(4, 1, 4095, 128), dtype="uint8"),
+            "position_ids_cos": TensorSpec(shape=(1, 1, 1, 64), dtype="uint16"),
+            "position_ids_sin": TensorSpec(shape=(1, 1, 1, 64), dtype="uint16"),
+            "attention_mask": TensorSpec(shape=(1, 1, 1, 4096), dtype="uint16"),
         }
 
     def get_output_spec(self) -> OutputSpec:

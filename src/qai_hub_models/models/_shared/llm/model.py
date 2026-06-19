@@ -53,7 +53,6 @@ from qai_hub_models.configs.model_metadata import (
     GenieSampleInput,
     ModelFileMetadata,
     ModelMetadata,
-    OutputSpec,
 )
 from qai_hub_models.configs.tensor_spec import (
     QuantizationParameters,
@@ -112,7 +111,7 @@ from qai_hub_models.utils.base_multi_graph_model import (
     MultiGraphWorkbenchModel,
 )
 from qai_hub_models.utils.checkpoint import CheckpointType
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 from qai_hub_models.utils.onnx.helpers import (
     ONNXBundle,
     generate_wrapper_onnx_file,
@@ -1146,7 +1145,7 @@ class LLMPartBase:
 
         # Embedding split (text LLMs): Part 1's only input is input_ids.
         if self._splits_embedding and self.part_id == 1:
-            return {"input_ids": ((1, sequence_length), "int32")}
+            return {"input_ids": TensorSpec(shape=(1, sequence_length), dtype="int32")}
 
         head_dim = self.head_dim or (self.hidden_size // self.num_attention_heads)
         embed_dim = head_dim // 2
@@ -1158,32 +1157,32 @@ class LLMPartBase:
         spec: InputSpec = {}
         for name in onnx_input_names:
             if "past_key" in name:
-                spec[name] = (
-                    (self.num_key_value_heads, 1, head_dim, kv_seq_len),
-                    "float32",
+                spec[name] = TensorSpec(
+                    shape=(self.num_key_value_heads, 1, head_dim, kv_seq_len),
+                    dtype="float32",
                 )
             elif "past_value" in name:
-                spec[name] = (
-                    (self.num_key_value_heads, 1, kv_seq_len, head_dim),
-                    "float32",
+                spec[name] = TensorSpec(
+                    shape=(self.num_key_value_heads, 1, kv_seq_len, head_dim),
+                    dtype="float32",
                 )
             elif name == "attention_mask":
-                spec[name] = (
-                    (1, 1, sequence_length, context_length),
-                    "float32",
+                spec[name] = TensorSpec(
+                    shape=(1, 1, sequence_length, context_length),
+                    dtype="float32",
                 )
             elif "position_ids_cos" in name or "position_ids_sin" in name:
-                spec[name] = (
-                    (1, 1, sequence_length, embed_dim),
-                    "float32",
+                spec[name] = TensorSpec(
+                    shape=(1, 1, sequence_length, embed_dim),
+                    dtype="float32",
                 )
             else:
                 # Either the pre-embedded token input ("inputs_embeds" for
                 # VLMs) or an intermediate hidden state from the previous part
                 # (found by process of elimination). Both are (1, seq, hidden).
-                spec[name] = (
-                    (1, sequence_length, self.hidden_size),
-                    "float32",
+                spec[name] = TensorSpec(
+                    shape=(1, sequence_length, self.hidden_size),
+                    dtype="float32",
                 )
 
         return spec
@@ -2002,39 +2001,41 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
 
         if llm_io_type == LLMIOType.genie_input_embeds:
             input_spec |= {
-                "input_embeds": (
-                    (1, sequence_length, hidden_size),
-                    "float32",
+                "input_embeds": TensorSpec(
+                    shape=(1, sequence_length, hidden_size),
+                    dtype="float32",
                 )
             }
         else:
-            input_spec |= {"input_ids": ((1, sequence_length), "int32")}
+            input_spec |= {
+                "input_ids": TensorSpec(shape=(1, sequence_length), dtype="int32")
+            }
 
         input_spec |= {
-            "attention_mask": (
-                (1, 1, sequence_length, context_length),
-                "float32",
+            "attention_mask": TensorSpec(
+                shape=(1, 1, sequence_length, context_length),
+                dtype="float32",
             ),
         }
 
         if llm_io_type == LLMIOType.huggingface_input_ids:
             input_spec |= {
-                "position_ids": (
-                    (1, sequence_length),
-                    "int32",
+                "position_ids": TensorSpec(
+                    shape=(1, sequence_length),
+                    dtype="int32",
                 ),
             }
         else:
             input_spec |= {
                 # each cos/sin are applied to a half-sliced copy of the hidden size
                 # and then concatenated.
-                "position_ids_cos": (
-                    (1, 1, sequence_length, embed_dim),
-                    "float32",
+                "position_ids_cos": TensorSpec(
+                    shape=(1, 1, sequence_length, embed_dim),
+                    dtype="float32",
                 ),
-                "position_ids_sin": (
-                    (1, 1, sequence_length, embed_dim),
-                    "float32",
+                "position_ids_sin": TensorSpec(
+                    shape=(1, 1, sequence_length, embed_dim),
+                    dtype="float32",
                 ),
             }
 
@@ -2046,25 +2047,25 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
 
         for layer in range(num_hidden_layers):
             past_k_name = f"past_key_{layer}_in"
-            input_spec[past_k_name] = (
-                (
+            input_spec[past_k_name] = TensorSpec(
+                shape=(
                     num_key_value_heads,
                     1,
                     head_dim,
                     context_length - sequence_length,
                 ),
-                "float32",
+                dtype="float32",
             )
 
             past_v_name = f"past_value_{layer}_in"
-            input_spec[past_v_name] = (
-                (
+            input_spec[past_v_name] = TensorSpec(
+                shape=(
                     num_key_value_heads,
                     1,
                     context_length - sequence_length,
                     head_dim,
                 ),
-                "float32",
+                dtype="float32",
             )
         return input_spec
 

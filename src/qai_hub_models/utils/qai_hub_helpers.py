@@ -36,8 +36,10 @@ from qai_hub_models.utils.export_result import (
 )
 from qai_hub_models.utils.input_spec import (
     InputSpec,
+    OutputSpec,
     broadcast_data_to_multi_batch,
     get_batch_size,
+    get_channel_last,
     make_torch_inputs,
 )
 from qai_hub_models.utils.onnx.helpers import (
@@ -50,20 +52,6 @@ from qai_hub_models.utils.transpose_channel import (
 
 _AIHUB_URL = "https://aihub.qualcomm.com"
 _AIHUB_NAME = "Qualcomm® AI Hub"
-_CAN_ACCESS_HUB: bool | None = None
-
-
-def can_access_qualcomm_ai_hub() -> bool:
-    global _CAN_ACCESS_HUB  # noqa: PLW0603
-    if _CAN_ACCESS_HUB is not None:
-        return _CAN_ACCESS_HUB
-    try:
-        hub.get_frameworks()
-    except Exception:
-        _CAN_ACCESS_HUB = False
-    else:
-        _CAN_ACCESS_HUB = True
-    return _CAN_ACCESS_HUB
 
 
 def tensor_to_numpy(tensor: torch.Tensor) -> np.ndarray:
@@ -552,9 +540,8 @@ def build_quantize_options(
 def build_compile_options(
     target_runtime: TargetRuntime,
     precision: Precision,
-    output_names: list[str],
-    channel_last_inputs: list[str],
-    channel_last_outputs: list[str],
+    input_spec: InputSpec,
+    output_spec: OutputSpec,
     context_graph_name: str | None = None,
     other_compile_options: str = "",
 ) -> str:
@@ -572,17 +559,17 @@ def build_compile_options(
     ):
         compile_options += f" {target_runtime.default_qairt_version.hub_option}"
 
-    compile_options += f" --output_names {','.join(output_names)}"
+    compile_options += f" --output_names {','.join(output_spec.keys())}"
 
-    if target_runtime != TargetRuntime.ONNX:
-        if channel_last_inputs:
-            compile_options += (
-                f" --force_channel_last_input {','.join(channel_last_inputs)}"
-            )
-        if channel_last_outputs:
-            compile_options += (
-                f" --force_channel_last_output {','.join(channel_last_outputs)}"
-            )
+    if channel_last_inputs := get_channel_last(input_spec, target_runtime):
+        compile_options += (
+            f" --force_channel_last_input {','.join(channel_last_inputs)}"
+        )
+
+    if channel_last_outputs := get_channel_last(input_spec, target_runtime):
+        compile_options += (
+            f" --force_channel_last_output {','.join(channel_last_outputs)}"
+        )
 
     if precision.activations_type is not None:
         compile_options += " --quantize_io"

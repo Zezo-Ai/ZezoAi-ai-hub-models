@@ -22,7 +22,7 @@ from qai_hub_models.utils.image_processing import (
     resize_pad,
     transform_resize_pad_coordinates,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 GEARGUARD_DATASET_VERSION = 2
@@ -84,7 +84,7 @@ class GearGuardDataset(BaseDataset):
         self.data_path = GEARGUARD_PRIVATE_ASSET.extracted_path
 
         # input_spec is (h, w) and target_image_size is (w, h)
-        input_spec = input_spec or {"image": ((1, 3, 320, 192), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 320, 192))}
         self.target_h = input_spec["image"][0][2]
         self.target_w = input_spec["image"][0][3]
         self.max_boxes = max_boxes

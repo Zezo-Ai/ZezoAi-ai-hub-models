@@ -14,7 +14,6 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.mpiigaze import MPIIGazeDataset
 from qai_hub_models.evaluators.mpigaze_evaluator import MPIIGazeEvaluator
 from qai_hub_models.models.eyegaze.external_repos.gaze_estimation.models.eyenet import (
@@ -27,7 +26,7 @@ from qai_hub_models.utils.asset_loaders import (
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import BaseModel, SerializationSettings
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, OutputSpec, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1

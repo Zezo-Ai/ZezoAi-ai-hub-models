@@ -10,7 +10,6 @@ from transformers import DetrForObjectDetection, PreTrainedModel
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.coco91class import Coco91ClassDataset
 from qai_hub_models.evaluators.detection_evaluator import DetectionEvaluator
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
@@ -29,6 +28,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -156,6 +156,7 @@ class DETR(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -168,9 +169,6 @@ class DETR(BaseModel):
             "logits": TensorSpec(io_type=IoType.TENSOR),
             "classes": TensorSpec(io_type=IoType.TENSOR),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

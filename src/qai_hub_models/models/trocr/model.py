@@ -18,7 +18,6 @@ from transformers.models.trocr.modeling_trocr import (
 )
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.export_result import ComponentGroup
@@ -27,6 +26,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -112,6 +112,7 @@ class TrOCREncoder(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -129,9 +130,6 @@ class TrOCREncoder(BaseModel):
             cast(PreTrainedModel, source_model.encoder),
             cast(TrOCRForCausalLM, source_model.decoder),
         )
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["pixel_values"]
 
 
 class TrOCRDecoder(BaseModel):

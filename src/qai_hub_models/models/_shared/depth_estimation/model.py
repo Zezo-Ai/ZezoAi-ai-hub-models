@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.nyuv2 import NYUV2Dataset
 from qai_hub_models.evaluators.depth_evaluator import DepthEvaluator
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
@@ -14,21 +13,21 @@ from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    IoType,
+    OutputSpec,
+    TensorSpec,
+)
 
 
 class DepthEstimationModel(BaseModel):
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["depth_estimates"]
-
     def get_output_spec(self) -> OutputSpec:
         return {
             "depth_estimates": TensorSpec(
                 io_type=IoType.TENSOR,
                 description="Monocular depth map",
+                apply_runtime_channel_reordering=True,
             ),
         }
 

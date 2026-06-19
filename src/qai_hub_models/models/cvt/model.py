@@ -18,7 +18,6 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.nuscenes_bev import NuscenesBevCVTDataset
 from qai_hub_models.evaluators.nuscenes_bev_evaluator import (
     NuscenesBevSegmentationEvaluator,
@@ -35,7 +34,7 @@ from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.external_repo import rewrite_hydra_targets
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, OutputSpec, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 CKPT_NAME = "vehicles_50k"  # Try road_75k for road predictions

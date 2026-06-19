@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.datasets.imagenet import ImagenetDataset
 from qai_hub_models.datasets.imagenette import ImagenetteDataset
 from qai_hub_models.evaluators.classification_evaluator import ClassificationEvaluator
@@ -30,6 +30,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 from qai_hub_models.utils.labels import write_labels_file
@@ -128,6 +129,7 @@ class ImagenetClassifier(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             )
         }
 
@@ -145,9 +147,6 @@ class ImagenetClassifier(BaseModel):
         image = load_image(TEST_IMAGENET_IMAGE)
         tensor = IMAGENET_TRANSFORM(image).unsqueeze(0)
         return dict(image_tensor=[tensor.numpy()])
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image_tensor"]
 
     @classmethod
     def get_eval_dataset_classes(cls) -> list[type[BaseDataset]]:

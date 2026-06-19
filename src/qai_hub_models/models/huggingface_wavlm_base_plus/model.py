@@ -23,14 +23,13 @@ from qai_hub_models import (
     SampleInputsType,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.libri_speech import LibriSpeechDataset
 from qai_hub_models.evaluators.libri_speech_evaluator import LibriSpeechEvaluator
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_numpy
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, OutputSpec, TensorSpec
 
 DEFAULT_WEIGHTS = "patrickvonplaten/wavlm-libri-clean-100h-base-plus"
 MODEL_ID = __name__.split(".")[-2]

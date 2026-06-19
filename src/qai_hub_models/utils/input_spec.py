@@ -10,7 +10,7 @@ from typing import Any, TypeGuard
 import numpy as np
 import torch
 
-from qai_hub_models import SampleInputsType
+from qai_hub_models import SampleInputsType, TargetRuntime
 from qai_hub_models.configs.tensor_spec import (
     BboxFormat,
     BboxMetadata,
@@ -26,11 +26,13 @@ from qai_hub_models.configs.tensor_spec import (
 # PyTorch trace doesn't capture the input specs. Hence we need an additional
 # InputSpec (name -> (shape, type)) when submitting profiling job to AI Hub.
 # This is a subtype of qai_hub.InputSpecs
-#
-# Values can be either:
-#   - Plain tuple: (shape, dtype) - for models without metadata
-#   - TensorSpec: with optional metadata for semantic type info
-InputSpec = dict[str, tuple[tuple[int, ...], str] | TensorSpec]
+InputSpec = dict[str, TensorSpec]
+
+# Output spec: maps output name -> TensorSpec. Structurally identical to
+# InputSpec; defined here (rather than in configs.model_metadata) so that
+# low-level utilities can reference it without importing model_metadata, which
+# pulls in the scorecard package and would create an import cycle.
+OutputSpec = dict[str, TensorSpec]
 
 # Re-export for backwards compatibility
 __all__ = [
@@ -40,6 +42,7 @@ __all__ = [
     "ImageMetadata",
     "InputSpec",
     "IoType",
+    "OutputSpec",
     "TensorSpec",
     "broadcast_data_to_multi_batch",
     "get_batch_size",
@@ -147,3 +150,11 @@ def broadcast_data_to_multi_batch(
         name: [np.broadcast_to(sample, spec[name][0]) for sample in samples]
         for name, samples in inputs.items()
     }
+
+
+def get_channel_last(
+    spec: InputSpec | OutputSpec, runtime: TargetRuntime | None = None
+) -> list[str]:
+    return [
+        k for k, v in spec.items() if v.apply_channel_last_during_compilation(runtime)
+    ]

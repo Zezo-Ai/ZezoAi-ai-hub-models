@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.celebahq import CelebAHQDataset
 from qai_hub_models.evaluators.inpaint_evaluator import InpaintEvaluator
 from qai_hub_models.models._shared.repaint.utils import preprocess_inputs
@@ -19,6 +18,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -50,10 +50,12 @@ class RepaintModel(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
             "mask": TensorSpec(
                 shape=(batch_size, 1, height, width),
                 dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -65,14 +67,9 @@ class RepaintModel(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image", "mask"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["painted_image"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

@@ -81,6 +81,7 @@ class InceptionNetV3(ImagenetClassifier):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             )
         }
 

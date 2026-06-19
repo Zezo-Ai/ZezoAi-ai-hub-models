@@ -10,7 +10,6 @@ from qai_hub.client import Device
 from typing_extensions import Self
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models.crestereo.external_repos.crestereo_pytorch.nets import (
     Model,
 )
@@ -21,6 +20,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 

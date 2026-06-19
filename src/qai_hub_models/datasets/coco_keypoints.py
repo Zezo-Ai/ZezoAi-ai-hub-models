@@ -14,7 +14,7 @@ from qai_hub_models.datasets.coco import COCO_VAL_DATASET
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, DatasetSplit
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resize_pad
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 COCO_KPT_FOLDER_NAME = "coco"
 COCO_KPT_VERSION = 3
@@ -81,7 +81,9 @@ class CocoKeypointsDataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.VAL,
         input_spec: InputSpec | None = None,
     ) -> None:
-        input_spec = input_spec or {"image": ((1, 3, 640, 640), "float32")}
+        input_spec = input_spec or {
+            "image": TensorSpec(shape=(1, 3, 640, 640), dtype="float32")
+        }
         self.target_h = input_spec["image"][0][2]
         self.target_w = input_spec["image"][0][3]
 

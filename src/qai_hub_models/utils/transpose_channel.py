@@ -62,13 +62,14 @@ def transpose_channel_last_to_first_input_specs(
     input_specs: InputSpec, channel_last_inputs: list[str]
 ) -> InputSpec:
     out: InputSpec = {}
-    for i, (shape, input_type) in input_specs.items():
+    for i, spec in input_specs.items():
+        shape = spec.shape
         if i in channel_last_inputs:
             if len(shape) == 3:
                 shape = (shape[2], shape[0], shape[1])
             elif len(shape) in (4, 5):
                 shape = (shape[0], shape[-1], *shape[1:-1])
-        out[i] = (shape, input_type)
+        out[i] = spec.model_copy(update={"shape": shape})
     return out
 
 

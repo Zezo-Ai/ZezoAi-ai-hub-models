@@ -15,7 +15,6 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models.centerpoint.external_repos import EXTERNAL_REPO_PATHS
 from qai_hub_models.models.centerpoint.external_repos.centerpoint.det3d.models import (
     build_detector,
@@ -28,7 +27,7 @@ from qai_hub_models.utils.asset_loaders import (
     load_torch,
 )
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, OutputSpec, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 DEFAULT_WEIGHTS = "pretrained/PointPillars.pth"

@@ -11,7 +11,7 @@ from PIL import Image
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, DatasetSplit
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 ICDAR2015_FOLDER_NAME = "icdar2015"
 
@@ -45,7 +45,9 @@ class ICDAR2015Dataset(BaseDataset):
         self.dataset_path = ICDAR2015_IMGS_ASSET.extracted_path.parent
         BaseDataset.__init__(self, self.dataset_path, split)
 
-        input_spec = input_spec or {"image": ((1, 3, 640, 640), "float32")}
+        input_spec = input_spec or {
+            "image": TensorSpec(shape=(1, 3, 640, 640), dtype="float32")
+        }
         self.input_height = input_spec["image"][0][2]
         self.input_width = input_spec["image"][0][3]
 

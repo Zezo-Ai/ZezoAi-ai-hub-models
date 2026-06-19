@@ -13,7 +13,6 @@ from torch import nn
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.kitti import KittiDataset
 from qai_hub_models.evaluators.kitti_evaluator import KittiEvaluator
 from qai_hub_models.models._shared.centernet.external_repos.centernet.src.lib.models.decode import (
@@ -32,6 +31,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -153,6 +153,7 @@ class CenterNet3D(CenterNet):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -188,10 +189,6 @@ class CenterNet3D(CenterNet):
 
     def get_calibration_dataset_cls(self) -> type[BaseDataset]:
         return KittiDataset
-
-    @staticmethod
-    def get_channel_last_inputs() -> list[str]:
-        return ["image"]
 
 
 def load_model(model: torch.nn.Module, model_path: str) -> torch.nn.Module:

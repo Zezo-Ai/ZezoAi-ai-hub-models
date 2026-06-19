@@ -20,7 +20,6 @@ from transformers.models.whisper.modeling_whisper import WhisperDecoder, Whisper
 from typing_extensions import Self
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models._shared.hf_whisper.model_adaptation import (
     monkey_patch_model,
 )
@@ -29,7 +28,7 @@ from qai_hub_models.utils.asset_loaders import (
 )
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, TensorSpec
 
 MODEL_ID = "hf_whisper_asr_shared"
 MODEL_ASSET_VERSION = 1

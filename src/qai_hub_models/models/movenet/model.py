@@ -14,7 +14,6 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.cocobody import CocoBodyDataset
 from qai_hub_models.evaluators.movenet_evaluator import MovenetPoseEvaluator
 from qai_hub_models.models.movenet.external_repos import EXTERNAL_REPO_PATHS
@@ -30,6 +29,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -95,6 +95,7 @@ class Movenet(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -102,9 +103,6 @@ class Movenet(BaseModel):
         return {
             "kpt_with_conf": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     def get_hub_profile_options(
         self,

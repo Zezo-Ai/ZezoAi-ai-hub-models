@@ -17,7 +17,7 @@ from qai_hub_models.datasets.nuscenes import NuscenesDataset
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.base_dataset import DatasetSplit
 from qai_hub_models.utils.bounding_box_processing_3d import transform_to_matrix
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 NUSCENE_ID = "nuscenes"
 NUSCENE_FILE = "v1.0-mini"
@@ -40,7 +40,7 @@ class NuscenesBevDataset(NuscenesDataset):
         top_crop: int | None = None,
         split: DatasetSplit = DatasetSplit.TRAIN,
     ) -> None:
-        input_spec = input_spec or {"image": ((1, 6, 3, 224, 480), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 6, 3, 224, 480))}
         super().__init__(
             source_dataset_file=dataset_file,
             split=split,

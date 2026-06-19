@@ -11,7 +11,7 @@ from PIL import Image
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, DatasetSplit
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 ADE_FOLDER_NAME = "ade"
 ADE_VERSION = 2
@@ -55,7 +55,7 @@ class ADESegmentationDataset(BaseDataset):
                 f"No valid image-annotation pairs found in {self.image_dir} and {self.category_dir}"
             )
 
-        input_spec = input_spec or {"image": ((1, 3, 512, 512), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 512, 512))}
         self.input_height = input_spec["image"][0][2]
         self.input_width = input_spec["image"][0][3]
 

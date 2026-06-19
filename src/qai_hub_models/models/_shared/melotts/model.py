@@ -27,7 +27,7 @@ from qai_hub_models import (
     SampleInputsType,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.datasets.common_voice import CommonVoiceText
 from qai_hub_models.models._shared.common import replace_module_recursively
 from qai_hub_models.models._shared.melotts.meloTTS_encoder import (
@@ -54,7 +54,7 @@ from qai_hub_models.models._shared.voiceai_tts.t5_g2p import (
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, TensorSpec
 
 if TYPE_CHECKING:
     from melo.api import TTS

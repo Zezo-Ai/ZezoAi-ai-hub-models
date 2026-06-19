@@ -12,7 +12,6 @@ from ruamel.yaml import YAML
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.semantic_kitti import SemanticKittiDataset
 from qai_hub_models.evaluators.semantic_kitti_evaluator import SemanticKittiEvaluator
 from qai_hub_models.models.salsanext.external_repos.salsanext.train.common.laserscan import (
@@ -25,7 +24,12 @@ from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    IoType,
+    OutputSpec,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 3
@@ -115,6 +119,7 @@ class SalsaNext(BaseModel):
                 shape=(batch_size, channel, height, width),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -122,9 +127,6 @@ class SalsaNext(BaseModel):
         return {
             "predict": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["lidar"]
 
     @classmethod
     def get_eval_dataset_classes(cls) -> list[type[BaseDataset]]:

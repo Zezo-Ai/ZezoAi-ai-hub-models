@@ -10,7 +10,6 @@ from transformers import SegformerForSemanticSegmentation
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.ade20k import ADESegmentationDataset
 from qai_hub_models.evaluators.segmentation_evaluator import SegmentationOutputEvaluator
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
@@ -26,6 +25,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -86,19 +86,16 @@ class SegformerBase(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
     def get_output_spec(self) -> OutputSpec:
         return {
-            "class_logits": TensorSpec(),
+            "class_logits": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["class_logits"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

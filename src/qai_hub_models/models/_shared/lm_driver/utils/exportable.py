@@ -4,7 +4,7 @@
 """ONNXExportableModuleWithCache — wrapper enabling ONNX export of HF models."""
 
 import torch
-from transformers import PreTrainedModel, DynamicCache
+from transformers import DynamicCache, PreTrainedModel
 
 from .compat import _patch_sdpa_mask  # noqa: F401 — triggers the patch on import
 from .layer_cache import (

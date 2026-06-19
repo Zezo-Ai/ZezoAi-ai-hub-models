@@ -20,7 +20,7 @@ from qai_hub_models.utils.base_dataset import (
     DatasetMetadata,
     DatasetSplit,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 NYUV2_FOLDER_NAME = "nyuv2"
@@ -80,7 +80,7 @@ class NYUV2Dataset(BaseDataset):
             if len(self.image_list) == num_samples:
                 break
 
-        input_spec = input_spec or {"image": ((1, 3, 256, 256), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 256, 256))}
         self.input_height = input_spec["image"][0][2]
         self.input_width = input_spec["image"][0][3]
 

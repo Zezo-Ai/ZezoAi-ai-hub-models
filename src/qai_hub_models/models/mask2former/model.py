@@ -21,7 +21,6 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.coco_panoptic_seg import CocoPanopticSegmentationDataset
 from qai_hub_models.evaluators.panoptic_segmentation_evaluator import (
     PanopticSegmentationEvaluator,
@@ -42,6 +41,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -118,6 +118,7 @@ class Mask2Former(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -125,14 +126,8 @@ class Mask2Former(BaseModel):
         return {
             "scores": TensorSpec(),
             "labels": TensorSpec(),
-            "masks": TensorSpec(),
+            "masks": TensorSpec(apply_runtime_channel_reordering=True),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["masks"]
 
     def get_hub_compile_options(
         self,

@@ -11,7 +11,6 @@ import torch
 from typing_extensions import Self
 
 from qai_hub_models import Precision, SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.human_poses import HumanPosesDataset
 from qai_hub_models.models._shared.mediapipe.external_repos import EXTERNAL_REPO_PATHS
 from qai_hub_models.models._shared.mediapipe.external_repos.mediapipe.blazepose import (
@@ -36,6 +35,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -210,6 +210,7 @@ class PoseDetector(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -228,9 +229,6 @@ class PoseDetector(BaseModel):
         if "--range_scheme" in options:
             return options
         return options + " --range_scheme min_max"
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None
@@ -307,6 +305,7 @@ class PoseLandmarkDetector(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -315,9 +314,6 @@ class PoseLandmarkDetector(BaseModel):
             "scores": TensorSpec(),
             "landmarks": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

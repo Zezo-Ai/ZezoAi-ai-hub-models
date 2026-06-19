@@ -4,26 +4,27 @@
 """LLM base class for GenAI test framework"""
 
 import types
-from abc import abstractmethod, ABC
-import torch
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+
+import torch
 from transformers import (
-    PreTrainedTokenizerBase,
-    PreTrainedModel,
-    PretrainedConfig,
+    AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    AutoConfig,
+    PretrainedConfig,
+    PreTrainedModel,
+    PreTrainedTokenizerBase,
 )
 from transformers.cache_utils import DynamicCache
 
 from .generator import Generator, VLM_Generator
 from .utils.layer_cache import (
+    AttentionType,
     LayerCacheDescriptor,
+    _resolve_text_config,
     attention_mask_input_names,
     cache_state_names,
-    AttentionType,
-    _resolve_text_config,
 )
 
 

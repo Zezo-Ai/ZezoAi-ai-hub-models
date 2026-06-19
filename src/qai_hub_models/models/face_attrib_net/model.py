@@ -9,7 +9,6 @@ import torch
 from torch import nn
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.face_attrib_dataset import FaceAttribDataset
 from qai_hub_models.evaluators.face_attrib_evaluator import FaceAttribNetEvaluator
 from qai_hub_models.models.face_attrib_net.layers import (
@@ -27,6 +26,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -558,6 +558,7 @@ class FaceAttribNet(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -571,17 +572,6 @@ class FaceAttribNet(BaseModel):
             Mapping of output tensor names to their specs.
         """
         return {"probability": TensorSpec()}
-
-    def get_channel_last_inputs(self) -> list[str]:
-        """
-        Return name string for "channel-last" input
-
-        Returns
-        -------
-        channel_last_inputs : list[str]
-            list of name string of "channel-last" input
-        """
-        return ["image"]
 
     def get_evaluator(self) -> BaseEvaluator:
         """

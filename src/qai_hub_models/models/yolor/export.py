@@ -27,6 +27,7 @@ from qai_hub_models.configs.model_metadata import (
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.yolor import MODEL_ID, Model
 from qai_hub_models.utils import quantization as quantization_utils
+from qai_hub_models.utils.ai_hub_access import can_access_qualcomm_ai_hub
 from qai_hub_models.utils.args import (
     export_parser,
     get_export_model_name,
@@ -47,7 +48,6 @@ from qai_hub_models.utils.printing import (
     print_profile_metrics_from_job,
     print_tool_versions,
 )
-from qai_hub_models.utils.qai_hub_helpers import can_access_qualcomm_ai_hub
 
 
 def quantize_model(
@@ -198,8 +198,8 @@ def download_model(
         metadata_path = dst_path / "metadata.json"
         file_metadata = ModelFileMetadata.from_hub_model(target_model)
         # Merge semantic metadata from get_input_spec()
-        merge_input_metadata(file_metadata, model.get_input_spec())
-        merge_output_metadata(file_metadata, model.get_output_spec())
+        merge_input_metadata(file_metadata, model.get_input_spec(), runtime)
+        merge_output_metadata(file_metadata, model.get_output_spec(), runtime)
         model_metadata = ModelMetadata(
             model_id=MODEL_ID,
             model_name="Yolo-R",

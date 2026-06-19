@@ -14,14 +14,13 @@ from torch import nn
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.models.rangenet_plus_plus.external_repos.lidar_bonnetal.train.tasks.semantic.modules.segmentator import (
     Segmentator,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -111,18 +110,20 @@ class RangeNetPlusPlus(BaseModel):
         height: int = INPUT_HEIGHT,
         width: int = INPUT_WIDTH,
     ) -> InputSpec:
-        return {"range_image": ((batch_size, INPUT_CHANNELS, height, width), "float32")}
+        return {
+            "range_image": TensorSpec(
+                shape=(batch_size, INPUT_CHANNELS, height, width),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            )
+        }
 
     def get_output_spec(self) -> OutputSpec:
         return {
-            "mask": TensorSpec(),
+            "mask": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["range_image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["mask"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

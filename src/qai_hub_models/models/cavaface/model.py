@@ -8,7 +8,6 @@ from __future__ import annotations
 import torch
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_model import BaseModel, SerializationSettings
 from qai_hub_models.utils.input_spec import (
@@ -16,6 +15,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -86,6 +86,7 @@ class CavaFace(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -93,6 +94,3 @@ class CavaFace(BaseModel):
         return {
             "embeddings": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]

@@ -14,7 +14,7 @@ from ultralytics.models import YOLO as ultralytics_YOLO
 from ultralytics.nn.tasks import OBBModel
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.datasets.dota128 import Dota128Dataset
 from qai_hub_models.models._shared.ultralytics.obb_patches import (
@@ -27,6 +27,7 @@ from qai_hub_models.models._shared.yolo.model import (
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import SerializationSettings
+from qai_hub_models.utils.input_spec import OutputSpec
 from qai_hub_models.utils.labels import write_labels_file
 
 MODEL_ASSET_VERSION = 1

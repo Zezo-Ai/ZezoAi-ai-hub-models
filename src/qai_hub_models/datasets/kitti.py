@@ -19,7 +19,7 @@ from qai_hub_models.utils.base_dataset import (
     DatasetSplit,
 )
 from qai_hub_models.utils.image_processing import pre_process_with_affine
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 KITTI_FOLDER_NAME = "kitti"
@@ -99,7 +99,7 @@ class KittiDataset(BaseDataset):
             self, KITTI_CALIBS_ASSET.extracted_path.parent, split=split
         )
 
-        input_spec = input_spec or {"image": ((1, 3, 384, 1280), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 384, 1280))}
         self.input_width = input_spec["image"][0][3]
         self.input_height = input_spec["image"][0][2]
         with open(

@@ -12,7 +12,7 @@ from torchvision import transforms
 
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, DatasetSplit
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 VOC_FOLDER_NAME = "pascal_voc"
 DEVKIT_FOLDER_NAME = "VOCdevkit"
@@ -36,7 +36,7 @@ class VOCSegmentationDataset(BaseDataset):
         split: DatasetSplit = DatasetSplit.TRAIN,
         input_spec: InputSpec | None = None,
     ) -> None:
-        input_spec = input_spec or {"image": ((1, 3, 520, 520), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 520, 520))}
         self.input_height = input_spec["image"][0][2]
         self.input_width = input_spec["image"][0][3]
         BaseDataset.__init__(

@@ -11,7 +11,6 @@ import torch
 from transformers import ElectraForPreTraining, ElectraTokenizer
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.wikitext_masked import ElectraWikiTextMasked
 from qai_hub_models.evaluators.electra_discriminator_evaluator import (
     ElectraDiscriminatorEvaluator,
@@ -23,7 +22,7 @@ from qai_hub_models.models._shared.bert_hf.model_patches import (
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import SerializationSettings
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, OutputSpec, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1

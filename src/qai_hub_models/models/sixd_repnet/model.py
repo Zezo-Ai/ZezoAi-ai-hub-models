@@ -13,7 +13,6 @@ import torch
 from face_detection.alignment import load_net
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.models.sixd_repnet.external_repos.sixdrepnet.sixdrepnet.model import (
     SixDRepNet as UpstreamSixDRepNet,
@@ -23,7 +22,7 @@ from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -120,7 +119,13 @@ class RetinaFaceDetector(BaseModel):
         height: int = 640,
         width: int = 640,
     ) -> InputSpec:
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            )
+        }
 
     def get_output_spec(self) -> OutputSpec:
         return {
@@ -128,9 +133,6 @@ class RetinaFaceDetector(BaseModel):
             "classifications": TensorSpec(),
             "landmark_regressions": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class PoseEstimator(BaseModel):
@@ -189,15 +191,18 @@ class PoseEstimator(BaseModel):
         height: int = INPUT_IMAGE_DIM,
         width: int = INPUT_IMAGE_DIM,
     ) -> InputSpec:
-        return {"image": ((batch_size, 3, height, width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            )
+        }
 
     def get_output_spec(self) -> OutputSpec:
         return {
             "rotation_matrix": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class SixDRepNet(WorkbenchModelCollection):

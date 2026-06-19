@@ -51,16 +51,7 @@ def validate_io_names(instance: BaseModel) -> list[str]:
     input_spec = instance.get_input_spec()
     output_names = list(instance.get_output_spec())
 
-    errors = [
-        f"Channel-last input '{name}' not found in input spec: {list(input_spec.keys())}"
-        for name in instance.get_channel_last_inputs()
-        if name not in input_spec
-    ]
-    errors.extend(
-        f"Channel-last output '{name}' not found in output names: {output_names}"
-        for name in instance.get_channel_last_outputs()
-        if name not in output_names
-    )
+    errors: list[str] = []
     errors.extend(
         f"Input name '{name}' contains '-'. "
         "QNN converts dashes to underscores, causing name mismatches."

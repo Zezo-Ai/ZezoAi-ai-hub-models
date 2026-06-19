@@ -27,7 +27,7 @@ from qai_hub_models.utils.image_processing import (
     resize_pad,
     transform_resize_pad_normalized_coordinates,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 
 class CocoDatasetClass(Enum):
@@ -159,7 +159,7 @@ class CocoDataset(BaseDataset, CocoDetection):
                 self.class80_label_map[cat["id"]] = i
 
         # input_spec is (h, w) and target_image_size is (w, h)
-        input_spec = input_spec or {"image": ((1, 3, 640, 640), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 640, 640))}
         self.target_h = input_spec["image"][0][2]
         self.target_w = input_spec["image"][0][3]
         self.max_boxes = max_boxes

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 # isort: off
 # This verifies aimet is installed, and this must be included first.
-from qai_hub_models.configs.model_metadata import OutputSpec
+from qai_hub_models.utils.input_spec import OutputSpec
 from qai_hub_models.models._shared.llm.model import (
     LLMBase,
     PositionProcessorBase,

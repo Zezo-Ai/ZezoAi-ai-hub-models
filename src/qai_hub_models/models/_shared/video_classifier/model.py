@@ -8,7 +8,6 @@ from __future__ import annotations
 import torch
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.kinetics400 import Kinetics400Dataset
 from qai_hub_models.evaluators.video_classification_evaluator import (
     VideoClassificationEvaluator,
@@ -27,6 +26,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -124,6 +124,7 @@ class KineticsClassifier(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -156,9 +157,6 @@ class KineticsClassifier(BaseModel):
                 softmax_applied=True,
             ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["video"]
 
     def get_evaluator(self) -> BaseEvaluator:
         return VideoClassificationEvaluator(num_classes=400)

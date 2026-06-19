@@ -13,7 +13,6 @@ from torch import nn
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.datasets.coco import CocoDataset
 from qai_hub_models.evaluators.centernet_detection_evaluator import (
@@ -27,7 +26,10 @@ from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.image_processing import pre_process_with_affine
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    OutputSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -153,6 +155,3 @@ class CenterNet2D(CenterNet):
 
     def get_calibration_dataset_cls(self) -> type[BaseDataset]:
         return CocoDataset
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]

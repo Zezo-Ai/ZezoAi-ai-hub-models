@@ -7,9 +7,11 @@
 //
 // Defines the core types for specifying tensor metadata:
 // - TensorSpec: Specification for a tensor (shape, dtype, metadata)
-// - IoType: Semantic type of a tensor (image, tensor)
+// - IoType: Semantic type of a tensor (image, tensor, bbox)
 // - ColorFormat: Color format for image tensors
 // - ImageMetadata: Metadata for image tensors
+// - BboxFormat: Bounding box coordinate format
+// - BboxMetadata: Metadata for bounding box tensors
 //
 // These types are used in model.get_input_spec() and in metadata.yaml files.
 syntax = "proto3";
@@ -50,10 +52,24 @@ enum ColorFormat {
   COLOR_FORMAT_GRAYSCALE = 3;
 }
 
+// Bounding box coordinate format.
+enum BboxFormat {
+  BBOX_FORMAT_UNSPECIFIED = 0;
+  BBOX_FORMAT_XYXY = 1;    // (x1, y1, x2, y2) - top-left and bottom-right corners
+  BBOX_FORMAT_XYWH = 2;    // (x, y, width, height) - top-left corner and size
+  BBOX_FORMAT_CXCYWH = 3;  // (cx, cy, width, height) - center and size
+}
+
 // Metadata specific to image tensor inputs.
 // Groups image-related metadata fields like color format and value range.
 message ImageMetadata {
   ColorFormat color_format = 1;
+}
+
+// Metadata specific to bounding box tensor outputs.
+// Groups bbox-related metadata fields like coordinate format.
+message BboxMetadata {
+  BboxFormat bbox_format = 1;
 }
 
 // Quantization parameters for a tensor.
@@ -79,4 +95,14 @@ message TensorSpec {
 
   // Image-specific metadata (color_format). Only used when io_type is IMAGE.
   optional ImageMetadata image_metadata = 8;
+
+  // Bbox-specific metadata (bbox_format). Only used when io_type is BBOX.
+  optional BboxMetadata bbox_metadata = 9;
+
+  // Whether softmax/sigmoid has been applied to this tensor's values.
+  bool softmax_applied = 10;
+
+  // Name of the labels file that maps indices to class names
+  // (e.g. "coco_labels.txt").
+  optional string labels_file = 11;
 }

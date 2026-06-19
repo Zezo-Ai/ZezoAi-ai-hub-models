@@ -16,7 +16,6 @@ from qai_hub_models import (
     SampleInputsType,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.cocowholebody import CocoWholeBodyDataset
 from qai_hub_models.evaluators.litehrnet_evaluator import LiteHRNetPoseEvaluator
 from qai_hub_models.extern.mmengine import patch_mmengine_pkgresources
@@ -33,6 +32,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 

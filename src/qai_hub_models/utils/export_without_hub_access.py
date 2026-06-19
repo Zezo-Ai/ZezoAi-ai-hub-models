@@ -13,12 +13,12 @@ from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.configs.devices_and_chipsets_yaml import DevicesAndChipsetsYaml
 from qai_hub_models.configs.perf_yaml import QAIHMModelPerf
 from qai_hub_models.scorecard.device import ScorecardDevice
+from qai_hub_models.utils.ai_hub_access import can_access_qualcomm_ai_hub
 from qai_hub_models.utils.fetch_static_assets import fetch_static_assets
 from qai_hub_models.utils.printing import print_profile_metrics, print_with_box
 from qai_hub_models.utils.qai_hub_helpers import (
     _AIHUB_NAME,
     _AIHUB_URL,
-    can_access_qualcomm_ai_hub,
 )
 from qai_hub_models.utils.version_helpers import QAIHMVersion
 

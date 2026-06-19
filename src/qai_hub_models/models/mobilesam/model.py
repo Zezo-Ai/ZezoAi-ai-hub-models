@@ -16,7 +16,6 @@ from mobile_sam.modeling.transformer import TwoWayAttentionBlock, TwoWayTransfor
 from mobile_sam.utils.onnx import SamOnnxModel
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models._shared.sam.model_patches import (
     Conv2DInplaceLinearSAMMaskDecoderMLP,
     Conv2DInplaceLinearSAMTransformerMLPBlock,
@@ -32,6 +31,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -74,19 +74,14 @@ class MobileSAMEncoder(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
-
     def get_output_spec(self) -> OutputSpec:
         return {
-            "image_embeddings": TensorSpec(),
+            "image_embeddings": TensorSpec(apply_runtime_channel_reordering=True),
         }
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["image_embeddings"]
 
     @classmethod
     def from_pretrained(cls, model_type: str = DEFAULT_MODEL_TYPE) -> Self:
@@ -215,6 +210,7 @@ class MobileSAMDecoder(BaseModel):
                 shape=(1, embed_dim, *embed_size),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
             "point_coords": TensorSpec(
                 shape=(1, num_of_points, 2),
@@ -232,6 +228,7 @@ class MobileSAMDecoder(BaseModel):
                 shape=(1, 1, *mask_input_size),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             )
             input_spec["has_mask_input"] = TensorSpec(
                 shape=(1,),
@@ -240,18 +237,9 @@ class MobileSAMDecoder(BaseModel):
             )
         return input_spec
 
-    def get_channel_last_inputs(self, has_mask_input: bool = False) -> list[str]:
-        out = ["image_embeddings"]
-        if has_mask_input:
-            out.append("mask_input")
-        return out
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["masks"]
-
     def get_output_spec(self) -> OutputSpec:
         return {
-            "masks": TensorSpec(),
+            "masks": TensorSpec(apply_runtime_channel_reordering=True),
             "scores": TensorSpec(),
         }
 

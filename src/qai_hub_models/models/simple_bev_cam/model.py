@@ -9,14 +9,18 @@ import torch
 from torch import nn
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models.simple_bev_cam.external_repos.simple_bev.nets.segnet import (
     Segnet,
 )
 from qai_hub_models.models.simple_bev_cam.external_repos.simple_bev.utils import vox
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    IoType,
+    OutputSpec,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 2
@@ -163,6 +167,7 @@ class SimpleBev(BaseModel):
                 shape=(batch_size, 6, 4, 4),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -172,14 +177,10 @@ class SimpleBev(BaseModel):
             "feat_e_results": TensorSpec(),
             "seg_e_results": TensorSpec(),
             "center_e_results": TensorSpec(),
-            "offset_e_results": TensorSpec(),
+            "offset_e_results": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["cam0_T_camXs"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["offset_e_results"]
 
 
 def _load_model_from_weight(

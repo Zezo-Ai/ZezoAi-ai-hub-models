@@ -43,7 +43,7 @@ from qai_hub_models.utils.export_result import (
     ExportResult,
     LegacyCollectionExportResult,
 )
-from qai_hub_models.utils.input_spec import to_hub_input_specs
+from qai_hub_models.utils.input_spec import TensorSpec, to_hub_input_specs
 from qai_hub_models.utils.model_cache import CacheMode, get_or_create_cached_model
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 from qai_hub_models.utils.printing import (
@@ -487,9 +487,9 @@ def export_model(
                 if inp_name in input_spec:
                     split_input_spec[inp_name] = input_spec[inp_name]
                 else:
-                    split_input_spec[inp_name] = (
-                        (1, seq_len, llm_config.hidden_size),
-                        "float32",
+                    split_input_spec[inp_name] = TensorSpec(
+                        shape=(1, seq_len, llm_config.hidden_size),
+                        dtype="float32",
                     )
 
             submitted_compile_job = hub.submit_compile_job(

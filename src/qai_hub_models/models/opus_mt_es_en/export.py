@@ -27,6 +27,7 @@ from qai_hub_models.configs.model_metadata import (
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.opus_mt_es_en import MODEL_ID, App, Model
 from qai_hub_models.utils import quantization as quantization_utils
+from qai_hub_models.utils.ai_hub_access import can_access_qualcomm_ai_hub
 from qai_hub_models.utils.args import (
     export_parser,
     get_export_model_name,
@@ -46,10 +47,7 @@ from qai_hub_models.utils.printing import (
     print_profile_metrics_from_job,
     print_tool_versions,
 )
-from qai_hub_models.utils.qai_hub_helpers import (
-    assert_success_and_get_target_models,
-    can_access_qualcomm_ai_hub,
-)
+from qai_hub_models.utils.qai_hub_helpers import assert_success_and_get_target_models
 
 
 def quantize_model(
@@ -258,10 +256,12 @@ def download_model(
             merge_input_metadata(
                 model_file_metadata[model_file_name],
                 model.get_component_input_spec(component_name),
+                runtime,
             )
             merge_output_metadata(
                 model_file_metadata[model_file_name],
                 model.get_component_output_spec(component_name),
+                runtime,
             )
 
         # Extract and save metadata alongside downloaded model

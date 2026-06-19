@@ -10,7 +10,6 @@ from torch import nn
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.coco_face import CocoFaceDataset
 from qai_hub_models.datasets.facemap_3dmm_dataset import FaceMap3DMMDataset
 from qai_hub_models.evaluators.facemap_3dmm_evaluator import FaceMap3DMMEvaluator
@@ -29,6 +28,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -93,6 +93,7 @@ class FaceMap_3DMM(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -109,9 +110,6 @@ class FaceMap_3DMM(BaseModel):
         return {
             "parameters_3dmm": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     def get_evaluator(self) -> BaseEvaluator:
         return FaceMap3DMMEvaluator(*self.get_input_spec()["image"][0][2:])

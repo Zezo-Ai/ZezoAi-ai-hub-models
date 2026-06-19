@@ -20,8 +20,8 @@ from qai_hub_models.scorecard.envvars import (
 )
 from qai_hub_models.scorecard.path_compile import ScorecardCompilePath
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
+from qai_hub_models.utils.ai_hub_access import can_access_qualcomm_ai_hub
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
-from qai_hub_models.utils.qai_hub_helpers import can_access_qualcomm_ai_hub
 
 FOR_GALAXY_SUFFIX = "-for-galaxy"
 

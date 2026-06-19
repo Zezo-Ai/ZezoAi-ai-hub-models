@@ -9,7 +9,6 @@ import torch
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.carvana import CarvanaDataset
 from qai_hub_models.evaluators.segmentation_evaluator import SegmentationOutputEvaluator
 from qai_hub_models.utils.asset_loaders import (
@@ -26,6 +25,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -96,19 +96,16 @@ class UNet(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
     def get_output_spec(self) -> OutputSpec:
         return {
-            "mask": TensorSpec(),
+            "mask": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["mask"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

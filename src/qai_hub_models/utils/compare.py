@@ -12,6 +12,7 @@ import pandas as pd
 import torch
 
 from qai_hub_models.utils.base_model import BaseModel
+from qai_hub_models.utils.input_spec import get_channel_last
 from qai_hub_models.utils.transpose_channel import transpose_channel_first_to_last
 
 
@@ -70,8 +71,7 @@ def torch_inference(
     sample_inputs
         Map from input name to list of values for that input.
     return_channel_last_output
-        If set, will transpose outputs to channel last format. Will only
-        transpose the outputs specified by `model.get_channel_last_outputs()`.
+        If set, will transpose outputs to channel last format.
 
     Returns
     -------
@@ -82,7 +82,7 @@ def torch_inference(
     if not return_channel_last_output:
         return numpy_outputs
     new_outputs = []
-    channel_last_outputs = model.get_channel_last_outputs()
+    channel_last_outputs = get_channel_last(model.get_input_spec())
     for name, np_out in zip(list(model.get_output_spec()), numpy_outputs, strict=False):
         if name in channel_last_outputs:
             new_out = transpose_channel_first_to_last([name], {name: [np_out]})

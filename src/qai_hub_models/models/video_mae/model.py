@@ -27,7 +27,11 @@ from qai_hub_models.models.video_mae.external_repos.videomae.modeling_finetune i
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_torch
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    IoType,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -103,6 +107,7 @@ class VideoMAE(KineticsClassifier):
                 shape=(batch_size, num_views * 3, num_frames, 224, 224),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
         }
 

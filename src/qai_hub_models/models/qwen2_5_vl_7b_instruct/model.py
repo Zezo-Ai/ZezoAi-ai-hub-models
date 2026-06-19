@@ -52,7 +52,7 @@ from qai_hub_models import (
     SampleInputsType,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.datasets.imagenette import IMAGENETTE_ASSET
 from qai_hub_models.models._shared.llm.common import LLMIOType
@@ -91,7 +91,7 @@ from qai_hub_models.utils.base_model import (
 )
 from qai_hub_models.utils.checkpoint import CheckpointType
 from qai_hub_models.utils.export_result import MultiGraphComponentGroup, MultiGraphGroup
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 from qai_hub_models.utils.onnx.helpers import ONNXBundle, mock_torch_onnx_inference
 
 logger = logging.getLogger(__name__)

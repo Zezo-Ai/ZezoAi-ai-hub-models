@@ -8,7 +8,6 @@ from __future__ import annotations
 import torch
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models.track_anything.external_repos import EXTERNAL_REPO_PATHS
 from qai_hub_models.models.track_anything.external_repos.track_anything.tracker.model.network import (
     XMem,
@@ -26,6 +25,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -107,6 +107,7 @@ class TrackAnythingEncodeKeyWithShrinkage(TrackAnything):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -117,9 +118,6 @@ class TrackAnythingEncodeKeyWithShrinkage(TrackAnything):
             "selection": TensorSpec(),
             "f16": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class TrackAnythingEncodeValue(TrackAnything):
@@ -183,6 +181,7 @@ class TrackAnythingEncodeValue(TrackAnything):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
             "mask": TensorSpec(
                 shape=(batch_size, height, width),
@@ -207,9 +206,6 @@ class TrackAnythingEncodeValue(TrackAnything):
             "value": TensorSpec(),
             "hidden": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class TrackAnythingEncodeKeyWithoutShrinkage(TrackAnything):
@@ -261,6 +257,7 @@ class TrackAnythingEncodeKeyWithoutShrinkage(TrackAnything):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -272,9 +269,6 @@ class TrackAnythingEncodeKeyWithoutShrinkage(TrackAnything):
             "f8": TensorSpec(),
             "f4": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class TrackAnythingSegment(TrackAnything):

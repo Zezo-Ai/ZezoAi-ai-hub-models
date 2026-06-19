@@ -16,7 +16,7 @@ from torchvision.transforms import functional as F
 from qai_hub_models.datasets.coco import CocoDataset
 from qai_hub_models.utils.base_dataset import DatasetMetadata, DatasetSplit
 from qai_hub_models.utils.image_processing import preprocess_PIL_image
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 # VOC class index -> COCO category id.
 # Matches torchvision references/segmentation/coco_utils.py CAT_LIST exactly.
@@ -82,7 +82,7 @@ class CocoVocSegDataset(CocoDataset):
         input_spec: InputSpec | None = None,
     ) -> None:
         input_spec = input_spec or {
-            "image": ((1, 3, _DEFAULT_INPUT_SIZE, _DEFAULT_INPUT_SIZE), "")
+            "image": TensorSpec(shape=(1, 3, _DEFAULT_INPUT_SIZE, _DEFAULT_INPUT_SIZE))
         }
         self.input_height: int = input_spec["image"][0][2]
         self.input_width: int = input_spec["image"][0][3]

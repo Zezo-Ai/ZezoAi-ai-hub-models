@@ -11,7 +11,6 @@ import torch
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.cocowholebody import CocoWholeBodyDataset
 from qai_hub_models.evaluators.wholebody_pose_evaluator import WholeBodyPoseEvaluator
 from qai_hub_models.extern.mmengine import patch_mmengine_pkgresources
@@ -28,6 +27,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 

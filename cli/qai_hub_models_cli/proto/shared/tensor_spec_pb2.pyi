@@ -14,9 +14,11 @@ Tensor specification types for model I/O.
 
 Defines the core types for specifying tensor metadata:
 - TensorSpec: Specification for a tensor (shape, dtype, metadata)
-- IoType: Semantic type of a tensor (image, tensor)
+- IoType: Semantic type of a tensor (image, tensor, bbox)
 - ColorFormat: Color format for image tensors
 - ImageMetadata: Metadata for image tensors
+- BboxFormat: Bounding box coordinate format
+- BboxMetadata: Metadata for bounding box tensors
 
 These types are used in model.get_input_spec() and in metadata.yaml files.
 """
@@ -115,6 +117,32 @@ COLOR_FORMAT_BGR: ColorFormat.ValueType  # 2
 COLOR_FORMAT_GRAYSCALE: ColorFormat.ValueType  # 3
 global___ColorFormat = ColorFormat
 
+class _BboxFormat:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _BboxFormatEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_BboxFormat.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    BBOX_FORMAT_UNSPECIFIED: _BboxFormat.ValueType  # 0
+    BBOX_FORMAT_XYXY: _BboxFormat.ValueType  # 1
+    """(x1, y1, x2, y2) - top-left and bottom-right corners"""
+    BBOX_FORMAT_XYWH: _BboxFormat.ValueType  # 2
+    """(x, y, width, height) - top-left corner and size"""
+    BBOX_FORMAT_CXCYWH: _BboxFormat.ValueType  # 3
+    """(cx, cy, width, height) - center and size"""
+
+class BboxFormat(_BboxFormat, metaclass=_BboxFormatEnumTypeWrapper):
+    """Bounding box coordinate format."""
+
+BBOX_FORMAT_UNSPECIFIED: BboxFormat.ValueType  # 0
+BBOX_FORMAT_XYXY: BboxFormat.ValueType  # 1
+"""(x1, y1, x2, y2) - top-left and bottom-right corners"""
+BBOX_FORMAT_XYWH: BboxFormat.ValueType  # 2
+"""(x, y, width, height) - top-left corner and size"""
+BBOX_FORMAT_CXCYWH: BboxFormat.ValueType  # 3
+"""(cx, cy, width, height) - center and size"""
+global___BboxFormat = BboxFormat
+
 @typing.final
 class ImageMetadata(google.protobuf.message.Message):
     """Metadata specific to image tensor inputs.
@@ -133,6 +161,25 @@ class ImageMetadata(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal["color_format", b"color_format"]) -> None: ...
 
 global___ImageMetadata = ImageMetadata
+
+@typing.final
+class BboxMetadata(google.protobuf.message.Message):
+    """Metadata specific to bounding box tensor outputs.
+    Groups bbox-related metadata fields like coordinate format.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    BBOX_FORMAT_FIELD_NUMBER: builtins.int
+    bbox_format: global___BboxFormat.ValueType
+    def __init__(
+        self,
+        *,
+        bbox_format: global___BboxFormat.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["bbox_format", b"bbox_format"]) -> None: ...
+
+global___BboxMetadata = BboxMetadata
 
 @typing.final
 class QuantizationParameters(google.protobuf.message.Message):
@@ -168,12 +215,21 @@ class TensorSpec(google.protobuf.message.Message):
     VALUE_RANGE_FIELD_NUMBER: builtins.int
     IO_TYPE_FIELD_NUMBER: builtins.int
     IMAGE_METADATA_FIELD_NUMBER: builtins.int
+    BBOX_METADATA_FIELD_NUMBER: builtins.int
+    SOFTMAX_APPLIED_FIELD_NUMBER: builtins.int
+    LABELS_FILE_FIELD_NUMBER: builtins.int
     name: builtins.str
     """Generic Tensor Metadata"""
     dtype: global___DType.ValueType
     description: builtins.str
     io_type: global___IoType.ValueType
     """IMAGE for image tensors, TENSOR for generic tensors."""
+    softmax_applied: builtins.bool
+    """Whether softmax/sigmoid has been applied to this tensor's values."""
+    labels_file: builtins.str
+    """Name of the labels file that maps indices to class names
+    (e.g. "coco_labels.txt").
+    """
     @property
     def shape(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
     @property
@@ -186,6 +242,10 @@ class TensorSpec(google.protobuf.message.Message):
     def image_metadata(self) -> global___ImageMetadata:
         """Image-specific metadata (color_format). Only used when io_type is IMAGE."""
 
+    @property
+    def bbox_metadata(self) -> global___BboxMetadata:
+        """Bbox-specific metadata (bbox_format). Only used when io_type is BBOX."""
+
     def __init__(
         self,
         *,
@@ -197,13 +257,20 @@ class TensorSpec(google.protobuf.message.Message):
         value_range: shared.range_pb2.Range | None = ...,
         io_type: global___IoType.ValueType = ...,
         image_metadata: global___ImageMetadata | None = ...,
+        bbox_metadata: global___BboxMetadata | None = ...,
+        softmax_applied: builtins.bool = ...,
+        labels_file: builtins.str | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_description", b"_description", "_image_metadata", b"_image_metadata", "_quantization_parameters", b"_quantization_parameters", "_value_range", b"_value_range", "description", b"description", "image_metadata", b"image_metadata", "quantization_parameters", b"quantization_parameters", "value_range", b"value_range"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_description", b"_description", "_image_metadata", b"_image_metadata", "_quantization_parameters", b"_quantization_parameters", "_value_range", b"_value_range", "description", b"description", "dtype", b"dtype", "image_metadata", b"image_metadata", "io_type", b"io_type", "name", b"name", "quantization_parameters", b"quantization_parameters", "shape", b"shape", "value_range", b"value_range"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_bbox_metadata", b"_bbox_metadata", "_description", b"_description", "_image_metadata", b"_image_metadata", "_labels_file", b"_labels_file", "_quantization_parameters", b"_quantization_parameters", "_value_range", b"_value_range", "bbox_metadata", b"bbox_metadata", "description", b"description", "image_metadata", b"image_metadata", "labels_file", b"labels_file", "quantization_parameters", b"quantization_parameters", "value_range", b"value_range"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_bbox_metadata", b"_bbox_metadata", "_description", b"_description", "_image_metadata", b"_image_metadata", "_labels_file", b"_labels_file", "_quantization_parameters", b"_quantization_parameters", "_value_range", b"_value_range", "bbox_metadata", b"bbox_metadata", "description", b"description", "dtype", b"dtype", "image_metadata", b"image_metadata", "io_type", b"io_type", "labels_file", b"labels_file", "name", b"name", "quantization_parameters", b"quantization_parameters", "shape", b"shape", "softmax_applied", b"softmax_applied", "value_range", b"value_range"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_bbox_metadata", b"_bbox_metadata"]) -> typing.Literal["bbox_metadata"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_description", b"_description"]) -> typing.Literal["description"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_image_metadata", b"_image_metadata"]) -> typing.Literal["image_metadata"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_labels_file", b"_labels_file"]) -> typing.Literal["labels_file"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_quantization_parameters", b"_quantization_parameters"]) -> typing.Literal["quantization_parameters"] | None: ...
     @typing.overload

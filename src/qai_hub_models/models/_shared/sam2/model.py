@@ -22,7 +22,6 @@ from sam2.modeling.sam2_utils import MLP as SAM2MaskDecoderMLP
 from sam2.modeling.sam2_utils import LayerNorm2d
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models._shared.sam.model_patches import (
     Conv2DInplaceLinearSAMMaskDecoderMLP,
     SplitHeadSAMDecoderAttention,
@@ -40,6 +39,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 from qai_hub_models.utils.window_partitioning import (
@@ -157,6 +157,7 @@ class SAM2Encoder(BaseModel, ABC):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
             "unnorm_coords": TensorSpec(
                 shape=(1, num_points, 2),
@@ -168,24 +169,21 @@ class SAM2Encoder(BaseModel, ABC):
             ),
         }
 
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return [
-            "image_embeddings",
-            "high_res_features1",
-            "high_res_features2",
-            "pix_feat",
-        ]
-
     def get_output_spec(self) -> OutputSpec:
         return {
-            "image_embeddings": TensorSpec(),
-            "high_res_features1": TensorSpec(),
-            "high_res_features2": TensorSpec(),
+            "image_embeddings": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
+            "high_res_features1": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
+            "high_res_features2": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
             "sparse_embedding": TensorSpec(),
-            "pix_feat": TensorSpec(),
+            "pix_feat": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
         }
 
     def get_hub_litemp_percentage(self, _: Precision) -> float:
@@ -278,14 +276,17 @@ class SAM2Decoder(BaseModel, ABC):
             "image_embeddings": TensorSpec(
                 shape=(1, self.prompt_encoder_embed_dim, *self._bb_feat_sizes[2]),
                 dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "high_res_features1": TensorSpec(
                 shape=(1, self.high_res_features1_dim, *self._bb_feat_sizes[0]),
                 dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "high_res_features2": TensorSpec(
                 shape=(1, self.high_res_features2_dim, *self._bb_feat_sizes[1]),
                 dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "sparse_embedding": TensorSpec(
                 shape=(1, num_points + 1, self.prompt_encoder_embed_dim),
@@ -293,15 +294,11 @@ class SAM2Decoder(BaseModel, ABC):
             ),
         }
 
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image_embeddings", "high_res_features1", "high_res_features2"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["masks"]
-
     def get_output_spec(self) -> OutputSpec:
         return {
-            "masks": TensorSpec(),
+            "masks": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
             "scores": TensorSpec(),
         }
 
@@ -376,7 +373,9 @@ class SAM2VideoDecoder(SAM2Decoder):
 
     def get_output_spec(self) -> OutputSpec:
         return {
-            "masks": TensorSpec(),
+            "masks": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
             "scores": TensorSpec(),
             "obj_ptr": TensorSpec(),
             "object_score_logits": TensorSpec(),

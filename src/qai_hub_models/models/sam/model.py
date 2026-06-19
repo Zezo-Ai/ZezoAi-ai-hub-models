@@ -21,7 +21,6 @@ from segment_anything.modeling.transformer import (
 from segment_anything.utils.onnx import SamOnnxModel
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models._shared.sam.model_patches import (
     Conv2DInplaceLinearSAMMaskDecoderMLP,
     Conv2DInplaceLinearSAMTransformerMLPBlock,
@@ -40,6 +39,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 from qai_hub_models.utils.window_partitioning import (
@@ -153,6 +153,7 @@ class SAMEncoderPart(BaseModel):
                     image_metadata=ImageMetadata(
                         color_format=ColorFormat.RGB,
                     ),
+                    apply_runtime_channel_reordering=True,
                 ),
             }
         return {
@@ -168,23 +169,12 @@ class SAMEncoderPart(BaseModel):
             ),
         }
 
-    def get_channel_last_inputs(self) -> list[str]:
-        if self.include_embedding:
-            return list(self.get_input_spec().keys())
-        return []
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["image_embeddings"] if self.include_neck else []
-
     def get_output_spec(self) -> OutputSpec:
-        return {
-            name: TensorSpec()
-            for name in (
-                ["image_embeddings"]
-                if self.include_neck
-                else ["intermediate_SAM_encoder_output"]
-            )
-        }
+        if self.include_neck:
+            return {
+                "image_embeddings": TensorSpec(apply_runtime_channel_reordering=True)
+            }
+        return {"intermediate_SAM_encoder_output": TensorSpec()}
 
     @classmethod
     def from_pretrained(cls, model_type: str = BASE_MODEL_TYPE) -> Self:
@@ -286,6 +276,7 @@ class SAMDecoder(BaseModel):
                 shape=(1, embed_dim, *embed_size),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
             "point_coords": TensorSpec(
                 shape=(1, num_of_points, 2),
@@ -303,6 +294,7 @@ class SAMDecoder(BaseModel):
                 shape=(1, 1, *mask_input_size),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             )
             input_spec["has_mask_input"] = TensorSpec(
                 shape=(1,),
@@ -311,18 +303,9 @@ class SAMDecoder(BaseModel):
             )
         return input_spec
 
-    def get_channel_last_inputs(self, has_mask_input: bool = False) -> list[str]:
-        out = ["image_embeddings"]
-        if has_mask_input:
-            out.append("mask_input")
-        return out
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["masks"]
-
     def get_output_spec(self) -> OutputSpec:
         return {
-            "masks": TensorSpec(),
+            "masks": TensorSpec(apply_runtime_channel_reordering=True),
             "scores": TensorSpec(),
         }
 

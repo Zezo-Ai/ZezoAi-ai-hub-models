@@ -19,6 +19,7 @@ import qai_hub as hub
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models.qwen2_7b_instruct import MODEL_ID, Model
+from qai_hub_models.utils.ai_hub_access import can_access_qualcomm_ai_hub
 from qai_hub_models.utils.args import (
     export_parser,
 )
@@ -30,9 +31,6 @@ from qai_hub_models.utils.path_helpers import get_next_free_path
 from qai_hub_models.utils.printing import (
     print_profile_metrics_from_job,
     print_tool_versions,
-)
-from qai_hub_models.utils.qai_hub_helpers import (
-    can_access_qualcomm_ai_hub,
 )
 
 

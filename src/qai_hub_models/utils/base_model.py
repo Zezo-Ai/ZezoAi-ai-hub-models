@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+from abc import ABC, abstractmethod
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, NamedTuple, cast
@@ -18,7 +19,7 @@ from qai_hub_models import (
     SampleInputsType,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.protocols import (
     EvaluatableModelProtocol,
     FromPrecompiledProtocol,
@@ -28,6 +29,8 @@ from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.input_spec import (
     InputSpec,
+    OutputSpec,
+    get_channel_last,
     make_torch_inputs,
 )
 from qai_hub_models.utils.kwarg_helpers import cli_friendly_class_name
@@ -66,25 +69,19 @@ def _model_cls_name(cls_instance: Any) -> str:
     return cli_friendly_class_name(type(cls_instance).__name__)
 
 
-class WorkbenchModel:
+class WorkbenchModel(ABC):
     """Base interface for AI Hub Workbench models."""
 
     # -- Subclasses must implement these --
+    @abstractmethod
     def get_input_spec(self, *args: Any, **kwargs: Any) -> InputSpec:
         """
         Returns a map from `{input_name -> (shape, dtype)}`
         specifying the shape and dtype for each input argument.
         """
-        raise NotImplementedError
+        ...
 
-    def serialize(
-        self,
-        output_dir: str | os.PathLike,
-        input_spec: InputSpec | None = None,
-    ) -> Path:
-        """Convert to an AI Hub Workbench source model appropriate for the export method."""
-        raise NotImplementedError
-
+    @abstractmethod
     def get_output_spec(self) -> OutputSpec:
         """
         Returns a map from `{output_name -> TensorSpec}` with semantic metadata
@@ -92,7 +89,16 @@ class WorkbenchModel:
 
         Override in subclasses to provide output metadata for the model.
         """
-        return {}
+        ...
+
+    @abstractmethod
+    def serialize(
+        self,
+        output_dir: str | os.PathLike,
+        input_spec: InputSpec | None = None,
+    ) -> Path:
+        """Convert to an AI Hub Workbench source model appropriate for the export method."""
+        ...
 
     def write_supplementary_files(
         self,
@@ -123,20 +129,6 @@ class WorkbenchModel:
     def context_graph_name(self) -> str:
         """The default name used for the graph context when compiling to a QNN Context Binary. May be overriden in the parameters of get_compile_options."""
         return self.name
-
-    def get_channel_last_inputs(self) -> list[str]:
-        """
-        A list of input names that should be transposed to channel-last format
-        for the on-device model in order to improve performance.
-        """
-        return []
-
-    def get_channel_last_outputs(self) -> list[str]:
-        """
-        A list of output names that should be transposed to channel-last format
-        for the on-device model in order to improve performance.
-        """
-        return []
 
     def get_unsupported_reason(
         self, target_runtime: TargetRuntime, device: Device
@@ -190,9 +182,8 @@ class WorkbenchModel:
         return build_compile_options(
             target_runtime,
             precision,
-            list(self.get_output_spec()),
-            self.get_channel_last_inputs(),
-            self.get_channel_last_outputs(),
+            self.get_input_spec(),
+            self.get_output_spec(),
             context_graph_name or self.context_graph_name,
             other_compile_options,
         )
@@ -236,10 +227,8 @@ class WorkbenchModel:
         input_spec = input_spec or self.get_input_spec()
         inputs = self._sample_inputs_impl(input_spec, **kwargs)
         inputs = expand_to_batch_size(inputs, input_spec)
-        if use_channel_last_format and self.get_channel_last_inputs():
-            return transpose_channel_first_to_last(
-                self.get_channel_last_inputs(), inputs
-            )
+        if use_channel_last_format and (cl_inputs := get_channel_last(input_spec)):
+            return transpose_channel_first_to_last(cl_inputs, inputs)
         return inputs
 
     def _sample_inputs_impl(

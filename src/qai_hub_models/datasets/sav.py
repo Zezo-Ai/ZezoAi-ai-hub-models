@@ -21,7 +21,7 @@ from qai_hub_models.utils.base_dataset import (
     DatasetSplit,
 )
 from qai_hub_models.utils.image_processing import numpy_image_to_torch
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 SAV_FOLDER_NAME = "sav"
@@ -49,7 +49,7 @@ class SaVDataset(BaseDataset):
         input_spec: InputSpec | None = None,
     ) -> None:
         self.input_tar = input_tar
-        input_spec = input_spec or {"image": ((1, 3, 1024, 1024), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 1024, 1024))}
         self.input_height = input_spec["image"][0][2]
         self.input_width = input_spec["image"][0][3]
         self.data_path = ASSET_CONFIG.get_local_store_dataset_path(

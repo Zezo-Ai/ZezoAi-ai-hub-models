@@ -22,7 +22,7 @@ from qai_hub_models.models.mediapipe_selfie.utils import (
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 2
@@ -375,8 +375,20 @@ class MediapipeSelfie(SelfieSegmentor):
 
     def get_input_spec(self) -> InputSpec:
         if self.image_type == "square":
-            return {"image": ((1, 3, *self.DEFAULT_HW), "float32")}
-        return {"image": ((1, 3, 144, self.DEFAULT_HW[0]), "float32")}
+            return {
+                "image": TensorSpec(
+                    shape=(1, 3, *self.DEFAULT_HW),
+                    dtype="float32",
+                    apply_runtime_channel_reordering=True,
+                )
+            }
+        return {
+            "image": TensorSpec(
+                shape=(1, 3, 144, self.DEFAULT_HW[0]),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            )
+        }
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

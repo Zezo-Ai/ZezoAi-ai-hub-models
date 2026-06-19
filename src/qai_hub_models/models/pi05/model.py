@@ -32,7 +32,6 @@ from qai_hub_models import (
     SampleInputsType,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models._shared.llm._utils import (
     _set_matmul_second_input_to_8b,
     _set_tensors_to_output_8b_sym,
@@ -60,6 +59,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
     make_torch_inputs,
 )

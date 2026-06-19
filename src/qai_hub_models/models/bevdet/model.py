@@ -13,7 +13,6 @@ from qai_hub.client import Device
 from typing_extensions import Self
 
 from qai_hub_models import Precision, SampleInputsType, TargetRuntime
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.nuscenes import NuscenesDataset
 from qai_hub_models.evaluators.nuscenes_evaluator import (
     NuscenesObjectDetectionEvaluator,
@@ -42,7 +41,7 @@ from qai_hub_models.utils.asset_loaders import (
 )
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_model import BaseModel, SerializationSettings
-from qai_hub_models.utils.input_spec import InputSpec, IoType, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, IoType, OutputSpec, TensorSpec
 
 with patch_mmdet_no_build_deps():
     from mmdet.models.task_modules import BaseBBoxCoder

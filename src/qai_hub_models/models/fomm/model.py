@@ -8,7 +8,6 @@ from __future__ import annotations
 import torch
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models.fomm.external_repos.first_order_model.demo import (
     load_checkpoints,
 )
@@ -25,6 +24,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -103,6 +103,7 @@ class FOMMDetector(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -111,9 +112,6 @@ class FOMMDetector(BaseModel):
             "keypoints": TensorSpec(),
             "jacobian": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class FOMMGenerator(BaseModel):
@@ -193,6 +191,7 @@ class FOMMGenerator(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
             "source_keypoint_values": TensorSpec(
                 shape=(batch_size, 10, 2),
@@ -220,9 +219,6 @@ class FOMMGenerator(BaseModel):
         return {
             "output_image": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class FOMM(WorkbenchModelCollection):

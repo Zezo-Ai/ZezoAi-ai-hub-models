@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
@@ -16,11 +17,11 @@ from qai_hub_models import (
     SampleInputsType,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.models.protocols import FromPretrainedProtocol
 from qai_hub_models.utils.base_model import _model_cls_name
 from qai_hub_models.utils.export_result import MultiGraphGroup
-from qai_hub_models.utils.input_spec import InputSpec, make_torch_inputs
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, make_torch_inputs
 from qai_hub_models.utils.qai_hub_helpers import (
     build_compile_options,
     build_link_options,
@@ -34,7 +35,7 @@ __all__ = [
 ]
 
 
-class MultiGraphWorkbenchModel(FromPretrainedProtocol):
+class MultiGraphWorkbenchModel(ABC, FromPretrainedProtocol):
     """
     A model composed of multiple independently-compiled graphs that are linked into one executable binary.
 
@@ -52,30 +53,30 @@ class MultiGraphWorkbenchModel(FromPretrainedProtocol):
 
     # -- Subclasses must implement these --
     @property
-    def graph_names(self) -> list[str]:
-        raise NotImplementedError
+    @abstractmethod
+    def graph_names(self) -> list[str]: ...
 
-    def get_graph_output_spec(self, graph_name: str) -> OutputSpec:
-        raise NotImplementedError
+    @abstractmethod
+    def get_graph_output_spec(self, graph_name: str) -> OutputSpec: ...
 
+    @abstractmethod
     def get_graph_input_spec(
         self, graph_name: str, *args: Any, **kwargs: Any
-    ) -> InputSpec:
-        raise NotImplementedError
+    ) -> InputSpec: ...
 
-    @property
-    def shared_source_model(self) -> bool:
-        return False
-
+    @abstractmethod
     def serialize_graph(
         self,
         graph_name: str,
         output_dir: str | os.PathLike,
         input_spec: InputSpec | None = None,
-    ) -> Path:
-        raise NotImplementedError()
+    ) -> Path: ...
 
     # -- Subclasses may override these --
+    @property
+    def shared_source_model(self) -> bool:
+        return False
+
     @property
     def name(self) -> str:
         return _model_cls_name(self)
@@ -156,9 +157,8 @@ class MultiGraphWorkbenchModel(FromPretrainedProtocol):
         return build_compile_options(
             target_runtime,
             precision,
-            list(self.get_graph_output_spec(graph_name)),
-            self.get_graph_channel_last_input(graph_name),
-            self.get_graph_channel_last_output(graph_name),
+            self.get_graph_input_spec(graph_name),
+            self.get_graph_output_spec(graph_name),
             graph_name,
             other_compile_options,
         )
@@ -197,19 +197,6 @@ class MultiGraphWorkbenchModel(FromPretrainedProtocol):
     def get_output_spec(self) -> MultiGraphGroup[OutputSpec]:
         return MultiGraphGroup(
             {name: self.get_graph_output_spec(name) for name in self.graph_names}
-        )
-
-    def get_channel_last_inputs(self) -> MultiGraphGroup[list[str]]:
-        return MultiGraphGroup(
-            {name: self.get_graph_channel_last_input(name) for name in self.graph_names}
-        )
-
-    def get_channel_last_outputs(self) -> MultiGraphGroup[list[str]]:
-        return MultiGraphGroup(
-            {
-                name: self.get_graph_channel_last_output(name)
-                for name in self.graph_names
-            }
         )
 
     # -- Auto-built hub option dicts --

@@ -13,7 +13,6 @@ from torch import Tensor, nn
 from typing_extensions import Self
 
 from qai_hub_models import Precision, SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.hagrid import PalmDetectorDataset
 from qai_hub_models.models._shared.common import apply_module_function_recursively
 from qai_hub_models.models.mediapipe_hand.model import (
@@ -31,6 +30,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -758,6 +758,7 @@ class HandLandmarkDetector(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -768,9 +769,6 @@ class HandLandmarkDetector(BaseModel):
             "lr": TensorSpec(),
             "world_landmarks": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

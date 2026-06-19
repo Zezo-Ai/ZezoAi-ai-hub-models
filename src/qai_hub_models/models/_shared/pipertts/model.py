@@ -17,7 +17,7 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.datasets.common_voice import CommonVoiceText
 from qai_hub_models.models._shared.pipertts.pipertts_metadata_json import (
     write_pipertts_supplementary_files,
@@ -37,7 +37,7 @@ from qai_hub_models.utils.base_model import (
     BaseModel,
     SerializationSettings,
 )
-from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, TensorSpec
 
 SAMPLE_RATE = 22050
 DEFAULT_NOISE_SCALE = 0.667

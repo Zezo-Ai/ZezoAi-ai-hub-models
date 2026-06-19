@@ -17,7 +17,7 @@ from qai_hub_models import (
     SampleInputsType,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.datasets.common import BaseDataset
 from qai_hub_models.models.protocols import FromPrecompiledProtocol
 from qai_hub_models.protocols import FromPretrainedProtocol
@@ -29,6 +29,7 @@ from qai_hub_models.utils.base_model import (
 from qai_hub_models.utils.export_result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     InputSpec,
+    OutputSpec,
 )
 from qai_hub_models.utils.kwarg_helpers import (
     filter_kwargs,
@@ -146,9 +147,8 @@ class CollectionModel(ABC):
         return build_compile_options(
             target_runtime,
             precision,
-            list(self.get_component_output_spec(component_name).keys()),
-            self.get_component_channel_last_inputs(component_name),
-            self.get_component_channel_last_outputs(component_name),
+            self.get_component_input_spec(component_name),
+            self.get_component_output_spec(component_name),
             context_graph_name,
         )
 
@@ -409,12 +409,6 @@ class WorkbenchModelCollection(
     ) -> float | None:
         return self.components[component_name].get_hub_litemp_percentage(precision)
 
-    def get_component_channel_last_inputs(self, component_name: str) -> list[str]:
-        return self.components[component_name].get_channel_last_inputs()
-
-    def get_component_channel_last_outputs(self, component_name: str) -> list[str]:
-        return self.components[component_name].get_channel_last_outputs()
-
     def get_component_mixed_precision(
         self, component_name: str, precision: Precision
     ) -> Precision:
@@ -553,12 +547,6 @@ class PrecompiledWorkbenchModelCollection(
             target_runtime, device
         )
 
-    def get_component_channel_last_inputs(self, component_name: str) -> list[str]:
-        return self.components[component_name].get_channel_last_inputs()
-
-    def get_component_channel_last_outputs(self, component_name: str) -> list[str]:
-        return self.components[component_name].get_channel_last_outputs()
-
     def get_component_hub_compile_options(
         self,
         component_name: str,
@@ -566,6 +554,7 @@ class PrecompiledWorkbenchModelCollection(
         precision: Precision,
         other_compile_options: str = "",
         device: Device | None = None,
+        context_graph_name: str | None = None,
     ) -> str:
         raise NotImplementedError()
 

@@ -14,7 +14,6 @@ from torch import nn
 from typing_extensions import Self
 
 from qai_hub_models import Precision, SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.cocobody import CocoBodyDataset
 from qai_hub_models.evaluators.posenet_mobilenet_evaluator import (
     PosenetMobilenetEvaluator,
@@ -35,6 +34,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -99,6 +99,7 @@ class PosenetMobilenet(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -115,9 +116,6 @@ class PosenetMobilenet(BaseModel):
         self, input_spec: InputSpec | None = None
     ) -> SampleInputsType:
         return {"image": [load_numpy(SAMPLE_INPUTS)]}
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     def get_evaluator(self) -> BaseEvaluator:
         h, w = self.get_input_spec()["image"][0][2:]

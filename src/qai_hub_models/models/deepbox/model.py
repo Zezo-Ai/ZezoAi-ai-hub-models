@@ -11,7 +11,6 @@ from torchvision.models import vgg
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.kitti import KittiDataset
 from qai_hub_models.models.deepbox.external_repos.boundingbox_3d.torch_lib import (
     Model as TorchLibModel,
@@ -31,6 +30,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -70,6 +70,7 @@ class Yolo2DDetection(YoloV3):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -149,6 +150,7 @@ class VGG3DDetection(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -158,9 +160,6 @@ class VGG3DDetection(BaseModel):
             "conf": TensorSpec(),
             "dim": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class DeepBox(WorkbenchModelCollection):

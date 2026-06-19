@@ -41,8 +41,10 @@ from qai_hub_models.configs.proto_helpers import (
     _USE_CASE_TO_PROTO,
 )
 from qai_hub_models.configs.tensor_spec import (
+    _BBOX_FORMAT_TO_PROTO,
     _COLOR_FORMAT_TO_PROTO,
     _IO_TYPE_TO_PROTO,
+    BboxFormat,
     ColorFormat,
     IoType,
 )
@@ -233,4 +235,19 @@ class TestColorFormatMapping:
             tensor_spec_pb2.DESCRIPTOR.enum_types_by_name["ColorFormat"]
         )
         mapped = set(_COLOR_FORMAT_TO_PROTO.values())
+        assert proto_values == mapped
+
+
+class TestBboxFormatMapping:
+    def test_python_to_proto(self) -> None:
+        for bf in BboxFormat:
+            assert bf.value in _BBOX_FORMAT_TO_PROTO, (
+                f"BboxFormat.{bf.name} has no proto mapping"
+            )
+
+    def test_proto_to_python(self) -> None:
+        proto_values = _proto_enum_values(
+            tensor_spec_pb2.DESCRIPTOR.enum_types_by_name["BboxFormat"]
+        )
+        mapped = set(_BBOX_FORMAT_TO_PROTO.values())
         assert proto_values == mapped

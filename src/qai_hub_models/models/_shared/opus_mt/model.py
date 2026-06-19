@@ -15,7 +15,6 @@ import torch
 from transformers import MarianMTModel, MarianTokenizer
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models._shared.opus_mt.model_adaptation import (
     QcMarianDecoder,
     QcMarianEncoder,
@@ -24,7 +23,7 @@ from qai_hub_models.models._shared.opus_mt.model_adaptation import (
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.export_result import ComponentGroup
-from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, TensorSpec
 
 MODEL_ID = "opus_mt_shared"
 MODEL_ASSET_VERSION = 1

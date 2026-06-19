@@ -9,7 +9,6 @@ from ultralytics.nn.modules.head import Segment, Segment26, YOLOESegment
 from ultralytics.nn.tasks import SegmentationModel
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models._shared.ultralytics.segment_patches import (
     patch_ultralytics_segmentation_head,
     patch_ultralytics_segmentation_head_26,
@@ -27,6 +26,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -93,6 +93,7 @@ class UltralyticsSingleClassSegmentor(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             )
         }
 
@@ -108,14 +109,11 @@ class UltralyticsSingleClassSegmentor(BaseModel):
                 labels_file="coco_labels.txt",
             ),
             "mask_coeffs": TensorSpec(io_type=IoType.TENSOR),
-            "mask_protos": TensorSpec(io_type=IoType.TENSOR),
+            "mask_protos": TensorSpec(
+                io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
+            ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["mask_protos"]
 
 
 class UltralyticsMulticlassSegmentor(BaseModel):
@@ -156,6 +154,7 @@ class UltralyticsMulticlassSegmentor(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             )
         }
 
@@ -175,14 +174,11 @@ class UltralyticsMulticlassSegmentor(BaseModel):
                 io_type=IoType.TENSOR,
                 labels_file="coco_labels.txt",
             ),
-            "mask_protos": TensorSpec(io_type=IoType.TENSOR),
+            "mask_protos": TensorSpec(
+                io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
+            ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["mask_protos"]
 
     def forward(
         self, image: torch.Tensor

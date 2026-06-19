@@ -12,7 +12,7 @@ import torch
 from qai_hub_models.utils.asset_loaders import load_image
 from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, DatasetSplit
 from qai_hub_models.utils.image_processing import preprocess_PIL_image, resize_pad
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 FLICKR_FOLDER_NAME = "flickr1024"
@@ -56,7 +56,7 @@ class Flickr1024Dataset(BaseDataset):
         self.lq_files = sorted(os.listdir(self.lq_folder))
         self.gt_files = sorted(os.listdir(self.gt_folder))
 
-        input_spec = input_spec or {"l_image": ((1, 3, 128, 128), "")}
+        input_spec = input_spec or {"l_image": TensorSpec(shape=(1, 3, 128, 128))}
         self.target_h = input_spec["l_image"][0][2]
         self.target_w = input_spec["l_image"][0][3]
 

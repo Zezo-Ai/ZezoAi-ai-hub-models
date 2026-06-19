@@ -24,7 +24,6 @@ from sam3.model.sam3_image import Sam3Image as Sam3
 from sam3.model.text_encoder_ve import VETextEncoder
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models.sam3.model_patches import (
     SAM3Normalize,
     SplitHeadMultiheadAttention,
@@ -40,7 +39,7 @@ from qai_hub_models.utils.base_model import (
     SerializationSettings,
 )
 from qai_hub_models.utils.export_result import ComponentGroup
-from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, TensorSpec
 from qai_hub_models.utils.window_partitioning import (
     window_partition_5d,
     window_unpartition_5d,
@@ -108,7 +107,11 @@ class SAM3VisionBackbone(BaseModel):
         img_height: int = 1008,
         img_width: int = 1008,
     ) -> InputSpec:
-        return {"image": ((batch_size, 3, img_height, img_width), "float32")}
+        return {
+            "image": TensorSpec(
+                shape=(batch_size, 3, img_height, img_width), dtype="float32"
+            )
+        }
 
     def get_output_spec(self) -> OutputSpec:
         return {
@@ -303,13 +306,17 @@ class SAM3Head(BaseModel):
         mask_w: int = 288,
     ) -> InputSpec:
         return {
-            "tokenized": ((1, seq_len), "int32"),
-            "backbone_fpn_0": ((1, d_model, mask_h, mask_w), "float32"),
-            "backbone_fpn_1": (
-                (1, d_model, mask_h // 2, mask_w // 2),
-                "float32",
+            "tokenized": TensorSpec(shape=(1, seq_len), dtype="int32"),
+            "backbone_fpn_0": TensorSpec(
+                shape=(1, d_model, mask_h, mask_w), dtype="float32"
             ),
-            "backbone_fpn_2": ((1, d_model, fpn_h, fpn_w), "float32"),
+            "backbone_fpn_1": TensorSpec(
+                shape=(1, d_model, mask_h // 2, mask_w // 2),
+                dtype="float32",
+            ),
+            "backbone_fpn_2": TensorSpec(
+                shape=(1, d_model, fpn_h, fpn_w), dtype="float32"
+            ),
         }
 
     def get_output_spec(self) -> OutputSpec:

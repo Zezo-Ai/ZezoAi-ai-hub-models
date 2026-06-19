@@ -15,7 +15,7 @@ import torch
 from qai_hub_models.models.eyegaze.app import preprocess_eye_crop
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, DatasetSplit
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 MPII_GAZE_VERSION = 2
 
@@ -40,7 +40,7 @@ class MPIIGazeDataset(BaseDataset):
         self.mpii_path = MPII_GAZE_ASSET.extracted_path
         BaseDataset.__init__(self, self.mpii_path, split)
 
-        input_spec = input_spec or {"image": ((1, 96, 160), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 96, 160))}
         self.input_height = input_spec["image"][0][1]
         self.input_width = input_spec["image"][0][2]
 

@@ -13,7 +13,6 @@ from torch import nn
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.cocobody import CocoBodyDataset
 from qai_hub_models.evaluators.centernet_pose_evaluator import CenternetPoseEvaluator
 from qai_hub_models.models._shared.centernet.external_repos.centernet.src.lib.models.decode import (
@@ -29,6 +28,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -168,6 +168,7 @@ class CenterNetPose(CenterNet):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -197,7 +198,3 @@ class CenterNetPose(CenterNet):
 
     def get_calibration_dataset_cls(self) -> type[BaseDataset]:
         return CocoBodyDataset
-
-    @staticmethod
-    def get_channel_last_inputs() -> list[str]:
-        return ["image"]

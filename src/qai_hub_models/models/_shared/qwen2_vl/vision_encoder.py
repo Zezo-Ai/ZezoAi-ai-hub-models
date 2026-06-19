@@ -26,10 +26,9 @@ from typing import TYPE_CHECKING, Any
 import torch
 import torch.nn.functional as F
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 
 if TYPE_CHECKING:
     from aimet_onnx.quantsim import QuantizationSimModel
@@ -458,11 +457,15 @@ class Qwen2VLVisionEncoder(BaseModel):
         rope_dim = 40  # Default for Qwen2.5-VL-7B
 
         return {
-            "pixel_values": ((seq_len, patch_dim), "float32"),
-            "position_ids_cos": ((seq_len, rope_dim), "float32"),
-            "position_ids_sin": ((seq_len, rope_dim), "float32"),
-            "window_attention_mask": ((1, seq_len, seq_len), "float32"),
-            "full_attention_mask": ((1, seq_len, seq_len), "float32"),
+            "pixel_values": TensorSpec(shape=(seq_len, patch_dim), dtype="float32"),
+            "position_ids_cos": TensorSpec(shape=(seq_len, rope_dim), dtype="float32"),
+            "position_ids_sin": TensorSpec(shape=(seq_len, rope_dim), dtype="float32"),
+            "window_attention_mask": TensorSpec(
+                shape=(1, seq_len, seq_len), dtype="float32"
+            ),
+            "full_attention_mask": TensorSpec(
+                shape=(1, seq_len, seq_len), dtype="float32"
+            ),
         }
 
     def get_output_spec(self) -> OutputSpec:

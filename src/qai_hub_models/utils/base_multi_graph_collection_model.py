@@ -10,7 +10,7 @@ from typing import Any, Generic, TypeVar
 from qai_hub import Device
 
 from qai_hub_models import Precision, SampleInputsType, TargetRuntime
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.datasets.common import BaseDataset
 from qai_hub_models.utils.base_model import (
     WorkbenchModel,
@@ -21,7 +21,7 @@ from qai_hub_models.utils.export_result import (
     ComponentGroup,
     MultiGraphComponentGroup,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 from qai_hub_models.utils.kwarg_helpers import filter_kwargs
 from qai_hub_models.utils.qai_hub_helpers import (
     build_compile_options,
@@ -160,11 +160,8 @@ class MultiGraphCollectionModel(ABC):
         return build_compile_options(
             target_runtime,
             precision,
-            list(
-                self.get_component_graph_output_spec(component_name, graph_name).keys()
-            ),
-            self.get_component_graph_channel_last_inputs(component_name, graph_name),
-            self.get_component_graph_channel_last_outputs(component_name, graph_name),
+            self.get_component_graph_input_spec(component_name, graph_name),
+            self.get_component_graph_output_spec(component_name, graph_name),
             graph_name,
         )
 
@@ -466,22 +463,6 @@ class MultiGraphWorkbenchModelCollection(
         if isinstance(component, MultiGraphWorkbenchModel):
             return component.get_graph_hub_litemp_percentage(graph_name, precision)
         return component.get_hub_litemp_percentage(precision)
-
-    def get_component_graph_channel_last_inputs(
-        self, component_name: str, graph_name: str
-    ) -> list[str]:
-        component = self.components[component_name]
-        if isinstance(component, MultiGraphWorkbenchModel):
-            return component.get_graph_channel_last_input(graph_name)
-        return component.get_channel_last_inputs()
-
-    def get_component_graph_channel_last_outputs(
-        self, component_name: str, graph_name: str
-    ) -> list[str]:
-        component = self.components[component_name]
-        if isinstance(component, MultiGraphWorkbenchModel):
-            return component.get_graph_channel_last_output(graph_name)
-        return component.get_channel_last_outputs()
 
     def get_component_graph_hub_quantize_options(
         self,

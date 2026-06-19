@@ -8,7 +8,6 @@ from __future__ import annotations
 import torch
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.bsd300 import BSD300Dataset
 from qai_hub_models.evaluators.superres_evaluator import SuperResolutionOutputEvaluator
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
@@ -21,6 +20,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -94,6 +94,7 @@ class SuperResolutionModel(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             )
         }
 
@@ -105,14 +106,9 @@ class SuperResolutionModel(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["upscaled_image"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

@@ -12,8 +12,6 @@ from torchvision import transforms
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
-from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.datasets.flickr1024 import Flickr1024Dataset
 from qai_hub_models.evaluators.stereo_evaluator import StereoEvaluator
 from qai_hub_models.models._shared.nafnet.model import (
@@ -25,7 +23,11 @@ from qai_hub_models.utils.asset_loaders import (
     load_image,
 )
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    OutputSpec,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -120,8 +122,16 @@ class NAFSSR(NAFNetModel):
         width: int = 128,
     ) -> InputSpec:
         return {
-            "l_image": ((batch_size, 3, height, width), "float32"),
-            "r_image": ((batch_size, 3, height, width), "float32"),
+            "l_image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            ),
+            "r_image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            ),
         }
 
     def _sample_inputs_impl(
@@ -139,15 +149,13 @@ class NAFSSR(NAFNetModel):
 
     def get_output_spec(self) -> OutputSpec:
         return {
-            "upscaled_left": TensorSpec(),
-            "upscaled_right": TensorSpec(),
+            "upscaled_left": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
+            "upscaled_right": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["l_image", "r_image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["upscaled_left", "upscaled_right"]
 
     @classmethod
     def get_eval_dataset_classes(cls) -> list[type]:

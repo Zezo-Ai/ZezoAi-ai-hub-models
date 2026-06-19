@@ -264,7 +264,7 @@ def test_merge_input_metadata_image() -> None:
     }
 
     # Merge metadata
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     # Verify metadata was merged
     image_spec = file_metadata.inputs["image"]
@@ -293,7 +293,7 @@ def test_merge_input_metadata_image_bgr() -> None:
         )
     }
 
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     image_spec = file_metadata.inputs["image"]
     assert image_spec.io_type == IoType.IMAGE
@@ -319,7 +319,7 @@ def test_merge_input_metadata_tensor() -> None:
         )
     }
 
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     tensor_spec = file_metadata.inputs["mel_spectrogram"]
     assert tensor_spec.io_type == IoType.TENSOR
@@ -344,7 +344,7 @@ def test_merge_input_metadata_tensor_unbounded() -> None:
         )
     }
 
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     tensor_spec = file_metadata.inputs["embedding"]
     assert tensor_spec.io_type == IoType.TENSOR
@@ -360,12 +360,12 @@ def test_merge_input_metadata_no_metadata() -> None:
         outputs={"logits": TensorSpec(shape=(1, 1000), dtype="float32")},
     )
 
-    # Plain tuple InputSpec (no metadata)
+    # InputSpec entry with no semantic metadata set
     input_spec: InputSpec = {
-        "image": ((1, 3, 224, 224), "float32"),
+        "image": TensorSpec(shape=(1, 3, 224, 224), dtype="float32"),
     }
 
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     # Verify default metadata fields (io_type defaults to TENSOR)
     image_spec = file_metadata.inputs["image"]
@@ -386,7 +386,7 @@ def test_merge_input_metadata_tensor_spec_no_metadata() -> None:
         "image": TensorSpec(shape=(1, 3, 224, 224), dtype="float32"),
     }
 
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     # Verify default metadata fields (io_type defaults to TENSOR)
     image_spec = file_metadata.inputs["image"]
@@ -414,7 +414,7 @@ def test_merge_input_metadata_mismatched_input_raises() -> None:
 
     # Should raise ValueError for mismatched input (non-empty metadata means real mismatch)
     with pytest.raises(ValueError, match="not found in compiled model metadata"):
-        merge_input_metadata(file_metadata, input_spec)
+        merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
 
 def test_merge_input_metadata_empty_model_metadata() -> None:
@@ -434,7 +434,7 @@ def test_merge_input_metadata_empty_model_metadata() -> None:
     }
 
     # Should not raise — skips merge entirely when inputs are empty
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
     assert file_metadata.inputs == {}
 
 
@@ -470,7 +470,7 @@ def test_merge_input_metadata_multiple_inputs() -> None:
         ),
     }
 
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     # Verify image input
     image_spec = file_metadata.inputs["image"]
@@ -507,7 +507,7 @@ def test_merge_input_metadata_json_roundtrip() -> None:
         )
     }
 
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     model_metadata = ModelMetadata(
         model_id=DEFAULT_MODEL_ID,
@@ -553,7 +553,7 @@ def test_merge_input_metadata_tensor_io_type_in_yaml() -> None:
         ),
     }
 
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     model_metadata = ModelMetadata(
         runtime=DEFAULT_RUNTIME,
@@ -594,7 +594,7 @@ def test_merge_input_metadata_grayscale_image() -> None:
         ),
     }
 
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     spec = file_metadata.inputs["input"]
     assert spec.io_type == IoType.IMAGE
@@ -635,7 +635,7 @@ def test_merge_input_metadata_mixed_image_tensor_yaml_roundtrip() -> None:
         ),
     }
 
-    merge_input_metadata(file_metadata, input_spec)
+    merge_input_metadata(file_metadata, input_spec, DEFAULT_RUNTIME)
 
     model_metadata = ModelMetadata(
         runtime=DEFAULT_RUNTIME,
@@ -680,7 +680,7 @@ def test_merge_output_metadata_bbox() -> None:
         "class_idx": TensorSpec(io_type=IoType.TENSOR),
     }
 
-    merge_output_metadata(file_metadata, output_spec)
+    merge_output_metadata(file_metadata, output_spec, DEFAULT_RUNTIME)
 
     assert file_metadata.outputs["boxes"].io_type == IoType.BBOX
     assert file_metadata.outputs["boxes"].bbox_metadata is not None

@@ -12,7 +12,7 @@ from typing_extensions import Self
 
 # isort: off
 # This verifies aimet is installed, and this must be included first.
-from qai_hub_models.configs.model_metadata import OutputSpec
+from qai_hub_models.utils.input_spec import OutputSpec
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.quantization_aimet_onnx import (
     AIMETOnnxQuantizableMixin,
@@ -224,18 +224,16 @@ class UnetBase(BaseModel, FromPretrainedMixin):
     ) -> torch.Tensor:
         return self.model(latent, time_emb, text_emb)
 
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["latent"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["output_latent"]
-
     def get_input_spec(
         self,
         batch_size: int = 1,
     ) -> InputSpec:
         return {
-            "latent": TensorSpec(shape=(batch_size, 4, 64, 64), dtype="float32"),
+            "latent": TensorSpec(
+                shape=(batch_size, 4, 64, 64),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            ),
             "timestep": TensorSpec(shape=(batch_size, 1), dtype="float32"),
             "text_emb": TensorSpec(
                 shape=(batch_size, self.seq_len, self.text_emb_dim), dtype="float32"
@@ -244,7 +242,9 @@ class UnetBase(BaseModel, FromPretrainedMixin):
 
     def get_output_spec(self) -> OutputSpec:
         return {
-            "output_latent": TensorSpec(),
+            "output_latent": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
         }
 
 
@@ -351,16 +351,17 @@ class VaeDecoderBase(BaseModel, FromPretrainedMixin):
 
         return AutoencoderKLDecoder(model)
 
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["latent"]
-
     def get_input_spec(self, batch_size: int = 1) -> InputSpec:
         """
         Returns the input specification (name -> (shape, type). This can be
         used to submit profiling job on Qualcomm AI Hub Workbench.
         """
         return {
-            "latent": TensorSpec(shape=(batch_size, 4, 64, 64), dtype="float32"),
+            "latent": TensorSpec(
+                shape=(batch_size, 4, 64, 64),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            ),
         }
 
     def get_output_spec(self) -> OutputSpec:

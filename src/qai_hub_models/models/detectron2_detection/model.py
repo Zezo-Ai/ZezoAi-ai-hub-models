@@ -15,7 +15,6 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.coco import Coco180Dataset, CocoDataset
 from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.evaluators.detection_evaluator import DetectionEvaluator
@@ -31,6 +30,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 
@@ -116,14 +116,12 @@ class Detectron2ProposalGenerator(Detectron2):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
     def get_output_spec(self) -> OutputSpec:
         return {x: TensorSpec() for x in ["feature", "proposals", "score"]}
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class Detectron2ROIHead(Detectron2):
@@ -204,6 +202,7 @@ class Detectron2ROIHead(Detectron2):
                 shape=(1, 1024, height, width),
                 dtype="float32",
                 io_type=IoType.TENSOR,
+                apply_runtime_channel_reordering=True,
             ),
             "proposals_boxes": TensorSpec(
                 shape=(1, num_boxes, 4),
@@ -221,9 +220,6 @@ class Detectron2ROIHead(Detectron2):
             "scores": TensorSpec(io_type=IoType.TENSOR),
             "classes": TensorSpec(io_type=IoType.TENSOR),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["features"]
 
     def get_hub_compile_options(
         self,

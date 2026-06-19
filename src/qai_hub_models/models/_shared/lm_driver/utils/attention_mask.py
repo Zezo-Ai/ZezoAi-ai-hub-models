@@ -6,16 +6,16 @@
 Supports both full causal masks and sliding-window causal masks.
 """
 
-from packaging import version
 import torch
 import transformers
+from packaging import version
 
 TRANSFORMERS_VERSION_5_1_OR_LATER = version.parse(
     transformers.__version__
 ) >= version.parse("5.1.0")
 
 if TRANSFORMERS_VERSION_5_1_OR_LATER:
-    from transformers.masking_utils import eager_mask, causal_mask_function
+    from transformers.masking_utils import causal_mask_function, eager_mask
 else:
     from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 

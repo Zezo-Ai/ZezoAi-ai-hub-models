@@ -25,8 +25,10 @@ from collections.abc import Iterator
 from enum import Enum
 from typing import Any, Literal, overload
 
+from pydantic import Field
 from qai_hub_models_cli.proto.shared import range_pb2, tensor_spec_pb2
 
+from qai_hub_models import TargetRuntime
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
 
 
@@ -106,6 +108,12 @@ _COLOR_FORMAT_TO_PROTO: dict[str, int] = {
     "grayscale": tensor_spec_pb2.COLOR_FORMAT_GRAYSCALE,
 }
 
+_BBOX_FORMAT_TO_PROTO: dict[str, int] = {
+    "xyxy": tensor_spec_pb2.BBOX_FORMAT_XYXY,
+    "xywh": tensor_spec_pb2.BBOX_FORMAT_XYWH,
+    "cxcywh": tensor_spec_pb2.BBOX_FORMAT_CXCYWH,
+}
+
 
 class QuantizationParameters(BaseQAIHMConfig):
     """Quantization parameters for a tensor."""
@@ -168,6 +176,14 @@ class TensorSpec(BaseQAIHMConfig):
     labels_file
         Name of the labels file that maps indices to class names (e.g.,
         "coco_labels.txt").
+    apply_runtime_channel_reordering
+        Some runtimes are natively NCHW (eg. PyTorch, ONNX) instead of NHWC (eg. TFLite).
+
+        If a runtime executes using the channel last ordering and the source model uses
+        channel first ordering, AI Hub Workbench  will insert transposes to keep the I/O spec consistent.
+
+        When `apply_runtime_channel_reordering` True, the compiled model will
+        exclude those transposes and use runtime-native channel ordering instead.
     """
 
     shape: tuple[int, ...] = ()
@@ -181,6 +197,7 @@ class TensorSpec(BaseQAIHMConfig):
     value_range: tuple[float, float] = (float("-inf"), float("inf"))
     softmax_applied: bool = False
     labels_file: str | None = None
+    apply_runtime_channel_reordering: bool = Field(default=False, exclude=True)
 
     # -----------------------------------------------------------------------
     # Tuple-like behavior for backwards compatibility with InputSpec usage
@@ -214,6 +231,14 @@ class TensorSpec(BaseQAIHMConfig):
         yield self.shape
         yield self.dtype
 
+    def apply_channel_last_during_compilation(
+        self, runtime: TargetRuntime | None = None
+    ) -> bool:
+        """Returns true if this tensor should be passed to `--force_channel_last_input / --force_channel_last_output` during compilation."""
+        return self.apply_runtime_channel_reordering and (
+            runtime is None or runtime.channel_last_native_execution
+        )
+
     def to_proto(self, name: str) -> tensor_spec_pb2.TensorSpec:
         quant = None
         if self.quantization_parameters is not None:
@@ -236,6 +261,15 @@ class TensorSpec(BaseQAIHMConfig):
                 ),
             )
 
+        bbox_metadata = None
+        if self.bbox_metadata is not None:
+            bbox_metadata = tensor_spec_pb2.BboxMetadata(
+                bbox_format=_BBOX_FORMAT_TO_PROTO.get(
+                    self.bbox_metadata.bbox_format.value,
+                    tensor_spec_pb2.BBOX_FORMAT_UNSPECIFIED,
+                ),
+            )
+
         return tensor_spec_pb2.TensorSpec(
             name=name,
             shape=list(self.shape),
@@ -247,4 +281,7 @@ class TensorSpec(BaseQAIHMConfig):
                 self.io_type.value, tensor_spec_pb2.IO_TYPE_UNSPECIFIED
             ),
             image_metadata=image_metadata,
+            bbox_metadata=bbox_metadata,
+            softmax_applied=self.softmax_applied,
+            labels_file=self.labels_file,
         )

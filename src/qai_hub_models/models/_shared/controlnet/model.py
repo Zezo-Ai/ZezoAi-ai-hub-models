@@ -11,7 +11,7 @@ from typing_extensions import Self
 
 # isort: off
 # This verifies aimet is installed, and this must be included first.
-from qai_hub_models.configs.model_metadata import OutputSpec
+from qai_hub_models.utils.input_spec import OutputSpec
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.quantization_aimet_onnx import (
     AIMETOnnxQuantizableMixin,
@@ -166,69 +166,91 @@ class ControlUnetBase(BaseModel, FromPretrainedMixin):
             controlnet_midblock,
         )
 
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["output_latent"]
-
     def get_output_spec(self) -> OutputSpec:
         return {
-            "output_latent": TensorSpec(),
+            "output_latent": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return (
-            ["latent"]
-            + [f"controlnet_downblock{i}" for i in range(12)]
-            + ["controlnet_midblock"]
-        )
 
     def get_input_spec(
         self,
         batch_size: int = 1,
     ) -> InputSpec:
         return {
-            "latent": TensorSpec(shape=(batch_size, 4, 64, 64), dtype="float32"),
+            "latent": TensorSpec(
+                shape=(batch_size, 4, 64, 64),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            ),
             "timestep": TensorSpec(shape=(batch_size, 1), dtype="float32"),
             "text_emb": TensorSpec(
                 shape=(batch_size, self.seq_len, self.text_emb_dim), dtype="float32"
             ),
             "controlnet_downblock0": TensorSpec(
-                shape=(batch_size, 320, 64, 64), dtype="float32"
+                shape=(batch_size, 320, 64, 64),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock1": TensorSpec(
-                shape=(batch_size, 320, 64, 64), dtype="float32"
+                shape=(batch_size, 320, 64, 64),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock2": TensorSpec(
-                shape=(batch_size, 320, 64, 64), dtype="float32"
+                shape=(batch_size, 320, 64, 64),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock3": TensorSpec(
-                shape=(batch_size, 320, 32, 32), dtype="float32"
+                shape=(batch_size, 320, 32, 32),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock4": TensorSpec(
-                shape=(batch_size, 640, 32, 32), dtype="float32"
+                shape=(batch_size, 640, 32, 32),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock5": TensorSpec(
-                shape=(batch_size, 640, 32, 32), dtype="float32"
+                shape=(batch_size, 640, 32, 32),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock6": TensorSpec(
-                shape=(batch_size, 640, 16, 16), dtype="float32"
+                shape=(batch_size, 640, 16, 16),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock7": TensorSpec(
-                shape=(batch_size, 1280, 16, 16), dtype="float32"
+                shape=(batch_size, 1280, 16, 16),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock8": TensorSpec(
-                shape=(batch_size, 1280, 16, 16), dtype="float32"
+                shape=(batch_size, 1280, 16, 16),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock9": TensorSpec(
-                shape=(batch_size, 1280, 8, 8), dtype="float32"
+                shape=(batch_size, 1280, 8, 8),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock10": TensorSpec(
-                shape=(batch_size, 1280, 8, 8), dtype="float32"
+                shape=(batch_size, 1280, 8, 8),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_downblock11": TensorSpec(
-                shape=(batch_size, 1280, 8, 8), dtype="float32"
+                shape=(batch_size, 1280, 8, 8),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
             "controlnet_midblock": TensorSpec(
-                shape=(batch_size, 1280, 8, 8), dtype="float32"
+                shape=(batch_size, 1280, 8, 8),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -350,16 +372,13 @@ class ControlNetBase(BaseModel, FromPretrainedMixin):
     ) -> tuple[torch.Tensor, ...]:
         return self.model(latent, time_emb, text_emb, image_cond)
 
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["latent", "image_cond"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        # All outputs are channel last
-        return list(self.get_output_spec())
-
     def get_input_spec(self, batch_size: int = 1) -> InputSpec:
         return {
-            "latent": TensorSpec(shape=(batch_size, 4, 64, 64), dtype="float32"),
+            "latent": TensorSpec(
+                shape=(batch_size, 4, 64, 64),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            ),
             "timestep": TensorSpec(shape=(batch_size, 1), dtype="float32"),
             "text_emb": TensorSpec(
                 shape=(batch_size, self.seq_len, self.text_emb_dim), dtype="float32"
@@ -372,12 +391,13 @@ class ControlNetBase(BaseModel, FromPretrainedMixin):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
     def get_output_spec(self) -> OutputSpec:
         return {
-            name: TensorSpec()
+            name: TensorSpec(apply_runtime_channel_reordering=True)
             for name in [f"down_block_{i}" for i in range(12)] + ["mid_block"]
         }
 

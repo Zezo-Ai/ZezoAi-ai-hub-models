@@ -13,7 +13,6 @@ import torch
 from typing_extensions import Self
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models._shared.llama3.model import (
     Llama3Base,
     Llama3Base_AIMETOnnx,
@@ -33,7 +32,7 @@ from qai_hub_models.models._shared.llm.model import (
     DEFAULT_EXPORT_SEQUENCE_LENGTHS as GLOBAL_DEFAULT_EXPORT_SEQUENCE_LENGTHS,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 
 DEFAULT_EXPORT_CONTEXT_LENGTHS = GLOBAL_DEFAULT_EXPORT_CONTEXT_LENGTHS
 DEFAULT_EXPORT_SEQUENCE_LENGTHS = GLOBAL_DEFAULT_EXPORT_SEQUENCE_LENGTHS

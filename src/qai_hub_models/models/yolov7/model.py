@@ -13,7 +13,6 @@ import torch.nn.functional as F
 from typing_extensions import Self
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.models._shared.yolo.model import DEFAULT_YOLO_IMAGE_INPUT_HW, Yolo
 from qai_hub_models.models._shared.yolo.utils import detect_postprocess_split_input
@@ -21,7 +20,7 @@ from qai_hub_models.models.yolov7.external_repos.yolov7.models.experimental impo
     attempt_load,
 )
 from qai_hub_models.utils.base_model import SerializationSettings
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 from qai_hub_models.utils.set_env import set_temp_env
 
 MODEL_ID = __name__.split(".")[-2]

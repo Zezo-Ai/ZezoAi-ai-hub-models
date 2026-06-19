@@ -16,7 +16,6 @@ from easyocr.model.modules import BidirectionalLSTM
 from easyocr.model.vgg_model import Model as VGGRecognizer
 from typing_extensions import Self
 
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.datasets.icdar2015 import ICDAR2015Dataset
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
@@ -30,6 +29,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 from qai_hub_models.utils.rnn import UnrolledLSTM
@@ -102,6 +102,7 @@ class EasyOCRDetector(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -109,9 +110,6 @@ class EasyOCRDetector(BaseModel):
         return {
             "results": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class EasyOCRRecognizer(BaseModel):
@@ -181,6 +179,7 @@ class EasyOCRRecognizer(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.GRAYSCALE,
                 ),
+                apply_runtime_channel_reordering=True,
             ),
         }
 
@@ -188,9 +187,6 @@ class EasyOCRRecognizer(BaseModel):
         return {
             "output_preds": TensorSpec(),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
 
 class EasyOCR(WorkbenchModelCollection):

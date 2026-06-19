@@ -15,7 +15,7 @@ from PIL import Image
 from qai_hub_models.utils.asset_loaders import CachedWebDatasetAsset
 from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, DatasetSplit
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resize_pad
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.path_helpers import QAIHM_PACKAGE_ROOT
 
 DATASET_ID = "dota128"
@@ -55,7 +55,7 @@ class Dota128Dataset(BaseDataset):
         self.max_boxes = int(max_boxes)
         self.num_samples = int(num_samples)
 
-        input_spec = input_spec or {"image": ((1, 3, 640, 640), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 640, 640))}
         self.target_h = input_spec["image"][0][2]
         self.target_w = input_spec["image"][0][3]
 

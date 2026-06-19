@@ -10,7 +10,7 @@ import os
 import torch
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.datasets.pascal_voc import VOCSegmentationDataset
 from qai_hub_models.evaluators.segmentation_evaluator import SegmentationOutputEvaluator
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
@@ -26,6 +26,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 from qai_hub_models.utils.labels import write_labels_file
@@ -88,6 +89,7 @@ class DeepLabV3Model(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             )
         }
 
@@ -98,9 +100,6 @@ class DeepLabV3Model(BaseModel):
                 description="Semantic segmentation mask",
             ),
         }
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     def _sample_inputs_impl(
         self, input_spec: InputSpec | None = None

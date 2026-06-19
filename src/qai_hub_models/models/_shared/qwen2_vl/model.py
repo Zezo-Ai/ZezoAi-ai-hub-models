@@ -46,6 +46,7 @@ from qai_hub_models.models._shared.qwen2.model import (
     QwenPositionProcessor,
 )
 from qai_hub_models.utils.base_dataset import DatasetSplit
+from qai_hub_models.utils.input_spec import TensorSpec
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 
 if TYPE_CHECKING:
@@ -219,23 +220,23 @@ class Qwen2VLTextBase(Qwen2Base):
         input_spec: InputSpec = {}
 
         # VLM uses inputs_embeds
-        input_spec["inputs_embeds"] = (
-            (1, sequence_length, hidden_size),
-            "float32",
+        input_spec["inputs_embeds"] = TensorSpec(
+            shape=(1, sequence_length, hidden_size),
+            dtype="float32",
         )
 
-        input_spec["attention_mask"] = (
-            (1, 1, sequence_length, context_length),
-            "float32",
+        input_spec["attention_mask"] = TensorSpec(
+            shape=(1, 1, sequence_length, context_length),
+            dtype="float32",
         )
 
-        input_spec["position_ids_cos"] = (
-            (1, 1, sequence_length, embed_dim),
-            "float32",
+        input_spec["position_ids_cos"] = TensorSpec(
+            shape=(1, 1, sequence_length, embed_dim),
+            dtype="float32",
         )
-        input_spec["position_ids_sin"] = (
-            (1, 1, sequence_length, embed_dim),
-            "float32",
+        input_spec["position_ids_sin"] = TensorSpec(
+            shape=(1, 1, sequence_length, embed_dim),
+            dtype="float32",
         )
 
         # KV cache for each layer
@@ -246,25 +247,25 @@ class Qwen2VLTextBase(Qwen2Base):
 
         for layer in range(num_hidden_layers):
             past_k_name = f"past_key_{layer}_in"
-            input_spec[past_k_name] = (
-                (
+            input_spec[past_k_name] = TensorSpec(
+                shape=(
                     num_key_value_heads,
                     1,
                     head_dim,
                     context_length - sequence_length,
                 ),
-                "float32",
+                dtype="float32",
             )
 
             past_v_name = f"past_value_{layer}_in"
-            input_spec[past_v_name] = (
-                (
+            input_spec[past_v_name] = TensorSpec(
+                shape=(
                     num_key_value_heads,
                     1,
                     context_length - sequence_length,
                     head_dim,
                 ),
-                "float32",
+                dtype="float32",
             )
         return input_spec
 

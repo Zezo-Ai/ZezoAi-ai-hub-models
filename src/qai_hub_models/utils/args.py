@@ -28,6 +28,7 @@ from qai_hub_models.protocols import (
     FromPretrainedProtocol,
     FromPretrainedTypeVar,
 )
+from qai_hub_models.utils.ai_hub_access import can_access_qualcomm_ai_hub
 from qai_hub_models.utils.base_collection_model import (
     CollectionModel,
     WorkbenchModelCollection,
@@ -44,7 +45,6 @@ from qai_hub_models.utils.inference import OnDeviceModel, compile_model_from_arg
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.kwarg_helpers import filter_kwargs, get_params
 from qai_hub_models.utils.qai_hub_helpers import (
-    can_access_qualcomm_ai_hub,
     raise_if_fp_is_unsupported,
 )
 from qai_hub_models.utils.version_helpers import QAIHMVersion

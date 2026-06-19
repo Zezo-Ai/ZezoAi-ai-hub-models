@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import ModelMetadata, OutputSpec
+from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.datasets.coco import CocoDataset
 from qai_hub_models.datasets.coco_seg import CocoSegDataset
 from qai_hub_models.models._shared.yolo.utils import (
@@ -30,6 +30,7 @@ from qai_hub_models.utils.input_spec import (
     ImageMetadata,
     InputSpec,
     IoType,
+    OutputSpec,
     TensorSpec,
 )
 from qai_hub_models.utils.labels import write_labels_file
@@ -205,6 +206,7 @@ class Yolo(BaseModel):
                 image_metadata=ImageMetadata(
                     color_format=ColorFormat.RGB,
                 ),
+                apply_runtime_channel_reordering=True,
             )
         }
 
@@ -236,9 +238,6 @@ class Yolo(BaseModel):
             h, w = input_spec["image"][0][2:]
             image = image.resize((w, h))
         return {"image": [app_to_net_image_inputs(image)[1].numpy()]}
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
 
     @classmethod
     def get_eval_dataset_classes(cls) -> list[type[BaseDataset]]:

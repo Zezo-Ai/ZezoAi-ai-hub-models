@@ -12,11 +12,10 @@ from transformers.models.t5.modeling_t5 import T5Attention
 from typing_extensions import Self
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.model_metadata import OutputSpec
 from qai_hub_models.models._shared.common import replace_module_recursively
 from qai_hub_models.models._shared.voiceai_tts.t5_attention import T5AttentionMod
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, TensorSpec
 
 MAX_NUM_INPUT_IDS = 50
 NUM_DECODER_BLOCKS = 4

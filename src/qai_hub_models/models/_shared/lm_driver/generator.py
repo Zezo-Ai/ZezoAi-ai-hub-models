@@ -7,11 +7,10 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import itertools
-from collections import OrderedDict
-import typing
-from typing import Union
 import types
+import typing
+from collections import OrderedDict
+from typing import Union
 
 import torch
 import transformers
@@ -24,11 +23,10 @@ from .utils.attention_mask import (
     convert_2d_attention_mask_to_4d,
     convert_2d_attention_mask_to_4d_sliding_window,
 )
-
 from .utils.layer_cache import (
     AttentionType,
-    build_layer_cache_descriptors,
     _resolve_text_config,
+    build_layer_cache_descriptors,
 )
 from .utils.rope_embedding import RopeEmbedding, RopeEmbeddingProtocol
 

@@ -10,8 +10,6 @@ from pathlib import Path
 from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
-from qai_hub_models.configs.model_metadata import OutputSpec
-from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.datasets.reds import REDSDataset
 from qai_hub_models.models._shared.nafnet.model import (
     NAFNetModel,
@@ -22,7 +20,11 @@ from qai_hub_models.utils.asset_loaders import (
     load_image,
 )
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import (
+    InputSpec,
+    OutputSpec,
+    TensorSpec,
+)
 
 MODEL_ID = __name__.split(".")[-2]
 MODEL_ASSET_VERSION = 1
@@ -78,12 +80,18 @@ class NafNetDeBlur(NAFNetModel):
         width: int = 640,
     ) -> InputSpec:
         return {
-            "image": ((batch_size, 3, height, width), "float32"),
+            "image": TensorSpec(
+                shape=(batch_size, 3, height, width),
+                dtype="float32",
+                apply_runtime_channel_reordering=True,
+            ),
         }
 
     def get_output_spec(self) -> OutputSpec:
         return {
-            "deblurred_image": TensorSpec(),
+            "deblurred_image": TensorSpec(
+                apply_runtime_channel_reordering=True,
+            ),
         }
 
     def _sample_inputs_impl(
@@ -94,12 +102,6 @@ class NafNetDeBlur(NAFNetModel):
             h, w = input_spec["image"][0][2:]
             image = image.resize((w, h))
         return {"image": [app_to_net_image_inputs(image)[1].numpy()]}
-
-    def get_channel_last_inputs(self) -> list[str]:
-        return ["image"]
-
-    def get_channel_last_outputs(self) -> list[str]:
-        return ["deblurred_image"]
 
     @classmethod
     def get_eval_dataset_classes(cls) -> list[type]:

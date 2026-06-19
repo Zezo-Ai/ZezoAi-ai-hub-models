@@ -20,7 +20,7 @@ from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, Data
 from qai_hub_models.utils.image_processing import (
     pre_process_with_affine,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 
 MPII_FOLDER_NAME = "mpii"
 MPII_VERSION = 2
@@ -71,7 +71,7 @@ class MPIIDataset(BaseDataset):
     ) -> None:
         BaseDataset.__init__(self, MPII_ASSET.extracted_path.parent, split)
         assert self.split_str in ["train", "val"]
-        input_spec = input_spec or {"image": ((1, 3, 256, 192), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 256, 192))}
         self.num_joints = 16
         gt_mat = GT.fetch()
         anno_path = CachedWebDatasetAsset.from_asset_store(

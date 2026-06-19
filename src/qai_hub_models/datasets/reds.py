@@ -20,7 +20,7 @@ from qai_hub_models.utils.image_processing import (
     numpy_image_to_torch,
     resize_pad,
 )
-from qai_hub_models.utils.input_spec import InputSpec
+from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.private_asset_loaders import CachedPrivateDatasetAsset
 
 REDS_FOLDER_NAME = "reds"
@@ -69,7 +69,7 @@ class REDSDataset(BaseDataset):
             [self.lq_folder, self.gt_folder], ["lq", "gt"]
         )
 
-        input_spec = input_spec or {"image": ((1, 3, 360, 640), "")}
+        input_spec = input_spec or {"image": TensorSpec(shape=(1, 3, 360, 640))}
         self.input_height = input_spec["image"][0][2]
         self.input_width = input_spec["image"][0][3]
 

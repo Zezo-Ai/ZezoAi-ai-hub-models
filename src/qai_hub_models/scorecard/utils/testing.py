@@ -60,6 +60,7 @@ from qai_hub_models.utils.inference import (
 )
 from qai_hub_models.utils.input_spec import (
     InputSpec,
+    get_channel_last,
     is_input_spec,
     is_input_spec_dict,
 )
@@ -550,7 +551,7 @@ def get_hub_val_dataset(
     input_entries, gt_entries = dataset_entries_from_batch(
         batch,
         list(input_spec.keys()),
-        instance.get_channel_last_inputs() if apply_channel_transpose else [],
+        get_channel_last(input_spec) if apply_channel_transpose else [],
     )
 
     input_dataset = hub.upload_dataset(input_entries)
