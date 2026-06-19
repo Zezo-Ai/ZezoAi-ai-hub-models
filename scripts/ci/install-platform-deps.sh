@@ -19,7 +19,19 @@ start_group "Ubuntu install: update repositories"
     APT_ARCH=$(dpkg --print-architecture)
     echo "deb [arch=$APT_ARCH signed-by=$APT_GPG_FILE] https://cli.github.com/packages stable main" | run_as_root tee "$APT_SOURCE_FILE" > /dev/null
 
-    run_as_root apt-get update
+    # Retry apt-get update to tolerate transient mirror sync races (Release manifest
+    # vs. Packages index out of sync), which apt itself reports as "Mirror sync in
+    # progress?". The window is typically seconds; 3 attempts x 30s covers it.
+    for attempt in 1 2 3; do
+        if run_as_root apt-get update; then
+            break
+        fi
+        if [ "$attempt" -eq 3 ]; then
+            die "apt-get update failed after 3 attempts"
+        fi
+        log_warn "apt-get update failed (attempt $attempt/3); retrying in 30s..."
+        sleep 30
+    done
 end_group
 
 start_group "Ubuntu Install: install/upgrade packages"

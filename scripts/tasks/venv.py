@@ -235,6 +235,7 @@ class InstallGlobalRequirementsTask(RunCommandsWithVenvTask):
             group_name="Install Global Requirements",
             venv=venv_path,
             commands=commands,
+            retries=2,
         )
 
 
@@ -270,6 +271,7 @@ class InstallLLMGraderRequirementsTask(RunCommandsWithVenvTask):
                 f'{get_pip()} install -r "{GRADER_REQUIREMENTS_PATH}"',
                 f'{get_pip()} install --no-deps -e "{PY_PACKAGE_INSTALL_ROOT}"',
             ],
+            retries=2,
         )
 
 
@@ -303,6 +305,7 @@ class InstallCLITask(RunCommandsWithVenvTask):
             junit_testsuite=junit_testsuite,
             junit_name=junit_name,
             junit_classname=junit_classname,
+            retries=2,
         )
 
 
@@ -370,6 +373,7 @@ class SyncLocalQAIHMVenvTask(CompositeTask):
                     group_name=f"Install QAIHM{extras_str} ({install_method})",
                     venv=venv_path,
                     commands=commands,
+                    retries=2,
                 ),
             ],
             junit_xml_path=junit_xml_path,

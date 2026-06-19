@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from sys import platform
@@ -169,6 +170,8 @@ class RunCommandsTask(Task):
         junit_name: str = "",
         junit_classname: str = "",
         prereqs: list[Task] | None = None,
+        retries: int = 0,
+        retry_sleep_s: float = 30.0,
     ) -> None:
         if ignore_return_codes is None:
             ignore_return_codes = []
@@ -192,6 +195,8 @@ class RunCommandsTask(Task):
         self.cwd = cwd
         self.env = env
         self.ignore_return_codes = ignore_return_codes
+        self.retries = retries
+        self.retry_sleep_s = retry_sleep_s
 
     def does_work(self) -> bool:
         return True
@@ -206,21 +211,32 @@ class RunCommandsTask(Task):
 
     def _run_command(self, command: str) -> bool:
         echo(f"bnt $ {command}")
-        try:
-            subprocess.run(
-                command,
-                shell=True,
-                check=True,
-                cwd=self.cwd,
-                env=self.env,
-                executable=BASH_EXECUTABLE,
-            )
-        except subprocess.CalledProcessError as e:
-            if e.returncode in self.ignore_return_codes:
+        max_attempts = self.retries + 1
+        for attempt in range(1, max_attempts + 1):
+            try:
+                subprocess.run(
+                    command,
+                    shell=True,
+                    check=True,
+                    cwd=self.cwd,
+                    env=self.env,
+                    executable=BASH_EXECUTABLE,
+                )
                 return True
-            if self.raise_on_failure:
-                raise
-            return False
+            except subprocess.CalledProcessError as e:
+                if e.returncode in self.ignore_return_codes:
+                    return True
+                if attempt < max_attempts:
+                    echo(
+                        f"Command failed (exit {e.returncode}); "
+                        f"retrying in {self.retry_sleep_s}s "
+                        f"(attempt {attempt}/{max_attempts})"
+                    )
+                    time.sleep(self.retry_sleep_s)
+                    continue
+                if self.raise_on_failure:
+                    raise
+                return False
         return True
 
 
@@ -243,6 +259,8 @@ class RunCommandsWithVenvTask(RunCommandsTask):
         junit_name: str = "",
         junit_classname: str = "",
         prereqs: list[Task] | None = None,
+        retries: int = 0,
+        retry_sleep_s: float = 30.0,
     ) -> None:
         if ignore_return_codes is None:
             ignore_return_codes = []
@@ -257,6 +275,8 @@ class RunCommandsWithVenvTask(RunCommandsTask):
             junit_name=junit_name,
             junit_classname=junit_classname,
             prereqs=prereqs,
+            retries=retries,
+            retry_sleep_s=retry_sleep_s,
         )
         self.venv = venv
         self.commands = [commands] if isinstance(commands, str) else commands

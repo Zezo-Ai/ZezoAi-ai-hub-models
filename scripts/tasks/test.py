@@ -228,6 +228,7 @@ class GPUPyTestModelsTask(CompositeTask):
                     commands=[" && ".join(install_cmds)],
                     raise_on_failure=False,
                     ignore_return_codes=[5],
+                    retries=2,
                 )
             )
 
@@ -764,6 +765,7 @@ class CollectLLMPerfTask(CompositeTask):
                     commands=[f"pip install $(ls {qdc_wheel_glob})"],
                     raise_on_failure=False,
                     ignore_return_codes=[5],
+                    retries=2,
                 )
             )
 

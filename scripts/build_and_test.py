@@ -298,6 +298,7 @@ class TaskLibrary:
                 group_name="Install Compiler Nightly Requirements",
                 venv=self.venv_path,
                 commands=["pip install -r scripts/compiler_nightly/requirements.txt"],
+                retries=2,
             ),
         )
 

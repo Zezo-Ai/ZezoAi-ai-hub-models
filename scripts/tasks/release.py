@@ -34,6 +34,7 @@ class CreateReleaseVenv(CompositeTask):
                 "Install build dependencies",
                 venv=self.venv_path,
                 commands=["pip install build==1.4.2"],
+                retries=2,
             )
         )
         super().__init__(
