@@ -526,6 +526,77 @@ class TargetRuntime(Enum):
         assert_never(self)
 
     @property
+    def display_name(self) -> str:
+        """Human-readable name for this runtime."""
+        if self == TargetRuntime.TFLITE:
+            return "TensorFlow Lite"
+        if self == TargetRuntime.QNN_DLC:
+            return "QAIRT DLC"
+        if self == TargetRuntime.QNN_CONTEXT_BINARY:
+            return "QAIRT Context Binary"
+        if self == TargetRuntime.ONNX:
+            return "ONNX Runtime"
+        if self == TargetRuntime.PRECOMPILED_QNN_ONNX:
+            return "Precompiled QAIRT ONNX"
+        if self == TargetRuntime.GENIE:
+            return "GenAI Inference Extensions"
+        if self == TargetRuntime.GENIEX_QAIRT:
+            return "GenieX (QAIRT)"
+        if self == TargetRuntime.GENIEX_LLAMACPP:
+            return "GenieX (Llama.cpp)"
+        if self == TargetRuntime.VOICE_AI:
+            return "Voice AI"
+        assert_never(self)
+
+    @property
+    def description(self) -> str:
+        """One-line description of this runtime."""
+        if self == TargetRuntime.TFLITE:
+            return "LiteRT (TensorFlow Lite)."
+        if self == TargetRuntime.QNN_DLC:
+            return "Qualcomm AI Engine Direct deep-learning container."
+        if self == TargetRuntime.QNN_CONTEXT_BINARY:
+            return "Qualcomm AI Engine Direct context binary."
+        if self == TargetRuntime.ONNX:
+            return "ONNX model using the QNN execution provider."
+        if self == TargetRuntime.PRECOMPILED_QNN_ONNX:
+            return "A QAIRT context binary wrapped in an ONNX file."
+        if self == TargetRuntime.GENIE:
+            return "Qualcomm GenAI Inference Extensions (genie) bundle."
+        if self == TargetRuntime.GENIEX_QAIRT:
+            return "Qualcomm GenieX LLM runtime bundle backed by QAIRT."
+        if self == TargetRuntime.GENIEX_LLAMACPP:
+            return "GenieX LLM runtime backed by llama.cpp (GGUF)."
+        if self == TargetRuntime.VOICE_AI:
+            return "Qualcomm Voice AI SDK bundle."
+        assert_never(self)
+
+    @property
+    def documentation_url(self) -> str:
+        """Documentation URL for this runtime (empty if none)."""
+        qairt_sdk = (
+            "https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk"
+        )
+        onnx_qnn = (
+            "https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html"
+        )
+        if self == TargetRuntime.TFLITE:
+            return "https://ai.google.dev/edge/litert"
+        if self == TargetRuntime.QNN_DLC or self == TargetRuntime.QNN_CONTEXT_BINARY:  # noqa: PLR1714
+            return qairt_sdk
+        if self == TargetRuntime.ONNX or self == TargetRuntime.PRECOMPILED_QNN_ONNX:  # noqa: PLR1714
+            return onnx_qnn
+        if self == TargetRuntime.GENIE:
+            return "https://www.qualcomm.com/developer/software/gen-ai-inference-extensions"
+        if self == TargetRuntime.GENIEX_QAIRT:
+            return qairt_sdk
+        if self == TargetRuntime.GENIEX_LLAMACPP:
+            return "https://github.com/ggml-org/llama.cpp"
+        if self == TargetRuntime.VOICE_AI:
+            return qairt_sdk
+        assert_never(self)
+
+    @property
     def hub_model_type(self) -> hub.SourceModelType:
         """The associated hub SourceModelType for assets for this TargetRuntime."""
         if self == TargetRuntime.QNN_CONTEXT_BINARY or self == TargetRuntime.VOICE_AI:  # noqa: PLR1714 | Can't merge comparisons and use assert_never

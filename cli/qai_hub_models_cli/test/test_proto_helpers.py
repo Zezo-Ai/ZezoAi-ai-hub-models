@@ -631,7 +631,7 @@ class TestFormatFetchCommands:
         out = format_fetch_commands(
             _model_release_assets(), "mobilenet_v2", runtime="tflite"
         )
-        assert "-r tflite -p <precision>" in out
+        assert "-r 'tflite' -p <precision>" in out
         assert "See devices per chipset" in out
         assert "[ -c '<chipset>' || -d '<device>' ]" in out
 

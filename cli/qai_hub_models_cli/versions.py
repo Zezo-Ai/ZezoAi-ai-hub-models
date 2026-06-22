@@ -30,7 +30,7 @@ MIN_MANIFEST_VERSION = Version(
 MIN_INTERNAL_REGISTRY_VERSION = Version("0.56.0")
 MIN_MODEL_FILTER_VERSION = Version(
     "0.56.0"
-)  # the version where the manifest gained model-filter fields
+)  # the version where the manifest gained model-filter and runtime-detail fields
 PYPI_VERSIONS_URL = "https://pypi.org/pypi/qai-hub-models/json"
 
 

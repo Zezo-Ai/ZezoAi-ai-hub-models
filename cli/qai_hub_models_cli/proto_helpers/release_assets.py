@@ -21,8 +21,8 @@ from qai_hub_models_cli.proto_helpers._common import fetch_model_proto
 from qai_hub_models_cli.proto_helpers.info import get_model_info
 from qai_hub_models_cli.proto_helpers.manifest import get_manifest_entry
 from qai_hub_models_cli.proto_helpers.platform import (
-    get_runtime_info,
     resolve_chipset,
+    resolve_runtime,
 )
 from qai_hub_models_cli.proto_helpers.platform_enums import (
     precision_proto_to_str,
@@ -300,11 +300,12 @@ def format_fetch_commands(
         asset.HasField("chipset") for asset in release_assets.assets
     )
     # Pre-fill the download command with the user's known values, falling back
-    # to placeholders for anything they haven't specified.
-    download_cmd = (
-        f"qai_hub_models fetch {model} "
-        f"-r {runtime or '<runtime>'} -p {precision or '<precision>'}"
-    )
+    # to placeholders for anything they haven't specified. Known values are
+    # quoted since runtime display names (and chipset/device names) can contain
+    # spaces; placeholders are left unquoted.
+    runtime_arg = f"'{runtime}'" if runtime else "<runtime>"
+    precision_arg = f"'{precision}'" if precision else "<precision>"
+    download_cmd = f"qai_hub_models fetch {model} -r {runtime_arg} -p {precision_arg}"
     if device is not None:
         download_cmd += f" -d '{device}'"
     elif chipset is not None:
@@ -319,7 +320,9 @@ def format_fetch_commands(
     entries = []
     if subset:
         entries.append(("See all assets", f"qai_hub_models fetch {model} -i"))
+    entries.append(("More about runtimes", "qai_hub_models runtimes"))
     if has_chipset_assets:
+        entries.append(("Chipset information", "qai_hub_models chipsets"))
         entries.append(("See devices per chipset", "qai_hub_models devices"))
     entries.append(
         ("Get an asset URL" if url_only else "Download an asset", download_cmd)
@@ -385,7 +388,9 @@ def filter_release_assets(
     if chipset is not None and device is not None:
         raise ValueError("Provide at most one of 'chipset' or 'device'.")
 
-    runtime_val = runtime_str_to_proto(runtime) if runtime is not None else None
+    runtime_val = (
+        runtime_str_to_proto(runtime, platform) if runtime is not None else None
+    )
     precision_val = precision_str_to_proto(precision) if precision is not None else None
     chipset_name: str | None = None
     if chipset is not None or device is not None:
@@ -469,8 +474,8 @@ def get_model_asset_details(
         raise ValueError("Provide at most one of 'chipset' or 'device'.")
 
     model = release_assets.model_id
-    runtime_val = runtime_str_to_proto(runtime)
-    is_aot = get_runtime_info(platform, runtime_val).is_aot_compiled
+    runtime_val = runtime_str_to_proto(runtime, platform)
+    is_aot = resolve_runtime(platform, runtime_val).is_aot_compiled
 
     errmsg: str | None = None
     if is_aot and chipset is None and device is None:

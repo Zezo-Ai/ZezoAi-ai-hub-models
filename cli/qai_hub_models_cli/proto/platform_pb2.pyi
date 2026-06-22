@@ -279,10 +279,24 @@ class RuntimeInfo(google.protobuf.message.Message):
     WEBSITE_RUNTIME_FIELD_NUMBER: builtins.int
     FILE_EXTENSION_FIELD_NUMBER: builtins.int
     IS_AOT_COMPILED_FIELD_NUMBER: builtins.int
+    DISPLAY_NAME_FIELD_NUMBER: builtins.int
+    DESCRIPTION_FIELD_NUMBER: builtins.int
+    DOCUMENTATION_URL_FIELD_NUMBER: builtins.int
     runtime: shared.runtime_pb2.Runtime.ValueType
     website_runtime: builtins.str
     file_extension: builtins.str
     is_aot_compiled: builtins.bool
+    display_name: builtins.str
+    """Fields 5-7 (the runtime display metadata) were added in AI Hub Models
+    0.56.0. They are unset/empty in platform protos from earlier releases, so
+    consumers must only rely on them when the platform version is >= 0.56.0.
+
+    Human-readable name (e.g. "TensorFlow Lite").
+    """
+    description: builtins.str
+    """One-line description of the runtime."""
+    documentation_url: builtins.str
+    """Documentation URL (empty if none)."""
     def __init__(
         self,
         *,
@@ -290,8 +304,11 @@ class RuntimeInfo(google.protobuf.message.Message):
         website_runtime: builtins.str = ...,
         file_extension: builtins.str = ...,
         is_aot_compiled: builtins.bool = ...,
+        display_name: builtins.str = ...,
+        description: builtins.str = ...,
+        documentation_url: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["file_extension", b"file_extension", "is_aot_compiled", b"is_aot_compiled", "runtime", b"runtime", "website_runtime", b"website_runtime"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["description", b"description", "display_name", b"display_name", "documentation_url", b"documentation_url", "file_extension", b"file_extension", "is_aot_compiled", b"is_aot_compiled", "runtime", b"runtime", "website_runtime", b"website_runtime"]) -> None: ...
 
 global___RuntimeInfo = RuntimeInfo
 

@@ -17,7 +17,7 @@ from qai_hub_models_cli.common import (
 )
 from qai_hub_models_cli.proto.shared.precision_pb2 import Precision
 from qai_hub_models_cli.proto.shared.runtime_pb2 import Runtime
-from qai_hub_models_cli.proto_helpers.platform import get_platform, get_runtime_info
+from qai_hub_models_cli.proto_helpers.platform import get_platform, resolve_runtime
 from qai_hub_models_cli.proto_helpers.platform_enums import (
     precision_proto_to_str,
     runtime_proto_to_str,
@@ -184,7 +184,7 @@ def get_asset_url(
         elif precision is None:
             reason = "A precision is required to fetch a model asset."
         elif (
-            get_runtime_info(platform, runtime).is_aot_compiled
+            resolve_runtime(platform, runtime).is_aot_compiled
             and chipset is None
             and device is None
         ):

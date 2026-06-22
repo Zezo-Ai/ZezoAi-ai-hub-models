@@ -31,7 +31,7 @@ from qai_hub_models_cli.proto_helpers.platform_enums import (
     world_proto_to_str,
 )
 from qai_hub_models_cli.utils import build_table
-from qai_hub_models_cli.versions import CURRENT_VERSION
+from qai_hub_models_cli.versions import CURRENT_VERSION, MIN_MODEL_FILTER_VERSION
 
 # Column headers for the chipset attributes shared by the `chipsets` and
 # `devices` CLI tables, in display order. Kept here so both tables stay aligned.
@@ -107,7 +107,7 @@ def get_platform(
     )
 
 
-def get_runtime_info(
+def resolve_runtime(
     platform: PlatformInfo,
     runtime: Runtime.ValueType | str,
 ) -> RuntimeInfo:
@@ -119,8 +119,8 @@ def get_runtime_info(
     platform
         Platform registry to look the runtime up in.
     runtime
-        Runtime enum value (e.g. ``RUNTIME_TFLITE``) or string
-        (e.g. ``"tflite"``).
+        Runtime enum value (e.g. ``RUNTIME_TFLITE``), token (e.g. ``"tflite"``),
+        or display name (e.g. ``"TensorFlow Lite"``).
 
     Returns
     -------
@@ -133,7 +133,7 @@ def get_runtime_info(
     KeyError
         If *runtime* is not a known runtime.
     """
-    runtime_val = runtime_str_to_proto(runtime)
+    runtime_val = runtime_str_to_proto(runtime, platform)
     for rt in platform.runtimes:
         if rt.runtime == runtime_val:
             return rt
@@ -432,3 +432,55 @@ def format_chipsets_table(
         wrap_column="Name",
         title=title,
     )
+
+
+def format_runtimes_table(
+    runtimes: Iterable[RuntimeInfo],
+    version: Version,
+    title: str | None = "Runtimes (Compilation Targets)",
+) -> str:
+    """Format a table of runtimes with their display details.
+
+    The display-metadata columns (Name, Description) are sourced from
+    ``RuntimeInfo`` fields only populated as of ``MIN_MODEL_FILTER_VERSION``;
+    for older platforms they are omitted rather than shown blank.
+    """
+    # Docs URLs are long, unwrappable tokens; keeping them in the table would
+    # squeeze every other column. List them via format_runtime_links instead.
+    has_metadata = version >= MIN_MODEL_FILTER_VERSION
+    columns = ["ID"]
+    if has_metadata:
+        columns += ["Name", "Description"]
+    columns += ["Ext", "Compiled"]
+
+    rows = []
+    for rt in runtimes:
+        row = [runtime_proto_to_str(rt.runtime)]
+        if has_metadata:
+            row += [rt.display_name, rt.description]
+        row += [
+            rt.file_extension,
+            "Ahead-of-Time" if rt.is_aot_compiled else "On-Device",
+        ]
+        rows.append(row)
+
+    return build_table(
+        columns,
+        rows,
+        wrap_column="Description" if has_metadata else "ID",
+        title=title,
+    )
+
+
+def format_runtime_links(runtimes: Iterable[RuntimeInfo]) -> str:
+    """Format a ``Learn more`` footnote of per-runtime docs URLs (or "" if none)."""
+    links = [
+        (runtime_proto_to_str(rt.runtime), rt.documentation_url)
+        for rt in runtimes
+        if rt.documentation_url
+    ]
+    if not links:
+        return ""
+    width = max(len(token) for token, _ in links)
+    body = "\n".join(f"  {token:<{width}}  {url}" for token, url in links)
+    return f"Learn more:\n{body}"

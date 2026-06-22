@@ -127,6 +127,19 @@ message RuntimeInfo {
   string file_extension = 3;
 
   bool is_aot_compiled = 4;
+
+  // Fields 5-7 (the runtime display metadata) were added in AI Hub Models
+  // 0.56.0. They are unset/empty in platform protos from earlier releases, so
+  // consumers must only rely on them when the platform version is >= 0.56.0.
+
+  // Human-readable name (e.g. "TensorFlow Lite").
+  string display_name = 5;
+
+  // One-line description of the runtime.
+  string description = 6;
+
+  // Documentation URL (empty if none).
+  string documentation_url = 7;
 }
 
 // AI Hub Platform registry: devices, chipsets, form factors, and runtimes.

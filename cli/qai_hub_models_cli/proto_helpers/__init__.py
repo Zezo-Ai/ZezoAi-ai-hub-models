@@ -8,7 +8,7 @@ from qai_hub_models_cli.proto_helpers.numerics import get_model_numerics
 from qai_hub_models_cli.proto_helpers.perf import get_model_perf
 from qai_hub_models_cli.proto_helpers.platform import (
     get_platform,
-    get_runtime_info,
+    resolve_runtime,
 )
 from qai_hub_models_cli.proto_helpers.platform_enums import (
     precision_proto_to_str,
@@ -30,9 +30,9 @@ __all__ = [
     "get_model_perf",
     "get_model_release_assets",
     "get_platform",
-    "get_runtime_info",
     "precision_proto_to_str",
     "precision_str_to_proto",
+    "resolve_runtime",
     "runtime_proto_to_str",
     "runtime_str_to_proto",
 ]

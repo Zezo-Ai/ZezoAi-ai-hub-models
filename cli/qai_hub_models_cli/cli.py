@@ -35,6 +35,8 @@ from qai_hub_models_cli.proto_helpers.platform import (
     filter_devices,
     format_chipsets_table,
     format_devices_table,
+    format_runtime_links,
+    format_runtimes_table,
     format_similar_devices_table,
     get_platform,
     resolve_chipset,
@@ -173,7 +175,7 @@ def _run_fetch(args: argparse.Namespace) -> None:
             format_release_assets_table(
                 release_assets,
                 platform.chipsets,
-                title="Release Assets",
+                title="Download Options",
             )
         )
         print()
@@ -277,7 +279,6 @@ def add_fetch_parser(subparsers: argparse._SubParsersAction) -> argparse.Argumen
         "-r",
         "--runtime",
         default=None,
-        type=str.lower,
         help=f"Target runtime. Known values: {runtime_values}. "
         "Older releases may support different values. "
         "Required unless -i/--info is given.",
@@ -493,6 +494,9 @@ def _run_list_models(args: argparse.Namespace) -> None:
     )
     print(
         " - Request we add a new model: https://github.com/qualcomm/ai-hub-models/issues\n"
+    )
+    print(
+        "More about our supported platforms: `qai_hub_models runtimes`, `qai_hub_models devices`, `qai_hub_models chipsets`\n"
     )
     print("Run `qai_hub_models info <model_id>` for details and download options.")
     print_upgrade_notice()
@@ -743,6 +747,38 @@ def add_list_chipsets_parser(
     return parser
 
 
+def _run_list_runtimes(args: argparse.Namespace) -> None:
+    runtimes = get_platform(args.qaihm_version).runtimes
+
+    if args.quiet:
+        for rt in runtimes:
+            print(runtime_proto_to_str(rt.runtime))
+        return
+
+    print(format_runtimes_table(runtimes, args.qaihm_version))
+    print(f"Total: {len(runtimes)} runtimes")
+    # Display metadata (incl. docs links) exists only as of MIN_MODEL_FILTER_VERSION.
+    if args.qaihm_version >= MIN_MODEL_FILTER_VERSION and (
+        links := format_runtime_links(runtimes)
+    ):
+        print(f"\n{links}")
+    print_upgrade_notice()
+
+
+def add_list_runtimes_parser(
+    subparsers: argparse._SubParsersAction,
+) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser(
+        "runtimes",
+        help="List all runtimes.",
+        description="List all runtimes models can be compiled to.",
+    )
+    _add_version_arg(parser)
+    _add_quiet_arg(parser, "Print runtime IDs only, one per line.")
+    parser.set_defaults(func=_run_list_runtimes)
+    return parser
+
+
 def _run_info(args: argparse.Namespace) -> None:
     info = get_model_info(args.model, args.qaihm_version)
 
@@ -959,9 +995,10 @@ def main(args: list[str] | None = None) -> None:
     add_list_models_parser(subparsers)
     add_list_devices_parser(subparsers)
     add_list_chipsets_parser(subparsers)
+    add_list_runtimes_parser(subparsers)
+    add_versions_parser(subparsers)
     if use_internal_releases() or is_internal_repo():
         add_validate_aws_parser(subparsers)
-    add_versions_parser(subparsers)
 
     parsed = parser.parse_args(args)
     if hasattr(parsed, "func"):

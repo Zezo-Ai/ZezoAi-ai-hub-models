@@ -88,7 +88,7 @@ def test_get_asset_url_returns_s3_url_from_internal_proto() -> None:
             return_value=PlatformInfo(),
         ),
         patch(
-            "qai_hub_models_cli.fetch.get_runtime_info",
+            "qai_hub_models_cli.fetch.resolve_runtime",
             return_value=RuntimeInfo(is_aot_compiled=False),
         ),
     ):

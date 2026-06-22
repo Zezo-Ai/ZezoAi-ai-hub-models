@@ -457,6 +457,9 @@ class DevicesAndChipsetsYaml(BaseQAIHMConfig):
                 website_runtime=self.scorecard_path_to_website_runtime[path],
                 file_extension=self.scorecard_path_extensions[path],
                 is_aot_compiled=self.scorecard_path_assets_require_chipset[path],
+                display_name=path.runtime.display_name,
+                description=path.runtime.description,
+                documentation_url=path.runtime.documentation_url,
             )
             for path in self.scorecard_path_to_website_runtime
         ]

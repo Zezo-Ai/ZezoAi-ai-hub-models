@@ -16,6 +16,7 @@ from qai_hub_models_cli.proto.platform_pb2 import (
     FormFactor,
     OperatingSystem,
     OperatingSystemType,
+    PlatformInfo,
     WebsiteWorld,
 )
 from qai_hub_models_cli.proto.shared.precision_pb2 import Precision
@@ -99,32 +100,52 @@ def precision_str_to_proto(precision: str | Precision.ValueType) -> Precision.Va
         ) from None
 
 
-def runtime_proto_to_str(runtime: Runtime.ValueType) -> str:
+def runtime_proto_to_str(
+    runtime: Runtime.ValueType,
+    platform: PlatformInfo | None = None,
+    display_name: bool = False,
+) -> str:
     """
-    Convert a Runtime proto enum value to its lowercase string name.
+    Convert a Runtime proto enum value to a string.
 
     Parameters
     ----------
     runtime
         ``Runtime`` enum value (e.g. ``RUNTIME_TFLITE``).
+    platform
+        Optional platform registry supplying runtime display names. Required
+        when *display_name* is True.
+    display_name
+        If True, return the human display name (e.g. ``"TensorFlow Lite"``) from
+        *platform* instead of the lowercase token. Falls back to the token if
+        the runtime has no display name in *platform*.
 
     Returns
     -------
     str
-        Lowercase name without the ``RUNTIME_`` prefix (e.g. ``"tflite"``).
+        The lowercase token (e.g. ``"tflite"``), or the display name when
+        *display_name* is True.
 
     Raises
     ------
     KeyError
         If *runtime* is not a valid enum value.
     """
+    if display_name and platform is not None:
+        for rt in platform.runtimes:
+            if rt.runtime == runtime and rt.display_name:
+                return rt.display_name
+
     name = Runtime.Name(runtime)
     if not name.startswith("RUNTIME_"):
         raise KeyError(f"Unknown runtime value: {runtime!r}")
     return name.removeprefix("RUNTIME_").lower()
 
 
-def runtime_str_to_proto(runtime: str | Runtime.ValueType) -> Runtime.ValueType:
+def runtime_str_to_proto(
+    runtime: str | Runtime.ValueType,
+    platform: PlatformInfo | None = None,
+) -> Runtime.ValueType:
     """
     Convert a runtime string to its proto enum value.
 
@@ -132,7 +153,12 @@ def runtime_str_to_proto(runtime: str | Runtime.ValueType) -> Runtime.ValueType:
     ----------
     runtime
         Runtime name (e.g. ``"tflite"``, ``"qnn_dlc"``, ``"RUNTIME_ONNX"``).
-        Case-insensitive. The ``RUNTIME_`` prefix is optional.
+        Case-insensitive; the ``RUNTIME_`` prefix is optional. If *platform* is
+        given, the human display name (e.g. ``"TensorFlow Lite"``) is also
+        accepted, matched against ``RuntimeInfo.display_name`` ignoring case,
+        spaces, and punctuation.
+    platform
+        Optional platform registry supplying runtime display names.
 
     Returns
     -------
@@ -153,14 +179,32 @@ def runtime_str_to_proto(runtime: str | Runtime.ValueType) -> Runtime.ValueType:
     try:
         return Runtime.Value(key)
     except ValueError:
+        pass
+
+    # Fall back to matching the human display name from the platform registry.
+    if platform is not None:
+        target = "".join(c for c in runtime if c.isalnum()).lower()
+        for rt in platform.runtimes:
+            display = rt.display_name
+            if display and "".join(c for c in display if c.isalnum()).lower() == target:
+                return rt.runtime
+
+    # When the platform is available, list valid runtimes as "Display Name (token)";
+    # otherwise fall back to the bare tokens from the proto enum.
+    if platform is not None:
+        valid = ", ".join(
+            f"{rt.display_name} ({runtime_proto_to_str(rt.runtime)})"
+            if rt.display_name
+            else runtime_proto_to_str(rt.runtime)
+            for rt in platform.runtimes
+        )
+    else:
         valid = ", ".join(
             name.removeprefix("RUNTIME_").lower()
             for name in Runtime.DESCRIPTOR.values_by_name
             if name != "RUNTIME_UNSPECIFIED"
         )
-        raise KeyError(
-            f"Unknown runtime: {runtime!r}. Valid runtimes: {valid}"
-        ) from None
+    raise KeyError(f"Unknown runtime: {runtime!r}. Valid runtimes: {valid}") from None
 
 
 def form_factor_proto_to_str(form_factor: int) -> str:

@@ -4,7 +4,6 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
-import sys
 from concurrent.futures import ThreadPoolExecutor
 
 from qai_hub_models_cli.proto.info_pb2 import ModelInfo
@@ -14,6 +13,7 @@ from qai_hub_models_cli.proto.perf_pb2 import ModelPerf
 from qai_hub_models_cli.proto.platform_pb2 import PlatformInfo
 from qai_hub_models_cli.proto.release_assets_pb2 import ModelReleaseAssets
 from qai_hub_models_cli.versions import CURRENT_VERSION
+from tqdm import tqdm
 
 from qai_hub_models._version import __version__
 from qai_hub_models.configs._info_yaml_enums import MODEL_STATUS
@@ -31,10 +31,6 @@ from qai_hub_models.utils.path_helpers import MODEL_IDS, is_internal_repo
 
 def get_manifest_proto() -> ReleaseManifest:
     """Build a ReleaseManifest from local model configs (dev installs)."""
-    print(
-        "Building the dev model manifest from local configs; this can take a minute...",
-        file=sys.stderr,
-    )
 
     def _build_entry(model_id: str) -> ManifestModelEntry | None:
         info = QAIHMModelInfo.from_model(model_id)
@@ -53,7 +49,14 @@ def get_manifest_proto() -> ReleaseManifest:
         )
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        entries = list(pool.map(_build_entry, MODEL_IDS))
+        entries = list(
+            tqdm(
+                pool.map(_build_entry, MODEL_IDS),
+                total=len(MODEL_IDS),
+                desc="Building CLI model manifest from current repository ref",
+                unit="model",
+            )
+        )
 
     return ReleaseManifest(
         version=__version__, models=filter(lambda x: x is not None, entries)
