@@ -9,9 +9,14 @@ from pathlib import Path
 
 from qai_hub_models import Precision
 from qai_hub_models.configs.perf_yaml import QAIHMModelPerf
+from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.scorecard.device import ScorecardDevice, cs_8_gen_3
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
 from qai_hub_models.scorecard.results.performance_diff import PerformanceDiff
+from qai_hub_models.scorecard.results.yaml import (
+    ToolVersionChange,
+    ToolVersionsByPathYaml,
+)
 
 MODEL_ID = "dummy"
 PREV_JOB_ID = "jgzr270o5"
@@ -328,3 +333,80 @@ def test_dump_severe_regressions_json(tmp_path: Path) -> None:
         data = json.load(f)
     assert len(data) == 1
     assert data[0]["Model ID"] == MODEL_ID
+
+
+def test_tool_versions_diff_detects_changes() -> None:
+    """ToolVersionsByPathYaml.diff returns one row per changed field, skips equal fields."""
+    previous = ToolVersionsByPathYaml(
+        tool_versions={
+            ScorecardProfilePath.TFLITE: ToolVersions(tflite="2.10.0", onnx="1.16.0"),
+            ScorecardProfilePath.ONNX: ToolVersions(onnx="1.16.0"),
+        }
+    )
+    current = ToolVersionsByPathYaml(
+        tool_versions={
+            ScorecardProfilePath.TFLITE: ToolVersions(tflite="2.11.0", onnx="1.16.0"),
+            ScorecardProfilePath.ONNX: ToolVersions(onnx="1.17.0"),
+            ScorecardProfilePath.QNN_DLC: ToolVersions(onnx="1.17.0"),
+        }
+    )
+
+    rows = current.diff(previous)
+    assert (
+        ToolVersionChange(
+            ScorecardProfilePath.TFLITE.name, "tflite", "2.10.0", "2.11.0"
+        )
+        in rows
+    )
+    assert (
+        ToolVersionChange(ScorecardProfilePath.ONNX.name, "onnx", "1.16.0", "1.17.0")
+        in rows
+    )
+    assert (
+        ToolVersionChange(ScorecardProfilePath.QNN_DLC.name, "onnx", "N/A", "1.17.0")
+        in rows
+    )
+    # Unchanged fields must not appear (TFLITE.onnx stayed 1.16.0).
+    assert not any(
+        r.path == ScorecardProfilePath.TFLITE.name and r.tool == "onnx" for r in rows
+    )
+
+
+def test_tool_versions_diff_empty_when_identical() -> None:
+    yaml = ToolVersionsByPathYaml(
+        tool_versions={
+            ScorecardProfilePath.TFLITE: ToolVersions(tflite="2.11.0"),
+        }
+    )
+    assert yaml.diff(yaml) == []
+
+
+def test_dump_summary_includes_toolchain_section(tmp_path: Path) -> None:
+    """dump_summary renders a Toolchain Version Changes section when given changes."""
+    perf_diff = PerformanceDiff()
+    summary_path = str(tmp_path / "summary.txt")
+    toolchain_changes = [
+        ToolVersionChange(
+            ScorecardProfilePath.TFLITE.name, "tflite", "2.10.0", "2.11.0"
+        ),
+    ]
+    perf_diff.dump_summary(summary_path, toolchain_changes=toolchain_changes)
+
+    contents = Path(summary_path).read_text()
+    assert "Toolchain Version Changes" in contents
+    assert "tflite" in contents
+    assert "2.10.0" in contents
+    assert "2.11.0" in contents
+
+
+def test_dump_summary_omits_toolchain_section_when_empty(tmp_path: Path) -> None:
+    """No Toolchain Version Changes section when toolchain_changes is None or []."""
+    perf_diff = PerformanceDiff()
+
+    none_path = str(tmp_path / "none.txt")
+    perf_diff.dump_summary(none_path, toolchain_changes=None)
+    assert "Toolchain Version Changes" not in Path(none_path).read_text()
+
+    empty_path = str(tmp_path / "empty.txt")
+    perf_diff.dump_summary(empty_path, toolchain_changes=[])
+    assert "Toolchain Version Changes" not in Path(empty_path).read_text()

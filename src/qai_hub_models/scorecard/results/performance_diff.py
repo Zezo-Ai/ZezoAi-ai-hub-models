@@ -17,6 +17,7 @@ from qai_hub_models.configs.perf_yaml import QAIHMModelPerf
 from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.scorecard.envvars import DeploymentEnvvar
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
+from qai_hub_models.scorecard.results.yaml import ToolVersionChange
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
 
 # Last 3 values in tuple are: [prev inference time, new inference time, diff, job_id]
@@ -442,10 +443,32 @@ class PerformanceDiff:
             or self.regressions
         )
 
-    def dump_summary(self, summary_file_path: str) -> None:
-        """Dumps Perf change summary captured so far to the provided path."""
+    def dump_summary(
+        self,
+        summary_file_path: str,
+        toolchain_changes: list[ToolVersionChange] | None = None,
+    ) -> None:
+        """Dumps Perf change summary captured so far to the provided path.
+
+        Parameters
+        ----------
+        summary_file_path
+            Output path for the summary text file.
+        toolchain_changes
+            Optional toolchain version changes since the previous scorecard.
+            Section is omitted when None or empty.
+        """
         with open(summary_file_path, "w") as sf:
             sf.write("================= Perf Change Summary =================")
+            if toolchain_changes:
+                sf.write(
+                    "\n\n----------------- Toolchain Version Changes -----------------\n"
+                )
+                table = PrettyTable(["Path", "Tool", "Previous", "Current"])
+                table.add_rows(
+                    [(c.path, c.tool, c.previous, c.current) for c in toolchain_changes]
+                )
+                sf.write(str(table))
             if self._has_perf_changes():
                 sf.write("\n\n----------------- Regressions -----------------\n")
                 # Dumps Point 1 and 2 from Summary of Interest

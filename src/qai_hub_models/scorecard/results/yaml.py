@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Generic, TypeVar
 
@@ -45,6 +46,14 @@ from qai_hub_models.utils.export_result import (
 ScorecardJobYamlTypeVar = TypeVar("ScorecardJobYamlTypeVar", bound="ScorecardJobYaml")
 
 
+@dataclass(frozen=True)
+class ToolVersionChange:
+    path: str
+    tool: str
+    previous: str
+    current: str
+
+
 # Schema for sdk versions dumped to Hugging Face / Scorecard Intermediates in YAML format.
 class ToolVersionsByPathYaml(BaseQAIHMConfig):
     tool_versions: dict[ScorecardProfilePath, ToolVersions] = Field(
@@ -81,6 +90,43 @@ class ToolVersionsByPathYaml(BaseQAIHMConfig):
         filename: str = "tool-versions.yaml",
     ) -> bool:
         return self.to_yaml(Path(dirpath) / filename, write_if_empty=False)
+
+    def diff(self, previous: ToolVersionsByPathYaml) -> list[ToolVersionChange]:
+        """
+        Compute per-path, per-tool version changes between this (current) and a previous yaml.
+
+        Returns one ToolVersionChange per differing field. Missing values are rendered as "N/A".
+        """
+        rows: list[ToolVersionChange] = []
+        all_paths = sorted(
+            set(self.tool_versions) | set(previous.tool_versions),
+            key=lambda p: p.name,
+        )
+        for path in all_paths:
+            curr = self.tool_versions.get(path, ToolVersions())
+            prev = previous.tool_versions.get(path, ToolVersions())
+            for field_name in ToolVersions.model_fields:
+                curr_val = getattr(curr, field_name)
+                prev_val = getattr(prev, field_name)
+                if curr_val == prev_val:
+                    continue
+                rows.append(
+                    ToolVersionChange(
+                        path=path.name,
+                        tool=field_name,
+                        previous=_format_tool_version(prev_val),
+                        current=_format_tool_version(curr_val),
+                    )
+                )
+        return rows
+
+
+def _format_tool_version(value: object) -> str:
+    if value is None:
+        return "N/A"
+    if hasattr(value, "full_version_with_flavor"):
+        return value.full_version_with_flavor
+    return str(value)
 
 
 class ScorecardJobYaml(ScorecardYamlFile[str], Generic[ScorecardJobTypeVar]):

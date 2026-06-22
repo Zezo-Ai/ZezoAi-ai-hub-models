@@ -51,6 +51,7 @@ from qai_hub_models.scorecard.results.yaml import (
     PreQDQCompileScorecardJobYaml,
     ProfileScorecardJobYaml,
     QuantizeScorecardJobYaml,
+    ToolVersionsByPathYaml,
     get_model_component_and_graph_names,
 )
 from qai_hub_models.scorecard.static.list_models import (
@@ -614,7 +615,18 @@ if __name__ == "__main__":
         report_path = os.path.join(
             args.artifacts_dir, f"performance-summary-{now_str}.txt"
         )
-        perf_report.dump_summary(report_path)
+        # Diff toolchain versions between this run's intermediates (current)
+        # and the checked-in intermediates from the previous results branch (previous).
+        current_tool_versions = ToolVersionsByPathYaml.from_yaml(
+            ScorecardArtifact.TOOL_VERSIONS.path,
+            create_empty_if_no_file=True,
+        )
+        previous_tool_versions = ToolVersionsByPathYaml.from_yaml(
+            ScorecardArtifact.TOOL_VERSIONS.intermediates_path,
+            create_empty_if_no_file=True,
+        )
+        toolchain_changes = current_tool_versions.diff(previous_tool_versions)
+        perf_report.dump_summary(report_path, toolchain_changes=toolchain_changes)
 
         regressions_path = os.path.join(
             args.artifacts_dir, f"perf-regressions-2x-{now_str}.json"
