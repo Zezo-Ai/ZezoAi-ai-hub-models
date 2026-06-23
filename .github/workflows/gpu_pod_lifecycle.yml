@@ -278,7 +278,9 @@ jobs:
   cleanup_runner:
     name: "Cleanup GPU Runner"
     needs: [check_gpu_node, start_runner, run_test_models, run_gpu_tests]
-    if: ${{ always() && needs.check_gpu_node.outputs.use_kube == 'true' && needs.start_runner.result == 'success' }}
+    # A cancelled start_runner can leave the Argo workflow alive, so clean up
+    # on any non-skipped result.
+    if: ${{ always() && needs.check_gpu_node.outputs.use_kube == 'true' && needs.start_runner.result != 'skipped' }}
     runs-on: [tetra-ubuntu-2204, self-hosted]
     steps:
       - uses: actions/checkout@v7
