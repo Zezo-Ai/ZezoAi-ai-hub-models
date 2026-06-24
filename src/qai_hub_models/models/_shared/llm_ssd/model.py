@@ -78,6 +78,99 @@ def apply_ssd_engine_overrides(engine: dict[str, Any]) -> None:
     qnn_htp["allow-async-init"] = True
 
 
+def apply_ssd_genie_assets(
+    output_path: Path,
+    encodings_path: str | os.PathLike | Path,
+    ssd_forecast_ckpt: str | os.PathLike | Path | None,
+) -> None:
+    """Augment an already-written genie bundle with SSD assets.
+
+    Writes the quantized forecast-prefix KV-cache file and patches
+    ``genie_config.json`` (and ``text-generator.json`` if present) to enable
+    the ``ssd-q1`` self-speculative-decoding dialog. This is a no-op if
+    ``ssd_forecast_ckpt`` is None.
+
+    Parameters
+    ----------
+    output_path
+        The genie bundle directory containing ``genie_config.json``.
+    encodings_path
+        Path to the full (unsplit) model AIMET encodings JSON. Its
+        ``past_key_*_in`` / ``past_value_*_in`` activation encodings supply the
+        quantization scales for the forecast-prefix KV-cache.
+    ssd_forecast_ckpt
+        Path to the SSD forecast checkpoint (``forecast_module_state_dict.pt``).
+    """
+    if ssd_forecast_ckpt is None:
+        return
+
+    # Load SSD params once
+    ssd_param = torch.load(ssd_forecast_ckpt, map_location="cpu", weights_only=True)
+    ssd_prefix = ssd_param["forecast_prefix"].to(torch.float32)
+    n_layer, _, _, _, len_prefix, _ = ssd_prefix.shape
+    ssd_prefix_tuple = tuple(
+        (ssd_prefix[i][0].permute(0, 1, 3, 2), ssd_prefix[i][1]) for i in range(n_layer)
+    )
+    num_ssd_forecast_tokens = len(ssd_param["forecast_embedding"])
+
+    # Load activation_encodings (to scan for all 'past_key_*_in' layers)
+    with open(encodings_path) as f:
+        encodings = json.load(f)
+    if isinstance(encodings["activation_encodings"], list):
+        # Convert encodings to dictionary
+        encodings["activation_encodings"] = {
+            v["name"]: v for v in encodings["activation_encodings"]
+        }
+    actv_encodings = encodings["activation_encodings"]
+    num_layers = sum(
+        1
+        for ae_key in actv_encodings
+        if ae_key.startswith("past_value_") and ae_key.endswith("_in")
+    )
+
+    # Create 'forecast-prefix' folder and save kvcache prefix
+    ssd_prefix_des_dir = output_path / "forecast-prefix"
+    shutil.rmtree(ssd_prefix_des_dir, ignore_errors=True)
+    ssd_prefix_des_dir.mkdir(parents=True, exist_ok=True)
+    _save_kv_cache(
+        ssd_prefix_tuple,
+        actv_encodings,
+        str(ssd_prefix_des_dir / "kv-cache.primary.qnn-htp"),
+        num_layers,
+    )
+
+    # Update genie config with SSD params
+    with open(output_path / GENIE_CONFIG_JSON) as f:
+        genie_config = json.load(f)
+    genie_config["dialog"]["type"] = "ssd-q1"
+    genie_config["dialog"]["ssd-q1"] = {
+        "version": 1,
+        "ssd-version": 1,
+        "forecast-token-count": num_ssd_forecast_tokens,
+        "forecast-prefix": len_prefix,
+        "forecast-prefix-name": ssd_prefix_des_dir.name,
+        "branches": [3, 2],
+        "n-streams": 1,
+        "p-threshold": 0.0,
+    }
+    apply_ssd_engine_overrides(genie_config["dialog"]["engine"])
+    with open(output_path / GENIE_CONFIG_JSON, "w") as f:
+        json.dump(genie_config, f, indent=4)
+
+    # Apply the same SSD-specific overrides to text-generator.json
+    text_gen_path = output_path / "text-generator.json"
+    if text_gen_path.exists():
+        with open(text_gen_path) as f:
+            text_gen_config = json.load(f)
+        apply_ssd_engine_overrides(text_gen_config["text-generator"]["engine"])
+        with open(text_gen_path, "w") as f:
+            json.dump(text_gen_config, f, indent=4)
+    else:
+        print(
+            f"No text-generator.json found at {output_path}, skipping SSD engine overrides for it"
+        )
+
+
 def _quantize_kv_cache(f: Any, encoding: Any, bw: int = 8) -> Any:
     def _round(x: Any) -> Any:
         sign = np.where(x < 0, -1, 1).astype(np.float32)
@@ -205,73 +298,8 @@ class LLMDynamic_SSD_AIMETOnnx(LLMDynamic_AIMETOnnx):
         )
         if cls.FPModel is None or not hasattr(cls.FPModel, "_ssd_forecast_ckpt"):
             return
-        ssd_forecast_ckpt = cls.FPModel._ssd_forecast_ckpt()
-        if ssd_forecast_ckpt is None:
-            return
-
-        # Load SSD params once
-        ssd_param = torch.load(ssd_forecast_ckpt, map_location="cpu", weights_only=True)
-        ssd_prefix = ssd_param["forecast_prefix"].to(torch.float32)
-        n_layer, _, _, _, len_prefix, _ = ssd_prefix.shape
-        ssd_prefix_tuple = tuple(
-            (ssd_prefix[i][0].permute(0, 1, 3, 2), ssd_prefix[i][1])
-            for i in range(n_layer)
+        apply_ssd_genie_assets(
+            output_path=output_path,
+            encodings_path=encodings_path,
+            ssd_forecast_ckpt=cls.FPModel._ssd_forecast_ckpt(),
         )
-        num_ssd_forecast_tokens = len(ssd_param["forecast_embedding"])
-
-        # Load activation_encodings (to scan for all 'past_key_*_in' layers)
-        with open(encodings_path) as f:
-            encodings = json.load(f)
-        if isinstance(encodings["activation_encodings"], list):
-            # Convert encodings to dictionary
-            encodings["activation_encodings"] = {
-                v["name"]: v for v in encodings["activation_encodings"]
-            }
-        actv_encodings = encodings["activation_encodings"]
-        num_layers = sum(
-            1
-            for ae_key in actv_encodings
-            if ae_key.startswith("past_value_") and ae_key.endswith("_in")
-        )
-
-        # Create 'forecast-prefix' folder and save kvcache prefix
-        ssd_prefix_des_dir = output_path / "forecast-prefix"
-        shutil.rmtree(ssd_prefix_des_dir, ignore_errors=True)
-        ssd_prefix_des_dir.mkdir(parents=True, exist_ok=True)
-        _save_kv_cache(
-            ssd_prefix_tuple,
-            actv_encodings,
-            str(ssd_prefix_des_dir / "kv-cache.primary.qnn-htp"),
-            num_layers,
-        )
-
-        # Update genie config with SSD params
-        with open(output_path / GENIE_CONFIG_JSON) as f:
-            genie_config = json.load(f)
-        genie_config["dialog"]["type"] = "ssd-q1"
-        genie_config["dialog"]["ssd-q1"] = {
-            "version": 1,
-            "ssd-version": 1,
-            "forecast-token-count": num_ssd_forecast_tokens,
-            "forecast-prefix": len_prefix,
-            "forecast-prefix-name": ssd_prefix_des_dir.name,
-            "branches": [3, 2],
-            "n-streams": 1,
-            "p-threshold": 0.0,
-        }
-        apply_ssd_engine_overrides(genie_config["dialog"]["engine"])
-        with open(output_path / GENIE_CONFIG_JSON, "w") as f:
-            json.dump(genie_config, f, indent=4)
-
-        # Apply the same SSD-specific overrides to text-generator.json
-        text_gen_path = output_path / "text-generator.json"
-        if text_gen_path.exists():
-            with open(text_gen_path) as f:
-                text_gen_config = json.load(f)
-            apply_ssd_engine_overrides(text_gen_config["text-generator"]["engine"])
-            with open(text_gen_path, "w") as f:
-                json.dump(text_gen_config, f, indent=4)
-        else:
-            print(
-                f"No text-generator.json found at {output_path}, skipping SSD engine overrides for it"
-            )

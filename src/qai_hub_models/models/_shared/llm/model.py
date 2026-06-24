@@ -1549,6 +1549,10 @@ class DynamicSplitCollectionBase(MultiGraphWorkbenchModelCollection):
     part_base_cls: Any
     supports_thinking: bool = False
     parts: dict[str, Any]
+    # Default (seq_len, ctx_len) graphs to emit. Override in subclasses that
+    # need non-standard sequence lengths (e.g. SSD uses an AR-32 token graph).
+    default_sequence_lengths: list[int] = DEFAULT_EXPORT_SEQUENCE_LENGTHS
+    default_context_lengths: list[int] = DEFAULT_EXPORT_CONTEXT_LENGTHS
 
     @classmethod
     def from_pretrained(
@@ -1556,8 +1560,9 @@ class DynamicSplitCollectionBase(MultiGraphWorkbenchModelCollection):
         checkpoint: str | Path = "DEFAULT",
         host_device: torch.device | None = None,
         _skip_quantsim_creation: bool = True,
-        sequence_lengths: list[int] = DEFAULT_EXPORT_SEQUENCE_LENGTHS,
-        context_lengths: list[int] = DEFAULT_EXPORT_CONTEXT_LENGTHS,
+        # Empty lists are a read-only "use cls defaults" sentinel (never mutated).
+        sequence_lengths: list[int] = [],  # noqa: B006
+        context_lengths: list[int] = [],  # noqa: B006
     ) -> Self:
         """
         Create Collection with all Parts.
@@ -1572,15 +1577,19 @@ class DynamicSplitCollectionBase(MultiGraphWorkbenchModelCollection):
         _skip_quantsim_creation
             Skip QuantSim creation (for testing).
         sequence_lengths
-            Sequence lengths to compile for.
+            Sequence lengths to compile for. Empty means use
+            ``cls.default_sequence_lengths``.
         context_lengths
-            Context lengths to compile for.
+            Context lengths to compile for. Empty means use
+            ``cls.default_context_lengths``.
 
         Returns
         -------
         Self
             The Collection with all Parts.
         """
+        sequence_lengths = sequence_lengths or cls.default_sequence_lengths
+        context_lengths = context_lengths or cls.default_context_lengths
         return cls(
             {
                 part_name: part_cls.from_pretrained(

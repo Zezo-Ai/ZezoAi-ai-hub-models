@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from qai_hub_models import Precision
+from qai_hub_models.configs.model_metadata import ModelMetadata
 
 # LLMIOType is re-exported from this module so the CLI input-spec parser can
 # resolve the inherited get_input_spec's "llm_io_type" annotation, which it
@@ -28,6 +29,7 @@ from qai_hub_models.models._shared.llm.model import SplitForwardMixin
 from qai_hub_models.models._shared.llm_ssd.model import (
     LLMDynamic_SSD_AIMETOnnx,
     append_ssd_forecast_embeddings,
+    apply_ssd_genie_assets,
 )
 from qai_hub_models.models._shared.lm_driver.generator import (
     HubCompatibleGenerator,
@@ -200,9 +202,54 @@ class Llama3_2_3B_SSD_Collection(LlamaPreSplitCollectionBase):
     hf_repo_name = HF_REPO_NAME
     fp_presplit_cls = Llama3_2_3B_SSD_PreSplit
     part_base_cls = Llama3_2_3B_SSD_PartBase
+    default_sequence_lengths = DEFAULT_EXPORT_SEQUENCE_LENGTHS
     parts = {
         "part1_of_4": Llama3_2_3B_SSD_Part1_Of_4,
         "part2_of_4": Llama3_2_3B_SSD_Part2_Of_4,
         "part3_of_4": Llama3_2_3B_SSD_Part3_Of_4,
         "part4_of_4": Llama3_2_3B_SSD_Part4_Of_4,
     }
+
+    def write_supplementary_files(
+        self,
+        output_dir: str | os.PathLike,
+        metadata: ModelMetadata,
+    ) -> None:
+        # Write the standard genie bundle (genie_config.json, tokenizer, etc.),
+        # then layer the SSD-specific assets on top: the quantized
+        # forecast-prefix KV-cache file and the ssd-q1 dialog config. The
+        # legacy export path did this in prepare_genie_assets, which the
+        # modernized collection export no longer calls.
+        super().write_supplementary_files(output_dir, metadata)
+
+        # The forecast-prefix KV-cache is quantized using the full (unsplit)
+        # model's activation encodings, which live alongside the resolved
+        # checkpoint as model.encodings.
+        first_part = next(iter(self.components.values()))
+        assert isinstance(first_part, self.part_base_cls)
+        checkpoint = getattr(first_part._presplit, "checkpoint", None)
+        if checkpoint is None:
+            logger.warning(
+                "SSD collection has no resolved checkpoint; skipping SSD genie "
+                "assets. The exported bundle will not enable self-speculative "
+                "decoding."
+            )
+            return
+        encodings_path = Path(checkpoint) / "model.encodings"
+        if not encodings_path.exists():
+            logger.warning(
+                "Expected model.encodings at %s for SSD genie assets, but it "
+                "was not found; skipping SSD genie assets.",
+                encodings_path,
+            )
+            return
+
+        output_path = Path(output_dir)
+        apply_ssd_genie_assets(
+            output_path=output_path,
+            encodings_path=encodings_path,
+            ssd_forecast_ckpt=self.fp_presplit_cls._ssd_forecast_ckpt(),
+        )
+        metadata.supplementary_files["forecast-prefix/kv-cache.primary.qnn-htp"] = (
+            "Quantized forecast-prefix KV-cache for SSD self-speculative decoding."
+        )
