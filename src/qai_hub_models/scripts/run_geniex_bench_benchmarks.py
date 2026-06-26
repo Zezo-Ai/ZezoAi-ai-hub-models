@@ -26,6 +26,10 @@ from qai_hub_models.models._shared.llm.qdc.geniex_jobs import (
 )
 from qai_hub_models.scorecard import ScorecardProfilePath
 from qai_hub_models.scorecard.device import ScorecardDevice
+from qai_hub_models.scorecard.envvars import (
+    LLMPerfPrecisionsEnvvar,
+    SpecialLLMPerfPrecisionSetting,
+)
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.fetch_prerelease_assets import download_prerelease_asset
 from qai_hub_models.utils.path_helpers import MODEL_IDS
@@ -44,48 +48,61 @@ LLAMACPP_DEVICE_ALIASES = ("cpu", "gpu", "npu")
 LLAMACPP_CONTEXT_LENGTHS = [512, 1024, 4096]
 
 
-def _qairt_precision(model_id: str) -> Precision:
-    return QAIHMModelCodeGen.from_model(model_id).supported_precisions[0]
+def _qairt_precisions(model_id: str) -> list[Precision]:
+    cg = QAIHMModelCodeGen.from_model(model_id)
+    return [
+        p
+        for p in cg.supported_precisions
+        if cg.is_supported(p, TargetRuntime.GENIEX_QAIRT)
+    ]
 
 
-def _discover_models(filter_models: str | None, runtime: TargetRuntime) -> list[str]:
-    if filter_models and filter_models.lower() != "all":
-        candidates = [m.strip() for m in filter_models.split(",") if m.strip()]
-    else:
-        candidates = list(MODEL_IDS)
-
-    out: list[str] = []
-    for mid in candidates:
-        cg = QAIHMModelCodeGen.from_model(mid)
-        if any(cg.is_supported(p, runtime) for p in cg.supported_precisions):
-            out.append(mid)
-    return out
-
-
-def discover_llamacpp_models(filter_models: str | None) -> list[str]:
-    if filter_models and filter_models.lower() != "all":
-        candidates = [m.strip() for m in filter_models.split(",") if m.strip()]
-    else:
-        candidates = list(MODEL_IDS)
-
-    return [mid for mid in candidates if _llamacpp_asset(mid) is not None]
-
-
-def _llamacpp_asset(model_id: str) -> tuple[Precision, str] | None:
-    """Return (precision, gguf_url) for whichever precision keys the
-    geniex_llamacpp asset in release-assets.yaml. Quants vary across models
-    (q4_0 for most, mxfp4 for gpt_oss_20b, etc.) so we don't pin the key.
+def _llamacpp_assets(model_id: str) -> dict[Precision, str]:
+    """Return {precision: gguf_url} for each precision with a geniex_llamacpp
+    asset in release-assets.yaml. Quants vary across models (q4_0 for most,
+    mxfp4 for gpt_oss_20b, etc.).
     """
     assets = QAIHMModelReleaseAssets.from_model(model_id, not_exists_ok=True)
+    out: dict[Precision, str] = {}
     for precision, prec_details in assets.precisions.items():
         asset = prec_details.universal_assets.get(ScorecardProfilePath.GENIEX_LLAMACPP)
         if asset and asset.download_url:
-            return precision, asset.download_url
-    return None
+            out[precision] = asset.download_url
+    return out
+
+
+def _candidate_model_ids(filter_models: str | None) -> list[str]:
+    if filter_models and filter_models.lower() != "all":
+        return [m.strip() for m in filter_models.split(",") if m.strip()]
+    return list(MODEL_IDS)
 
 
 def discover_qairt_models(filter_models: str | None) -> list[str]:
-    return _discover_models(filter_models, TargetRuntime.GENIEX_QAIRT)
+    return [
+        mid for mid in _candidate_model_ids(filter_models) if _qairt_precisions(mid)
+    ]
+
+
+def discover_llamacpp_models(filter_models: str | None) -> list[str]:
+    return [mid for mid in _candidate_model_ids(filter_models) if _llamacpp_assets(mid)]
+
+
+def _resolve_precisions(
+    setting: set[str | SpecialLLMPerfPrecisionSetting],
+    candidates: list[Precision],
+) -> list[Precision]:
+    if not candidates:
+        return []
+    if SpecialLLMPerfPrecisionSetting.ALL in setting:
+        return candidates
+    if SpecialLLMPerfPrecisionSetting.DEFAULT in setting:
+        return [candidates[0]]
+    candidate_set = set(candidates)
+    return [
+        Precision.parse(p)
+        for p in setting
+        if isinstance(p, str) and Precision.parse(p) in candidate_set
+    ]
 
 
 def fetch_qairt_genie_bundle(
@@ -145,6 +162,7 @@ def write_csv(rows: list[dict], path: str) -> None:
             [
                 "Model",
                 "Plugin",
+                "Precision",
                 "Device",
                 "Ctx",
                 "Decode TPS",
@@ -158,6 +176,7 @@ def write_csv(rows: list[dict], path: str) -> None:
                 [
                     r["model"],
                     r.get("plugin", ""),
+                    r.get("precision", ""),
                     r["device"],
                     r.get("ctx", ""),
                     r.get("decode_tps", ""),
@@ -179,13 +198,14 @@ def write_summary(rows: list[dict]) -> None:
     with open(summary, "a") as f:
         f.write("## geniex-bench Benchmark Results\n\n")
         f.write(
-            "| Model | Plugin | Device | Ctx | Decode TPS | Prefill TPS | TTFT (ms) | Status |\n"
+            "| Model | Plugin | Precision | Device | Ctx | Decode TPS | Prefill TPS | TTFT (ms) | Status |\n"
         )
         f.write(
-            "|-------|--------|--------|----:|-----------:|------------:|----------:|--------|\n"
+            "|-------|--------|-----------|--------|----:|-----------:|------------:|----------:|--------|\n"
         )
         f.writelines(
-            f"| {r['model']} | {r.get('plugin', '-')} | {r['device']} | {r.get('ctx', '-')} | "
+            f"| {r['model']} | {r.get('plugin', '-')} | {r.get('precision', '-')} | "
+            f"{r['device']} | {r.get('ctx', '-')} | "
             f"{_format_values(r.get('decode_tps'))} | {_format_values(r.get('prefill_tps'))} | "
             f"{_format_values(r.get('ttft_ms'), '.1f')} | {r['status']} |\n"
             for r in rows
@@ -242,6 +262,12 @@ def main() -> int:
         default="all",
         choices=["all", "llama_cpp", "qairt"],
     )
+    ap.add_argument(
+        "--precisions",
+        default="default",
+        help='Comma-separated precisions (e.g. "w4,w4a16"), "all" for every '
+        'supported precision, or "default" to use the model\'s default precision.',
+    )
     ap.add_argument("--csv", default="geniex_bench_results.csv")
     ap.add_argument("--results-dir", default="geniex_bench_results")
     ap.add_argument("--skip-perf-update", action="store_true")
@@ -258,6 +284,7 @@ def main() -> int:
         return 1
 
     plugins = ["llama_cpp", "qairt"] if args.plugin == "all" else [args.plugin]
+    precision_setting = LLMPerfPrecisionsEnvvar.parse(args.precisions)
 
     if args.devices.strip().lower() == "all":
         devices = list(ALL_GENIEX_DEVICES)
@@ -284,134 +311,143 @@ def main() -> int:
 
         for model_id in models:
             if plugin == "qairt":
-                precision = _qairt_precision(model_id)
-                llamacpp = None
+                candidates = _qairt_precisions(model_id)
+                llamacpp_urls: dict[Precision, str] = {}
             else:
-                llamacpp = _llamacpp_asset(model_id)
-                assert llamacpp is not None, (
-                    f"{model_id} has no geniex_llamacpp asset in release-assets.yaml"
+                llamacpp_urls = _llamacpp_assets(model_id)
+                candidates = list(llamacpp_urls.keys())
+
+            precisions = _resolve_precisions(precision_setting, candidates)
+            if not precisions:
+                print(
+                    f"Skipping {model_id} on {plugin}: no requested precision "
+                    f"available (candidates={[str(p) for p in candidates]})."
                 )
-                precision, _ = llamacpp
-            for device_token in devices:
-                sd = _scorecard_device(device_token)
-                # Per-(model, device) failure must not abort the whole sweep.
-                try:
-                    if plugin == "qairt":
-                        bundle_dir, ctx_list = fetch_qairt_genie_bundle(
-                            model_id,
-                            precision,
-                            sd.chipset,
-                            Path(args.results_dir) / "qairt_bundles",
-                        )
-                        metrics = run_geniex_bench_job(
-                            model_id,
-                            str(bundle_dir),
-                            device_token,
-                            api_token,
-                            ctx_list,
-                            args.results_dir,
-                            plugin,
-                        )
-                    else:
-                        assert llamacpp is not None
-                        _, model_url = llamacpp
-                        metrics = run_geniex_bench_job(
-                            model_id,
-                            model_url,
-                            device_token,
-                            api_token,
-                            LLAMACPP_CONTEXT_LENGTHS,
-                            args.results_dir,
-                            plugin,
-                        )
-                except Exception as e:
-                    print(
-                        f"ERROR: geniex-bench job failed for {model_id} @ "
-                        f"{sd.name} (plugin={plugin}): {e}",
-                        file=sys.stderr,
-                    )
-                    rows.append(
-                        {
-                            "model": model_id,
-                            "plugin": plugin,
-                            "device": sd.name,
-                            "status": "failed",
-                        }
-                    )
-                    continue
+                continue
 
-                if not metrics:
-                    rows.append(
-                        {
-                            "model": model_id,
-                            "plugin": plugin,
-                            "device": sd.name,
-                            "status": "no_metrics",
-                        }
-                    )
-                    continue
-
-                for m in metrics:
-                    base_plugin = m.plugin or plugin
-                    plugin_label = (
-                        f"{base_plugin}_{m.device_alias}"
-                        if base_plugin == "llama_cpp" and m.device_alias
-                        else base_plugin
-                    )
-                    rows.append(
-                        {
-                            "model": model_id,
-                            "plugin": plugin_label,
-                            "device": sd.name,
-                            "ctx": m.context_length,
-                            "decode_tps": m.decode_tps,
-                            "prefill_tps": m.prefill_tps,
-                            "ttft_ms": m.ttft_ms,
-                            "status": "success",
-                        }
-                    )
-                    if not args.skip_perf_update:
+            for precision in precisions:
+                for device_token in devices:
+                    sd = _scorecard_device(device_token)
+                    # Per-(model, precision, device) failure must not abort the whole sweep.
+                    try:
                         if plugin == "qairt":
-                            profile_path = ScorecardProfilePath.GENIEX_QAIRT
+                            bundle_dir, ctx_list = fetch_qairt_genie_bundle(
+                                model_id,
+                                precision,
+                                sd.chipset,
+                                Path(args.results_dir) / "qairt_bundles",
+                            )
+                            metrics = run_geniex_bench_job(
+                                model_id,
+                                str(bundle_dir),
+                                device_token,
+                                api_token,
+                                ctx_list,
+                                args.results_dir,
+                                plugin,
+                            )
                         else:
-                            profile_path = ScorecardProfilePath.GENIEX_LLAMACPP
-                        # ttft_max_ms=ttft_ms: geniex measures TTFT at full ctx.
-                        update_kwargs = dict(
-                            model_id=model_id,
-                            device_name=sd.reference_device_name,
-                            precision=str(precision),
-                            context_length=m.context_length,
-                            tps=m.decode_tps,
-                            ttft_ms=m.ttft_ms,
-                            prefill_tps=m.prefill_tps,
-                            ttft_max_ms=m.ttft_ms,
-                            profile_path=profile_path.value,
-                            desired_compute_unit=m.device_alias,
+                            metrics = run_geniex_bench_job(
+                                model_id,
+                                llamacpp_urls[precision],
+                                device_token,
+                                api_token,
+                                LLAMACPP_CONTEXT_LENGTHS,
+                                args.results_dir,
+                                plugin,
+                            )
+                    except Exception as e:
+                        print(
+                            f"ERROR: geniex-bench job failed for {model_id} @ "
+                            f"{sd.name} (plugin={plugin}, precision={precision}): {e}",
+                            file=sys.stderr,
                         )
-                        perf_updates.append(update_kwargs)
-                        update_perf_yaml(
-                            model_id=model_id,
-                            device_name=sd.reference_device_name,
-                            precision=precision,
-                            context_length=m.context_length,
-                            tps=m.decode_tps,
-                            ttft_ms=m.ttft_ms,
-                            prefill_tps=m.prefill_tps,
-                            ttft_max_ms=m.ttft_ms,
-                            profile_path=profile_path,
-                            desired_compute_unit=m.device_alias,
+                        rows.append(
+                            {
+                                "model": model_id,
+                                "plugin": plugin,
+                                "precision": str(precision),
+                                "device": sd.name,
+                                "status": "failed",
+                            }
                         )
+                        continue
+
+                    if not metrics:
+                        rows.append(
+                            {
+                                "model": model_id,
+                                "plugin": plugin,
+                                "precision": str(precision),
+                                "device": sd.name,
+                                "status": "no_metrics",
+                            }
+                        )
+                        continue
+
+                    for m in metrics:
+                        base_plugin = m.plugin or plugin
+                        plugin_label = (
+                            f"{base_plugin}_{m.device_alias}"
+                            if base_plugin == "llama_cpp" and m.device_alias
+                            else base_plugin
+                        )
+                        rows.append(
+                            {
+                                "model": model_id,
+                                "plugin": plugin_label,
+                                "precision": str(precision),
+                                "device": sd.name,
+                                "ctx": m.context_length,
+                                "decode_tps": m.decode_tps,
+                                "prefill_tps": m.prefill_tps,
+                                "ttft_ms": m.ttft_ms,
+                                "status": "success",
+                            }
+                        )
+                        if not args.skip_perf_update:
+                            if plugin == "qairt":
+                                profile_path = ScorecardProfilePath.GENIEX_QAIRT
+                            else:
+                                profile_path = ScorecardProfilePath.GENIEX_LLAMACPP
+                            # ttft_max_ms=ttft_ms: geniex measures TTFT at full ctx.
+                            update_kwargs = dict(
+                                model_id=model_id,
+                                device_name=sd.reference_device_name,
+                                precision=str(precision),
+                                context_length=m.context_length,
+                                tps=m.decode_tps,
+                                ttft_ms=m.ttft_ms,
+                                prefill_tps=m.prefill_tps,
+                                ttft_max_ms=m.ttft_ms,
+                                profile_path=profile_path.value,
+                                desired_compute_unit=m.device_alias,
+                            )
+                            perf_updates.append(update_kwargs)
+                            update_perf_yaml(
+                                model_id=model_id,
+                                device_name=sd.reference_device_name,
+                                precision=precision,
+                                context_length=m.context_length,
+                                tps=m.decode_tps,
+                                ttft_ms=m.ttft_ms,
+                                prefill_tps=m.prefill_tps,
+                                ttft_max_ms=m.ttft_ms,
+                                profile_path=profile_path,
+                                desired_compute_unit=m.device_alias,
+                            )
 
     print(f"\n{'=' * 60}\nRESULTS SUMMARY\n{'=' * 60}")
     for r in rows:
+        prec = r.get("precision", "-")
         if r["status"] == "success":
             print(
-                f"  {r['model']} @ {r['device']} ctx={r['ctx']}: "
+                f"  {r['model']} [{prec}] @ {r['device']} ctx={r['ctx']}: "
                 f"decode={r['decode_tps']:.2f} prefill={r['prefill_tps']:.2f} "
                 f"TTFT={r['ttft_ms']:.1f}ms"
             )
         else:
-            print(f"  {r['model']} @ {r['device']}: {r['status']}")
+            print(f"  {r['model']} [{prec}] @ {r['device']}: {r['status']}")
 
     write_csv(rows, args.csv)
     print(f"\nResults saved to {args.csv}")

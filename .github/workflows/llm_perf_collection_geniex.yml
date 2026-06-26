@@ -33,6 +33,12 @@ on:
           - llama_cpp
           - qairt
 
+      precision:
+        description: 'Precision(s) to collect perf for. Comma-separated (e.g. "w4,w4a16"), "all" for every supported precision, or "default" to use the model''s default precision.'
+        required: true
+        default: 'default'
+        type: string
+
       create_pr:
         description: 'Create PR with perf.yaml changes'
         default: true
@@ -54,6 +60,11 @@ on:
         description: 'geniex-bench plugin(s) to run.'
         type: string
         default: 'all'
+
+      precision:
+        description: 'Precision(s) to collect perf for. Comma-separated, "all", or "default" to use the model''s default precision.'
+        type: string
+        default: 'default'
 
       create_pr:
         description: 'Create PR with perf.yaml changes'
@@ -111,13 +122,15 @@ jobs:
         QAIHM_MODELS: ${{ inputs.model || 'all' }}
         QAIHM_TEST_DEVICES: ${{ inputs.device || 'cs_x2_elite,cs_x_elite' }}
         GENIEX_BENCH_PLUGIN: ${{ inputs.geniex_bench_plugin || 'all' }}
+        GENIEX_BENCH_PRECISIONS: ${{ inputs.precision || 'default' }}
       run: |
         source ${{ env.VENV_PATH }}/bin/activate
         cd $GITHUB_WORKSPACE
         python -m qai_hub_models.scripts.run_geniex_bench_benchmarks \
           --models "$QAIHM_MODELS" \
           --devices "$QAIHM_TEST_DEVICES" \
-          --plugin "$GENIEX_BENCH_PLUGIN"
+          --plugin "$GENIEX_BENCH_PLUGIN" \
+          --precisions "$GENIEX_BENCH_PRECISIONS"
 
     - name: Upload geniex-bench results
       if: ${{ !cancelled() }}
