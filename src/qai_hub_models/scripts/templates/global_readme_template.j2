@@ -39,6 +39,26 @@ See supported: [On-Device Runtimes](#on-device-runtimes), [Hardware Targets & Pr
 
 &nbsp;
 
+## NEW: Quick Start with the AI Hub Models CLI
+
+Use our lightweight command-line inferface to browse and download from the collection of Qualcomm® AI Hub Models.
+
+
+```shell
+pip install qai_hub_models_cli # (the CLI is also available with the qai-hub-models package)
+
+qai-hub-models models                                                # browse the catalog
+qai-hub-models info mobilenet_v2                                     # model details + download options
+qai-hub-models fetch mobilenet_v2 --runtime tflite --precision float # download a deployable asset
+# ... and more
+```
+
+The CLI also offers a Python API.
+
+See the [CLI README](cli/README.md) for full usage instructions.
+
+&nbsp;
+
 ## Setup
 
 ### 1. Install Python Package

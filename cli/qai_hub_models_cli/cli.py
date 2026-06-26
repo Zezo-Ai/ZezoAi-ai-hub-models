@@ -789,21 +789,19 @@ def _run_list_devices(args: argparse.Namespace) -> None:
     similar = [d for d in devices if d.reference_chipset]
 
     print(format_devices_table(primary, platform.chipsets))
-    print(f"Total: {len(primary)} devices.")
+    print(
+        f"Total: {len(primary)} devices. This table is a snapshot of devices tested with AI Hub Models v{args.qaihm_version}. AI Hub Workbench may support a different set of devices."
+    )
 
     if similar:
         print()
         print(format_similar_devices_table(similar, platform.chipsets))
         print(
-            f"Total: {len(similar)} similar devices. NOTE: The similar devices table lists devices that have not "
+            f"Total: {len(similar)} similar devices. Devices in this table have not "
             "been tested with AI Hub Models. However, the corresponding similar device / chipset "
             "serve as substitute compilation targets and have been tested. Assets built for the 'similar device' / 'similar chipset' "
             "are likely to run on the device, though performance and accuracy metrics may differ."
         )
-
-    print(
-        f"\nNOTE: This is a snapshot of devices tested with AI Hub Models v{args.qaihm_version}. AI Hub Workbench may support a different set of devices."
-    )
 
     print("\nSee all supported chipsets using `qai-hub-models chipsets`.")
 
@@ -877,22 +875,20 @@ def _run_list_chipsets(args: argparse.Namespace) -> None:
     similar = [c for c in chipsets if c.name in references]
 
     print(format_chipsets_table(primary))
-    print(f"Total: {len(primary)} chipsets")
+    print(
+        f"Total: {len(primary)} chipsets. This table is a snapshot of chipsets tested with AI Hub Models v{args.qaihm_version}. AI Hub Workbench may support a different set of chipsets."
+    )
 
     if similar:
         print()
         print(format_similar_chipsets_table(similar, platform.chipsets, references))
-        noun = "chipset" if len(similar) == 1 else "chipsets"
         print(
-            f"Total: {len(similar)} similar {noun}. NOTE: The similar chipsets table lists chipsets that have not "
+            f"Total: {len(similar)} similar chipsets. Chipsets in this table have not "
             "been tested with AI Hub Models. However, the corresponding similar chipset / device "
             "serve as substitute compilation targets and have been tested. Assets built for the 'similar chipset' / 'similar device' "
             "are likely to run on the chipset, though performance and accuracy metrics may differ."
         )
 
-    print(
-        f"\nNOTE: This is a snapshot of chipsets tested with AI Hub Models v{args.qaihm_version}. AI Hub Workbench may support a different set of chipsets."
-    )
     print("\nSee all supported devices using `qai-hub-models devices`.")
     print_upgrade_notice()
 
