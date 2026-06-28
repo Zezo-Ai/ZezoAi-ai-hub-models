@@ -8,11 +8,13 @@ supported_devices:
 - Samsung Galaxy S25 Ultra
 - Samsung Galaxy S25+
 - Dragonwing Q-8750
+- Dragonwing IQ-9075 EVK
 supported_chipsets:
 - qualcomm-snapdragon-8-elite
 - qualcomm-snapdragon-x-elite
 - qualcomm-snapdragon-x2-elite
 - qualcomm-snapdragon-8-elite-gen5
+- qualcomm-qcs9075
 precisions:
   w4a16:
     components:
@@ -27,6 +29,15 @@ precisions:
                   min: 111.043
                   max: 3553.376
                 desired_compute_unit: npu
+            geniex_qairt:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 15.883526
+                time_to_first_token_range_milliseconds:
+                  min: 419.6075789473684
+                  max: 13427.442526315788
+                prefill_tokens_per_second: 305.046921
+                desired_compute_unit: npu
           Snapdragon X Elite CRD:
             genie:
               llm_metrics:
@@ -35,6 +46,15 @@ precisions:
                 time_to_first_token_range_milliseconds:
                   min: 226.932
                   max: 7261.824
+                desired_compute_unit: npu
+            geniex_qairt:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 11.691041
+                time_to_first_token_range_milliseconds:
+                  min: 713.152
+                  max: 22820.864
+                prefill_tokens_per_second: 179.484878
                 desired_compute_unit: npu
           Snapdragon X2 Elite CRD:
             genie:
@@ -45,6 +65,15 @@ precisions:
                   min: 129.952
                   max: 4158.464
                 desired_compute_unit: npu
+            geniex_qairt:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 15.712119
+                time_to_first_token_range_milliseconds:
+                  min: 404.9886315789473
+                  max: 12959.636210526314
+                prefill_tokens_per_second: 316.058255
+                desired_compute_unit: npu
           Dragonwing IQ-X7181:
             genie:
               llm_metrics:
@@ -53,4 +82,24 @@ precisions:
                 time_to_first_token_range_milliseconds:
                   min: 226.932
                   max: 7261.824
+                desired_compute_unit: npu
+          Dragonwing IQ-9075 EVK:
+            geniex_qairt:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 9.862273
+                time_to_first_token_range_milliseconds:
+                  min: 749.2311578947368
+                  max: 23975.39705263158
+                prefill_tokens_per_second: 170.8418
+                desired_compute_unit: npu
+          Snapdragon 8 Elite QRD:
+            geniex_qairt:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 14.003767
+                time_to_first_token_range_milliseconds:
+                  min: 539.3616842105263
+                  max: 17259.57389473684
+                prefill_tokens_per_second: 237.317562
                 desired_compute_unit: npu
