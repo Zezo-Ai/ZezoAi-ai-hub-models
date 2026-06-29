@@ -8,12 +8,13 @@ import functools
 from typing import cast
 
 import torch
+from torch.nn import ModuleList
 from ultralytics.nn.modules.head import Detect
-from ultralytics.nn.tasks import DetectionModel
+from ultralytics.nn.tasks import DetectionModel, WorldModel
 from ultralytics.utils.tal import make_anchors
 
 
-def patch_ultralytics_detection_head(model: DetectionModel) -> None:
+def patch_ultralytics_detection_head(model: DetectionModel | WorldModel) -> None:
     """
     Patch the model's detection head for export compatibility.
 
@@ -24,7 +25,7 @@ def patch_ultralytics_detection_head(model: DetectionModel) -> None:
     Parameters
     ----------
     model
-        DetectionModel to patch.
+        DetectionModel | WorldModel to patch.
     """
     head = cast(Detect, model.model[-1])
 
@@ -41,7 +42,9 @@ def patch_ultralytics_detection_head(model: DetectionModel) -> None:
 
 
 def patched_ultryaltics_det_head_forward(
-    self: Detect, x: list[torch.Tensor]
+    self: Detect,
+    x: list[torch.Tensor],
+    txt_feats: list[str] | list[torch.Tensor] | torch.Tensor | None = None,
 ) -> (
     tuple[torch.Tensor, torch.Tensor]
     | tuple[list[torch.Tensor], list[torch.Tensor]]
@@ -61,6 +64,9 @@ def patched_ultryaltics_det_head_forward(
     x
         List of feature maps from different detection layers.
 
+    txt_feats
+        List of feature maps for prompt encoding layer
+
     Returns
     -------
     output : tuple[torch.Tensor, torch.Tensor] | tuple[list[torch.Tensor], list[torch.Tensor]] | tuple[torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor]]
@@ -71,17 +77,28 @@ def patched_ultryaltics_det_head_forward(
     assert not self.end2end  # end2end mode not supported
     boxes = []
     scores = []
+    cv4 = cv3 = None
+    if txt_feats is not None:
+        cv4 = cast(ModuleList, self.cv4)
+        cv3 = cast(ModuleList, self.cv3)
     for i in range(self.nl):
         boxes.append(self.cv2[i](x[i]))
-        scores.append(self.cv3[i](x[i]))
+        scores.append(
+            cv4[i](cv3[i](x[i]), txt_feats)  # type: ignore[index]
+            if txt_feats is not None
+            else self.cv3[i](x[i])
+        )
     if self.training:  # Training path
         return boxes, scores
-    yboxes, yscores = patched_ultryaltics_det_head_inference(self, boxes, scores)
+    yboxes, yscores = patched_ultryaltics_det_head_inference(self, boxes, scores, x)
     return (yboxes, yscores) if self.export else (yboxes, yscores, boxes, scores)
 
 
 def patched_ultryaltics_det_head_inference(
-    self: Detect, boxes: list[torch.Tensor], scores: list[torch.Tensor]
+    self: Detect,
+    boxes: list[torch.Tensor],
+    scores: list[torch.Tensor],
+    feats: list[torch.Tensor] | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Adjusted version of Detect::_inference that does not concat the bounding boxes and class probs.
@@ -98,6 +115,8 @@ def patched_ultryaltics_det_head_inference(
         List of box predictions from different detection layers.
     scores
         List of score predictions from different detection layers.
+    feats
+        Original features for anchor generation
 
     Returns
     -------
@@ -114,9 +133,10 @@ def patched_ultryaltics_det_head_inference(
         tuple(score.view(shape[0], scores[0].shape[1], -1) for score in scores), 2
     )
 
-    if self.dynamic or self.shape is None or self.shape[2:] != shape[2:]:
+    if self.dynamic or self.shape != shape:
         self.anchors, self.strides = (
-            bb.transpose(0, 1) for bb in make_anchors(boxes, self.stride, 0.5)
+            bb.transpose(0, 1)
+            for bb in make_anchors(feats if feats else boxes, self.stride, 0.5)
         )
         self.shape = shape  # type: ignore[assignment]
 

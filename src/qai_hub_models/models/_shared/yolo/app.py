@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal, overload
+from typing import Any, Literal, cast, overload
 
 import numpy as np
 import torch
@@ -31,6 +31,18 @@ from qai_hub_models.utils.image_processing import app_to_net_image_inputs, resiz
 from qai_hub_models.utils.input_spec import InputSpec
 
 
+def _parse_prompt_text(prompt_text: list[str] | str | None) -> list[str]:
+    """Normalize prompt text from a list, comma-separated string, or labels file."""
+    if prompt_text is None:
+        return []
+    if isinstance(prompt_text, str):
+        if prompt_text.endswith(".txt"):
+            with open(prompt_text) as f:
+                return [t.rstrip("\r\n").strip() for t in f if t.strip()]
+        return [t.strip() for t in prompt_text.split(",") if t.strip()]
+    return [t.strip() for t in prompt_text if t.strip()]
+
+
 class YoloObjectDetectionApp:
     """
     This class consists of light-weight "app code" that is required to perform end to end inference
@@ -52,9 +64,7 @@ class YoloObjectDetectionApp:
 
     def __init__(
         self,
-        model: Callable[
-            [torch.Tensor], tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-        ],
+        model: Callable[..., tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
         nms_score_threshold: float = 0.45,
         nms_iou_threshold: float = 0.7,
         model_includes_postprocessing: bool = True,
@@ -123,7 +133,8 @@ class YoloObjectDetectionApp:
         pixel_values_or_image: (
             torch.Tensor | np.ndarray | Image.Image | list[Image.Image]
         ),
-        raw_output: Literal[False],
+        raw_output: Literal[False] = ...,
+        prompt_text: list[str] | str | None = ...,
     ) -> list[np.ndarray]: ...
 
     @overload
@@ -133,15 +144,8 @@ class YoloObjectDetectionApp:
             torch.Tensor | np.ndarray | Image.Image | list[Image.Image]
         ),
         raw_output: Literal[True],
+        prompt_text: list[str] | str | None = ...,
     ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]: ...
-
-    @overload
-    def predict_boxes_from_image(
-        self,
-        pixel_values_or_image: (
-            torch.Tensor | np.ndarray | Image.Image | list[Image.Image]
-        ),
-    ) -> list[np.ndarray]: ...
 
     def predict_boxes_from_image(
         self,
@@ -149,6 +153,7 @@ class YoloObjectDetectionApp:
             torch.Tensor | np.ndarray | Image.Image | list[Image.Image]
         ),
         raw_output: bool = False,
+        prompt_text: list[str] | str | None = None,
     ) -> (
         tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]
         | list[np.ndarray]
@@ -167,6 +172,11 @@ class YoloObjectDetectionApp:
 
         raw_output
             See "returns" doc section for details.
+
+        prompt_text
+            Class names to detect. Only used by YoloWorldPromptDetectionApp subclasses.
+            List or comma-separated string. Falls back to ``self.prompt_text`` when set.
+            Ignored by non-prompt models.
 
         Returns
         -------
@@ -198,11 +208,41 @@ class YoloObjectDetectionApp:
             )
         self.check_image_size(NCHW_fp32_torch_frames)
 
+        txt_feats: torch.Tensor | None = None
+        filter_indices: set[int] | None = None
+        if isinstance(self, YoloWorldPromptDetectionApp):
+            classes: list[str]
+            if prompt_text is not None:
+                classes = (
+                    [t.strip() for t in prompt_text.split(",") if t.strip()]
+                    if isinstance(prompt_text, str)
+                    else list(prompt_text)
+                )
+            elif self.prompt_text:
+                classes = self.prompt_text
+            else:
+                raise ValueError(
+                    "prompt_text must be provided either as an argument or via from_components."
+                )
+            if not classes:
+                raise ValueError("prompt_text must contain at least one class name.")
+            with torch.no_grad():
+                txt_feats = self.text_encoder.encode_classes(classes)
+            filter_indices = set(range(len(classes)))
+
         # Run prediction
-        if self.model_includes_postprocessing:
-            pred_boxes, pred_scores, pred_class_idx = self.model(NCHW_fp32_torch_frames)
+        if txt_feats is not None:
+            world_app = cast("YoloWorldPromptDetectionApp", self)
+            model_output_typing: tuple[torch.Tensor, ...] = self.model(
+                NCHW_fp32_torch_frames,
+                world_app._txt_feats_for_image(NCHW_fp32_torch_frames, txt_feats),
+            )
         else:
-            model_output: tuple[torch.Tensor, ...] = self.model(NCHW_fp32_torch_frames)
+            model_output_typing = self.model(NCHW_fp32_torch_frames)
+        model_output = model_output_typing
+        if self.model_includes_postprocessing:
+            pred_boxes, pred_scores, pred_class_idx = model_output
+        else:
             if isinstance(model_output, torch.Tensor):
                 model_output = (model_output,)
             pred_boxes, pred_scores, pred_class_idx = self.pre_nms_postprocess(
@@ -229,6 +269,15 @@ class YoloObjectDetectionApp:
                     boxes[:, [0, 2]] = (boxes[:, [0, 2]] - pad_x) / scale
                     boxes[:, [1, 3]] = (boxes[:, [1, 3]] - pad_y) / scale
 
+        # Subclass-defined post-NMS filtering (no-op when filter_indices is None)
+        pred_post_nms_boxes, pred_post_nms_scores, pred_post_nms_class_idx = (
+            self._post_nms_filter(
+                pred_post_nms_boxes,
+                pred_post_nms_scores,
+                pred_post_nms_class_idx,
+                filter_indices,
+            )
+        )
         # Return raw output if requested
         if raw_output or isinstance(pixel_values_or_image, torch.Tensor):
             return (pred_post_nms_boxes, pred_post_nms_scores, pred_post_nms_class_idx)
@@ -246,6 +295,21 @@ class YoloObjectDetectionApp:
                 )
 
         return NHWC_int_numpy_frames
+
+    def _post_nms_filter(
+        self,
+        boxes: list[torch.Tensor],
+        scores: list[torch.Tensor],
+        class_idx: list[torch.Tensor],
+        filter_indices: set[int] | None = None,
+    ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        """
+        Hook for subclasses to filter post-NMS detections.
+
+        The default implementation is a no-op; override in a subclass to
+        remove unwanted detections after NMS has been applied.
+        """
+        return boxes, scores, class_idx
 
     def pre_nms_postprocess(
         self, *predictions: torch.Tensor
@@ -269,6 +333,122 @@ class YoloObjectDetectionApp:
             Shape is [batch, num_preds] where the last dim is the index of the most probable class of the prediction.
         """
         return detect_postprocess(predictions[0])
+
+
+class YoloWorldPromptDetectionApp(YoloObjectDetectionApp):
+    """
+    Light-weight app code for end-to-end inference with Yolo World prompt-based
+    object detection models (e.g. YoloWorld).
+
+    The app owns all prompt handling:
+      * parses ``prompt_text`` provided by the user,
+      * generates text embeddings from the model text encoder, and
+      * passes those embeddings to the detector together with the image.
+    """
+
+    # Declared here so predict_boxes_from_image (base class) can access them
+    # after an isinstance(self, YoloWorldPromptDetectionApp) guard.
+    # Subclasses (e.g. YoloWorldDetectionApp) set these at construction time.
+    prompt_text: list[str] = []
+    text_encoder: Any  # implements encode_classes(list[str]) -> torch.Tensor
+
+    def __init__(
+        self,
+        model: Callable[..., tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+        nms_score_threshold: float = 0.45,
+        nms_iou_threshold: float = 0.7,
+        model_includes_postprocessing: bool = True,
+    ) -> None:
+        """
+        Initialize a YoloWorldPromptDetectionApp.
+
+        Parameters
+        ----------
+        model
+            Yolo World detector. It must accept ``(image, txt_feats)`` as inputs.
+        nms_score_threshold
+            Score threshold for non maximum suppression.
+        nms_iou_threshold
+            Intersection over Union threshold for non maximum suppression.
+        model_includes_postprocessing
+            Whether the model includes postprocessing steps beyond the detector.
+        """
+        super().__init__(
+            model,
+            nms_score_threshold,
+            nms_iou_threshold,
+            model_includes_postprocessing,
+        )
+
+    def check_image_size(self, pixel_values: torch.Tensor) -> None:
+        """Verify image size is valid model input."""
+        invalid_dims = [s for s in pixel_values.shape[-2:] if s % 32 != 0]
+        if invalid_dims:
+            raise ValueError(
+                f"Invalid image size: dimensions {invalid_dims} are not divisible by 32."
+            )
+
+    def _txt_feats_for_image(
+        self, pixel_values: torch.Tensor, txt_feats: torch.Tensor
+    ) -> torch.Tensor:
+        """Return text embeddings shaped for the current image batch/model input."""
+        txt_feats = txt_feats.to(device=pixel_values.device)
+        input_spec_fn = getattr(self.model, "get_input_spec", None)
+        txt_feats_spec = (
+            input_spec_fn().get("txt_feats") if input_spec_fn is not None else None
+        )
+        if txt_feats_spec is not None:
+            expected_num_classes = txt_feats_spec[0][1]
+            if txt_feats.shape[1] > expected_num_classes:
+                raise ValueError(
+                    "prompt_text contains more classes than the model txt_feats input supports. "
+                    f"Expected at most {expected_num_classes}, got {txt_feats.shape[1]}."
+                    f"Model supports only COCO classes to identify"
+                )
+            if txt_feats.shape[1] < expected_num_classes:
+                padding = torch.zeros(
+                    txt_feats.shape[0],
+                    expected_num_classes - txt_feats.shape[1],
+                    txt_feats.shape[2],
+                    dtype=txt_feats.dtype,
+                    device=txt_feats.device,
+                )
+                txt_feats = torch.cat([txt_feats, padding], dim=1)
+
+        batch_size = pixel_values.shape[0]
+        if txt_feats.shape[0] == batch_size:
+            return txt_feats
+        if txt_feats.shape[0] != 1:
+            raise ValueError(
+                f"Text embedding batch size {txt_feats.shape[0]} does not match image batch size {batch_size}."
+            )
+        return txt_feats.expand(batch_size, -1, -1)
+
+    def _post_nms_filter(
+        self,
+        boxes: list[torch.Tensor],
+        scores: list[torch.Tensor],
+        class_idx: list[torch.Tensor],
+        filter_indices: set[int] | None = None,
+    ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+        """Retain only detections whose class index maps to prompt_text."""
+        if filter_indices is None:
+            return boxes, scores, class_idx
+        for batch_idx in range(len(class_idx)):
+            if len(class_idx[batch_idx]) == 0:
+                continue
+            keep = torch.tensor(
+                [
+                    int(cls_idx.item()) in filter_indices
+                    for cls_idx in class_idx[batch_idx]
+                ],
+                dtype=torch.bool,
+                device=class_idx[batch_idx].device,
+            )
+            boxes[batch_idx] = boxes[batch_idx][keep]
+            scores[batch_idx] = scores[batch_idx][keep]
+            class_idx[batch_idx] = class_idx[batch_idx][keep]
+        return boxes, scores, class_idx
 
 
 class YoloSegmentationApp:
