@@ -6,7 +6,9 @@ name: QAI Hub Models Nightly
 
 on:
     schedule:
-        - cron: '0 6 * * *' # Daily at 10 PM PST (11 PM PDT)
+        # Friday night aligns with scorecard. Running both overloads job submissions / runner usage.
+        # Saturday night's run conflicts with profile job usage on workbench from the scorecard.
+        - cron: '0 6 * * 1-5' # Daily except Fri/Sat nights, at 10 PM PST (11 PM PDT)
 
     workflow_dispatch:
       inputs:
