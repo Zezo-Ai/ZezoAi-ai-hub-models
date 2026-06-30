@@ -24,7 +24,6 @@ from qai_hub_models.models._shared.llm.llm_helpers import (
 )
 from qai_hub_models.models._shared.llm.model import (
     DEFAULT_CONTEXT_LENGTH,
-    DEFAULT_SEQUENCE_LENGTH,
     LLM_QNN,
 )
 from qai_hub_models.models._shared.llm.perf_collection import (
@@ -257,9 +256,6 @@ def test_compile(
     Qwen3_8B_QuantizablePreSplit.release()
     FPSplitModelWrapper.release()
     QuantizedSplitModelWrapper.release()
-    # Pass both prompt (ar128) and token (ar1) sequence lengths so the
-    # genie bundle includes both model types. Without ar1, Genie must use
-    # the ar128 model for token generation, halving TPS on-device.
     result = run_llm_compile(
         export_model,
         MODEL_ID,
@@ -268,8 +264,6 @@ def test_compile(
         device,
         extra_model_arguments=dict(
             checkpoint=checkpoint,
-            sequence_length=[DEFAULT_SEQUENCE_LENGTH, 1],
-            context_length=[DEFAULT_CONTEXT_LENGTH],
             _skip_quantsim_creation=True,
             output_dir=test.GENIE_BUNDLES_ROOT,
         ),

@@ -853,3 +853,5 @@ class Qwen3PreSplitCollectionBase(DynamicSplitCollectionBase):
     classes via the ``parts`` mapping and set ``hf_repo_name`` /
     ``fp_presplit_cls`` / ``part_base_cls`` / ``supports_thinking``.
     """
+
+    default_context_lengths: list[int] = [512, 1024, 2048, 3072, 4096]

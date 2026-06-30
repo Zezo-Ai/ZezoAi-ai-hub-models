@@ -246,9 +246,6 @@ def test_compile(
     Qwen3_4B_Instruct_2507_QuantizablePreSplit.release()
     FPSplitModelWrapper.release()
     QuantizedSplitModelWrapper.release()
-    # Pass both prompt (ar128) and token (ar1) sequence lengths so the
-    # genie bundle includes both model types. Without ar1, Genie must use
-    # the ar128 model for token generation, halving TPS on-device.
     result = run_llm_compile(
         export_model,
         MODEL_ID,
@@ -257,8 +254,6 @@ def test_compile(
         device,
         extra_model_arguments=dict(
             checkpoint=checkpoint,
-            sequence_length=[DEFAULT_SEQUENCE_LENGTH, 1],
-            context_length=[DEFAULT_CONTEXT_LENGTH],
             _skip_quantsim_creation=True,
             output_dir=test.GENIE_BUNDLES_ROOT,
         ),
