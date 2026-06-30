@@ -272,6 +272,10 @@ class RF_DETR(DETR):
                     "Only .pth / .pt / .ckpt files are accepted."
                 )
             kwargs["pretrain_weights"] = str(p)
+        # torch 2.11.0 MKL-DNN has a bug on CPUs without AVX-512 (e.g. AMD EPYC)
+        # that causes SIGFPE in Conv2d with kernel >= 4x4. Disabling MKL-DNN
+        # falls back to native PyTorch kernels with identical numerics.
+        torch.backends.mkldnn.set_flags(_enabled=False)
         torch_model = rfdetr_cls(**kwargs)
         torch_model.optimize_for_inference(compile=False)
         inference_model = torch_model.model.inference_model
