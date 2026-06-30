@@ -2,10 +2,12 @@ supported_devices:
 - Snapdragon X2 Elite CRD
 - Snapdragon X Elite CRD
 - Snapdragon 8 Elite QRD
+- Dragonwing IQ-9075 EVK
 supported_chipsets:
 - qualcomm-snapdragon-x2-elite
 - qualcomm-snapdragon-x-elite
 - qualcomm-snapdragon-8-elite
+- qualcomm-qcs9075
 precisions:
   q4_0:
     components:
@@ -124,4 +126,28 @@ precisions:
                   min: 111.72275
                   max: 446.891
                 prefill_tokens_per_second: 1146.088191
+                desired_compute_unit: npu
+          Dragonwing IQ-9075 EVK:
+            geniex_llamacpp:
+              llm_metrics:
+              - context_length: 512
+                tokens_per_second: 1.882364
+                time_to_first_token_range_milliseconds:
+                  min: 1182.69375
+                  max: 4730.775
+                prefill_tokens_per_second: 108.235358
+                desired_compute_unit: cpu
+              - context_length: 512
+                tokens_per_second: 1.878065
+                time_to_first_token_range_milliseconds:
+                  min: 1185.03875
+                  max: 4740.155
+                prefill_tokens_per_second: 108.02139
+                desired_compute_unit: gpu
+              - context_length: 512
+                tokens_per_second: 19.881743
+                time_to_first_token_range_milliseconds:
+                  min: 189.57975
+                  max: 758.319
+                prefill_tokens_per_second: 675.482238
                 desired_compute_unit: npu

@@ -2,10 +2,12 @@ supported_devices:
 - Snapdragon X Elite CRD
 - Snapdragon 8 Elite Gen 5 QRD
 - Snapdragon 8 Elite QRD
+- Snapdragon X2 Elite CRD
 supported_chipsets:
 - qualcomm-snapdragon-x-elite
 - qualcomm-snapdragon-8-elite-gen5
 - qualcomm-snapdragon-8-elite
+- qualcomm-snapdragon-x2-elite
 precisions:
   q4_0:
     components:
@@ -145,4 +147,49 @@ precisions:
                   min: 99.469
                   max: 397.876
                 prefill_tokens_per_second: 1287.758746
+                desired_compute_unit: npu
+          Snapdragon X2 Elite CRD:
+            geniex_llamacpp:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 36.023298
+                time_to_first_token_range_milliseconds:
+                  min: 238.19934375
+                  max: 7622.379
+                prefill_tokens_per_second: 537.3833
+                desired_compute_unit: cpu
+              - context_length: 512
+                tokens_per_second: 64.69927
+                time_to_first_token_range_milliseconds:
+                  min: 116.87925
+                  max: 467.517
+                prefill_tokens_per_second: 1096.106254
+                desired_compute_unit: cpu
+              - context_length: 4096
+                tokens_per_second: 36.289295
+                time_to_first_token_range_milliseconds:
+                  min: 238.2465
+                  max: 7623.888
+                prefill_tokens_per_second: 537.27517
+                desired_compute_unit: gpu
+              - context_length: 512
+                tokens_per_second: 64.899408
+                time_to_first_token_range_milliseconds:
+                  min: 114.30625
+                  max: 457.225
+                prefill_tokens_per_second: 1120.347658
+                desired_compute_unit: gpu
+              - context_length: 4096
+                tokens_per_second: 22.904047
+                time_to_first_token_range_milliseconds:
+                  min: 101.38803125
+                  max: 3244.417
+                prefill_tokens_per_second: 1262.74732
+                desired_compute_unit: npu
+              - context_length: 512
+                tokens_per_second: 38.419333
+                time_to_first_token_range_milliseconds:
+                  min: 64.60275
+                  max: 258.411
+                prefill_tokens_per_second: 1983.197053
                 desired_compute_unit: npu
