@@ -284,8 +284,11 @@ jobs:
       - name: Get Changed Files
         run: |
           mkdir -p "${{ github.workspace }}/build"
-          (git diff --name-only -r HEAD^1 HEAD) > "${{ github.workspace }}/build/changed-qaihm-files.txt"
-          (git diff origin/main --name-only) >> "${{ github.workspace }}/build/changed-qaihm-files.txt"
+          # Three-dot: only files this PR changed. Two-dot picks up main's drift.
+          git diff --name-only origin/main...HEAD > "${{ github.workspace }}/build/changed-qaihm-files.txt"
+          # Also include the latest commit's diff so post-merge runs (where HEAD is
+          # already on main and the diff above is empty) still see the landed changes.
+          git diff --name-only -r HEAD^1 HEAD >> "${{ github.workspace }}/build/changed-qaihm-files.txt"
           cat "${{ github.workspace }}/build/changed-qaihm-files.txt"
 
       - name: CI Setup
