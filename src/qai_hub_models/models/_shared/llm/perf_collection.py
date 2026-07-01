@@ -197,9 +197,11 @@ def update_perf_yaml(
 ) -> None:
     """Upsert one LLM metric into the model's perf.yaml.
 
-    ttft_max_ms: written to time_to_first_token_range.max. geniex-bench
-    passes the actual max TTFT from multiple benchmark rounds. For genie,
-    it is estimated as ttft_ms * (context_length / 128).
+    ttft_max_ms: written to time_to_first_token_range.max. Both genie and
+    geniex-bench callers extrapolate it as ttft_ms * (context_length / 128);
+    when omitted, the same formula is applied here as a fallback. The
+    measured TTFT (ttft_ms) is always on the bundle's short sample_prompt.txt,
+    not at full context length.
     desired_compute_unit: written to the entry; "npu" by default.
     FileLock guards the read-modify-write against concurrent xdist workers.
     """

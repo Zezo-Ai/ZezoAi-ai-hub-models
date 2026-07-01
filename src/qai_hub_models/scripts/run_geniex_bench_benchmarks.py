@@ -431,18 +431,14 @@ def main() -> int:
                                 profile_path = ScorecardProfilePath.GENIEX_QAIRT
                             else:
                                 profile_path = ScorecardProfilePath.GENIEX_LLAMACPP
-                            # Use the same logic as Genie, assume TTFT scales linearly with prompt length.
-                            # Range = [TTFT at 128 tokens, TTFT at full context].
-                            # Genie measures at 128 tokens: min=ttft, max=ttft*(ctx/128).
-                            # Geniex measures at prompt_tokens, same scaling logic:
-                            #   min = ttft * (128 / prompt_tokens)
-                            #   max = ttft * (context_length / prompt_tokens)
+
                             assert m.prompt_tokens > 0, (
                                 f"prompt_tokens must be > 0 for TTFT range "
                                 f"scaling, got {m.prompt_tokens}"
                             )
-                            ttft_min = m.ttft_ms * (128 / m.prompt_tokens)
-                            ttft_max = m.ttft_ms * (m.context_length / m.prompt_tokens)
+
+                            ttft_min = m.ttft_ms
+                            ttft_max = m.ttft_ms * (m.context_length / 128)
                             update_kwargs = dict(
                                 model_id=model_id,
                                 device_name=sd.reference_device_name,
