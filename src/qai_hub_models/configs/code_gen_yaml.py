@@ -86,9 +86,6 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # Whether the model's demo supports running on device with the `--eval-mode on-device` option.
     has_on_target_demo: bool = False
 
-    # Should print a statement at the end of export script to point to genie tutorial or not.
-    add_genie_url_to_export: bool = False
-
     # The reason why various paths are disabled
     disabled_paths: ModelDisableReasonsMapping = Field(
         default_factory=lambda: ModelDisableReasonsMapping()

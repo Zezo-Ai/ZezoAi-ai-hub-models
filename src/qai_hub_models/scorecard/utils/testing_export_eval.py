@@ -7,7 +7,6 @@ from __future__ import annotations
 import contextlib
 import itertools
 import math
-import sys
 import tempfile
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -83,7 +82,8 @@ from qai_hub_models.utils.evaluate import (
     evaluate_on_dataset,
     get_torch_val_dataloader,
 )
-from qai_hub_models.utils.export_result import (
+from qai_hub_models.utils.export.context import resolve_model_app_cls
+from qai_hub_models.utils.export.result import (
     CollectionExportResult,
     ComponentGroup,
     ExportResult,
@@ -665,6 +665,10 @@ def quantize_via_export(
     )
 
     # Run quantize jobs
+    quantize_kwargs: dict[str, Any] = {}
+    if isinstance(model, CollectionModel):
+        quantize_kwargs["app"] = resolve_model_app_cls(model_id)
+
     with mock.patch(
         "qai_hub_models.utils.quantization.get_calibration_data",
         mock_get_calibration_data,
@@ -675,6 +679,7 @@ def quantize_via_export(
             model_id,
             onnx_model_inputs,
             None,
+            **quantize_kwargs,
         )
 
     # Verify success or cache job IDs to a file.
@@ -749,25 +754,15 @@ def compile_via_export(
     if is_aimet:
         assert upload_model is not None
         source_models = upload_model(model)
-        if component_graph_names is not None:
-            compile_output = compile_model(
-                model,
-                model_id,
-                device.execution_device,
-                scorecard_path.runtime,
-                precision,
-                source_models,
-                extra_options=scorecard_path.get_compile_options(),
-            )
-        else:
-            compile_output = compile_model(
-                model,
-                model_id,
-                device.execution_device,
-                scorecard_path.runtime,
-                source_models,
-                extra_options=scorecard_path.get_compile_options(),
-            )
+        compile_output = compile_model(
+            model,
+            model_id,
+            device.execution_device,
+            scorecard_path.runtime,
+            precision,
+            source_models,
+            extra_options=scorecard_path.get_compile_options(),
+        )
     else:
         quantize_jobs = (
             QuantizeScorecardJobYaml.from_test_artifacts().get_export_output(
@@ -951,6 +946,7 @@ def run_llm_compile(
     )
 
     result = export_model(
+        model_id,
         device=device.execution_device,
         precision=precision,
         skip_downloading=skip_downloading,
@@ -1350,7 +1346,6 @@ def export_test_e2e(
     # However, that trace goes unused during this test because we are using pre-created compile jobs.
     # Patch over tracing / export to speed up the test.
     mocks: list[mock._patch] = []
-    export_module = sys.modules[export_model.__module__]
     mocks.append(
         mock.patch.object(
             torch.jit,
@@ -1390,12 +1385,12 @@ def export_test_e2e(
         )
 
     # Skip calibration data loading step; the result is also unused during this test.
-    if qutils := getattr(export_module, "quantization_utils", None):
-        mocks.append(
-            mock.patch.object(
-                qutils, "get_calibration_data", mock.MagicMock(return_value=None)
-            )
+    mocks.append(
+        mock.patch(
+            "qai_hub_models.utils.quantization.get_calibration_data",
+            mock.MagicMock(return_value=None),
         )
+    )
 
     s3_bucket: Bucket | None = None
     with contextlib.suppress(ValueError):
@@ -1420,9 +1415,8 @@ def export_test_e2e(
             )
         )
         mocks.append(
-            mock.patch.object(
-                export_module,
-                "download_and_unzip_workbench_onnx_model",
+            mock.patch(
+                "qai_hub_models.utils.export.download.download_and_unzip_workbench_onnx_model",
                 mock.MagicMock(
                     side_effect=[
                         ONNXBundle(Path(), f"{component}.onnx")
@@ -1457,6 +1451,7 @@ def export_test_e2e(
                 for m in mocks:
                     stack.enter_context(m)
                 result = export_model(
+                    model_id,
                     device=device.execution_device,
                     precision=precision,
                     target_runtime=scorecard_path.runtime,
@@ -1863,6 +1858,7 @@ def accuracy_on_sample_inputs_via_export(
         tabulate_patch,
     ):
         export_model(
+            model_id,
             device=device.execution_device,
             target_runtime=scorecard_path.runtime,
             precision=precision,
@@ -2106,6 +2102,7 @@ def accuracy_on_dataset_via_evaluate_and_export(
         tabulate_patch,
     ):
         export_model(
+            model_id,
             device=device.execution_device,
             target_runtime=scorecard_path.runtime,
             precision=precision,

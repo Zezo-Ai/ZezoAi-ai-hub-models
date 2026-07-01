@@ -19,7 +19,7 @@ from qai_hub_models.scorecard import (
 )
 from qai_hub_models.scorecard.device import cs_universal
 from qai_hub_models.scorecard.results.scorecard_job import JobTypeVar  # noqa: F401
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 
 ScorecardPathT = TypeVar(
     "ScorecardPathT", ScorecardProfilePath, ScorecardCompilePath, None

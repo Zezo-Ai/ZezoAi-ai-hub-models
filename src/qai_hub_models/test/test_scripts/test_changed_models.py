@@ -39,6 +39,7 @@ _changes = _load("tasks.changes")
 
 get_python_import_expression = _changes.get_python_import_expression
 resolve_affected_models = _changes.resolve_affected_models
+prune_llm_groups = _changes.prune_llm_groups
 
 
 def test_import_expression_matches_real_imports() -> None:
@@ -239,3 +240,89 @@ def test_codegen_yaml_change_detects_model() -> None:
     changed_files = "src/qai_hub_models/models/cvt/code-gen.yaml\n"
     models = _run_get_ci_test_models_with_changed_files(changed_files)
     assert "cvt" in models
+
+
+# ── LLM grouping tests ──────────────────────────────────────────────
+
+
+def test_llm_group_collapses_multiple_llamas() -> None:
+    """
+    Given a set with multiple llama variants, prune_llm_groups keeps
+    only llama_v3_2_1b_instruct (the first in LLM_GROUPS[0]).
+    """
+    models = {
+        "llama_v3_1_8b_instruct",
+        "llama_v3_2_1b_instruct",
+        "llama_v3_2_3b_instruct",
+        "mobilenet_v2",
+    }
+    pruned = prune_llm_groups(models)
+    assert "llama_v3_2_1b_instruct" in pruned
+    assert "llama_v3_1_8b_instruct" not in pruned
+    assert "llama_v3_2_3b_instruct" not in pruned
+    assert "mobilenet_v2" in pruned
+
+
+def test_llm_group_collapses_multiple_qwens() -> None:
+    """qwen3_4b is first in LLM_GROUPS[1], so it survives."""
+    models = {
+        "qwen3_4b",
+        "qwen3_8b",
+        "qwen2_7b_instruct",
+        "mobilenet_v2",
+    }
+    pruned = prune_llm_groups(models)
+    assert "qwen3_4b" in pruned
+    assert "qwen3_8b" not in pruned
+    assert "qwen2_7b_instruct" not in pruned
+    assert "mobilenet_v2" in pruned
+
+
+def test_llm_groups_are_independent() -> None:
+    """A set containing both a llama and a qwen keeps one from each group."""
+    models = {
+        "llama_v3_8b_instruct",
+        "qwen3_8b",
+        "mobilenet_v2",
+    }
+    pruned = prune_llm_groups(models)
+    # llama_v3_8b_instruct is the only llama present, so it's kept
+    assert "llama_v3_8b_instruct" in pruned
+    # qwen3_8b is the only qwen present, so it's kept
+    assert "qwen3_8b" in pruned
+    assert "mobilenet_v2" in pruned
+
+
+def test_prune_llm_groups_preserves_non_llm_models() -> None:
+    """Non-LLM models are untouched."""
+    models = {
+        "mobilenet_v2",
+        "sinet",
+        "whisper_tiny",
+        "stable_diffusion_v1_5",
+    }
+    pruned = prune_llm_groups(models)
+    assert pruned == models
+
+
+def test_prune_llm_groups_no_op_when_single_present() -> None:
+    """If only one llama is present, it's kept as-is."""
+    models = {"llama_v3_2_1b_instruct", "mobilenet_v2"}
+    pruned = prune_llm_groups(models)
+    assert pruned == models
+
+
+def test_llm_group_mistral_and_falcon_in_llama_group() -> None:
+    """Mistral and falcon are grouped with llama-family."""
+    models = {
+        "llama_v3_2_1b_instruct",
+        "mistral_7b_instruct_v0_3",
+        "falcon_v3_7b_instruct",
+        "mobilenet_v2",
+    }
+    pruned = prune_llm_groups(models)
+    # llama_v3_2_1b_instruct comes first in LLM_GROUPS[0]
+    assert "llama_v3_2_1b_instruct" in pruned
+    assert "mistral_7b_instruct_v0_3" not in pruned
+    assert "falcon_v3_7b_instruct" not in pruned
+    assert "mobilenet_v2" in pruned

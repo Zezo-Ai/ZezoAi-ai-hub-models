@@ -29,7 +29,7 @@ from qai_hub_models.utils.asset_loaders import (
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,

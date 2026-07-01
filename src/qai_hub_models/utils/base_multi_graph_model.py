@@ -21,7 +21,7 @@ from qai_hub_models import (
 from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.protocols import FromPretrainedProtocol
 from qai_hub_models.utils.base_model import _model_cls_name
-from qai_hub_models.utils.export_result import MultiGraphGroup
+from qai_hub_models.utils.export.result import MultiGraphGroup
 from qai_hub_models.utils.input_spec import (
     InputSpec,
     OutputSpec,

@@ -33,9 +33,6 @@ from qai_hub_models.models._shared.llm.perf_collection import (
 from qai_hub_models.models._shared.llm_ssd.model import apply_ssd_engine_overrides
 from qai_hub_models.models.llama_v3_2_3b_instruct_ssd import Model
 from qai_hub_models.models.llama_v3_2_3b_instruct_ssd.demo import llama_3_2_3b_chat_demo
-from qai_hub_models.models.llama_v3_2_3b_instruct_ssd.export import (
-    export_model,
-)
 from qai_hub_models.models.llama_v3_2_3b_instruct_ssd.model import (
     HF_REPO_NAME,
     MODEL_ID,
@@ -53,7 +50,10 @@ from qai_hub_models.scorecard.device import cs_8_elite_qrd
 from qai_hub_models.scorecard.utils.testing_export_eval import run_llm_compile
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.checkpoint import CheckpointSpec
-from qai_hub_models.utils.export_result import MultiGraphCollectionExportResult
+from qai_hub_models.utils.export.dispatch import resolve_export_model
+from qai_hub_models.utils.export.result import MultiGraphCollectionExportResult
+
+export_model = resolve_export_model(MODEL_ID)
 
 DEFAULT_EVAL_SEQLEN = 2048
 

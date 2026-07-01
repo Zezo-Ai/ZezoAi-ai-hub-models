@@ -10,7 +10,7 @@ import re
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from qai_hub_models.utils.export_result import (
+from qai_hub_models.utils.export.result import (
     ComponentGroup,
     MultiGraphComponentGroup,
     MultiGraphGroup,

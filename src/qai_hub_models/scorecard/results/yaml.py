@@ -37,7 +37,7 @@ from qai_hub_models.scorecard.results.scorecard_job import (
     ScorecardJobTypeVar,
 )
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
-from qai_hub_models.utils.export_result import (
+from qai_hub_models.utils.export.result import (
     ComponentGroup,
     MultiGraphComponentGroup,
     MultiGraphGroup,

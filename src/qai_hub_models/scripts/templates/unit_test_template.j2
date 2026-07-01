@@ -1,6 +1,13 @@
 {% import 'common_template.j2' as common %}
 {% set has_skipped_runtime = not supports_tflite or not supports_qnn or not supports_onnx -%}
 {% set is_llm = (test_split.value == "llm") -%}
+{%- if is_collection_model and has_multi_graph -%}
+    {%- set step_suffix = "multi_graph_collection_" -%}
+{%- elif is_collection_model -%}
+    {%- set step_suffix = "collection_" -%}
+{%- else -%}
+    {%- set step_suffix = "" -%}
+{%- endif -%}
 {{ header }}
 
 from __future__ import annotations
@@ -18,15 +25,15 @@ import pytest
 import qai_hub as hub
 from collections.abc import Generator
 from qai_hub_models.models.{{ model_name }} import Model, MODEL_ID
-from qai_hub_models.models.{{ model_name }}.export import (
-    compile_model,
-    export_model,
-    inference_model,
-    link_model,
-    profile_model,
-    quantize_model,
-    upload_model,
-)
+from qai_hub_models.utils.export.dispatch import resolve_export_model
+from qai_hub_models.utils.export.compile import run_{{ step_suffix }}compile as compile_model
+from qai_hub_models.utils.export.link import run_{{ step_suffix }}link as link_model
+from qai_hub_models.utils.export.profile import run_{{ step_suffix }}profile as profile_model
+from qai_hub_models.utils.export.upload import upload_{{ step_suffix }}source as upload_model
+{%- if not is_llm %}
+from qai_hub_models.utils.export.inference import run_{{ step_suffix }}inference as inference_model
+from qai_hub_models.utils.export.quantize import run_{{ step_suffix }}quantize as quantize_model
+{%- endif %}
 {%- if has_skipped_runtime or is_aimet or can_use_quantize_job %}
 from qai_hub_models import TargetRuntime
 {%- endif %}
@@ -105,6 +112,7 @@ PASSING_PRECISION_RUNTIMES : {{ common.write_supported_precision_runtimes(test_p
 
 EVAL_DEVICE = ScorecardDevice.get("{{ default_device }}")
 HAS_EVAL_DATASET = len(Model.get_eval_dataset_classes()) > 0
+export_model = resolve_export_model(MODEL_ID)
 
 @pytest.mark.compile
 def test_runtime_model_validation() -> None:

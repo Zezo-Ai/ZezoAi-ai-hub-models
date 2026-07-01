@@ -35,7 +35,7 @@ from qai_hub_models.models._shared.sam2.model import (
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
 
