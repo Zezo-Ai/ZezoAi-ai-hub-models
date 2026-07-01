@@ -53,7 +53,7 @@ from qai_hub_models.utils.checkpoint import (
     CheckpointType,
     FromPretrainedMixin,
 )
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,

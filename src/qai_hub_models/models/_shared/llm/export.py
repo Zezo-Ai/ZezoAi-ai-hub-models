@@ -39,7 +39,7 @@ from qai_hub_models.utils.args import (
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.compare import torch_inference
-from qai_hub_models.utils.export_result import (
+from qai_hub_models.utils.export.result import (
     ExportResult,
     LegacyCollectionExportResult,
 )

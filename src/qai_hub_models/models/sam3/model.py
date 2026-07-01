@@ -38,7 +38,7 @@ from qai_hub_models.utils.base_model import (
     BaseModel,
     SerializationSettings,
 )
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, TensorSpec
 from qai_hub_models.utils.window_partitioning import (
     window_partition_5d,

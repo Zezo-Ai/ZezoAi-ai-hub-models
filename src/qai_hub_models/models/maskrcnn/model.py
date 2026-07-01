@@ -21,7 +21,7 @@ from qai_hub_models import (
 from qai_hub_models.models.maskrcnn.model_patches import _onnx_merge_levels_optimized
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import (
     BboxFormat,

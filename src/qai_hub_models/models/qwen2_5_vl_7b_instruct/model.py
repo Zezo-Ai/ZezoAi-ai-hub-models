@@ -90,7 +90,7 @@ from qai_hub_models.utils.base_model import (
     BaseModel,
 )
 from qai_hub_models.utils.checkpoint import CheckpointType
-from qai_hub_models.utils.export_result import MultiGraphComponentGroup, MultiGraphGroup
+from qai_hub_models.utils.export.result import MultiGraphComponentGroup, MultiGraphGroup
 from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 from qai_hub_models.utils.onnx.helpers import ONNXBundle, mock_torch_onnx_inference
 

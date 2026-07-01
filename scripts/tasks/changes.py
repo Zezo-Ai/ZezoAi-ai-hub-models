@@ -38,6 +38,33 @@ REPRESENTATIVE_AIMET_MODEL_FILE = (
     "src/qai_hub_models/models/stable_diffusion_v1_5/model.py"
 )
 
+# For LLM families, testing a single representative is enough coverage
+# for cross-family refactors. Within each sublist, if multiple entries end up
+# in the resolved set of models to test, keep only the FIRST one (highest
+# priority — put the cheapest/smallest model first).
+LLM_GROUPS: list[list[str]] = [
+    [
+        "llama_v3_2_1b_instruct",  # smallest, primary representative
+        "llama_v3_2_3b_instruct",
+        "llama_v3_2_3b_instruct_ssd",
+        "llama_v3_1_8b_instruct",
+        "llama_v3_8b_instruct",
+        "llama_v3_1_sea_lion_3_5_8b_r",
+        "llama_v3_elyza_jp_8b",
+        "llama_v3_taide_8b_chat",
+        "mistral_7b_instruct_v0_3",
+        "falcon_v3_7b_instruct",
+    ],
+    [
+        "qwen3_4b",  # primary representative
+        "qwen3_4b_instruct_2507",
+        "qwen3_8b",
+        "qwen2_7b_instruct",
+        "qwen2_5_vl_7b_instruct",
+        "qwen3_vl_4b_instruct",
+    ],
+]
+
 # _shared/llm/ + _shared/llama3/ route to llama; _shared/qwen3/ routes to qwen.
 LLAMA_REPRESENTATIVE_EXPORT_FILE = (
     "src/qai_hub_models/models/llama_v3_2_1b_instruct/export.py"
@@ -111,6 +138,19 @@ MANUAL_EDGES = {
     "src/qai_hub_models/utils/tflite/torch_wrapper.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/utils/transpose_channel.py": REPRESENTATIVE_EXPORT_FILES,
 }
+
+
+def prune_llm_groups(models: set[str]) -> set[str]:
+    """
+    For each sublist in LLM_GROUPS, keep at most the first model that is present.
+    Non-LLM models are untouched.
+    """
+    out = set(models)
+    for group in LLM_GROUPS:
+        present = [m for m in group if m in out]
+        for extra in present[1:]:
+            out.discard(extra)
+    return out
 
 
 def get_python_import_expression(filepath: str) -> str:
@@ -371,5 +411,6 @@ class PrintCITestModelsTask(Task):
             # we run a representative model set to make sure codegen didn't break for regular + component models.
             out = out.union(REPRESENTATIVE_EXPORT_MODELS)
 
+        out = prune_llm_groups(out)
         print(",".join(sorted(out)))
         return True

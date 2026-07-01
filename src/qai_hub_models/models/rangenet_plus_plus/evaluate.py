@@ -15,9 +15,9 @@ import qai_hub as hub
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.models.protocols import ExecutableModelProtocol
 from qai_hub_models.models.rangenet_plus_plus import MODEL_ID, Model
-from qai_hub_models.models.rangenet_plus_plus.export import export_model
 from qai_hub_models.utils.args import evaluate_parser, get_model_kwargs
 from qai_hub_models.utils.evaluate import _load_quant_cpu_onnx, evaluate_on_dataset
+from qai_hub_models.utils.export.dispatch import resolve_export_model
 from qai_hub_models.utils.inference import AsyncOnDeviceModel, compile_model_from_args
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.kwarg_helpers import filter_kwargs
@@ -56,6 +56,7 @@ def build_parser(cli_mode: bool = False) -> argparse.ArgumentParser:
 
 
 def main(args: argparse.Namespace | None = None) -> None:
+    export_model = resolve_export_model(MODEL_ID)
     eval_dataset_classes = Model.get_eval_dataset_classes()
     if args is None:
         warnings.warn(
@@ -76,6 +77,7 @@ def main(args: argparse.Namespace | None = None) -> None:
             "Model does not have evaluation dataset specified. Evaluating PSNR on a single sample."
         )
         export_model(
+            MODEL_ID,
             device=args.device,
             target_runtime=args.target_runtime,
             skip_downloading=True,

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Mapping, ValuesView
-from importlib import import_module
 from typing import Any, cast
 
 import numpy as np
@@ -18,7 +17,7 @@ from qai_hub.public_rest_api import DatasetEntries
 from qai_hub_models import TargetRuntime
 from qai_hub_models.protocols import ExecutableModelProtocol
 from qai_hub_models.utils.asset_loaders import ModelZooAssetConfig, VersionType
-from qai_hub_models.utils.export_result import CollectionExportResult
+from qai_hub_models.utils.export.result import CollectionExportResult
 from qai_hub_models.utils.input_spec import (
     InputSpec,
     workbench_to_qihm_input_spec,
@@ -71,8 +70,9 @@ def compile_model_from_args(
         model_kwargs_dict["precision"] = cli_args.precision
         cli_str += f"--precision {cli_args.precision} "
 
-    export_file = f"qai_hub_models.models.{model_id}.export"
-    export_module = import_module(export_file)
+    from qai_hub_models.utils.export.dispatch import resolve_export_model
+
+    export_model = resolve_export_model(model_id)
     if getattr(cli_args, "num_calibration_samples", None):
         model_kwargs_dict["num_calibration_samples"] = cli_args.num_calibration_samples
         cli_str += f"--num-calibration-samples {cli_args.num_calibration_samples} "
@@ -90,12 +90,13 @@ def compile_model_from_args(
     model_name = model_id + (f".{component}" if component else "")
     print(f"Compiling on-device model asset for {model_name}.")
     print(
-        f"Running python -m {export_file} {cli_str} --target-runtime {cli_args.target_runtime.name.lower()}\n"
+        f"Running python -m qai_hub_models.models.{model_id}.export {cli_str} --target-runtime {cli_args.target_runtime.name.lower()}\n"
     )
     component_kwargs = {}
     if component is not None:
         component_kwargs = {"components": [component]}
-    export_output = export_module.export_model(
+    export_output = export_model(
+        model_id,
         device=cli_args.device,
         skip_profiling=True,
         skip_inferencing=True,

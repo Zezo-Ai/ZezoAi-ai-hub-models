@@ -22,7 +22,7 @@ from qai_hub_models.models._shared.stable_diffusion.model import (
     TextEncoderQuantizableBase,
     VaeDecoderQuantizableBase,
 )
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 from qai_hub_models.utils.input_spec import InputSpec
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 

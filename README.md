@@ -410,7 +410,7 @@ and many more.
 | [Qwen2.5-VL-7B-Instruct](https://aihub.qualcomm.com/models/qwen2_5_vl_7b_instruct) | [qai_hub_models.models.qwen2_5_vl_7b_instruct](src/qai_hub_models/models/qwen2_5_vl_7b_instruct/README.md) |
 | [Qwen3-4B](https://aihub.qualcomm.com/models/qwen3_4b) | [qai_hub_models.models.qwen3_4b](src/qai_hub_models/models/qwen3_4b/README.md) |
 | [Qwen3-4B-Instruct-2507](https://aihub.qualcomm.com/models/qwen3_4b_instruct_2507) | [qai_hub_models.models.qwen3_4b_instruct_2507](src/qai_hub_models/models/qwen3_4b_instruct_2507/README.md) |
-| [Qwen3-8B](src/qai_hub_models/models/qwen3_8b/README.md) | [qai_hub_models.models.qwen3_8b](src/qai_hub_models/models/qwen3_8b/README.md) |
+| [Qwen3-8B](https://aihub.qualcomm.com/models/qwen3_8b) | [qai_hub_models.models.qwen3_8b](src/qai_hub_models/models/qwen3_8b/README.md) |
 
 ## Need help?
 Slack: https://aihub.qualcomm.com/community/slack

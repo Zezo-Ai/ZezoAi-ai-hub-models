@@ -20,7 +20,7 @@ from qai_hub_models.utils.base_model import (
     _model_cls_name,
 )
 from qai_hub_models.utils.base_multi_graph_model import MultiGraphWorkbenchModel
-from qai_hub_models.utils.export_result import (
+from qai_hub_models.utils.export.result import (
     ComponentGroup,
     MultiGraphComponentGroup,
 )

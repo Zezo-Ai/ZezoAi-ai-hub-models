@@ -51,7 +51,7 @@ from qai_hub_models.utils.checkpoint import (
     FromPretrainedMixin,
     hf_repo_exists,
 )
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 from qai_hub_models.utils.input_spec import InputSpec, TensorSpec
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 from qai_hub_models.utils.qai_hub_helpers import ensure_hexagon_version

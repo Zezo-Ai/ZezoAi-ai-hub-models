@@ -40,7 +40,7 @@ from qai_hub_models.utils.bounding_box_processing_3d import (
     circle_nms as patched_circle_nms,
 )
 from qai_hub_models.utils.bounding_box_processing_3d import onnx_atan2
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 from qai_hub_models.utils.image_processing import (
     normalize_image_torchvision,
 )

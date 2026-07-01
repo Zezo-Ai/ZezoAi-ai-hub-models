@@ -22,7 +22,7 @@ from qai_hub_models.models._shared.opus_mt.model_adaptation import (
 )
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_model import BaseModel
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, TensorSpec
 
 MODEL_ID = "opus_mt_shared"

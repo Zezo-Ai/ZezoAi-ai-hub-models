@@ -24,7 +24,7 @@ from qai_hub_models.models._shared.detectron2.model import Detectron2
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_model import SerializationSettings
-from qai_hub_models.utils.export_result import ComponentGroup
+from qai_hub_models.utils.export.result import ComponentGroup
 from qai_hub_models.utils.input_spec import (
     BboxFormat,
     BboxMetadata,
