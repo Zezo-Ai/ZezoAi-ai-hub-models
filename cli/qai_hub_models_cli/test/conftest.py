@@ -13,7 +13,6 @@ from typing import Any
 import pytest
 
 from qai_hub_models_cli.versions import (
-    CURRENT_VERSION,
     get_published_versions,
     get_supported_versions,
 )
@@ -58,10 +57,23 @@ def _isolate_cache_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("qai_hub_models_cli.versions._VERSIONS_CACHE", versions_cache)
     monkeypatch.setattr("qai_hub_models_cli.proto_helpers._common.CACHE_DIR", cache_dir)
 
-    # Seed the upgrade-notice check cache so (print_upgrade_notice -> get_published_versions)
-    # reads it instead of querying PyPI.
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    versions_cache.write_text(str(CURRENT_VERSION))
+
+@pytest.fixture(autouse=True)
+def _stub_version_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Neutralize the version checks that query PyPI.
+
+    ``verify_version_supported`` and ``print_upgrade_notice`` fetch the
+    published-version list from PyPI. Stub them at their call-site bindings so
+    commands don't hit the network; tests in ``test_versions.py`` call the real
+    functions directly from the ``versions`` module and are unaffected.
+    """
+    monkeypatch.setattr(
+        "qai_hub_models_cli.proto_helpers._common.verify_version_supported",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "qai_hub_models_cli.cli.print_upgrade_notice", lambda *a, **k: None
+    )
 
 
 @pytest.fixture(autouse=True)

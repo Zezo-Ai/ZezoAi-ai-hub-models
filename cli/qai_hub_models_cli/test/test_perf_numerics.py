@@ -217,14 +217,14 @@ def test_numerics_table_includes_sdk_versions() -> None:
 
 
 def test_footer(capsys: pytest.CaptureFixture[str]) -> None:
-    main(["perf", "mobilenet_v2", "-r", "qnn_dlc", "-v", "0.56.0"])
+    main(["perf", "mobilenet_v2", "-r", "qnn_dlc", "-v", "0.22.0"])
     output = capsys.readouterr().out
     # Example command pins the version and echoes known filters, placeholders
     # for the rest.
-    assert "qai-hub-models perf mobilenet_v2 -v 0.56.0 -r 'qnn_dlc'" in output
+    assert "qai-hub-models perf mobilenet_v2 -v 0.22.0 -r 'qnn_dlc'" in output
     assert "-p <precision>" in output
     # Cross-links to the sibling command, version pinned.
-    assert "qai-hub-models numerics mobilenet_v2 -v 0.56.0" in output
+    assert "qai-hub-models numerics mobilenet_v2 -v 0.22.0" in output
 
 
 def test_no_footer_when_empty(capsys: pytest.CaptureFixture[str]) -> None:
