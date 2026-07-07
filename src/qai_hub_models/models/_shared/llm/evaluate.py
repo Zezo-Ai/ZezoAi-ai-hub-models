@@ -264,9 +264,12 @@ def _evaluate_impl(
         eval_iterations=len(eval_dataloader),
     )
 
+    # Make sure no model and grader resource uses overlap
     model.release()
     del model
+    generator.release()  # type: ignore[operator]
     del generator
+    torch.cuda.synchronize()
     gc.collect()
     torch.cuda.empty_cache()
 

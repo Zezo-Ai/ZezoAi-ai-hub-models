@@ -252,4 +252,17 @@ HOMOGRAPHY_ACCURACY = _register_metric(
     )
 )
 
+LLM_RESPONSE_GRADE = _register_metric(
+    MetricMetadata(
+        name="LLM Response Grade",
+        unit="%",
+        description=(
+            "Percentage score from grading on-device LLM responses against "
+            "reference prompts."
+        ),
+        range=(0.0, 100.0),
+        float_vs_device_threshold=10.0,
+    )
+)
+
 VALID_METRIC_PAIRS: frozenset[tuple[str, str]] = frozenset(_VALID_METRIC_PAIRS)

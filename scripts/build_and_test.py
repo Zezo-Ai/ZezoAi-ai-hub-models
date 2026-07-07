@@ -51,6 +51,7 @@ from tasks.task import (
     Task,
 )
 from tasks.test import (
+    CollectLLMAccuracyCSVTask,
     CollectLLMPerfTask,
     GenerateTestSummaryTask,
     GenieXBenchTask,
@@ -327,6 +328,28 @@ class TaskLibrary:
         return plan.add_step(
             step_id,
             GradeLLMResponsesTask(
+                venv=self.venv_path,
+                search_dir=os.environ.get("QAIHM_GRADE_RESPONSES_DIR"),
+            ),
+        )
+
+    @public_task(
+        "Build accuracy.csv from on-device LLM grading output (*_eval_grade.json)"
+    )
+    @depends(["install_deps"])
+    def collect_llm_accuracy_csv(
+        self, plan: Plan, step_id: str = "collect_llm_accuracy_csv"
+    ) -> str:
+        """
+        Build a scorecard-format accuracy.csv from *_eval_grade.json files.
+
+        The search directory defaults to the current working directory and can
+        be overridden via the QAIHM_GRADE_RESPONSES_DIR environment variable.
+        accuracy.csv is written under QAIHM_TEST_ARTIFACTS_DIR.
+        """
+        return plan.add_step(
+            step_id,
+            CollectLLMAccuracyCSVTask(
                 venv=self.venv_path,
                 search_dir=os.environ.get("QAIHM_GRADE_RESPONSES_DIR"),
             ),

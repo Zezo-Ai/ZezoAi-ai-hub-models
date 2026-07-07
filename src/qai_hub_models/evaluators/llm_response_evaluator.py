@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import subprocess
 import textwrap
@@ -73,6 +74,21 @@ def _run_grader_subprocess(
 
     The grader script writes a machine-readable summary to ``output_json``.
     """
+    # Aggressive cleanup before spawning the grader subprocess. The grader
+    # loads a ~65 GiB model and needs the parent's GPU memory footprint to be
+    # as small as possible. torch.cuda.ipc_collect() reclaims interprocess-
+    # handle memory that empty_cache() misses.
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+        free, total = torch.cuda.mem_get_info()
+        print(
+            f"Parent GPU state before grader: "
+            f"{(total - free) / 1024**3:.2f} GiB used / {total / 1024**3:.2f} GiB total"
+        )
+
     cmd = [
         python_exe,
         "-m",

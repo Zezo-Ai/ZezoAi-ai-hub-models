@@ -889,6 +889,41 @@ class GradeLLMResponsesTask(CompositeTask):
         )
 
 
+class CollectLLMAccuracyCSVTask(CompositeTask):
+    """Build a scorecard-format ``accuracy.csv`` from on-device LLM grading output.
+
+    Reads ``*_eval_grade.json`` files (written by GradeLLMResponsesTask) and
+    their ``*_eval.meta.json`` identity sidecars under ``search_dir`` and emits
+    one accuracy row per run via
+    ``qai_hub_models.scripts.llm.collect_llm_accuracy_csv``. Runs in the main
+    qaihm venv (it needs the scorecard package, not the grader venv).
+    """
+
+    def __init__(
+        self,
+        venv: str | None,
+        search_dir: str | None = None,
+        raise_on_failure: bool = False,
+    ) -> None:
+        search_dir = search_dir or os.getcwd()
+        super().__init__(
+            "Collect LLM Accuracy CSV",
+            [
+                RunCommandsWithVenvTask(
+                    group_name="Collect LLM Accuracy CSV",
+                    venv=venv,
+                    commands=[
+                        "python -m qai_hub_models.scripts.llm.collect_llm_accuracy_csv "
+                        f'"{search_dir}"',
+                    ],
+                    raise_on_failure=False,
+                )
+            ],
+            continue_after_single_task_failure=True,
+            raise_on_failure=raise_on_failure,
+        )
+
+
 class GenieXBenchTask(RunCommandsWithVenvTask):
     """Run geniex-bench benchmarks on QDC devices.
 

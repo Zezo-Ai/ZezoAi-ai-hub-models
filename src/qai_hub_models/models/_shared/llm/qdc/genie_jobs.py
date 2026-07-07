@@ -672,6 +672,32 @@ def save_eval_results_json(results: list[dict], output_path: str) -> None:
     print(f"Results saved to: {output_path}")
 
 
+def save_eval_metadata_json(
+    model_id: str,
+    chipset: str,
+    precision: str,
+    output_path: str,
+    dataset_name: str = "prompts",
+) -> None:
+    """Save a sidecar identifying which (model, chipset, precision, dataset) an eval JSON belongs to.
+
+    The grader output (``*_eval_grade.json``) carries no model/chipset/precision,
+    and the eval filename cannot be parsed unambiguously (model IDs and chipset
+    slugs both contain delimiters). This sidecar lets downstream tooling recover
+    the identity without reverse-engineering the filename.
+    """
+    metadata = {
+        "model_id": model_id,
+        "chipset": chipset,
+        "precision": precision,
+        "dataset_name": dataset_name,
+    }
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+
+    print(f"Eval metadata saved to: {output_path}")
+
+
 _USE_DEFAULT_PROMPTS = object()
 
 # Bounded retries for a QDC job that finishes with a non-"Successful" result;

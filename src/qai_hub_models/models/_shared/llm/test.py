@@ -790,6 +790,7 @@ def run_llm_perf_test(
     # QDC run
     from qai_hub_models.models._shared.llm.qdc.genie_jobs import (
         _USE_DEFAULT_PROMPTS,
+        save_eval_metadata_json,
         save_eval_results_json,
         submit_genie_bundle_to_qdc_device,
     )
@@ -828,7 +829,13 @@ def run_llm_perf_test(
     # Save eval results as JSON in the working directory (not output_dir)
     # so the workflow artifact upload picks it up from $GITHUB_WORKSPACE.
     if eval_results:
-        eval_json_path = Path(f"{model_id}_{device.chipset}_{precision}_eval.json")
-        save_eval_results_json(eval_results, str(eval_json_path))
+        base = f"{model_id}_{device.chipset}_{precision}_eval"
+        save_eval_results_json(eval_results, f"{base}.json")
+        # Sidecar carrying the (model, chipset, precision) identity, so the
+        # accuracy-CSV collector doesn't have to parse it back out of the
+        # ambiguous filename.
+        save_eval_metadata_json(
+            model_id, device.chipset, str(precision), f"{base}.meta.json"
+        )
 
     return tps, ttft, prefill_tps

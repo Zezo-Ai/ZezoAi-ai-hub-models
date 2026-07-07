@@ -291,12 +291,22 @@ jobs:
       run: |
         python3 scripts/ci/grader_summary.py "$GITHUB_WORKSPACE" >> "$GITHUB_STEP_SUMMARY"
 
+    - name: Collect LLM Accuracy CSV
+      if: ${{ !cancelled() && inputs.run_eval }}
+      env:
+        QAIHM_TEST_ARTIFACTS_DIR: ${{ github.workspace }}/qaihm_test_artifacts
+        QAIHM_GRADE_RESPONSES_DIR: ${{ github.workspace }}
+      run: |
+        python3 scripts/build_and_test.py \
+          --venv="${{ env.VENV_PATH }}" \
+          collect_llm_accuracy_csv
+
     - name: Stage results for upload
       if: ${{ !cancelled() }}
       run: |
         mkdir -p "$GITHUB_WORKSPACE/llm-perf-results"
         find "$GITHUB_WORKSPACE" -type f \
-          \( -name '*_eval.json' -o -name '*_grade.json' \) \
+          \( -name '*_eval.json' -o -name '*_grade.json' -o -name '*_eval.meta.json' \) \
           -exec cp {} "$GITHUB_WORKSPACE/llm-perf-results/" \;
 
     - name: Upload Results
@@ -305,6 +315,14 @@ jobs:
       with:
         name: llm-perf-results
         path: llm-perf-results/
+
+    - name: Upload Accuracy CSV
+      if: ${{ !cancelled() && inputs.run_eval }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: accuracy-csv
+        path: ${{ github.workspace }}/qaihm_test_artifacts/accuracy.csv
+        if-no-files-found: ignore
 
     - name: Add CSV to GitHub summary
       if: ${{ !cancelled() }}
