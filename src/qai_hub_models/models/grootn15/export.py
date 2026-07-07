@@ -16,7 +16,12 @@ from qai_hub_models.utils.args import export_parser
 from qai_hub_models.utils.asset_loaders import check_unpublished_model_warning
 from qai_hub_models.utils.export.dispatch import resolve_export_model
 
-SUPPORTED_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {}
+SUPPORTED_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
+    Precision.float: [
+        TargetRuntime.QNN_CONTEXT_BINARY,
+        TargetRuntime.PRECOMPILED_QNN_ONNX,
+    ],
+}
 
 
 DEFAULT_EXPORT_DEVICE = "Dragonwing IQ-9075 EVK"
