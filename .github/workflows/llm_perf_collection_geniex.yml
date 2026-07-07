@@ -1,5 +1,5 @@
 ## Collects TPS/TTFT via geniex-bench (llama_cpp + qairt plugins) on QDC,
-## then opens one PR replaying perf.yaml updates from a JSON manifest.
+## then opens one PR replaying perf.yaml updates from a JSON-lines updates file.
 
 name: GenieX Performance Collection
 run-name: "GenieX Perf (${{ inputs.model || 'all' }}, ${{ inputs.device || 'all' }}, ${{ inputs.geniex_version || 'latest' }})"
@@ -45,6 +45,11 @@ on:
         default: ''
         type: string
 
+      release_assets_action_id:
+        description: 'Run ID with a fresh Scorecard LLM Perf Release Assets (<run_id>) artifact to override the committed copy.'
+        type: string
+        default: ''
+
       create_pr:
         description: 'Create PR with perf.yaml changes'
         default: true
@@ -74,6 +79,11 @@ on:
 
       geniex_version:
         description: 'Pin GenieX release tag (e.g. "v0.3.1"). Leave blank for the unversioned "latest stable" mirror.'
+        type: string
+        default: ''
+
+      release_assets_action_id:
+        description: 'Run ID with a fresh Scorecard LLM Perf Release Assets (<run_id>) artifact to override the committed copy.'
         type: string
         default: ''
 
@@ -129,6 +139,15 @@ jobs:
         source ${{ env.VENV_PATH }}/bin/activate
         pip install qualcomm_device_cloud_sdk-*.whl
 
+    - name: Download Fresh Release Assets
+      if: ${{ inputs.release_assets_action_id != '' }}
+      uses: actions/download-artifact@v8
+      with:
+        run-id: ${{ inputs.release_assets_action_id }}
+        github-token: ${{ github.token }}
+        name: Scorecard LLM Perf Release Assets (${{ inputs.release_assets_action_id }})
+        path: ${{ github.workspace }}/llm-release-assets
+
     - name: Run geniex-bench Benchmarks
       id: run_benchmarks
       continue-on-error: true
@@ -138,6 +157,7 @@ jobs:
         GENIEX_BENCH_PLUGIN: ${{ inputs.geniex_bench_plugin || 'all' }}
         GENIEX_BENCH_PRECISIONS: ${{ inputs.precision || 'default' }}
         GENIEX_VERSION: ${{ inputs.geniex_version || '' }}
+        QAIHM_LLM_PERF_RELEASE_ASSETS: ${{ inputs.release_assets_action_id != '' && format('{0}/llm-release-assets/release-assets.yaml', github.workspace) || '' }}
       run: |
         source ${{ env.VENV_PATH }}/bin/activate
         cd $GITHUB_WORKSPACE
@@ -162,13 +182,16 @@ jobs:
           ${{ github.workspace }}/geniex_bench_results.csv
           ${{ github.workspace }}/geniex_bench_results/**/*.json
 
-    - name: Upload geniex perf.yaml update manifest
+    - name: Upload geniex perf.yaml updates
       id: upload-perf-updates
       if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v7
       with:
-        name: geniex-perf-updates
-        path: ${{ github.workspace }}/geniex_perf_updates.json
+        # perf-updates-* is the shared prefix the scorecard results collector
+        # globs to merge every runtime's updates (see llm_perf_collection.yml
+        # and scorecard_collect_results.yml).
+        name: perf-updates-geniex
+        path: ${{ github.workspace }}/geniex_perf_updates.jsonl
         if-no-files-found: ignore
 
     - name: Fail workflow if benchmarks failed
@@ -203,11 +226,11 @@ jobs:
         pip install -e src/
 
     # Download even on partial failure, then PR can create even if some benchmarks failed.
-    - name: Download geniex perf.yaml update manifest
+    - name: Download geniex perf.yaml updates
       if: ${{ needs.collect_geniex_bench_perf.result != 'cancelled' }}
       uses: actions/download-artifact@v8
       with:
-        name: geniex-perf-updates
+        name: perf-updates-geniex
         path: ${{ github.workspace }}/_perf_updates
 
     - name: Apply geniex perf.yaml updates & open PR
@@ -220,21 +243,21 @@ jobs:
         cd "$GITHUB_WORKSPACE"
         source ${{ env.VENV_PATH }}/bin/activate
 
-        manifest="_perf_updates/geniex_perf_updates.json"
-        if [ ! -s "$manifest" ]; then
+        updates="_perf_updates/geniex_perf_updates.jsonl"
+        if [ ! -s "$updates" ]; then
           echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          echo "No geniex perf manifest; skipping PR."
+          echo "No geniex perf updates; skipping PR."
           exit 0
         fi
 
         # Replay onto the workflow's checkout: add/update geniex entries
         # only; existing genie numbers are untouched.
-        python -m qai_hub_models.scripts.run_geniex_perf_updates "$manifest"
+        python -m qai_hub_models.scripts.apply_llm_perf_updates "$updates"
 
         git add -- 'src/qai_hub_models/models/*/perf.yaml'
         if git diff --cached --quiet; then
           echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          echo "Applying the manifest produced no perf.yaml changes; skipping PR."
+          echo "Applying the updates produced no perf.yaml changes; skipping PR."
           exit 0
         fi
 
@@ -274,7 +297,7 @@ jobs:
             bodyLines.push(`[All Results (zip)](${resultsUrl})`, '');
           }
           if (perfUpdatesUrl) {
-            bodyLines.push(`[Perf Updates Manifest](${perfUpdatesUrl})`, '');
+            bodyLines.push(`[Perf Updates](${perfUpdatesUrl})`, '');
           }
           bodyLines.push(
             `Models: ${process.env.QAIHM_TEST_MODELS}`,

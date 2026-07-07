@@ -227,16 +227,21 @@ jobs:
             pattern: "Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.action_id }}*)"
             path: build/release-assets-per-split
 
-      - name: Download LLM Perf YAMLs
-        id: download-llm-perf-yamls
+      # Every LLM perf runtime (genie, geniex) uploads its perf.yaml updates as
+      # a "perf-updates-<runtime>" artifact. Download them all here; the merge
+      # step below replays them in one clear-then-upsert pass. Because runtimes
+      # write disjoint profile_path buckets, the merged result is independent of
+      # which jobs ran or the order they finished.
+      - name: Download LLM Perf Updates
+        id: download-llm-perf-updates
         if: inputs.action_id != ''
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
             run-id: ${{ inputs.action_id }}
             github-token: ${{ github.token }}
-            name: updated-perf-yamls
-            path: ${{ github.workspace }}/src/qai_hub_models/models
+            pattern: perf-updates-*
+            path: ${{ github.workspace }}/llm-perf-updates
 
       - name: Check Out Scorecard Intermediates
         if: inputs.latest_results_branch != ''
@@ -293,6 +298,19 @@ jobs:
             --venv="${{ env.VENV_PATH }}" \
             --python="${{ steps.ci_setup.outputs.python-path }}" \
             create_perfs_and_numerics
+
+      # Merge every runtime's LLM perf.yaml updates (genie, geniex) in one
+      # clear-then-upsert pass. create_perfs_and_numerics above does not write
+      # LLM perf.yaml (LLMs set skips_profile_and_inference), so this owns all
+      # LLM perf.yaml edits. Order-independent: runtimes write disjoint
+      # profile_path buckets.
+      - name: Apply LLM Perf Updates
+        id: apply-llm-perf-updates
+        if: ${{ !cancelled() && steps.download-llm-perf-updates.outcome == 'success' }}
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python -m qai_hub_models.scripts.apply_llm_perf_updates \
+            ${{ github.workspace }}/llm-perf-updates
 
       - name: Combine Per-Split Release Assets
         id: combine-release-assets

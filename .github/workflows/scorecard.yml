@@ -217,6 +217,7 @@ jobs:
       deployment: ${{ inputs.deployment }}
       device: ${{ inputs.test_devices }}
       test_precisions: ${{ inputs.test_precisions }}
+      test_runtimes: ${{ inputs.test_runtimes }}
       run_eval: ${{ inputs.test_scope == 'accuracy' || inputs.test_scope == 'perf_and_accuracy' }}
 
   collect_results_split:
@@ -272,9 +273,13 @@ jobs:
           name: test-results-scorecard-models
           path: build/all-test-results/model-tests
 
+      # Accuracy results only exist when accuracy was requested (test_scope
+      # accuracy / perf_and_accuracy) -- collect_results_split runs for exports
+      # regardless, so its result can't gate the accuracy artifact. Mirrors the
+      # run_accuracy expression used to drive collect_results_split.
       - name: Download Accuracy Test Results
         id: download_accuracy_results
-        if: ${{ needs.collect_results_split.result != 'skipped' }}
+        if: ${{ needs.collect_results_split.result != 'skipped' && (inputs.test_scope == 'accuracy' || inputs.test_scope == 'perf_and_accuracy') }}
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -294,7 +299,7 @@ jobs:
         if: ${{ format('{0}', inputs.generate_test_summary) != 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          ACCURACY_SKIPPED: ${{ needs.collect_results_split.result == 'skipped' }}
+          ACCURACY_SKIPPED: ${{ needs.collect_results_split.result == 'skipped' || !(inputs.test_scope == 'accuracy' || inputs.test_scope == 'perf_and_accuracy') }}
           EXPORT_SKIPPED: ${{ needs.collect_results_split.result == 'skipped' }}
         run: |
           source "${{ env.VENV_PATH }}/bin/activate"

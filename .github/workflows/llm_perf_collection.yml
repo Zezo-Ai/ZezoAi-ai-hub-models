@@ -59,7 +59,7 @@ on:
         type: boolean
 
       release_assets_action_id:
-        description: 'Run ID with a fresh Scorecard Cached Artifact (release-assets.yaml, <run_id>, llm) to override the committed copy.'
+        description: 'Run ID with a fresh Scorecard LLM Perf Release Assets (<run_id>) artifact to override the committed copy.'
         type: string
         default: ''
 
@@ -96,7 +96,7 @@ on:
         default: true
 
       release_assets_action_id:
-        description: 'Run ID with a fresh Scorecard Cached Artifact (release-assets.yaml, <run_id>, llm) to override the committed copy.'
+        description: 'Run ID with a fresh Scorecard LLM Perf Release Assets (<run_id>) artifact to override the committed copy.'
         type: string
         default: ''
 
@@ -193,7 +193,7 @@ jobs:
       with:
         run-id: ${{ inputs.release_assets_action_id }}
         github-token: ${{ github.token }}
-        name: Scorecard Cached Artifact (release-assets.yaml, ${{ inputs.release_assets_action_id }}, llm)
+        name: Scorecard LLM Perf Release Assets (${{ inputs.release_assets_action_id }})
         path: ${{ github.workspace }}/llm-release-assets
 
     - name: Run LLM Performance Collection
@@ -204,6 +204,7 @@ jobs:
         QAIHM_LLM_PERF_PRECISIONS: ${{ inputs.precision }}
         QAIHM_RUN_EVAL: ${{ inputs.run_eval }}
         QAIHM_LLM_PERF_RELEASE_ASSETS: ${{ inputs.release_assets_action_id != '' && format('{0}/llm-release-assets/release-assets.yaml', github.workspace) || '' }}
+        QAIHM_LLM_PERF_UPDATES: ${{ github.workspace }}/genie_perf_updates.jsonl
         AWS_ROLE_ARN: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
         AWS_REGION: us-west-2
         AWS_PROFILE_NAME: qaihm
@@ -213,6 +214,15 @@ jobs:
             --venv='${{ env.VENV_PATH }}' \
             --only \
             collect_llm_perf
+
+    - name: Upload perf.yaml updates
+      id: upload-perf-updates
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: perf-updates-genie
+        path: ${{ github.workspace }}/genie_perf_updates.jsonl
+        if-no-files-found: ignore
 
     - name: Generate Test Failure Summary
       if: ${{ !cancelled() }}
@@ -301,14 +311,7 @@ jobs:
       run: |
         source "${{ env.VENV_PATH }}/bin/activate"
         pip install -q pandas tabulate
-        python -c 'import os, pandas as pd; print("## On-device Results"); fn="test_perf_on_device.csv"; print(pd.read_csv(fn).to_markdown(index=False)) if os.path.exists(fn) else print(f"File {fn} not found.")' >> "$GITHUB_STEP_SUMMARY"
-
-    - name: Upload updated perf.yaml files
-      if: ${{ !cancelled() }}
-      uses: actions/upload-artifact@v7
-      with:
-        name: updated-perf-yamls
-        path: src/qai_hub_models/models/**/perf.yaml
+        python -c 'import os, pandas as pd; print("## Genie On-device Results"); fn="test_perf_on_device.csv"; print(pd.read_csv(fn).to_markdown(index=False)) if os.path.exists(fn) else print(f"File {fn} not found.")' >> "$GITHUB_STEP_SUMMARY"
 
     - name: Create Pull Request
       if: ${{ !cancelled() && (inputs.create_pr) && steps.push_changes.outputs.branch_name != '' && steps.check_changes.outputs.has_changes == 'true' }}

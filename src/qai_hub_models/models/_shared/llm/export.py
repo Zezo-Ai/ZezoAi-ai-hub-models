@@ -66,7 +66,7 @@ from qai_hub_models.utils.args import (
 )
 from qai_hub_models.utils.kwarg_helpers import filter_kwargs
 
-VALID_TARGET_RUNTIMES = Literal[TargetRuntime.GENIE]
+VALID_TARGET_RUNTIMES = Literal[TargetRuntime.GENIE, TargetRuntime.GENIEX_QAIRT]
 
 
 def _parse_comma_separated_ints(value: str) -> list[int]:
@@ -677,7 +677,7 @@ def export_model(
         version = f"{qairt_version.api_version}.{qairt_version.framework.patch}"
 
         if (
-            target_runtime == TargetRuntime.GENIE
+            target_runtime in (TargetRuntime.GENIE, TargetRuntime.GENIEX_QAIRT)
             and hasattr(model, "checkpoint")
             and model.checkpoint is not None
         ):
@@ -698,16 +698,17 @@ def export_model(
                 model_name=model_display_name,
             )
 
-            raw_message = f"""
-                These models can be deployed on-device using the Genie SDK.
-                The assets were compiled with QAIRT SDK {version} and we
-                recommend matching this version for on-device deployment.
+            if target_runtime == TargetRuntime.GENIE:
+                raw_message = f"""
+                    These models can be deployed on-device using the Genie SDK.
+                    The assets were compiled with QAIRT SDK {version} and we
+                    recommend matching this version for on-device deployment.
 
-                For a full tutorial, please follow the instructions here:
+                    For a full tutorial, please follow the instructions here:
 
-                    https://github.com/quic/ai-hub-apps/tree/main/tutorials/llm_on_genie.
-            """
-            print(textwrap.dedent(raw_message))
+                        https://github.com/quic/ai-hub-apps/tree/main/tutorials/llm_on_genie.
+                """
+                print(textwrap.dedent(raw_message))
 
     # Print versions of frameworks used for compilation/profiling
     if not skip_summary:

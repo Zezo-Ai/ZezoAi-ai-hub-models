@@ -171,6 +171,23 @@ jobs:
           path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets.yaml
           if-no-files-found: ignore
 
+      # Separate copy consumed by the LLM perf jobs (Genie / GenieX), which run
+      # hours after this upload. The "Scorecard Cached Artifact (release-assets.yaml,
+      # <id>, *)"-named copy above is merged and then DELETED by the split results
+      # collection workflow (scorecard_results_collection_split.yml "Delete Split
+      # Release Asset Artifacts"), so the perf jobs cannot depend on it. This copy
+      # uses a name outside that delete glob and is only produced by the LLM
+      # asset-upload job (build_and_test_target == test_llm_export_scripts).
+      - name: Upload LLM Perf Release Assets
+        id: upload-llm-perf-asset-cache
+        if: ${{ inputs.build_and_test_target == 'test_llm_export_scripts' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: Scorecard LLM Perf Release Assets (${{ inputs.action_id }})
+          path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets.yaml
+          if-no-files-found: ignore
+
       - name: Combine Per-Model JUnit XMLs
         if: ${{ always() }}
         run: |

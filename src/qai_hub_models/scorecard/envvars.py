@@ -464,6 +464,21 @@ class LLMPerfReleaseAssetsEnvvar(QAIHMPathEnvvar):
         return Path("")
 
 
+class LLMPerfUpdatesEnvvar(QAIHMPathEnvvar):
+    """Path to a JSON-lines log of every ``update_perf_yaml`` call."""
+
+    VARNAME = "QAIHM_LLM_PERF_UPDATES"
+    CLI_ARGNAMES = ["--llm-perf-updates"]
+    CLI_HELP_MESSAGE = (
+        "JSON-lines file to which each update_perf_yaml call is appended, so a "
+        "later step can replay it. Unset disables recording."
+    )
+
+    @classmethod
+    def default(cls) -> Path:
+        return Path("")
+
+
 @pytest_cli_envvar
 class DeploymentEnvvar(QAIHMStringEnvvar):
     """The deployment to target."""

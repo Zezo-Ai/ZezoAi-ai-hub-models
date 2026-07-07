@@ -15,6 +15,7 @@ The compile/QDC test logic lives in _shared/llm/test.py (run_llm_perf_test).
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 
@@ -34,6 +35,7 @@ from qai_hub_models.scorecard.device import (
 from qai_hub_models.scorecard.envvars import (
     LLMPerfPrecisionsEnvvar,
     LLMPerfReleaseAssetsEnvvar,
+    LLMPerfUpdatesEnvvar,
     SpecialLLMPerfPrecisionSetting,
 )
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
@@ -183,6 +185,19 @@ def get_llm_perf_parametrization(
     return result
 
 
+def _record_perf_update(entry: dict) -> None:
+    """Append one update_perf_yaml call to the updates log, if one is configured.
+
+    JSON-lines append guarded by a FileLock so concurrent xdist workers don't
+    interleave partial writes.
+    """
+    if LLMPerfUpdatesEnvvar.is_default():
+        return
+    updates_path = LLMPerfUpdatesEnvvar.get()
+    with FileLock(f"{updates_path}.lock"), open(updates_path, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
 def update_perf_yaml(
     model_id: str,
     device_name: str,
@@ -204,7 +219,24 @@ def update_perf_yaml(
     not at full context length.
     desired_compute_unit: written to the entry; "npu" by default.
     FileLock guards the read-modify-write against concurrent xdist workers.
+
+    When LLMPerfUpdatesEnvvar is set, the call is also recorded to that
+    log so it can be replayed later (see _record_perf_update).
     """
+    _record_perf_update(
+        dict(
+            model_id=model_id,
+            device_name=device_name,
+            precision=str(precision),
+            context_length=context_length,
+            tps=tps,
+            ttft_ms=ttft_ms,
+            prefill_tps=prefill_tps,
+            profile_path=profile_path.value,
+            ttft_max_ms=ttft_max_ms,
+            desired_compute_unit=desired_compute_unit,
+        )
+    )
     perf_path = QAIHM_MODELS_ROOT / model_id / "perf.yaml"
     with FileLock(f"{perf_path}.lock"):
         _update_perf_yaml_locked(
@@ -306,16 +338,40 @@ def _upsert_metric(
 def clear_llm_metrics_for_profile_path(
     model_id: str,
     profile_path: ScorecardProfilePath,
+    device_name: str | None = None,
+    precision: Precision | None = None,
 ) -> None:
+    """Empty the llm_metrics list for a profile_path so a re-measured bucket
+    doesn't keep orphaned context-lengths / compute-units from a prior run.
+
+    device_name / precision scope the clear. When both are None every
+    precision/component/device bucket for profile_path is cleared. When set,
+    only the matching (device, precision) buckets are cleared -- callers
+    replaying a partial run (a subset of devices/precisions) pass them so
+    committed metrics for the devices/precisions this run did NOT measure are
+    preserved instead of silently wiped.
+    """
     perf_path = QAIHM_MODELS_ROOT / model_id / "perf.yaml"
     if not perf_path.exists():
         return
+    target_device = (
+        ScorecardDevice.get(device_name, return_unregistered=True)
+        if device_name is not None
+        else None
+    )
     with FileLock(f"{perf_path}.lock"):
         perf = QAIHMModelPerf.from_model(model_id, not_exists_ok=True)
         changed = False
-        for precision_details in perf.precisions.values():
+        for prec, precision_details in perf.precisions.items():
+            if precision is not None and prec != precision:
+                continue
             for component_details in precision_details.components.values():
-                for device_metrics in component_details.performance_metrics.values():
+                for (
+                    device,
+                    device_metrics,
+                ) in component_details.performance_metrics.items():
+                    if target_device is not None and device != target_device:
+                        continue
                     perf_details = device_metrics.get(profile_path)
                     if perf_details is not None and perf_details.llm_metrics:
                         perf_details.llm_metrics = []

@@ -105,31 +105,31 @@ def _resolve_precisions(
     ]
 
 
-def fetch_qairt_genie_bundle(
+def fetch_geniex_qairt_bundle(
     model_id: str, precision: Precision, chipset: str, output_dir: Path
 ) -> tuple[Path, list[int]]:
-    """Download/extract the CI-built genie bundle. Returns (bundle_dir, context_lengths)."""
+    """Download/extract the CI-built geniex_qairt bundle. Returns (bundle_dir, context_lengths)."""
     assets = load_release_assets_for_model(model_id)
-    asset = assets.get_asset(precision, chipset, ScorecardProfilePath.GENIE)
+    asset = assets.get_asset(precision, chipset, ScorecardProfilePath.GENIEX_QAIRT)
     if asset is None:
         available: list[str] = []
         prec_details = assets.precisions.get(precision)
         if prec_details is not None:
             available = sorted(prec_details.chipset_assets.keys())
         raise RuntimeError(
-            f"No genie release asset for {model_id!r} precision={precision} "
+            f"No geniex_qairt release asset for {model_id!r} precision={precision} "
             f"chipset={chipset!r}. Available: {available or '<none>'}. "
-            "Build release-assets.yaml before running geniex-bench QAIRT."
+            "Build release-assets.yaml with GENIEX_QAIRT before running geniex-bench QAIRT."
         )
 
     bundle_dir = output_dir / ASSET_CONFIG.get_release_asset_name(
-        model_id, TargetRuntime.GENIE, precision, chipset
+        model_id, TargetRuntime.GENIEX_QAIRT, precision, chipset
     )
     if not bundle_dir.exists():
         zip_path = download_prerelease_asset(
             asset,
             model_id=model_id,
-            runtime=TargetRuntime.GENIE,
+            runtime=TargetRuntime.GENIEX_QAIRT,
             precision=precision,
             chipset=chipset,
             output_folder=output_dir,
@@ -138,14 +138,14 @@ def fetch_qairt_genie_bundle(
         shutil.unpack_archive(str(zip_path), extract_dir=str(output_dir))
         if not bundle_dir.exists():
             raise RuntimeError(
-                f"Extracted genie bundle missing expected directory {bundle_dir}; "
+                f"Extracted geniex_qairt bundle missing expected directory {bundle_dir}; "
                 f"contents of {output_dir}: {sorted(p.name for p in output_dir.iterdir())}"
             )
 
     metadata = ModelMetadata.from_json(bundle_dir / "metadata.json")
     if metadata is None or metadata.genie is None:
         raise RuntimeError(
-            f"Genie bundle for {model_id!r} has no genie metadata at "
+            f"GenieX-QAIRT bundle for {model_id!r} has no genie metadata at "
             f"{bundle_dir / 'metadata.json'}"
         )
     return bundle_dir, metadata.genie.context_lengths
@@ -196,7 +196,7 @@ def write_summary(rows: list[dict]) -> None:
         return format(v, spec) if isinstance(v, (int, float)) else "-"
 
     with open(summary, "a") as f:
-        f.write("## geniex-bench Benchmark Results\n\n")
+        f.write("## GenieX On-device Results\n\n")
         f.write(
             "| Model | Plugin | Precision | Device | Ctx | Decode TPS | Prefill TPS | TTFT (ms) | Status |\n"
         )
@@ -278,8 +278,8 @@ def main() -> int:
     ap.add_argument("--skip-perf-update", action="store_true")
     ap.add_argument(
         "--perf-updates-json",
-        default="geniex_perf_updates.json",
-        help="JSON manifest of update_perf_yaml calls; replayed by run_geniex_perf_updates.py.",
+        default="geniex_perf_updates.jsonl",
+        help="JSON-lines log of update_perf_yaml calls; replayed by apply_llm_perf_updates.py.",
     )
     ap.add_argument(
         "--geniex-version",
@@ -349,7 +349,7 @@ def main() -> int:
                     # Per-(model, precision, device) failure must not abort the whole sweep.
                     try:
                         if plugin == "qairt":
-                            bundle_dir, ctx_list = fetch_qairt_genie_bundle(
+                            bundle_dir, ctx_list = fetch_geniex_qairt_bundle(
                                 model_id,
                                 precision,
                                 sd.chipset,
@@ -479,12 +479,17 @@ def main() -> int:
 
     write_csv(rows, args.csv)
     print(f"\nResults saved to {args.csv}")
+    # JSON-lines (one update per line), matching the format emitted by
+    # update_perf_yaml so apply_llm_perf_updates.py has a single format to read.
     with open(args.perf_updates_json, "w") as f:
-        json.dump(perf_updates, f, indent=2)
+        f.writelines(json.dumps(u) + "\n" for u in perf_updates)
     print(f"Wrote {len(perf_updates)} perf.yaml updates to {args.perf_updates_json}")
     write_summary(rows)
     failed = [r for r in rows if r["status"] != "success"]
-    if not rows or failed:
+    if not rows:
+        print("No models were benchmarked (all skipped or no candidates).")
+        return 0
+    if failed:
         return 1
     return 0
 

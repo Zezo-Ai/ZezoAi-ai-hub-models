@@ -35,6 +35,13 @@ on:
           type: string
           default: 'default'
 
+        test_runtimes:
+          description: |
+            Test Paths (runtimes). See `src/qai_hub_models/scorecard/path_profile.py`.
+            "default" is the same as "genie,geniex_qairt".
+          type: string
+          default: 'default'
+
         run_eval:
           description: |
             Run the on-device accuracy evaluation (100 default prompts). When
@@ -102,9 +109,9 @@ jobs:
       build_and_test_target: test_llm_export_scripts
 
   collect_llm_perf:
-    name: Collect LLM Performance Numbers
+    name: Collect LLM Performance Numbers (Genie)
     needs: [determine_llm_models, test_llm_export]
-    if: ${{ !cancelled() && needs.test_llm_export.result == 'success' && inputs.s3_prefix != '' }}
+    if: ${{ !cancelled() && needs.test_llm_export.result == 'success' && inputs.s3_prefix != '' && (inputs.test_runtimes == 'default' || inputs.test_runtimes == '' || contains(format(',{0},', inputs.test_runtimes), ',genie,')) }}
     secrets: inherit
     uses: ./.github/workflows/llm_perf_collection.yml
     with:
@@ -116,3 +123,18 @@ jobs:
       run_eval: ${{ inputs.run_eval }}
       create_pr: false
       release_assets_action_id: ${{ inputs.action_id }}
+
+  collect_llm_perf_geniex:
+    name: Collect LLM Performance Numbers (GenieX-QAIRT)
+    needs: [determine_llm_models, test_llm_export]
+    if: ${{ !cancelled() && needs.test_llm_export.result == 'success' && inputs.s3_prefix != '' && (inputs.test_runtimes == 'default' || inputs.test_runtimes == '' || contains(format(',{0},', inputs.test_runtimes), ',geniex_qairt,')) }}
+    secrets: inherit
+    uses: ./.github/workflows/llm_perf_collection_geniex.yml
+    with:
+      model: ${{ needs.determine_llm_models.outputs.models }}
+      device: ${{ inputs.device }}
+      # Map default and default variants to 'all' (see scorecard/envvars.py).
+      precision: ${{ contains(fromJSON('["default", "default_minus_float", "default_quantized", "bench"]'), inputs.test_precisions) && 'all' || inputs.test_precisions }}
+      geniex_bench_plugin: qairt
+      release_assets_action_id: ${{ inputs.action_id }}
+      create_pr: false
