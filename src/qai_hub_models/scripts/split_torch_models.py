@@ -150,6 +150,7 @@ def split_torch_models(
     stage: str | None = None,
     runtime_estimates_path: Path | None = None,
     collapse_to_single_split: bool = False,
+    exclude_test_splits: set[TestRunnerSplit] | None = None,
 ) -> list[dict[str, str | RunsOnValue]]:
     """
     Split models into chunks for parallel processing.
@@ -178,6 +179,11 @@ def split_torch_models(
         If True, emit a single torch split with all models on the default
         runner -- no custom GPU splits, no chunking. Use for unit-only runs
         where splitting buys nothing.
+    exclude_test_splits
+        Test splits (by TestRunnerSplit) to drop entirely from the output.
+        Models assigned to an excluded split are not compiled/tested/profiled.
+        Passing TestRunnerSplit.DEFAULT is not allowed (it would drop all
+        normal models); the CLI rejects it.
 
     Returns
     -------
@@ -185,6 +191,14 @@ def split_torch_models(
         List of dicts with 'split_name', 'models', and 'runs_on' keys for each split.
     """
     torch_models, static_models = validate_and_split_enabled_models(models)
+
+    exclude_test_splits = exclude_test_splits or set()
+    if exclude_test_splits:
+        torch_models = {
+            m
+            for m in torch_models
+            if QAIHMModelCodeGen.from_model(m).test_split not in exclude_test_splits
+        }
 
     splits: list[dict[str, str | RunsOnValue]] = []
 
@@ -329,8 +343,29 @@ def main() -> None:
             "Use for unit-only runs where splitting buys nothing."
         ),
     )
+    parser.add_argument(
+        "--exclude-test-splits",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated test splits to drop entirely (e.g. 'llm'). "
+            "Models in an excluded split are not compiled, tested, or "
+            "profiled. 'default' is not allowed."
+        ),
+    )
 
     args = parser.parse_args()
+
+    exclude_test_splits: set[TestRunnerSplit] | None = None
+    if args.exclude_test_splits:
+        exclude_test_splits = {
+            TestRunnerSplit(token.strip())
+            for token in args.exclude_test_splits.split(",")
+            if token.strip()
+        }
+        if TestRunnerSplit.DEFAULT in exclude_test_splits:
+            parser.error("--exclude-test-splits may not include 'default'.")
+
     splits = split_torch_models(
         args.models,
         args.max_num_pt_splits,
@@ -338,6 +373,7 @@ def main() -> None:
         stage=args.stage,
         runtime_estimates_path=args.runtime_estimates_path,
         collapse_to_single_split=args.collapse_to_single_split,
+        exclude_test_splits=exclude_test_splits,
     )
     if args.output_format == "github":
         # Output as a single line JSON for GitHub Actions

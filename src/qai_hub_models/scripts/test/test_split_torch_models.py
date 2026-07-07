@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 import ruamel.yaml
 
+from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.code_gen_yaml import TestRunnerSplit as _TestRunnerSplit
 from qai_hub_models.scorecard.artifacts import RUNTIME_STAGE_JOB_SUBMISSION
 from qai_hub_models.scorecard.envvars import SpecialModelSetting
 from qai_hub_models.scripts.split_torch_models import (
@@ -16,6 +18,7 @@ from qai_hub_models.scripts.split_torch_models import (
     _split_aot_jit,
     split_torch_models,
 )
+from qai_hub_models.utils.path_helpers import MODEL_IDS as PYTORCH_RECIPE_MODEL_IDS
 
 
 def _bin_loads(bins: list[list[str]], weights: dict[str, float]) -> list[float]:
@@ -215,6 +218,45 @@ def test_collapse_to_single_split_emits_one_torch_split() -> None:
     models_str = torch_splits[0]["models"]
     assert isinstance(models_str, str)
     assert any(m.startswith("llama_v3") for m in models_str.split(","))
+
+
+def test_exclude_test_splits_drops_llm_split() -> None:
+    """Excluding the LLM split drops all LLM models and their GPU split, while
+    still emitting the static and default torch splits.
+    """
+    splits = split_torch_models(
+        {SpecialModelSetting.ALL},
+        exclude_test_splits={_TestRunnerSplit.LLM},
+    )
+    split_names = {s["split_name"] for s in splits}
+    # No 'llm' split, and no GPU-group split at all.
+    assert "llm" not in split_names
+    for s in splits:
+        runs_on = s.get("runs_on")
+        assert not isinstance(runs_on, dict) or runs_on.get("group") != "GPU", s
+    # Static and default torch splits still present.
+    assert "static" in split_names
+    assert any(str(name).startswith("torch") for name in split_names), split_names
+    # No LLM model leaks into any split.
+    for s in splits:
+        models_str = s["models"]
+        assert isinstance(models_str, str)
+        assert not any(m.startswith("llama_v3") for m in models_str.split(",")), s
+
+
+def test_exclude_test_splits_empty_torch_emits_no_torch_split() -> None:
+    """If the only enabled torch models are LLMs, excluding the LLM split leaves
+    no torch split at all (so the downstream GPU job is skipped).
+    """
+    llm_models = {
+        m
+        for m in PYTORCH_RECIPE_MODEL_IDS
+        if QAIHMModelCodeGen.from_model(m).test_split is _TestRunnerSplit.LLM
+    }
+    if not llm_models:
+        pytest.skip("No LLM models available to exercise this edge case.")
+    splits = split_torch_models(llm_models, exclude_test_splits={_TestRunnerSplit.LLM})
+    assert splits == []
 
 
 @pytest.mark.parametrize("num_splits", [1, 2, 4, 8])
