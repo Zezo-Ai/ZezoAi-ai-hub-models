@@ -1,0 +1,346 @@
+##
+## Daily Customer Questions Reminder (Breeze)
+##
+## Runs every day at 14:00 UTC (7am PST).
+##  1. scrape-questions: Scrape Slack + GitHub for new customer questions.
+##  2. draft-and-post  : Breeze agent (Opus 4.7) classifies each thread as
+##                       no-reply / ack-only / answered / internal-noise.
+##                       When `enable_drafts` is true, also drafts a
+##                       starter answer grounded in
+##                       .claude/triage/customer-faq.md for no-reply /
+##                       ack-only threads. Default is reminder-only
+##                       (drafting disabled) until the KB quality bar is
+##                       met.
+##  3. post-to-slack   : Posts ONE message to the internal channel listing
+##                       threads still needing a Qualcomm reply. When
+##                       drafts are present in the JSON, they are attached
+##                       as threaded replies. The rendering logic
+##                       naturally emits reminder-only output when the
+##                       JSON has no drafts.
+##
+## Reminders post to #ai-hub-models (or #tungsten-debug in test_mode) as a
+## parent message (+ threaded draft replies when drafting is enabled). No
+## customer thread is ever touched. The full classified JSON is uploaded
+## as a workflow artifact for forensic lookback after Slack retention
+## purges.
+##
+## Two independent knobs (Pattern B):
+##  - test_mode (default true) — channel routing only. True routes to
+##    #tungsten-debug with a [TEST] prefix; false routes to
+##    #ai-hub-models. Does NOT control drafting.
+##  - enable_drafts (default false) — drafting gate. When true, the agent
+##    reads customer-faq.md and drafts starter answers for no-reply /
+##    ack-only threads. When false, drafts are omitted entirely (all
+##    draft fields null in the JSON, no threaded replies posted). Flip
+##    to true once the KB quality bar is met.
+##  - lookback_days (default 2) — overlap covers weekend gaps.
+##  - max_questions (default 50) — hard cap to prevent channel spam.
+##  - skip_slack — emergency lever for Slack-token issues; runs GitHub-only.
+##
+
+name: Customer Questions Reminder (Breeze)
+
+on:
+    schedule:
+        - cron: '0 14 * * *'  # Every day at 14:00 UTC (7am PST)
+
+    workflow_dispatch:
+      inputs:
+        lookback_days:
+          description: How many days back to scrape
+          required: false
+          type: number
+          default: 2
+        max_questions:
+          description: Hard cap on questions per run
+          required: false
+          type: number
+          default: 50
+        test_mode:
+          description: "Test mode: route Slack posts to #tungsten-debug with [TEST] prefix (channel routing only)"
+          required: false
+          type: boolean
+          default: true
+        enable_drafts:
+          description: "Enable KB-grounded drafts (agent reads customer-faq.md and drafts for no-reply / ack-only). Default false = reminder-only."
+          required: false
+          type: boolean
+          default: false
+        skip_slack:
+          description: "Skip the Slack scrape (GitHub-only run)"
+          required: false
+          type: boolean
+          default: false
+
+    # Allow other workflows (e.g., a temporary test hook on kb-weekly) to call us.
+    workflow_call:
+      inputs:
+        lookback_days:
+          required: false
+          type: number
+          default: 2
+        max_questions:
+          required: false
+          type: number
+          default: 50
+        test_mode:
+          required: false
+          type: boolean
+          default: true
+        enable_drafts:
+          required: false
+          type: boolean
+          default: false
+        skip_slack:
+          required: false
+          type: boolean
+          default: false
+
+env:
+  PYTHONUNBUFFERED: 1
+
+jobs:
+  scrape-questions:
+    name: Scrape Slack + GitHub Questions
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    permissions:
+      contents: read
+    outputs:
+      question_count: ${{ steps.count.outputs.count }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install scrape deps
+        run: pip install slack_sdk
+
+      - name: Scrape questions
+        # SLACK_BOT_TOKEN is the READ token (channels:history, users:read) —
+        # the same one the CSV exporter uses. If the secret is not provisioned
+        # in this repo, we silently fall back to GitHub-only.
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/cqa
+          SKIP_FLAG=""
+          if [ "${{ inputs.skip_slack }}" = "true" ]; then
+            SKIP_FLAG="--skip-slack"
+          elif [ -z "$SLACK_BOT_TOKEN" ]; then
+            echo "::warning::SLACK_BOT_TOKEN not set; falling back to GitHub-only scrape."
+            SKIP_FLAG="--skip-slack"
+          fi
+          python3 scripts/breeze_customer_questions/scrape_questions.py \
+            --lookback-days "${{ inputs.lookback_days || 2 }}" \
+            --max-questions "${{ inputs.max_questions || 50 }}" \
+            --output /tmp/cqa/questions.json \
+            $SKIP_FLAG
+
+      - name: Count questions
+        id: count
+        run: |
+          COUNT=$(python3 -c "import json; print(len(json.load(open('/tmp/cqa/questions.json'))['questions']))")
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Scraped $COUNT questions"
+
+      - name: Upload questions artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: customer-questions-${{ github.run_id }}
+          path: /tmp/cqa/questions.json
+          retention-days: 7
+
+  draft-and-post:
+    name: Breeze Agent — Classify Threads
+    needs: [scrape-questions]
+    if: ${{ needs.scrape-questions.outputs.question_count != '0' }}
+    uses: qcom-eng-Nimbus/custom-templates/.github/workflows/breeze-agent-reusable.yaml@main
+    secrets: inherit
+    with:
+      agent_name: "customer-questions-remind"
+      claude_model: "us.anthropic.claude-opus-4-7"
+      github_token_scope: organization
+      base_allowed_tools: >-
+        Read,
+        Write,
+        Bash(gh:*),
+        Bash(cat:*),
+        Bash(ls:*),
+        Bash(mkdir:*),
+        Bash(python3:*)
+      prompt: |
+        Classify scraped customer questions by reply status. When drafting
+        is enabled, also draft a starter answer from the KB for threads
+        that still need a Qualcomm reply (no-reply / ack-only). The
+        downstream post-to-slack job posts a single reminder message; when
+        the JSON contains drafts, they are attached as threaded replies.
+
+        Read .claude/skills/customer-questions-remind/SKILL.md and follow
+        it exactly. Drafting (Step 2b) is gated on ENABLE_DRAFTS:
+        - ENABLE_DRAFTS == "true": draft for no-reply / ack-only, using
+          `draft_answer: null` + `flags: ["kb_miss"]` when no FAQ matches.
+        - ENABLE_DRAFTS == "false" (default): skip Step 2b entirely — emit
+          null draft fields with empty `flags` for every question, and do
+          not read the KB.
+
+        TEST_MODE controls Slack channel routing only (handled by the
+        downstream job); it does NOT affect your behavior.
+
+        Context variables:
+        - QUESTIONS_PATH: /tmp/cqa/questions.json
+        - DRAFTS_PATH: /tmp/cqa/drafts.json
+        - MAX_QUESTIONS: ${{ inputs.max_questions || 50 }}
+        - ENABLE_DRAFTS: ${{ inputs.enable_drafts == true && 'true' || 'false' }}
+        - RUN_ID: ${{ github.run_id }}
+        - RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        - QUESTIONS_ARTIFACT: customer-questions-${{ github.run_id }}
+
+        Step 0 (boilerplate, do this first):
+          mkdir -p /tmp/cqa
+          gh run download $RUN_ID -n "$QUESTIONS_ARTIFACT" -D /tmp/cqa
+
+        Step 1-3: follow SKILL.md (read questions.json, classify status per
+        question, write classified JSON to DRAFTS_PATH).
+
+        Step 4 (emit classified JSON as base64 for downstream post-to-slack):
+          The reusable agent workflow does NOT pass repo secrets through to
+          user shell steps, so a separate `post-to-slack` job recovers the
+          file from this job's log. Print the file with markers it can grep
+          for and base64-decode (ONE Bash call, not three):
+
+          { echo "===DRAFTS_B64_BEGIN==="; base64 < /tmp/cqa/drafts.json; echo "===DRAFTS_B64_END==="; }
+
+          That's the entire post-step from your side. The downstream job
+          handles channel routing + chat.postMessage.
+      system_prompt: |
+        You are Breeze AI, a customer-question classifier (and, when
+        drafting is enabled, KB-grounded drafter) for QAI Hub Models. Your
+        job: read scraped questions and classify each thread's reply
+        status (no-reply / ack-only / answered / internal-noise). When
+        ENABLE_DRAFTS == "true", also draft a short starter answer for
+        no-reply / ack-only threads grounded in
+        `.claude/triage/customer-faq.md`. A separate workflow job posts
+        the reminder (+ drafts, when present) to an internal Slack channel.
+
+        IMPORTANT — you do NOT post to any customer thread. Drafts are for
+        internal czar review only; the downstream post-to-slack job posts
+        to the internal review channel.
+
+        IMPORTANT: You have a 50-turn limit. Be efficient:
+        - Read SKILL.md FIRST — it has all instructions
+        - When ENABLE_DRAFTS == "true", read .claude/triage/customer-faq.md
+          ONCE and hold it in memory. When ENABLE_DRAFTS == "false", skip
+          the KB read — drafting is disabled.
+        - Batch reads — never re-read the same file
+        - When uncertain whether a reply is substantive, prefer `ack-only`
+          over `answered` (liberal default — over-reminding is cheap)
+        - Drafting-enabled only: when no FAQ entry matches, emit
+          `draft_answer: null` + `flags: ["kb_miss"]` rather than
+          hallucinating. Drafting-disabled: all draft fields are `null`
+          with empty `flags` regardless of match.
+
+        Environment:
+        - QUESTIONS_PATH: /tmp/cqa/questions.json
+        - DRAFTS_PATH: /tmp/cqa/drafts.json
+        - MAX_QUESTIONS: ${{ inputs.max_questions || 50 }}
+        - ENABLE_DRAFTS: ${{ inputs.enable_drafts == true && 'true' || 'false' }}
+        - Full repo checkout available
+        - DO NOT call post_drafts_slack.py directly — your only post step is
+          the base64 emit. SLACK_NOTIFIER_TOKEN is NOT in this env.
+      bot_name: "breeze-code-action[bot]"
+      max_turns: 50
+      track_progress: false
+      show_full_output: true
+      additional_permissions: "actions: read"
+      sub_category: "customer-questions-remind"
+
+  post-to-slack:
+    name: Post Reminder to Slack
+    needs: [scrape-questions, draft-and-post]
+    if: ${{ needs.draft-and-post.result == 'success' }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Recover classified JSON from agent job log
+        # The reusable agent workflow does not propagate repo secrets to user
+        # shell steps, so the agent emits the JSON base64-encoded between
+        # known markers via its Bash tool. The Claude Code SDK captures bash
+        # stdout into structured JSON tool results (NOT raw lines), so we
+        # parse the JSON-encoded "stdout" field that contains our markers.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/cqa
+          # Find the agent job ID for this run.
+          AGENT_JOB_ID=$(gh api \
+            "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
+            --jq '.jobs[] | select(.name | contains("customer-questions-remind")) | .id' \
+            | head -n1)
+          echo "Agent job id: $AGENT_JOB_ID"
+          gh api "repos/${{ github.repository }}/actions/jobs/$AGENT_JOB_ID/logs" \
+            > /tmp/cqa/agent.log
+          python3 scripts/breeze_customer_questions/extract_drafts_from_log.py \
+            /tmp/cqa/agent.log /tmp/cqa/drafts.json
+          # Sanity check.
+          python3 -c "import json; d=json.load(open('/tmp/cqa/drafts.json')); print(f'Recovered {len(d.get(\"drafts\", []))} classified threads')"
+
+      - name: Post reminder message to Slack
+        env:
+          SLACK_NOTIFIER_TOKEN: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+        run: |
+          POST_FLAGS=""
+          if [ "${{ inputs.test_mode }}" = "true" ]; then POST_FLAGS="--test-mode"; fi
+          python3 scripts/breeze_customer_questions/post_drafts_slack.py \
+            --drafts /tmp/cqa/drafts.json \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --max-drafts ${{ inputs.max_questions || 50 }} \
+            $POST_FLAGS
+
+      - name: Upload classified JSON artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: customer-questions-reminders-${{ github.run_id }}
+          path: /tmp/cqa/drafts.json
+          retention-days: 30
+
+  notify-completion:
+    name: Notify Run Completion
+    needs: [scrape-questions, draft-and-post, post-to-slack]
+    # Only fire on genuine job failure. A clean run with 0 scraped questions
+    # leaves draft-and-post + post-to-slack `skipped` but no job `failure` —
+    # that is the intended quiet-day path and must NOT page the channel.
+    # Explicitly check each job to avoid triggering on infrastructure cleanup
+    # failures (e.g., runner post-job hook Docker permission errors).
+    if: ${{ !cancelled() && (needs.scrape-questions.result == 'failure' || needs.draft-and-post.result == 'failure' || needs.post-to-slack.result == 'failure') }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    steps:
+      - uses: slackapi/slack-github-action@v3
+        name: Notify Slack — failure (test mode → #tungsten-debug)
+        if: ${{ inputs.test_mode }}
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+          payload: |
+            channel: "C09MKAM6AGP"
+            text: "[TEST] Customer-questions reminder workflow encountered a failure.\nScrape: ${{ needs.scrape-questions.result }} (count: ${{ needs.scrape-questions.outputs.question_count || '0' }})\nClassify: ${{ needs.draft-and-post.result }}\nSlack reminder: ${{ needs.post-to-slack.result }}\nWorkflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - uses: slackapi/slack-github-action@v3
+        name: Notify Slack — failure (prod → #ai-hub-models)
+        if: ${{ !inputs.test_mode && github.event_name == 'schedule' }}
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_NOTIFIER_TOKEN }}
+          payload: |
+            channel: "C05LEEK0N8J"
+            text: "Customer-questions reminder workflow encountered a failure.\nScrape: ${{ needs.scrape-questions.result }} (count: ${{ needs.scrape-questions.outputs.question_count || '0' }})\nClassify: ${{ needs.draft-and-post.result }}\nSlack reminder: ${{ needs.post-to-slack.result }}\nWorkflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
