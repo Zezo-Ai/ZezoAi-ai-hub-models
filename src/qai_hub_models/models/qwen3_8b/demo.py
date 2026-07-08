@@ -11,7 +11,6 @@ from qai_hub_models.models._shared.qwen3.model import END_TOKENS
 from qai_hub_models.models.qwen3_8b.model import (
     HF_REPO_NAME,
     MODEL_ID,
-    SUPPORTED_PRECISIONS,
     QuantizedSplitModelWrapper,
     Qwen3_8B_PreSplit,
 )
@@ -39,7 +38,6 @@ def qwen3_8b_chat_demo(
         end_tokens=end_tokens,
         hf_repo_name=hf_repo_name,
         hf_repo_url=hf_repo_url,
-        supported_precisions=SUPPORTED_PRECISIONS,
         default_prompt=default_prompt,
         test_checkpoint=test_checkpoint,
         supports_thinking=True,

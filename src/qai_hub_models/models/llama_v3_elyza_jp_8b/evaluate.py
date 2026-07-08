@@ -9,7 +9,6 @@ import sys
 from qai_hub_models.models._shared.llm.evaluate import llm_evaluate
 from qai_hub_models.models._shared.llm.model import LLM_QNN
 from qai_hub_models.models.llama_v3_elyza_jp_8b.model import (
-    SUPPORTED_PRECISIONS,
     FPSplitModelWrapper,
     Llama3_Elyza_JP_8B_PreSplit,
     Llama3_Elyza_JP_8B_QuantizablePreSplit,
@@ -26,5 +25,4 @@ if __name__ == "__main__":
         if use_presplit
         else FPSplitModelWrapper,
         qnn_model_cls=LLM_QNN,  # type: ignore[type-abstract]
-        supported_precisions=SUPPORTED_PRECISIONS,
     )

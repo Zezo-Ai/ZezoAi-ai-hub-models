@@ -11,7 +11,6 @@ from qai_hub_models.models.qwen3_vl_4b_instruct.model import (
     DEFAULT_IMAGE_HEIGHT,
     DEFAULT_IMAGE_WIDTH,
     HF_REPO_NAME,
-    SUPPORTED_PRECISIONS,
     FPSplitModelWrapper,
     QuantizedSplitModelWrapper,
     Qwen3_VL_4B_PreSplit,
@@ -28,7 +27,6 @@ if __name__ == "__main__":
         if use_presplit
         else QuantizedSplitModelWrapper,
         fp_model_cls=Qwen3_VL_4B_PreSplit if use_presplit else FPSplitModelWrapper,
-        supported_precisions=SUPPORTED_PRECISIONS,
         vision_encoder_cls=Qwen3_VL_4B_VisionEncoder,
         hf_repo_name=HF_REPO_NAME,
         vlm_image_size=(DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT),

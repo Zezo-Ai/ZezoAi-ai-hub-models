@@ -51,7 +51,7 @@ class KLDivEvaluator(LLMEvaluator):
         gt: torch.Tensor | tuple[torch.Tensor, torch.Tensor],
     ) -> None:
         """
-        output: This is the output of an LLM_Generator, which produces a
+        output: This is the output of a Generator, which produces a
             CausalLMOutputWithPast instance.
         gt: Ground truth (gt) tensor, or optionally (gt, target) tuple
             gt: float[1, input_length]

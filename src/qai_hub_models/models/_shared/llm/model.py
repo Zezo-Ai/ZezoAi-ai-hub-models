@@ -2861,63 +2861,6 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         profile_options += " --max_profiler_iterations 50"
         return profile_options
 
-    def get_calibration_data(
-        self,
-        num_samples: int = 0,  # type: ignore[override]
-        input_spec: InputSpec | None = None,  # type: ignore[override]
-    ) -> DatasetEntries | None:
-        from qai_hub_models.datasets import instantiate_dataset
-        from qai_hub_models.datasets.wikitext import WikiText
-        from qai_hub_models.models._shared.llm.generator import LLM_Generator
-
-        if num_samples == 0:
-            num_samples = math.ceil(80000 / self.context_length)
-
-        dataset = instantiate_dataset(
-            WikiText,
-            DatasetSplit.TRAIN,
-            input_spec=None,
-            tokenizer=self.tokenizer,
-            block_size=self.sequence_length,
-            context_length=self.context_length,
-            num_samples=num_samples,
-        )
-        dataloader = DataLoader(dataset, batch_size=1, collate_fn=dataset.collate_fn)
-
-        input_spec = self.get_input_spec(
-            llm_config=self.llm_config.to_dict(),
-            sequence_length=self.sequence_length,
-            context_length=self.context_length,
-            llm_io_type=self.llm_io_type,
-        )
-        assert input_spec is not None
-        inputs: list[list[torch.Tensor | np.ndarray]] = [
-            [] for _ in range(len(input_spec))
-        ]
-
-        assert self.EmbeddingClass is not None
-        rope_embeddings = self.EmbeddingClass(
-            max_length=self.context_length, config=self.llm_config
-        )
-        generator = LLM_Generator(
-            [self],
-            self.tokenizer,
-            rope_embeddings,
-        )
-
-        # Only bother removing quantization if we don't have a floating point model provided
-        with self.remove_quantization():
-            # for data in dataloader
-            for sample in tqdm(
-                dataloader, total=len(dataloader), desc="Pre-filling calibration data"
-            ):
-                input_ids, attention_mask, _ = sample
-                for prefilled_inputs in generator.prefill(input_ids, attention_mask):
-                    for i, tensor in enumerate(prefilled_inputs):
-                        inputs[i].append(tensor)
-
-        return make_hub_dataset_entries(tuple(inputs), list(input_spec.keys()))
-
     def get_evaluator(
         self,
         task: str = "wikitext",

@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from qai_hub_models.models._shared.llm.evaluate import llm_evaluate
 from qai_hub_models.models._shared.llm.model import LLM_QNN
 
@@ -15,7 +13,6 @@ def vlm_evaluate(
     *,
     quantized_model_cls: type,
     fp_model_cls: type,
-    supported_precisions: Any,
     default_sequence_length: int | list[int] | None = None,
     vision_encoder_cls: type | None = None,
     hf_repo_name: str | None = None,
@@ -32,7 +29,6 @@ def vlm_evaluate(
         quantized_model_cls=quantized_model_cls,
         fp_model_cls=fp_model_cls,
         qnn_model_cls=LLM_QNN,  # type: ignore[type-abstract]
-        supported_precisions=supported_precisions,
         default_sequence_length=default_sequence_length,
         vision_encoder_cls=vision_encoder_cls,
         hf_repo_name=hf_repo_name,

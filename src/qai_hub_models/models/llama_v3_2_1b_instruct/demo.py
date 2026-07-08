@@ -11,7 +11,6 @@ from qai_hub_models.models._shared.llm.model import LLM_QNN, LLM_AIMETOnnx, LLMB
 from qai_hub_models.models.llama_v3_2_1b_instruct.model import (
     HF_REPO_NAME,
     MODEL_ID,
-    SUPPORTED_PRECISIONS,
     Llama3_2_1B_PreSplit,
     QuantizedSplitModelWrapper,
 )
@@ -39,7 +38,6 @@ def llama_3_2_1b_chat_demo(
         end_tokens=end_tokens,
         hf_repo_name=hf_repo_name,
         hf_repo_url=hf_repo_url,
-        supported_precisions=SUPPORTED_PRECISIONS,
         default_prompt=default_prompt,
         test_checkpoint=test_checkpoint,
     )

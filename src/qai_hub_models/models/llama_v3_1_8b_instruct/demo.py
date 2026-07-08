@@ -12,7 +12,6 @@ from qai_hub_models.models.llama_v3_1_8b_instruct.model import (
     HF_REPO_NAME,
     HF_REPO_URL,
     MODEL_ID,
-    SUPPORTED_PRECISIONS,
     Llama3_1_8B_PreSplit,
     QuantizedSplitModelWrapper,
 )
@@ -38,7 +37,6 @@ def llama_3_1_8b_chat_demo(
         end_tokens=end_tokens,
         hf_repo_name=hf_repo_name,
         hf_repo_url=hf_repo_url,
-        supported_precisions=SUPPORTED_PRECISIONS,
         default_prompt=default_prompt,
         test_checkpoint=test_checkpoint,
     )
