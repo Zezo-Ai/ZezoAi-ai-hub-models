@@ -267,7 +267,10 @@ def _evaluate_impl(
     # Make sure no model and grader resource uses overlap
     model.release()
     del model
-    generator.release()  # type: ignore[operator]
+    # HubCompatibleGenerator / VLM_Generator inherit from the lm_driver
+    # Generator which has no release(); model.release() above already tore
+    # down the underlying weights, so just drop the wrapper here.
+    getattr(generator, "release", lambda: None)()
     del generator
     torch.cuda.synchronize()
     gc.collect()
