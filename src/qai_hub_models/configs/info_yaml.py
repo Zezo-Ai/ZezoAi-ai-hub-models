@@ -66,6 +66,12 @@ __all__ = [
 URL_CACHE_TTL_SECONDS = 86400
 URL_CACHE_PATH = Path(LOCAL_STORE_DEFAULT_PATH) / "url_check_cache.json"
 
+# URLs that should be skipped during validation (e.g., due to SSL issues or rate limiting in CI environments)
+URL_VALIDATION_SKIPLIST = {
+    "https://drive.google.com/file/d/1ICTxogjS9Bc2O3K1P9ZauQYVoruT13n5/view?pli=1",  # llama_v3_taide_8b_chat license - SSL cert issue
+    "https://www.techmahindra.com/makers-lab/indus-project/",  # indus_1b research paper - intermittent 403
+}
+
 
 def _load_url_cache() -> dict[str, float]:
     """Load the URL check cache. Returns {url: timestamp}."""
@@ -107,7 +113,8 @@ def _validate_urls_exist(urls: list[tuple[str, str]]) -> None:
     urls_to_check = [
         (url, label)
         for url, label in urls
-        if now - cache.get(url, 0) > URL_CACHE_TTL_SECONDS
+        if url not in URL_VALIDATION_SKIPLIST
+        and now - cache.get(url, 0) > URL_CACHE_TTL_SECONDS
     ]
 
     if not urls_to_check:
