@@ -3,8 +3,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
-import numpy as np
-
+from qai_hub_models.models._shared.mediapipe.test_utils import (
+    assert_landmarks_close,
+    landmarks_from_raw_output,
+)
 from qai_hub_models.models.mediapipe_hand_gesture.app import MediaPipeHandGestureApp
 from qai_hub_models.models.mediapipe_hand_gesture.demo import INPUT_IMAGE_ADDRESS
 from qai_hub_models.models.mediapipe_hand_gesture.demo import main as demo_main
@@ -13,10 +15,17 @@ from qai_hub_models.models.mediapipe_hand_gesture.model import (
     MODEL_ID,
     MediaPipeHandGesture,
 )
-from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
+from qai_hub_models.utils.asset_loaders import (
+    CachedWebModelAsset,
+    load_image,
+    load_numpy,
+)
 
-OUTPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
-    MODEL_ID, MODEL_ASSET_VERSION, "thumbs_up_output.png"
+# Golden structured output (bounding box + landmark coordinates) for the demo
+# image. Comparing these directly is robust to the cross-environment pixel
+# drift that made the old rendered-image comparison flaky.
+LANDMARKS_GOLDEN_ADDRESS = CachedWebModelAsset.from_asset_store(
+    MODEL_ID, MODEL_ASSET_VERSION, "hand_gesture_landmarks_golden.npz"
 )
 
 # Because we have not made a modification to the pytorch source network,
@@ -24,33 +33,27 @@ OUTPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
 
 
 def test_hand_app() -> None:
-    image = load_image(
-        INPUT_IMAGE_ADDRESS,
-    )
-    expected_output = load_image(
-        OUTPUT_IMAGE_ADDRESS,
-    ).convert("RGB")
+    image = load_image(INPUT_IMAGE_ADDRESS)
+    expected = load_numpy(LANDMARKS_GOLDEN_ADDRESS)
     app = MediaPipeHandGestureApp.from_pretrained(
         MediaPipeHandGesture.from_pretrained(include_detector_postprocessing=True)
     )
-    actual_output = app.predict_landmarks_from_image(image)[0]
-    assert isinstance(actual_output, np.ndarray)
-    np.testing.assert_allclose(actual_output, np.asarray(expected_output))
+    actual = landmarks_from_raw_output(
+        app.predict_landmarks_from_image(image, raw_output=True)
+    )
+    assert_landmarks_close(actual, expected)
 
 
 def test_hand_app_no_detect_postprocess() -> None:
-    image = load_image(
-        INPUT_IMAGE_ADDRESS,
-    )
-    expected_output = load_image(
-        OUTPUT_IMAGE_ADDRESS,
-    ).convert("RGB")
+    image = load_image(INPUT_IMAGE_ADDRESS)
+    expected = load_numpy(LANDMARKS_GOLDEN_ADDRESS)
     app = MediaPipeHandGestureApp.from_pretrained(
         MediaPipeHandGesture.from_pretrained(include_detector_postprocessing=False)
     )
-    actual_output = app.predict_landmarks_from_image(image)[0]
-    assert isinstance(actual_output, np.ndarray)
-    np.testing.assert_allclose(actual_output, np.asarray(expected_output))
+    actual = landmarks_from_raw_output(
+        app.predict_landmarks_from_image(image, raw_output=True)
+    )
+    assert_landmarks_close(actual, expected)
 
 
 def test_demo() -> None:

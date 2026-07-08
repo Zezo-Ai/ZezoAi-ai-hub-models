@@ -3,8 +3,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
-import numpy as np
-
+from qai_hub_models.models._shared.mediapipe.test_utils import (
+    assert_landmarks_close,
+    landmarks_from_raw_output,
+)
 from qai_hub_models.models.mediapipe_pose.app import MediaPipePoseApp
 from qai_hub_models.models.mediapipe_pose.demo import INPUT_IMAGE_ADDRESS
 from qai_hub_models.models.mediapipe_pose.demo import main as demo_main
@@ -13,10 +15,17 @@ from qai_hub_models.models.mediapipe_pose.model import (
     MODEL_ID,
     MediaPipePose,
 )
-from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
+from qai_hub_models.utils.asset_loaders import (
+    CachedWebModelAsset,
+    load_image,
+    load_numpy,
+)
 
-OUTPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
-    MODEL_ID, MODEL_ASSET_VERSION, "pose_output_less_keypoints.png"
+# Golden structured output (bounding box + landmark coordinates) for the demo
+# image. Comparing these directly is robust to the cross-environment pixel
+# drift that made the old rendered-image comparison flaky.
+LANDMARKS_GOLDEN_ADDRESS = CachedWebModelAsset.from_asset_store(
+    MODEL_ID, MODEL_ASSET_VERSION, "pose_landmarks_golden.npz"
 )
 
 
@@ -25,33 +34,27 @@ OUTPUT_IMAGE_ADDRESS = CachedWebModelAsset.from_asset_store(
 
 
 def test_pose_app() -> None:
-    image = load_image(
-        INPUT_IMAGE_ADDRESS,
-    )
-    expected_output = load_image(
-        OUTPUT_IMAGE_ADDRESS,
-    ).convert("RGB")
+    image = load_image(INPUT_IMAGE_ADDRESS)
+    expected = load_numpy(LANDMARKS_GOLDEN_ADDRESS)
     app = MediaPipePoseApp.from_pretrained(
         MediaPipePose.from_pretrained(include_detector_postprocessing=False)
     )
-    actual_output = app.predict_landmarks_from_image(image)[0]
-    assert isinstance(actual_output, np.ndarray)
-    np.testing.assert_allclose(actual_output, np.asarray(expected_output))
+    actual = landmarks_from_raw_output(
+        app.predict_landmarks_from_image(image, raw_output=True)
+    )
+    assert_landmarks_close(actual, expected)
 
 
 def test_pose_app_with_detect_postprocessing() -> None:
-    image = load_image(
-        INPUT_IMAGE_ADDRESS,
-    )
-    expected_output = load_image(
-        OUTPUT_IMAGE_ADDRESS,
-    ).convert("RGB")
+    image = load_image(INPUT_IMAGE_ADDRESS)
+    expected = load_numpy(LANDMARKS_GOLDEN_ADDRESS)
     app = MediaPipePoseApp.from_pretrained(
         MediaPipePose.from_pretrained(include_detector_postprocessing=True)
     )
-    actual_output = app.predict_landmarks_from_image(image)[0]
-    assert isinstance(actual_output, np.ndarray)
-    np.testing.assert_allclose(actual_output, np.asarray(expected_output))
+    actual = landmarks_from_raw_output(
+        app.predict_landmarks_from_image(image, raw_output=True)
+    )
+    assert_landmarks_close(actual, expected)
 
 
 def test_demo() -> None:
