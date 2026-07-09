@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import gc
 import textwrap
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -153,17 +154,19 @@ class MMMUEvaluator(LLMEvaluator):
                     image_grid_thw = image_grid_thw.to(self.device)
 
                 inputs = [input_ids, attention_mask]
-                outputs = generator(  # type: ignore[operator, unused-ignore]
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                )
+                with torch.no_grad():
+                    outputs = generator(  # type: ignore[operator, unused-ignore]
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        pixel_values=pixel_values,
+                        image_grid_thw=image_grid_thw,
+                    )
 
                 if callback:
                     callback(inputs, outputs, ground_truth)
                 # Free KV cache and GPU tensors between samples
                 del outputs, inputs
+                gc.collect()
                 torch.cuda.empty_cache()
                 total_samples += 1
                 pbar.update(batch_size)

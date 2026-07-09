@@ -20,6 +20,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     aimet_onnx_is_installed = False
 import contextlib
+import gc
 import importlib.metadata
 import itertools
 import os
@@ -380,6 +381,8 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel):
                 )
             data = dataset_entries_to_dataloader(calib_data)
 
+        # NOTE: when weight_optimization_data is None, optim_data IS data (same
+        # loader for weight-opt and calibration); keep consumers read-only.
         optim_data = (
             data if weight_optimization_data is None else weight_optimization_data
         )
@@ -404,6 +407,8 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel):
             )
             print()
             self._apply_seq_mse(data=optim_data, num_batches=seq_mse_num_batches)
+            gc.collect()
+            torch.cuda.empty_cache()
 
         if use_ada_scale:
             assert self.ada_scale_model_type is not None
@@ -427,6 +432,8 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel):
                 model_type=self.ada_scale_model_type,
                 num_rmsnorm_per_blk=self.ada_scale_num_rmsnorm_per_blk,
             )
+            gc.collect()
+            torch.cuda.empty_cache()
 
         num_calib_samples = num_samples or len(data)
         num_calib_batches = num_calib_samples * batches_per_sample
