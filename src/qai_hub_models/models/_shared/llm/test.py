@@ -677,6 +677,7 @@ def setup_test_quantization(
     num_samples: int = 0,
     use_seq_mse: bool = False,
     use_dynamic_shapes: bool = False,
+    image_size: tuple[int, int] | None = None,
 ) -> str:
     if not (
         (Path(output_path) / "model.encodings").exists()
@@ -701,6 +702,7 @@ def setup_test_quantization(
             num_samples=num_samples,
             use_seq_mse=use_seq_mse,
             use_dynamic_shapes=use_dynamic_shapes,
+            image_size=image_size,
         )
         cleanup()
     return output_path

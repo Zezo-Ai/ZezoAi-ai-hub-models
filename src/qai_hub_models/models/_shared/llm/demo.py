@@ -17,6 +17,7 @@ from transformers import (
     set_seed,
 )
 
+from qai_hub_models import Precision
 from qai_hub_models.models._shared.llm.app import IndentedTextStreamer
 from qai_hub_models.models._shared.llm.generator_factory import make_generator
 from qai_hub_models.models._shared.llm.model import (
@@ -222,12 +223,22 @@ def llm_chat_demo(
 
     if checkpoint_type == CheckpointType.GENIE_BUNDLE:
         final_model_cls = qnn_model_cls
+        is_fp = False
     elif checkpoint_type.is_aimet_onnx():
-        if is_default and checkpoint != "DEFAULT_UNQUANTIZED":
+        # VLMs need the FP model so the quantized instance inherits
+        # _original_llm_config (used by make_generator) — the quantized
+        # checkpoint alone doesn't carry it. Text LLMs only need it to seed a
+        # DEFAULT (non-UNQUANTIZED) checkpoint's tokenizer/config.
+        needs_fp_model = vision_encoder_cls is not None or (
+            is_default and checkpoint != "DEFAULT_UNQUANTIZED"
+        )
+        if needs_fp_model:
             extra["fp_model"] = fp_model_cls.from_pretrained()
         final_model_cls = model_cls
+        is_fp = False
     else:
         final_model_cls = fp_model_cls
+        is_fp = True
 
     # Collect VLM image size override if provided
     vlm_image_size = None
@@ -253,9 +264,30 @@ def llm_chat_demo(
         and vision_encoder_cls is not None
         and image_path
     ):
-        hf_model = AutoModel.from_pretrained(hf_repo_name, trust_remote_code=True)
-        vision_model = hf_model.visual.to(host_device).eval()
-        del hf_model
+        if is_fp:
+            veg_precision = Precision.float
+        else:
+            default_precision = getattr(model_cls, "default_precision", Precision.w4a16)
+            veg_precision = checkpoint_type.precision(
+                default_precision, checkpoint=checkpoint
+            )
+
+        if veg_precision == Precision.float:
+            hf_model = AutoModel.from_pretrained(hf_repo_name, trust_remote_code=True)
+            vision_model = hf_model.visual.to(host_device).eval()
+            del hf_model
+        else:
+            veg_kwargs: dict[str, Any] = {
+                "checkpoint": checkpoint,
+                "precision": veg_precision,
+            }
+            if vlm_image_size is not None:
+                veg_kwargs["image_width"] = vlm_image_size[0]
+                veg_kwargs["image_height"] = vlm_image_size[1]
+            vision_model = vision_encoder_cls.from_pretrained(
+                device=host_device,
+                **veg_kwargs,
+            )
 
     generator = make_generator(
         model,
@@ -310,6 +342,13 @@ def llm_chat_demo(
             veg = vision_model.veg
             target_w = int(veg._image_width)
             target_h = int(veg._image_height)
+        elif hasattr(vision_model, "_image_width") and hasattr(
+            vision_model, "_image_height"
+        ):
+            # Fixed-shape VEG (e.g. Qwen2.5-VL): images must match the shape the
+            # encoder was exported/quantized for.
+            target_w = int(vision_model._image_width)
+            target_h = int(vision_model._image_height)
         elif vlm_image_size is not None:
             target_w, target_h = vlm_image_size
         elif vision_encoder_cls is not None and hasattr(
