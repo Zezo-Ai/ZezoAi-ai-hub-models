@@ -467,6 +467,7 @@ _TAG_DISPLAY_NAMES: dict[str, str] = {
     "BU_COMPUTE": "BU Compute",
     "MOE": "MoE",
     "VLM": "VLM",
+    "ROBOTICS": "Robotics",
 }
 
 

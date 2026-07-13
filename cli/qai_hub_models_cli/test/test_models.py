@@ -66,6 +66,18 @@ def _fake_manifest() -> ReleaseManifest:
                     ModelTag.MODEL_TAG_GENERATIVE_AI,
                 ],
             ),
+            ManifestModelEntry(
+                id="pi05",
+                display_name="Pi0.5",
+                domain=ModelDomain.MODEL_DOMAIN_MULTIMODAL,
+                is_quantized=True,
+                supported_runtimes=[Runtime.RUNTIME_ONNX],
+                supported_chipsets=["qualcomm-snapdragon-x-elite"],
+                tags=[
+                    ModelTag.MODEL_TAG_GENERATIVE_AI,
+                    ModelTag.MODEL_TAG_ROBOTICS,
+                ],
+            ),
         ],
     )
 
@@ -114,9 +126,10 @@ def test_models_table(manifest: None, capsys: pytest.CaptureFixture[str]) -> Non
     assert "Whisper Small" in output
     assert "Qwen3.5-2B" in output
     assert "Qwen3-VL-4B-Instruct" in output
+    assert "Pi0.5" in output
     assert "Computer Vision" in output
     assert "Audio" in output
-    assert "Total: 4 models" in output
+    assert "Total: 5 models" in output
     # Use Case + Quantized + Runtimes columns.
     assert "Quantized" in output and "Runtimes" in output
     assert "tflite" in output
@@ -126,7 +139,7 @@ def test_models_quiet(manifest: None, capsys: pytest.CaptureFixture[str]) -> Non
     main(["models", "-q"])
     lines = capsys.readouterr().out.strip().splitlines()
     assert sorted(lines) == sorted(
-        ["mobilenet_v2", "whisper_small", "qwen3_5_2b", "qwen3_vl_4b_instruct"]
+        ["mobilenet_v2", "whisper_small", "qwen3_5_2b", "qwen3_vl_4b_instruct", "pi05"]
     )
 
 
@@ -141,14 +154,18 @@ def test_models_domain_filter(
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
-        (["--quantized"], ["mobilenet_v2", "qwen3_5_2b", "qwen3_vl_4b_instruct"]),
+        (
+            ["--quantized"],
+            ["mobilenet_v2", "pi05", "qwen3_5_2b", "qwen3_vl_4b_instruct"],
+        ),
         # Repeated -r is ANDed and accumulates: mobilenet has onnx but not qnn_dlc.
         # (A single-flag overwrite bug would wrongly keep only the last -r and match.)
         (["-r", "qnn_dlc", "-r", "onnx"], []),
         (["-t", "foundation"], ["whisper_small"]),
+        (["-t", "robotics"], ["pi05"]),
         (["-d", "Samsung Galaxy S24"], ["mobilenet_v2"]),  # device resolves to chipset
         (["--aot"], ["mobilenet_v2"]),  # has tflite (AOT); whisper is onnx-only
-        (["--jit"], ["mobilenet_v2", "whisper_small"]),  # both have onnx (JIT)
+        (["--jit"], ["mobilenet_v2", "pi05", "whisper_small"]),  # all have onnx (JIT)
         # --llm includes both text-only LLM and VLM (which is also tagged llm).
         (["--llm"], ["qwen3_5_2b", "qwen3_vl_4b_instruct"]),
         # --vlm is VLM-only.

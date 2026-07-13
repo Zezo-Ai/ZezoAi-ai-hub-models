@@ -131,6 +131,7 @@ class _ModelTagEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumT
     MODEL_TAG_BU_COMPUTE: _ModelTag.ValueType  # 8
     MODEL_TAG_MOE: _ModelTag.ValueType  # 9
     MODEL_TAG_VLM: _ModelTag.ValueType  # 10
+    MODEL_TAG_ROBOTICS: _ModelTag.ValueType  # 11
 
 class ModelTag(_ModelTag, metaclass=_ModelTagEnumTypeWrapper): ...
 
@@ -145,6 +146,7 @@ MODEL_TAG_BU_AUTO: ModelTag.ValueType  # 7
 MODEL_TAG_BU_COMPUTE: ModelTag.ValueType  # 8
 MODEL_TAG_MOE: ModelTag.ValueType  # 9
 MODEL_TAG_VLM: ModelTag.ValueType  # 10
+MODEL_TAG_ROBOTICS: ModelTag.ValueType  # 11
 global___ModelTag = ModelTag
 
 class _ModelStatus:

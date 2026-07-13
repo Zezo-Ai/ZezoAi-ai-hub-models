@@ -134,6 +134,7 @@ _TAG_TO_PROTO: dict[str, int] = {
     MODEL_TAG.BU_COMPUTE.value: info_pb2.MODEL_TAG_BU_COMPUTE,
     MODEL_TAG.MOE.value: info_pb2.MODEL_TAG_MOE,
     MODEL_TAG.VLM.value: info_pb2.MODEL_TAG_VLM,
+    MODEL_TAG.ROBOTICS.value: info_pb2.MODEL_TAG_ROBOTICS,
 }
 
 
