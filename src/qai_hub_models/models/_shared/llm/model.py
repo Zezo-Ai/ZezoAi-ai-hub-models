@@ -2465,6 +2465,17 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
+            # SpinQuant must rotate the float graph before QuantSim is built
+            # (see apply_spinquant_to_onnx). Only on a fresh export -- a saved
+            # checkpoint's ONNX is already rotated.
+            spinquant_config = getattr(cls, "spinquant_config", None)
+            if spinquant_config and not onnx_file_exists:
+                print()
+                print(f"Apply SpinQuant ({spinquant_config}) to float ONNX graph")
+                print()
+                assert onnx_model is not None
+                cls.apply_spinquant_to_onnx(onnx_model, spinquant_config)
+
             # Two copies are needed. One for QuantSim and one for passing to
             # quantize function for applying Sequential MSE.
             # Deepcopy causes error on GPU.
@@ -2566,6 +2577,18 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         quantsim.op_outputs_to_ignore.append("Slice")
         quantsim.op_outputs_to_ignore.append("Constant")
         qs.encoding_version = "1.0.0"
+
+        # aimet-onnx 2.33.0+ rejects an initializer shared across consumers of
+        # different op types (e.g. Qwen3's tied lm_head.weight feeding both the
+        # embedding Gather and the lm_head MatMul). Give each consumer a unique
+        # copy. No-op on older aimet (function absent) and on models without
+        # such conflicts.
+        try:
+            from aimet_onnx.utils import duplicate_shared_initializers
+
+            duplicate_shared_initializers(onnx_model.graph)
+        except ImportError:
+            pass
 
         quant_sim = QuantizationSimModel(
             model=onnx_model,

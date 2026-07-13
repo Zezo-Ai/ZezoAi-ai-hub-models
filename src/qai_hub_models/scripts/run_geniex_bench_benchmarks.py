@@ -25,7 +25,10 @@ from qai_hub_models.models._shared.llm.qdc.geniex_jobs import (
     submit_geniex_bench_to_qdc_device,
 )
 from qai_hub_models.scorecard import ScorecardProfilePath
-from qai_hub_models.scorecard.device import ScorecardDevice
+from qai_hub_models.scorecard.device import (
+    ScorecardDevice,
+    get_canonical_chipset_name,
+)
 from qai_hub_models.scorecard.envvars import (
     LLMPerfPrecisionsEnvvar,
     SpecialLLMPerfPrecisionSetting,
@@ -112,6 +115,10 @@ def fetch_geniex_qairt_bundle(
     model_id: str, precision: Precision, chipset: str, output_dir: Path
 ) -> tuple[Path, list[int]]:
     """Download/extract the CI-built geniex_qairt bundle. Returns (bundle_dir, context_lengths)."""
+    # release-assets.yaml keys chipset_assets by canonical name, so canonicalize
+    # the variant-suffixed workbench chipset (e.g. "-for-galaxy") before lookup,
+    # matching the Genie perf path.
+    chipset = get_canonical_chipset_name(chipset)
     assets = load_release_assets_for_model(model_id)
     asset = assets.get_asset(precision, chipset, ScorecardProfilePath.GENIEX_QAIRT)
     if asset is None:

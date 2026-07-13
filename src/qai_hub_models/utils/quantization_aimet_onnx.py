@@ -31,6 +31,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 
+import onnx
 import onnxruntime
 import torch
 from qai_hub.public_rest_api import DatasetEntries
@@ -141,6 +142,10 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel):
 
     # RMSNorms per block (currently needed for AdaScale for Qwen3)
     ada_scale_num_rmsnorm_per_blk: int | None = None
+
+    # SpinQuant rotation config, e.g. {"enable_r1": True, "enable_r2": False, "enable_r3": True}.
+    # None (default) = SpinQuant disabled. Applied in-place to self.quant_sim before calibration.
+    spinquant_config: dict | None = None
 
     def __init__(
         self,
@@ -324,6 +329,33 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel):
         if restore_value is not None:
             DecoderBlockQwen3.NUM_RMSNORM_PER_BLK = restore_value
 
+    @staticmethod
+    def apply_spinquant_to_onnx(
+        onnx_model: onnx.ModelProto, spinquant_config: dict
+    ) -> None:
+        """Apply SpinQuant rotations in place on a float ONNX graph.
+
+        Must run on the *float* graph BEFORE the QuantizationSimModel is built:
+        aimet-onnx 2.33.0's block identifier walks RMSNorm -> weight-linear
+        connectivity, which the QcQuantizeOp nodes inserted at QuantSim
+        construction break (causing "No active RMSNorms found"). R3 also inserts
+        plain-float Hadamard MatMuls that the subsequent QuantSim must wrap in
+        activation quantizers, so it likewise has to precede sim creation.
+        """
+        ensure_min_aimet_onnx_version("2.33.0")
+        # Local imports: optional 2.33.0-only dependency, gated by the version
+        # check above -- same exception to imports-at-top as _apply_ada_scale's
+        # AdaScale import.
+        from aimet_onnx.experimental.spinquant import apply_spinquant
+        from aimet_onnx.utils import duplicate_shared_initializers
+
+        # SpinQuant builds a ConnectedGraph, which (like QuantSim) rejects an
+        # initializer shared across consumers of different op types (Qwen3's tied
+        # lm_head.weight feeds both the embedding Gather and the lm_head MatMul).
+        # Dedup first; idempotent, so the later _build_quantsim call is a no-op.
+        duplicate_shared_initializers(onnx_model.graph)
+        apply_spinquant(onnx_model, **spinquant_config)
+
     def _apply_calibration(self, data: DataLoader, num_batches: int) -> None:
         assert self.quant_sim is not None
         ensure_min_aimet_onnx_version("2.8.0")
@@ -393,6 +425,11 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel):
             batches_per_sample = self.context_length // self.sequence_length
         else:
             batches_per_sample = 1
+
+        # NOTE: SpinQuant is NOT applied here. It rotates the *float* ONNX graph
+        # and must run before the QuantizationSimModel is constructed (see
+        # apply_spinquant_to_onnx / create_quantsim). Applying it to the already
+        # built sim breaks aimet's RMSNorm block detection.
 
         if use_seq_mse:
             seq_mse_num_samples = min(
