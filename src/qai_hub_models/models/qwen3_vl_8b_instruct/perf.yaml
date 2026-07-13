@@ -1,0 +1,55 @@
+supported_devices:
+- Snapdragon 8 Elite QRD
+- Snapdragon X2 Elite CRD
+- Dragonwing IQ-9075 EVK
+- Snapdragon 8 Elite Gen 5 QRD
+supported_chipsets:
+- qualcomm-snapdragon-8-elite
+- qualcomm-snapdragon-x2-elite
+- qualcomm-qcs9075
+- qualcomm-snapdragon-8-elite-gen5
+precisions:
+  w4a16:
+    components:
+      Qwen3-VL-8B-Instruct:
+        performance_metrics:
+          Snapdragon 8 Elite QRD:
+            geniex_qairt:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 14.732318
+                time_to_first_token_range_milliseconds:
+                  min: 98.939
+                  max: 3166.048
+                prefill_tokens_per_second: 242.573707
+                desired_compute_unit: npu
+          Snapdragon X2 Elite CRD:
+            geniex_qairt:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 23.326982
+                time_to_first_token_range_milliseconds:
+                  min: 72.637
+                  max: 2324.384
+                prefill_tokens_per_second: 330.410122
+                desired_compute_unit: npu
+          Dragonwing IQ-9075 EVK:
+            geniex_qairt:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 11.313728
+                time_to_first_token_range_milliseconds:
+                  min: 140.854
+                  max: 4507.328
+                prefill_tokens_per_second: 170.389197
+                desired_compute_unit: npu
+          Snapdragon 8 Elite Gen 5 QRD:
+            geniex_qairt:
+              llm_metrics:
+              - context_length: 4096
+                tokens_per_second: 16.716241
+                time_to_first_token_range_milliseconds:
+                  min: 81.122
+                  max: 2595.904
+                prefill_tokens_per_second: 295.850694
+                desired_compute_unit: npu
