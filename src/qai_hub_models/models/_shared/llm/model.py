@@ -1650,13 +1650,20 @@ class DynamicSplitCollectionBase(MultiGraphWorkbenchModelCollection):
         metadata: ModelMetadata,
     ) -> None:
         output_path = Path(output_dir)
-
+        # Write sample_prompt.txt for on-device tests
+        tokenizer = (
+            AutoTokenizer.from_pretrained(self.hf_repo_name)
+            if not (output_path / "tokenizer.json").exists()
+            else AutoTokenizer.from_pretrained(str(output_path))
+        )
+        sample_prompt = self.fp_presplit_cls.get_input_prompt_with_tags(
+            tokenizer=tokenizer
+        )
         # Save tokenizer and config from HuggingFace (skip if already present)
         if not (output_path / "tokenizer.json").exists():
-            tokenizer = AutoTokenizer.from_pretrained(self.hf_repo_name)
-            tokenizer.save_pretrained(output_path)
-        else:
-            tokenizer = AutoTokenizer.from_pretrained(str(output_path))
+            # GenieX reads the chat_template field embedded inside tokenizer_config.json.
+            # save_jinja_files=False keeps it embedded instead of writing a separate chat_template.jinja file.
+            tokenizer.save_pretrained(output_path, save_jinja_files=False)
         if not (output_path / "config.json").exists():
             llm_config = AutoConfig.from_pretrained(self.hf_repo_name)
             llm_config.save_pretrained(output_path)
@@ -1688,10 +1695,6 @@ class DynamicSplitCollectionBase(MultiGraphWorkbenchModelCollection):
                 "HTP backend configuration for the target device."
             )
 
-        # Write sample_prompt.txt for on-device genie-t2t-run
-        sample_prompt = self.fp_presplit_cls.get_input_prompt_with_tags(
-            tokenizer=tokenizer
-        )
         with open(output_path / "sample_prompt.txt", "w") as f:
             f.write(sample_prompt)
 

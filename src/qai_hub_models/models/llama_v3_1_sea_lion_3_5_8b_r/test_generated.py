@@ -204,6 +204,16 @@ def test_export(
     )
     from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 
+    def save_tokenizer_and_config(hf_repo_name: str, ckpt: Path) -> None:
+        # Pre-populate tokenizer.json and config.json in the encodings dir so
+        # downstream LLM_AIMETOnnx.__init__'s get_tokenizer(checkpoint) /
+        # get_llm_config(checkpoint) reads from disk instead of needing the
+        # 14 GB FP HuggingFace load.
+        if not (ckpt / "tokenizer.json").exists():
+            AutoTokenizer.from_pretrained(hf_repo_name).save_pretrained(ckpt)
+        if not (ckpt / "config.json").exists():
+            AutoConfig.from_pretrained(hf_repo_name).save_pretrained(ckpt)
+
     def _stub_resolve_default_checkpoint(
         cls: Any, precision: Precision, host_device: object, fp_model: object
     ) -> tuple[str, None]:
@@ -216,16 +226,20 @@ def test_export(
             ).fetch()
         )
         ckpt = encodings_path.parent
-        # Pre-populate tokenizer.json and config.json in the encodings dir so
-        # downstream LLM_AIMETOnnx.__init__'s get_tokenizer(checkpoint) /
-        # get_llm_config(checkpoint) reads from disk instead of needing the
-        # 14 GB FP HuggingFace load.
-        if not (ckpt / "tokenizer.json").exists():
-            AutoTokenizer.from_pretrained(cls.FPModel.hf_repo_name).save_pretrained(
-                ckpt
-            )
-        if not (ckpt / "config.json").exists():
-            AutoConfig.from_pretrained(cls.FPModel.hf_repo_name).save_pretrained(ckpt)
+        save_tokenizer_and_config(cls.FPModel.hf_repo_name, ckpt)
+        return str(ckpt), None
+
+    def _stub_resolve_default_checkpoint_from_dynamic_cls(
+        cls: Any, precision: Precision, host_device: object, fp_model: object
+    ) -> tuple[str, None]:
+        precision_checkpoint = cls.default_checkpoint[precision]
+        encodings_path = _StubPath(
+            CachedWebModelAsset.from_asset_store(
+                cls.model_id, cls.model_asset_version, f"{precision_checkpoint}.zip"
+            ).fetch()
+        )
+        ckpt = encodings_path.parent
+        save_tokenizer_and_config(cls.FPModel.hf_repo_name, ckpt)
         return str(ckpt), None
 
     with pytest.MonkeyPatch.context() as mp:
@@ -237,7 +251,7 @@ def test_export(
         mp.setattr(
             DynamicQuantizablePreSplitMixin,
             "resolve_default_checkpoint",
-            classmethod(_stub_resolve_default_checkpoint),
+            classmethod(_stub_resolve_default_checkpoint_from_dynamic_cls),
         )
         mp.setattr(
             LlamaDynamicQuantizablePreSplitMixin,
