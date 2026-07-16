@@ -15,7 +15,6 @@ import torch
 from transformers import AutoConfig
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.models._shared.llm import test
 from qai_hub_models.models._shared.llm.common import get_qdc_api_token
 from qai_hub_models.models._shared.llm.evaluate import evaluate
@@ -320,14 +319,7 @@ def test_compile(
     assert (genie_bundle_path / "htp_backend_ext_config.json").exists()
     assert (genie_bundle_path / "sample_prompt.txt").exists()
 
-    # TODO(https://github.com/qcom-ai-hub/tetracode/issues/19349): remove once
-    # the QDC w4/w4a16 mix-up is resolved.
     assert isinstance(result, MultiGraphCollectionExportResult)
-    print(f"[provenance] precision={precision} bundle={genie_bundle_path}")
-    for compile_key, compile_job in (result.compile_jobs or {}).items():
-        print(f"[provenance] compile_job[{compile_key}]={compile_job.job_id}")
-    for link_key, link_job in (result.link_jobs or {}).items():
-        print(f"[provenance] link_job[{link_key}]={link_job.job_id}")
 
 
 @pytest.mark.nightly
@@ -366,12 +358,6 @@ def test_qdc(
         _USE_DEFAULT_PROMPTS,
         submit_genie_bundle_to_qdc_device,
     )
-
-    # TODO(https://github.com/qcom-ai-hub/tetracode/issues/19349): remove once
-    # the QDC w4/w4a16 mix-up is resolved.
-    metadata = ModelMetadata.from_json(genie_bundle_path / "metadata.json")
-    print(f"[provenance] precision={precision} bundle={genie_bundle_path}")
-    print(f"[provenance] metadata.json precision={metadata.precision}")
 
     qdc_job_name = f"Genie {MODEL_ID} {precision}"
     tps, prefill_tps, min_ttft_ms, _ = submit_genie_bundle_to_qdc_device(

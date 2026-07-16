@@ -243,8 +243,3 @@ def test_compile(
     assert (genie_bundle_path / "sample_prompt.txt").exists()
 
     assert isinstance(result, MultiGraphCollectionExportResult)
-    print(f"[provenance] precision={precision} bundle={genie_bundle_path}")
-    for compile_key, compile_job in (result.compile_jobs or {}).items():
-        print(f"[provenance] compile_job[{compile_key}]={compile_job.job_id}")
-    for link_key, link_job in (result.link_jobs or {}).items():
-        print(f"[provenance] link_job[{link_key}]={link_job.job_id}")
