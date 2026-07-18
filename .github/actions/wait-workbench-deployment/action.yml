@@ -14,13 +14,15 @@ runs:
       shell: bash
       run: |
         source "${{ github.workspace }}/${{ inputs.venv-path }}/bin/activate"
-        while true; do
+        for i in $(seq 1 24); do
             OUTPUT=$(qai-hub list-devices 2>&1) || true
             echo "$OUTPUT"
             if [[ "$OUTPUT" != *"Qualcomm AI Hub is unavailable"* ]]; then
               echo "workbench is available, ending"
-              break
+              exit 0
             fi
             echo "workbench is unavailable. Waiting 5 minutes..."
             sleep 300
         done
+        echo "::error::workbench never became available"
+        exit 1
