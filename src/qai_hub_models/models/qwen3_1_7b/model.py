@@ -13,9 +13,8 @@ tied-embedding encoding fix). This module supplies the 1.7B-specific architectur
 constants and the small concrete subclasses (Part classes + the Collection,
 whose ``parts`` mapping registers the Part classes).
 
-Quantization uses the SpinQuant (R1+R3) -> AdaScale -> Calibration recipe; the
-SpinQuant rotations are configured via ``spinquant_config`` on the Quantizable
-PreSplit and applied automatically inside ``quantize()``.
+Quantization uses the SpinQuant (R1+R3) -> AdaScale -> Calibration recipe;
+SpinQuant passes are specified via ``--use-spin-quant r1,r3`` on the quantize CLI.
 """
 
 from __future__ import annotations
@@ -81,13 +80,6 @@ DEFAULT_CHECKPOINT = {
     Precision.w4a16: "qwen3_1_7b_w4a16",
 }
 
-# SpinQuant rotation recipe: R1 (residual-stream) + R3 (online Hadamard on Q/K).
-# R3 requires the attention-score scale (1/sqrt(head_dim)) to be applied on the
-# QK^T MatMul *output* rather than folded into the K operand -- see the SHA
-# attention note in _shared/qwen3/model_adaptations.py. With the K-side Div
-# removed, aimet's R3 anchor walk reaches the QK^T MatMul cleanly.
-SPINQUANT_CONFIG = {"enable_r1": True, "enable_r2": False, "enable_r3": True}
-
 # Name used for split ONNX file basenames (e.g. Qwen3_1_7B_1_of_4.onnx)
 SPLIT_MODEL_NAME = "Qwen3_1_7B"
 
@@ -133,8 +125,7 @@ class Qwen3_1_7B_QuantizablePreSplit(Qwen3QuantizablePreSplitBase[Qwen3_1_7B_Pre
 
     # AdaScale config (16 attn heads + 8 KV heads + 1).
     ada_scale_num_rmsnorm_per_blk = NUM_ATTN_HEADS + NUM_KEY_VALUE_HEADS + 1
-    # SpinQuant (R1+R3) is applied in-place before calibration inside quantize().
-    spinquant_config = SPINQUANT_CONFIG
+    # SpinQuant (R1+R3) is applied via `--use-spin-quant r1,r3` on the quantize CLI.
     supports_thinking = True
 
 

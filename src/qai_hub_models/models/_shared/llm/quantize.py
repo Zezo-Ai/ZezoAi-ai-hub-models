@@ -37,6 +37,26 @@ logger = logging.getLogger(__name__)
 
 _SERIALIZABLE_TYPES = (str, int, float, bool)
 
+_VALID_SPIN_QUANT_PASSES = {"r1", "r2", "r3"}
+
+
+def _parse_spin_quant_args(args: argparse.Namespace) -> dict | None:
+    """Convert --use-spin-quant CLI arg to a config dict."""
+    if args.use_spin_quant is None:
+        return None
+    passes = {p.strip().lower() for p in args.use_spin_quant.split(",")}
+    invalid = passes - _VALID_SPIN_QUANT_PASSES
+    if invalid:
+        raise ValueError(
+            f"Invalid SpinQuant passes: {sorted(invalid)}. "
+            f"Valid passes are: {sorted(_VALID_SPIN_QUANT_PASSES)}"
+        )
+    return {
+        "enable_r1": "r1" in passes,
+        "enable_r2": "r2" in passes,
+        "enable_r3": "r3" in passes,
+    }
+
 
 def save_command_args(
     path: Path, args: argparse.Namespace, cli_args: list[str]
@@ -69,13 +89,22 @@ def quantize(
     ada_scale_num_samples: int | None = None,
     ada_scale_num_iterations: int | None = None,
     image_size: tuple[int, int] | None = None,
+    fp_model: LLMBase | None = None,
+    spinquant_config: dict | None = None,
 ) -> None:
+    # Every deployable LLM/VLM routes through the dynamic-shape classes
+    # (DynamicQuantizablePreSplitMixin + LLMDynamic_AIMETOnnx). The static
+    # code paths are dead, so require the dynamic class here rather than
+    # branching on it below.
+    assert issubclass(quantized_model_cls, DynamicQuantizablePreSplitMixin), (
+        f"{quantized_model_cls.__name__} is not a DynamicQuantizablePreSplitMixin; "
+        "only dynamic-shape quantization is supported."
+    )
+
     # Calibration should run on the PreSplit (monolithic QuantSim) class. A
     # split-forward wrapper stacks one ORT session per Part on the monolithic and
     # can OOM the GPU on larger models; warn so the caller passes the PreSplit class.
-    if isinstance(quantized_model_cls, type) and issubclass(
-        quantized_model_cls, SplitForwardMixin
-    ):
+    if issubclass(quantized_model_cls, SplitForwardMixin):
         logger.warning(
             "quantize() received split-forward wrapper %s; calibration should run "
             "on its PreSplit class (monolithic QuantSim) to avoid stacking per-Part "
@@ -95,32 +124,67 @@ def quantize(
             "This quantization technique requires a CUDA GPU (V100/A100). Please re-try with GPU machine."
         )
 
-    # Create the floating point model
-    extra: dict[str, Any] = {}
-    if not issubclass(fp_model_cls, LLMDynamicBase):
-        extra["sequence_length"] = seq_len
-        extra["context_length"] = context_length
-    # DEFAULT* checkpoints are resolved by DynamicQuantizablePreSplitMixin, not the FP model.
-    fp_checkpoint = checkpoint
-    if isinstance(checkpoint, str) and checkpoint.startswith("DEFAULT"):
-        fp_checkpoint = None
-    if fp_checkpoint:
-        extra["checkpoint"] = fp_checkpoint
+    # Create the floating point model (skip if caller pre-created it)
+    if fp_model is None:
+        extra: dict[str, Any] = {}
+        if not issubclass(fp_model_cls, LLMDynamicBase):
+            extra["sequence_length"] = seq_len
+            extra["context_length"] = context_length
+        # DEFAULT* checkpoints are resolved by DynamicQuantizablePreSplitMixin, not the FP model.
+        fp_checkpoint = checkpoint
+        if isinstance(checkpoint, str) and checkpoint.startswith("DEFAULT"):
+            fp_checkpoint = None
+        if fp_checkpoint:
+            extra["checkpoint"] = fp_checkpoint
 
-    fp_model = fp_model_cls.from_pretrained(**extra).to(torch.device("cpu")).eval()
+        fp_model = fp_model_cls.from_pretrained(**extra).to(torch.device("cpu")).eval()
+        torch.cuda.empty_cache()
+
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    # Determine where to find/put the exported artifacts. If a directory
+    # already holds a COMPLETE export (re-quantize scenario), use it directly.
+    # Otherwise export fresh and apply pre-sim transforms (e.g. SpinQuant).
+    # _has_onnx_on_disk checks every artifact the model's export_onnx produces
+    # (backbone for text LLMs; backbone + VEG + embedding for VLMs), so an
+    # interrupted export is correctly treated as incomplete and re-run.
+    def _has_onnx(p: Path) -> bool:
+        return quantized_model_cls._has_onnx_on_disk(p, seq_len, context_length)
+
+    onnx_dir = output_path
+    if _has_onnx(output_path):
+        pass  # Already fully exported (e.g. from a prior run or VLM pre-export)
+    elif checkpoint and _has_onnx(Path(checkpoint)):
+        onnx_dir = Path(checkpoint)
+    else:
+        # Phase 1: Export ONNX
+        export_kwargs: dict[str, Any] = dict(fp_model=fp_model, output_dir=output_path)
+        if image_size is not None:
+            export_kwargs["image_height"] = image_size[0]
+            export_kwargs["image_width"] = image_size[1]
+        quantized_model_cls.export_onnx(**export_kwargs)
+
+        # Phase 2: Pre-sim transforms (e.g. SpinQuant)
+        quantized_model_cls.apply_pre_sim_transforms(
+            output_dir=output_path,
+            spinquant_config=spinquant_config,
+        )
+
+    # Free FP model GPU memory before QuantSim creation
+    fp_model.to("cpu")
+    gc.collect()
     torch.cuda.empty_cache()
 
-    quant_extra: dict[str, Any] = dict(
+    # Phase 3: Load ONNX + create QuantSim. Dynamic classes take neither
+    # sequence_length nor context_length (they are fixed to defaults).
+    model_quant = quantized_model_cls.from_pretrained(
         precision=precision,
-        checkpoint=checkpoint,
+        checkpoint=str(onnx_dir),
         host_device=device,
         fp_model=fp_model,
         _skip_quantsim_creation=False,
     )
-    if not issubclass(quantized_model_cls, DynamicQuantizablePreSplitMixin):
-        quant_extra["context_length"] = context_length
-        quant_extra["sequence_length"] = seq_len
-    model_quant = quantized_model_cls.from_pretrained(**quant_extra)
 
     # Determine how many samples we need
     num_max_samples = 0
@@ -131,21 +195,18 @@ def quantize(
     if use_ada_scale and ada_scale_num_samples is not None:
         num_max_samples = max(num_max_samples, ada_scale_num_samples)
 
-    if isinstance(model_quant, LLMDynamic_AIMETOnnx):
-        calib_data = model_quant.get_calibration_data(
-            num_samples=num_max_samples,
-            sequence_length=seq_len,
-            context_length=context_length,
-            image_size=image_size,
-        )
-    else:
-        assert isinstance(model_quant, LLM_AIMETOnnx)
-        calib_data = model_quant.get_calibration_data(num_samples=num_max_samples)
+    assert isinstance(model_quant, LLMDynamic_AIMETOnnx)
+    calib_data = model_quant.get_calibration_data(
+        num_samples=num_max_samples,
+        sequence_length=seq_len,
+        context_length=context_length,
+        image_size=image_size,
+    )
     assert calib_data is not None
     dataloader = dataset_entries_to_dataloader(calib_data)
 
     weight_optim_dataloader = None
-    if (use_seq_mse or use_ada_scale) and isinstance(model_quant, LLMDynamic_AIMETOnnx):
+    if use_seq_mse or use_ada_scale:
         optim_num_samples = max(seq_mse_num_samples or 0, ada_scale_num_samples or 0)
         optim_data = model_quant.get_weight_optimization_data(
             num_samples=optim_num_samples,
@@ -256,8 +317,18 @@ def llm_quantize(
         choices=[str(p) for p in supported_precisions],
         help="Pick the precision with which the model must be quantized.",
     )
+    parser.add_argument(
+        "--use-spin-quant",
+        type=str,
+        default=None,
+        metavar="PASSES",
+        help="Comma-separated SpinQuant passes to apply (r1,r2,r3). "
+        "Example: --use-spin-quant r1,r3",
+    )
     cli_args = sys.argv[1:]
     args = parser.parse_args(cli_args)
+
+    spinquant_config = _parse_spin_quant_args(args)
 
     quantize(
         quantized_model_cls=quantized_model_cls,
@@ -273,6 +344,7 @@ def llm_quantize(
         seq_mse_num_samples=args.seq_mse_num_samples,
         ada_scale_num_samples=args.ada_scale_num_samples,
         ada_scale_num_iterations=args.ada_scale_num_iterations,
+        spinquant_config=spinquant_config,
     )
 
     save_command_args(Path(args.output_dir) / "args.json", args, cli_args)

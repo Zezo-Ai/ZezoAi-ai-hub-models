@@ -50,8 +50,9 @@ class VLMDynamic_AIMETOnnx(LLMDynamic_AIMETOnnx):
             if hf_repo is None:
                 hf_repo = self.llm_config._name_or_path
 
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             hf_model = AutoModel.from_pretrained(hf_repo, trust_remote_code=True)
-            visual = hf_model.visual.eval()
+            visual = hf_model.visual.eval().to(device)
             del hf_model
             return visual
         except Exception:
@@ -140,7 +141,10 @@ class VLMDynamic_AIMETOnnx(LLMDynamic_AIMETOnnx):
             kwargs["pixel_values"] = (
                 pixel_values.to(device) if pixel_values is not None else None
             )
-            kwargs["image_grid_thw"] = rest[2] if len(rest) > 2 else None
+            image_grid_thw = rest[2] if len(rest) > 2 else None
+            kwargs["image_grid_thw"] = (
+                image_grid_thw.to(device) if image_grid_thw is not None else None
+            )
             return kwargs
 
         inputs = self._prefill_dataset(

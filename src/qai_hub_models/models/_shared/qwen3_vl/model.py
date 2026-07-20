@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import gc
 import itertools
 import json
 import logging
@@ -1262,6 +1263,9 @@ class Qwen3VLQuantizablePreSplitBase(  # type: ignore[misc]
     # + num_key_value_heads k_norms + 1 post_attention_layernorm intermediate ops
     ada_scale_num_rmsnorm_per_blk: int | None = None
 
+    # VLM: vision encoder class (set by leaf classes)
+    vision_encoder_cls: type[Qwen3VLVisionEncoderBase] | None = None
+
     @classmethod
     def attention_mask_min_clip_and_multiplier(
         cls,
@@ -1311,10 +1315,129 @@ class Qwen3VLQuantizablePreSplitBase(  # type: ignore[misc]
             fp_model = self.FPModel.from_pretrained()
         super().save_calibrated_checkpoint(output_checkpoint, fp_model)
 
-        # VLM-specific: embedding table is needed for on-device LUT encoder
+        # VLM-specific: embedding table is needed for on-device LUT encoder.
+        # Skip if already present (e.g. pre-exported and SpinQuant-rotated).
+        embedding_path = Path(output_checkpoint) / "embedding_weights.raw"
+        if not embedding_path.exists():
+            export_embedding_weights_from_tensor(
+                fp_model.get_embedding_weights().float(), Path(output_checkpoint)
+            )
+
+    @classmethod
+    def _has_onnx_on_disk(
+        cls, ckpt: Path, sequence_length: int, context_length: int
+    ) -> bool:
+        """Require backbone + VEG ONNX + embedding for a complete VLM export.
+
+        export_onnx / apply_pre_sim_transforms produce vision_encoder.onnx and
+        embedding_weights.raw alongside the backbone. A run interrupted after
+        the backbone is written but before (or during) the VEG/embedding write
+        must not be treated as complete, or quantize() would skip re-export and
+        SpinQuant, leaving those artifacts stale/missing and inconsistent with
+        the rotated backbone.
+        """
+        if not super()._has_onnx_on_disk(ckpt, sequence_length, context_length):
+            return False
+        veg_complete = (ckpt / "vision_encoder.onnx").exists() and (
+            ckpt / "vision_encoder.onnx.data"
+        ).exists()
+        embedding_complete = (ckpt / "embedding_weights.raw").exists()
+        return veg_complete and embedding_complete
+
+    @classmethod
+    def export_onnx(
+        cls,
+        fp_model: Qwen3VLPreSplitT,  # type: ignore[override]
+        output_dir: Path,
+        **kwargs: Any,
+    ) -> None:
+        """Export backbone ONNX, VEG ONNX, and embedding weights."""
+        # Backbone (delegate to parent)
+        super().export_onnx(fp_model, output_dir)
+
+        # Embedding weights (external to the ONNX graph for VLMs)
         export_embedding_weights_from_tensor(
-            fp_model.get_embedding_weights().float(), Path(output_checkpoint)
+            fp_model.get_embedding_weights().float(), output_dir
         )
+
+        # VEG ONNX
+        assert cls.vision_encoder_cls is not None
+        host_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        image_height = kwargs.get(
+            "image_height", cls.vision_encoder_cls.default_image_height
+        )
+        image_width = kwargs.get(
+            "image_width", cls.vision_encoder_cls.default_image_width
+        )
+        veg_model = cls.vision_encoder_cls.from_pretrained(
+            device=host_device,
+            image_height=image_height,
+            image_width=image_width,
+        )
+        veg_model.eval()
+        veg_onnx = cls.vision_encoder_cls.export_to_onnx(veg_model, host_device)
+        cls.vision_encoder_cls.save_onnx(veg_onnx, str(output_dir))
+
+        del veg_model, veg_onnx
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    @classmethod
+    def apply_pre_sim_transforms(
+        cls,
+        output_dir: Path,
+        spinquant_config: dict | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Apply SpinQuant co-rotating backbone + VEG + embedding."""
+        if not spinquant_config:
+            return
+
+        # Load backbone
+        backbone_path = output_dir / "model_dynamic.onnx"
+        backbone_onnx = onnx.load(str(backbone_path), load_external_data=True)
+
+        # Load VEG
+        veg_onnx = onnx.load(
+            str(output_dir / "vision_encoder.onnx"), load_external_data=True
+        )
+
+        # Load embedding
+        hidden_size = cls.FPModel.hidden_size
+        embedding_np = np.fromfile(
+            str(output_dir / "embedding_weights.raw"), dtype=np.float32
+        )
+        embedding = torch.from_numpy(embedding_np.reshape(-1, hidden_size))
+
+        # Co-rotate all three
+        cls.apply_spinquant_to_onnx(
+            backbone_onnx,
+            spinquant_config,
+            visual_model=veg_onnx,
+            embedding=embedding,
+        )
+
+        # Save rotated backbone
+        onnx.save_model(
+            backbone_onnx,
+            str(backbone_path),
+            save_as_external_data=True,
+            all_tensors_to_one_file=True,
+            location="model.data",
+        )
+
+        # Save rotated VEG
+        assert cls.vision_encoder_cls is not None
+        cls.vision_encoder_cls.save_onnx(veg_onnx, str(output_dir))
+
+        # Save rotated embedding
+        export_embedding_weights_from_tensor(embedding, output_dir)
+
+        del backbone_onnx, veg_onnx, embedding
+        gc.collect()
+
+        print("  SpinQuant complete.")
 
 
 # ---------------------------------------------------------------------------

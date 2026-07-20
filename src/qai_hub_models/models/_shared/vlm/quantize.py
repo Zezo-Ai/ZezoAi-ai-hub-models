@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import onnx
 import torch
 
 from qai_hub_models import Precision
@@ -18,7 +19,11 @@ from qai_hub_models.models._shared.llm.model import (
     DEFAULT_CALIBRATION_SEQ_LEN,
     DEFAULT_CONTEXT_LENGTH,
 )
-from qai_hub_models.models._shared.llm.quantize import quantize, save_command_args
+from qai_hub_models.models._shared.llm.quantize import (
+    _parse_spin_quant_args,
+    quantize,
+    save_command_args,
+)
 from qai_hub_models.utils.args import get_quantize_action_with_default
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 
@@ -33,11 +38,13 @@ def _quantize_vision_encoder(
 ) -> None:
     """Quantize the VEG (Vision Embedding Generator).
 
+    If a pre-exported vision_encoder.onnx exists in *output_dir* (produced by
+    the export/SpinQuant phase), the VEG QuantSim is built on that graph.
+    Otherwise, a fresh VEG ONNX is exported from the HF model.
+
     Produces vision_encoder.{onnx,data,encodings} in *output_dir*.
     """
     host_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # Concrete VEG class (per-model); its quantization-lifecycle classmethods are
-    # resolved dynamically, so type as Any.
     cls: Any = vision_encoder_cls
 
     print(f"  Loading {num_calibration_samples} calibration images...")
@@ -53,8 +60,21 @@ def _quantize_vision_encoder(
     )
     veg_model.eval()
 
-    print("  Exporting VEG to ONNX and creating QuantSim...")
-    quant_sim, fixed_inputs = cls.create_quantsim(veg_model, host_device)
+    # Obtain the VEG ONNX graph: reuse the pre-exported one if the
+    # export/SpinQuant phase already produced it (so the rotated graph is
+    # used), otherwise export a fresh graph from the HF model.
+    veg_onnx_path = Path(output_dir) / "vision_encoder.onnx"
+    if veg_onnx_path.exists():
+        print(f"  Loading pre-exported VEG ONNX from {veg_onnx_path}...")
+        veg_onnx = onnx.load(str(veg_onnx_path), load_external_data=True)
+    else:
+        print("  Exporting VEG to ONNX...")
+        veg_onnx = cls.export_to_onnx(veg_model, host_device)
+
+    print("  Creating QuantSim from ONNX...")
+    quant_sim, fixed_inputs = cls.create_quantsim_from_onnx(
+        veg_onnx, veg_model, host_device
+    )
 
     print(f"  Calibrating with {num_calibration_samples} images...")
     cls.calibrate(quant_sim, calibration_data, fixed_inputs)
@@ -68,7 +88,7 @@ def _quantize_vision_encoder(
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    print("Pass 2 (VEG) completed successfully.")
+    print("VEG quantization completed successfully.")
 
 
 def quantize_vlm(
@@ -83,10 +103,11 @@ def quantize_vlm(
     default_image_height: int,
     default_image_width: int,
 ) -> None:
-    """Run the two-pass VLM quantize flow (LLM text model + vision encoder).
+    """Run the VLM quantize flow.
 
-    The body is the (previously duplicated) per-model ``quantize.py`` ``main()``;
-    only the items above differ between models, so they are parameters.
+    The shared quantize() function handles export, pre-sim transforms
+    (SpinQuant co-rotation), QuantSim creation, and calibration for the
+    backbone. VEG quantization runs as a separate step afterward.
     """
     parser = argparse.ArgumentParser(description=description)
 
@@ -161,13 +182,13 @@ def quantize_vlm(
         "--skip-veg",
         action="store_true",
         default=False,
-        help="Skip vision encoder (VEG) quantization (Pass 2).",
+        help="Skip vision encoder (VEG) quantization.",
     )
     parser.add_argument(
         "--skip-llm",
         action="store_true",
         default=False,
-        help="Skip LLM text model quantization (Pass 1).",
+        help="Skip LLM text model quantization.",
     )
     parser.add_argument(
         "--veg-num-samples",
@@ -184,15 +205,22 @@ def quantize_vlm(
         help="Image size (height width) used to resize calibration images. "
         "Must match the size the model's input spec is built for.",
     )
+    parser.add_argument(
+        "--use-spin-quant",
+        type=str,
+        default=None,
+        metavar="PASSES",
+        help="Comma-separated SpinQuant passes to apply (r1,r2,r3). "
+        "Example: --use-spin-quant r1,r3",
+    )
 
     cli_args = sys.argv[1:]
     args = parser.parse_args(cli_args)
 
-    # Pass 1: LLM text model
+    spinquant_config = _parse_spin_quant_args(args)
+
+    # LLM backbone quantization (export -> SpinQuant -> QuantSim -> calibrate -> save)
     if not args.skip_llm:
-        print("=" * 60)
-        print("Pass 1: LLM Text Model Quantization")
-        print("=" * 60)
         quantize(
             quantized_model_cls=quantized_model_cls,
             fp_model_cls=fp_model_cls,
@@ -208,15 +236,16 @@ def quantize_vlm(
             ada_scale_num_samples=args.ada_scale_num_samples,
             ada_scale_num_iterations=args.ada_scale_num_iterations,
             image_size=tuple(args.image_size),
+            spinquant_config=spinquant_config,
         )
     else:
-        print("Skipping Pass 1 (LLM) as requested.")
+        print("Skipping LLM quantization as requested.")
 
-    # Pass 2: Vision Encoder (VEG)
+    # VEG quantization (loads rotated VEG ONNX from disk if present)
     if not args.skip_veg:
         print()
         print("=" * 60)
-        print("Pass 2: Vision Encoder (VEG) Quantization")
+        print("Vision Encoder (VEG) Quantization")
         print("=" * 60)
         _quantize_vision_encoder(
             vision_encoder_cls=vision_encoder_cls,
@@ -226,12 +255,12 @@ def quantize_vlm(
             num_calibration_samples=args.veg_num_samples,
         )
     else:
-        print("Skipping Pass 2 (VEG) as requested.")
+        print("Skipping VEG quantization as requested.")
 
     save_command_args(Path(args.output_dir) / "args.json", args, cli_args)
 
     print()
-    print("All quantization passes completed.")
+    print("All quantization completed.")
     print()
     print(
         "    If you are using custom weights via checkpoint folder, please add a copy "

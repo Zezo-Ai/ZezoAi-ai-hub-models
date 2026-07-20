@@ -143,10 +143,6 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel):
     # RMSNorms per block (currently needed for AdaScale for Qwen3)
     ada_scale_num_rmsnorm_per_blk: int | None = None
 
-    # SpinQuant rotation config, e.g. {"enable_r1": True, "enable_r2": False, "enable_r3": True}.
-    # None (default) = SpinQuant disabled. Applied in-place to self.quant_sim before calibration.
-    spinquant_config: dict | None = None
-
     def __init__(
         self,
         quant_sim: QuantSimOnnx | None,
@@ -331,7 +327,10 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel):
 
     @staticmethod
     def apply_spinquant_to_onnx(
-        onnx_model: onnx.ModelProto, spinquant_config: dict
+        onnx_model: onnx.ModelProto,
+        spinquant_config: dict,
+        visual_model: onnx.ModelProto | None = None,
+        embedding: torch.Tensor | None = None,
     ) -> None:
         """Apply SpinQuant rotations in place on a float ONNX graph.
 
@@ -341,11 +340,29 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel):
         construction break (causing "No active RMSNorms found"). R3 also inserts
         plain-float Hadamard MatMuls that the subsequent QuantSim must wrap in
         activation quantizers, so it likewise has to precede sim creation.
+
+        Parameters
+        ----------
+        onnx_model
+            Backbone (text decoder) ONNX model. Mutated in-place.
+        spinquant_config
+            Dict of rotation flags (enable_r1, enable_r2, enable_r3).
+        visual_model
+            Optional vision encoder ONNX model (VLM). Its PatchMerger
+            linear_fc2 weights are co-rotated in-place with R1.
+        embedding
+            Optional embedding weight tensor of shape [vocab, hidden]
+            (VLM backbones exported with inputs_embeds). Rotated in-place.
         """
         ensure_min_aimet_onnx_version("2.33.0")
         # Local imports: optional 2.33.0-only dependency, gated by the version
         # check above -- same exception to imports-at-top as _apply_ada_scale's
         # AdaScale import.
+
+        print()
+        print(f"Apply SpinQuant ({spinquant_config})")
+        print()
+
         from aimet_onnx.experimental.spinquant import apply_spinquant
         from aimet_onnx.utils import duplicate_shared_initializers
 
@@ -354,7 +371,12 @@ class AIMETOnnxQuantizableMixin(WorkbenchModel):
         # lm_head.weight feeds both the embedding Gather and the lm_head MatMul).
         # Dedup first; idempotent, so the later _build_quantsim call is a no-op.
         duplicate_shared_initializers(onnx_model.graph)
-        apply_spinquant(onnx_model, **spinquant_config)
+        apply_spinquant(
+            onnx_model,
+            visual_model=visual_model,
+            embedding=embedding,
+            **spinquant_config,
+        )
 
     def _apply_calibration(self, data: DataLoader, num_batches: int) -> None:
         assert self.quant_sim is not None

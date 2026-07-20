@@ -2347,6 +2347,147 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         # This must be defined by the HubModelProtocol protocol via BaseModel
         return self._sample_inputs_impl(input_spec)
 
+    # ------------------------------------------------------------------
+    # Phased quantize protocol
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def export_onnx(
+        cls,
+        fp_model: LLMBase,
+        output_dir: Path,
+        **kwargs: Any,
+    ) -> None:
+        """Export backbone ONNX to output_dir/model_dynamic.onnx + model.data.
+
+        VLM subclasses override this to also export VEG ONNX and embedding.
+        """
+        # Every deployable LLM/VLM FP PreSplit is a DynamicPreSplitOnnxMixin;
+        # the dynamic-shape ONNX bundle is the only supported export path.
+        assert isinstance(fp_model, DynamicPreSplitOnnxMixin), (
+            f"{type(fp_model).__name__} is not a DynamicPreSplitOnnxMixin; "
+            "only dynamic-shape ONNX export is supported."
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = fp_model.get_full_onnx_bundle(Path(tmp))
+            shutil.copy(bundle.onnx_graph_path, output_dir / "model_dynamic.onnx")
+            bundle_data = bundle.onnx_graph_path.parent / "model.data"
+            if bundle_data.exists():
+                shutil.copy(bundle_data, output_dir / "model.data")
+
+        # Save tokenizer + config so the checkpoint is self-contained
+        fp_model.tokenizer.save_pretrained(str(output_dir))
+        fp_model.llm_config.save_pretrained(str(output_dir))
+
+    @classmethod
+    def apply_pre_sim_transforms(
+        cls,
+        output_dir: Path,
+        spinquant_config: dict | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Apply pre-QuantSim transforms (e.g. SpinQuant) to ONNX on disk.
+
+        Mutates files in output_dir in-place. No-op if no transforms configured.
+        VLM subclasses override to co-rotate backbone + VEG + embedding.
+        """
+        if not spinquant_config:
+            return
+
+        backbone_path = output_dir / "model_dynamic.onnx"
+        backbone_onnx = onnx.load(str(backbone_path), load_external_data=True)
+
+        cls.apply_spinquant_to_onnx(backbone_onnx, spinquant_config)
+
+        onnx.save_model(
+            backbone_onnx,
+            str(backbone_path),
+            save_as_external_data=True,
+            all_tensors_to_one_file=True,
+            location="model.data",
+        )
+        del backbone_onnx
+        gc.collect()
+
+    @classmethod
+    def _load_onnx_and_build_quantsim(
+        cls,
+        output_dir: Path,
+        host_device: torch.device,
+        precision: Precision,
+        sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
+        context_length: int = DEFAULT_CONTEXT_LENGTH,
+    ) -> QuantizationSimModel:
+        """Load ONNX from disk, create QuantSim, and load encodings.
+
+        This handles the mechanical steps of discovering the ONNX file,
+        building a QuantizationSimModel, and loading any saved encodings.
+        Instance construction is handled by the caller (from_pretrained).
+        """
+        if AIMET_ONNX_INSTALLED:
+            AimetLogger.set_level_for_all_areas(logging.WARNING)
+
+        # Discover ONNX file
+        onnx_path = output_dir / "model_dynamic.onnx"
+        if not onnx_path.exists():
+            # Fall back to legacy fixed-shape format
+            onnx_path = (
+                output_dir / f"model_seqlen{sequence_length}_cl{context_length}.onnx"
+            )
+        if not onnx_path.exists():
+            raise FileNotFoundError(
+                f"No ONNX model found in {output_dir}. Run export_onnx first."
+            )
+
+        print()
+        print(f"Loading onnx model from {onnx_path}")
+        onnx_model = onnx.load(str(onnx_path), load_external_data=False)
+        load_external_data_for_model(onnx_model, str(output_dir))
+
+        print()
+        print("Creating a QuantSim model using AIMET ONNX.")
+        quant_sim = cls.create_quantsim(onnx_model, host_device, precision)
+        del onnx_model
+        gc.collect()
+
+        # Load encodings if present (re-quantize / resume / inference)
+        aimet_encodings = output_dir / "model.encodings"
+        if aimet_encodings.exists():
+            print()
+            print(f"Loading the encodings from {aimet_encodings}")
+            load_encodings_to_sim(quant_sim, str(aimet_encodings), strict=False)
+
+        return quant_sim
+
+    @classmethod
+    def _has_onnx_on_disk(
+        cls, ckpt: Path, sequence_length: int, context_length: int
+    ) -> bool:
+        """Check whether a checkpoint directory holds a complete export.
+
+        For the base backbone this means the ONNX graph + its external data.
+        VLM subclasses override to additionally require their extra export
+        artifacts (vision encoder ONNX, embedding weights) so that a run
+        interrupted mid-export is not mistaken for a complete checkpoint --
+        which would otherwise cause quantize() to skip re-export and leave
+        stale/missing VEG/embedding artifacts inconsistent with the backbone.
+        """
+        external_data_exists = (ckpt / "model.onnx.data").exists() or (
+            ckpt / "model.data"
+        ).exists()
+        if not external_data_exists:
+            return False
+        if (ckpt / "model_dynamic.onnx").exists():
+            return True
+        legacy_path = ckpt / f"model_seqlen{sequence_length}_cl{context_length}.onnx"
+        return legacy_path.exists()
+
+    # ------------------------------------------------------------------
+    # from_pretrained (delegates to phased protocol)
+    # ------------------------------------------------------------------
+
     @classmethod
     def from_pretrained(
         cls,
@@ -2359,8 +2500,13 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         _skip_quantsim_creation: bool = False,
     ) -> Self:
         """
-        Load weight from local checkpoint of Huggingface and create Aimet-ONNX QuantSim.
-        Optionally load onnx model and AIMET encodings from a checkpoint.
+        Load from checkpoint or export+quantize an FP model.
+
+        When checkpoint contains an ONNX model on disk, loads directly.
+        When no ONNX exists and fp_model is provided, exports it before
+        creating QuantSim. SpinQuant and other pre-sim transforms are applied
+        by the quantize() flow (which pre-exports the rotated ONNX to the
+        checkpoint dir), not here.
 
         Parameters
         ----------
@@ -2374,10 +2520,8 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             Precision to use for the model.
         fp_model
             Floating point version of this model.
-            This is quantized as part of this class and QuantSim model is created.
         checkpoint
             Path to previously calibrated AIMET encodings and ONNX models.
-            Note that encodings are sensitive to AIMET ONNX versions.
         _skip_quantsim_creation
             If True, skip creating the QuantSim model.
 
@@ -2389,6 +2533,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         if host_device is None:
             host_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        # Capture fp_model attributes before it may be freed.
         _fp_tokenizer = fp_model.tokenizer if fp_model is not None else None
         _fp_llm_config = fp_model.llm_config if fp_model is not None else None
         _fp_embedding_weights = None
@@ -2398,119 +2543,65 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
         if fp_model is not None and hasattr(fp_model, "_original_llm_config"):
             _fp_original_llm_config = fp_model._original_llm_config
 
-        if not _skip_quantsim_creation:
-            if AIMET_ONNX_INSTALLED:
-                AimetLogger.set_level_for_all_areas(logging.WARNING)
-            onnx_path = None
-            onnx_file_exists = False
-            tmp_dir = tempfile.TemporaryDirectory()
-            onnx_tmpfile = os.path.join(tmp_dir.name, "model.onnx")
+        quant_sim: QuantizationSimModel | None = None
+        output_dir: Path | None = None
+        tmp_dir: tempfile.TemporaryDirectory | None = None
 
-            if checkpoint is None:
-                onnx_file_exists = False
-            else:
-                external_data_exists = os.path.exists(
-                    os.path.join(checkpoint, "model.onnx.data")
-                ) or os.path.exists(os.path.join(checkpoint, "model.data"))
-
-                # Look for fully dynamic ONNX model first (new format)
-                onnx_path = os.path.join(checkpoint, "model_dynamic.onnx")
-                onnx_file_exists = os.path.exists(onnx_path) and external_data_exists
-                if not onnx_file_exists:
-                    # Fall back to fixed-shape model (old format)
-                    onnx_path = os.path.join(
-                        checkpoint,
-                        f"model_seqlen{sequence_length}_cl{context_length}.onnx",
-                    )
-                    onnx_file_exists = (
-                        os.path.exists(onnx_path) and external_data_exists
-                    )
-
-            if not onnx_file_exists:
-                if fp_model is None:
-                    raise ValueError(
-                        "The quantized checkpoint (with custom weights) must have an ONNX model."
-                    )
-                if isinstance(fp_model, DynamicPreSplitOnnxMixin):
-                    bundle = fp_model.get_full_onnx_bundle(Path(tmp_dir.name))
-                    onnx_model = bundle.load_onnx_model()
-                else:
-                    onnx_model = get_onnx_model(  # type: ignore[assignment]
-                        fp_model=fp_model,
-                        context_length=context_length,
-                        sequence_length=sequence_length,
-                        path=onnx_tmpfile,
-                        return_model=True,
-                        llm_io_type=fp_model.llm_io_type,
-                    )
-
-            else:
-                print()
-                print(f"Loading onnx model from {onnx_path}")
-                assert onnx_path is not None
-                onnx_model = onnx.load(onnx_path, load_external_data=False)
-                from onnx.external_data_helper import load_external_data_for_model
-
-                load_external_data_for_model(onnx_model, os.path.dirname(onnx_path))
-
-            if onnx_path is None:
-                tmp_dir.cleanup()
-
-            # Free the fp_model GPU memory before creating QuantSim to avoid
-            # OOM for large models (e.g. 7B) where both PyTorch weights and
-            # the AIMET-ONNX CUDA session don't fit on a single GPU.
-            # Preserve tokenizer/config which are needed later.
+        if _skip_quantsim_creation:
+            # Lightweight instance (split-forward demo/export path)
+            pass
+        elif checkpoint is not None and cls._has_onnx_on_disk(
+            Path(str(checkpoint)), sequence_length, context_length
+        ):
+            # ONNX on disk -- load directly (inference / pre-exported path)
+            output_dir = Path(str(checkpoint))
+            quant_sim = cls._load_onnx_and_build_quantsim(
+                output_dir=output_dir,
+                host_device=host_device,
+                precision=precision,
+                sequence_length=sequence_length,
+                context_length=context_length,
+            )
             if fp_model is not None:
                 fp_model.to("cpu")
-                del fp_model
-                fp_model = None
-                gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-
-            # SpinQuant must rotate the float graph before QuantSim is built
-            # (see apply_spinquant_to_onnx). Only on a fresh export -- a saved
-            # checkpoint's ONNX is already rotated.
-            spinquant_config = getattr(cls, "spinquant_config", None)
-            if spinquant_config and not onnx_file_exists:
-                print()
-                print(f"Apply SpinQuant ({spinquant_config}) to float ONNX graph")
-                print()
-                assert onnx_model is not None
-                cls.apply_spinquant_to_onnx(onnx_model, spinquant_config)
-
-            # Two copies are needed. One for QuantSim and one for passing to
-            # quantize function for applying Sequential MSE.
-            # Deepcopy causes error on GPU.
-            print()
-            print("Creating a QuantSim model using AIMET ONNX.")
-            assert onnx_model is not None
-            quant_sim = cls.create_quantsim(onnx_model, host_device, precision)
-
-            # Cleanup the ONNX model that creates the QuantSim model
-            del onnx_model
-            gc.collect()
-
-            # Encodings are not produced yet.
-            if checkpoint is not None:
-                aimet_encodings = os.path.join(checkpoint, "model.encodings")
-                if os.path.exists(aimet_encodings):
-                    print()
-                    print(
-                        f"Loading the encodings from path {checkpoint} to load the QuantSim model."
-                    )
-                    load_encodings_to_sim(quant_sim, aimet_encodings, strict=False)
         else:
-            quant_sim = None
+            # No ONNX on disk -- export, then load
+            if fp_model is None:
+                raise ValueError(
+                    "The quantized checkpoint (with custom weights) must have "
+                    "an ONNX model."
+                )
 
+            tmp_dir = tempfile.TemporaryDirectory()
+            output_dir = Path(tmp_dir.name)
+
+            cls.export_onnx(fp_model, output_dir)
+
+            # Free fp_model memory before QuantSim creation to avoid OOM for
+            # large models (e.g. 7B) where both PyTorch weights and the
+            # AIMET-ONNX CUDA session don't fit on a single GPU.
+            fp_model.to("cpu")
+            del fp_model
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            quant_sim = cls._load_onnx_and_build_quantsim(
+                output_dir=output_dir,
+                host_device=host_device,
+                precision=precision,
+                sequence_length=sequence_length,
+                context_length=context_length,
+            )
+
+        # -- Unified instance construction --
         attention_mask_min_clip, attention_mask_multiplier = (
             cls.attention_mask_min_clip_and_multiplier(precision)
         )
-
         init_kwargs: dict[str, Any] = dict(
             quant_sim=quant_sim,
             host_device=host_device,
-            checkpoint=checkpoint,
+            checkpoint=str(output_dir) if output_dir else checkpoint,
             tokenizer=_fp_tokenizer,
             llm_config=_fp_llm_config,
             attention_mask_min_clip=attention_mask_min_clip,
@@ -2522,15 +2613,17 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
 
         instance = cls(**init_kwargs)
 
-        # Re-attach the embedding weights
+        # Re-attach the embedding weights captured from fp_model, but ONLY if
+        # the instance did not already load them from the checkpoint.
         if (
             _fp_embedding_weights is not None
             and getattr(instance, "_embedding_weights", None) is None
         ):
             instance._embedding_weights = _fp_embedding_weights
-
         if _fp_original_llm_config is not None:
             instance._original_llm_config = _fp_original_llm_config
+        if tmp_dir is not None:
+            instance._tmp_dir = tmp_dir
 
         return instance
 

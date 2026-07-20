@@ -159,6 +159,11 @@ class Qwen3_VL_4B_VisionEncoder(Qwen3VLVisionEncoderBase):
     quant_presplit_cls = Qwen3_VL_4B_QuantizablePreSplit
 
 
+# Circular dependency: QuantizablePreSplit.vision_encoder_cls -> VisionEncoder and
+# VisionEncoder.quant_presplit_cls -> QuantizablePreSplit. One must be post-hoc.
+Qwen3_VL_4B_QuantizablePreSplit.vision_encoder_cls = Qwen3_VL_4B_VisionEncoder
+
+
 class Qwen3_VL_4B_PartBase(Qwen3VLPartBase):
     """Unified Part base for Qwen3-VL-4B."""
 

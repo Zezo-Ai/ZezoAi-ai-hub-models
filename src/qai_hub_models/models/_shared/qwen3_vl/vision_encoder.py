@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import copy
 import os
+import tempfile
 from pathlib import Path
 from typing import Any, cast
 
+import onnx
 import torch
 import torch.nn.functional as F
 
@@ -369,22 +371,15 @@ class Qwen3VLVisionEncoder(BaseModel):
         return calibration_data
 
     @classmethod
-    def create_quantsim(
+    def export_to_onnx(
         cls,
         veg_model: Qwen3VLVisionEncoder,
         host_device: torch.device,
-    ) -> tuple[Any, dict]:
-        """Export VEG to ONNX and create AIMET QuantSim."""
-        import tempfile
-
-        import onnx
-        from aimet_onnx.common.defs import QuantScheme
-        from aimet_onnx.quantsim import QuantizationSimModel
-
+    ) -> onnx.ModelProto:
+        """Export VEG instance to a float ONNX ModelProto."""
         temp_dir = tempfile.mkdtemp()
         onnx_path = os.path.join(temp_dir, "vision_encoder.onnx")
 
-        # Get sample inputs for export
         input_spec = veg_model.get_input_spec()
         sample_inputs = {}
         for name, (shape, dtype) in input_spec.items():
@@ -393,7 +388,6 @@ class Qwen3VLVisionEncoder(BaseModel):
             else:
                 sample_inputs[name] = torch.zeros(*shape, device=host_device)
 
-        # Export to ONNX
         veg_model.to(host_device)
         torch.onnx.export(
             veg_model,
@@ -404,7 +398,42 @@ class Qwen3VLVisionEncoder(BaseModel):
             opset_version=17,
         )
 
-        onnx_model = onnx.load(onnx_path, load_external_data=True)
+        return onnx.load(onnx_path, load_external_data=True)
+
+    @classmethod
+    def save_onnx(
+        cls,
+        onnx_model: onnx.ModelProto,
+        output_dir: str | os.PathLike | Path,
+        filename: str = "vision_encoder.onnx",
+    ) -> Path:
+        """Save VEG ONNX with external data to output_dir."""
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        onnx_path = output_path / filename
+        onnx.save_model(
+            onnx_model,
+            str(onnx_path),
+            save_as_external_data=True,
+            all_tensors_to_one_file=True,
+            location=filename + ".data",
+        )
+        return onnx_path
+
+    @classmethod
+    def create_quantsim_from_onnx(
+        cls,
+        onnx_model: onnx.ModelProto,
+        veg_model: Qwen3VLVisionEncoder | None,
+        host_device: torch.device,
+    ) -> tuple[Any, dict]:
+        """Create AIMET QuantSim from an already-exported ONNX model.
+
+        When *veg_model* is None, fixed_inputs is empty (caller does not
+        intend to calibrate -- e.g. just holding the rotated graph for export).
+        """
+        from aimet_onnx.common.defs import QuantScheme
+        from aimet_onnx.quantsim import QuantizationSimModel
 
         providers = ["CPUExecutionProvider"]
         if torch.cuda.is_available():
@@ -418,13 +447,14 @@ class Qwen3VLVisionEncoder(BaseModel):
             providers=providers,
         )
 
-        # Fixed inputs for calibration (RoPE and masks from buffers)
-        fixed_inputs = {
-            "position_ids_cos": veg_model._pos_emb_cos,
-            "position_ids_sin": veg_model._pos_emb_sin,
-            "window_attention_mask": veg_model._window_attention_mask,
-            "full_attention_mask": veg_model._full_attention_mask,
-        }
+        fixed_inputs: dict = {}
+        if veg_model is not None:
+            fixed_inputs = {
+                "position_ids_cos": veg_model._pos_emb_cos,
+                "position_ids_sin": veg_model._pos_emb_sin,
+                "window_attention_mask": veg_model._window_attention_mask,
+                "full_attention_mask": veg_model._full_attention_mask,
+            }
 
         return quant_sim, fixed_inputs
 
