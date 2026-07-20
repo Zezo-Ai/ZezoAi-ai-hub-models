@@ -123,7 +123,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.prepare_matrix.outputs.matrix_include) }}
     runs-on: [tetra-ubuntu-2204, self-hosted]
-    timeout-minutes: 7200
+    timeout-minutes: 2880
     permissions:
       contents: read
       actions: read
@@ -132,6 +132,7 @@ jobs:
     env:
       QDC_API_TOKEN: ${{ secrets.QDC_API_KEY }}
       QDC_PRIVATE_API_KEY: ${{ secrets.QDC_PRIVATE_API_KEY }}
+      JOBS_FILE: ${{ github.workspace }}/src/qai_hub_models/scorecard/intermediates/geniex_jobs_${{ matrix.pool }}_pool.yaml
     outputs:
       results_url: ${{ steps.upload-results.outputs.artifact-url }}
       perf_updates_url: ${{ steps.upload-perf-updates.outputs.artifact-url }}
@@ -171,7 +172,31 @@ jobs:
         name: Scorecard LLM Perf Release Assets (${{ inputs.release_assets_action_id }})
         path: ${{ github.workspace }}/llm-release-assets
 
-    - name: Run geniex-bench Benchmarks
+    - name: Submit geniex-bench Jobs
+      id: submit
+      env:
+        QAIHM_MODELS: ${{ inputs.model || 'all' }}
+        QAIHM_TEST_DEVICES: ${{ matrix.devices }}
+        GENIEX_BENCH_PLUGIN: ${{ inputs.geniex_bench_plugin || 'all' }}
+        GENIEX_BENCH_PRECISIONS: ${{ inputs.precision || 'default' }}
+        GENIEX_VERSION: ${{ inputs.geniex_version || '' }}
+        QAIHM_LLM_PERF_RELEASE_ASSETS: ${{ inputs.release_assets_action_id != '' && format('{0}/llm-release-assets/release-assets.yaml', github.workspace) || '' }}
+      run: |
+        source ${{ env.VENV_PATH }}/bin/activate
+        cd $GITHUB_WORKSPACE
+        extra=()
+        if [ -n "$GENIEX_VERSION" ]; then
+          extra+=(--geniex-version "$GENIEX_VERSION")
+        fi
+        python -m qai_hub_models.scripts.run_geniex_bench_benchmarks submit \
+          --models "$QAIHM_MODELS" \
+          --devices "$QAIHM_TEST_DEVICES" \
+          --plugin "$GENIEX_BENCH_PLUGIN" \
+          --precisions "$GENIEX_BENCH_PRECISIONS" \
+          --jobs-file "$JOBS_FILE" \
+          "${extra[@]}"
+
+    - name: Collect geniex-bench Results
       id: run_benchmarks
       continue-on-error: true
       env:
@@ -188,15 +213,22 @@ jobs:
         if [ -n "$GENIEX_VERSION" ]; then
           extra+=(--geniex-version "$GENIEX_VERSION")
         fi
-        # Per-pool updates file: consolidate_pr downloads all
-        # perf-updates-geniex-* artifacts and replays them in one pass.
-        python -m qai_hub_models.scripts.run_geniex_bench_benchmarks \
+        python -m qai_hub_models.scripts.run_geniex_bench_benchmarks collect \
           --models "$QAIHM_MODELS" \
           --devices "$QAIHM_TEST_DEVICES" \
           --plugin "$GENIEX_BENCH_PLUGIN" \
           --precisions "$GENIEX_BENCH_PRECISIONS" \
+          --jobs-file "$JOBS_FILE" \
           --perf-updates-json "$GITHUB_WORKSPACE/geniex_perf_updates_${{ matrix.pool }}.jsonl" \
           "${extra[@]}"
+
+    - name: Upload geniex jobs yaml
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: geniex-jobs-${{ matrix.pool }}
+        path: ${{ env.JOBS_FILE }}
+        if-no-files-found: ignore
 
     - name: Upload geniex-bench results
       id: upload-results
@@ -213,9 +245,6 @@ jobs:
       if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v7
       with:
-        # perf-updates-* is the shared prefix the scorecard results collector
-        # globs to merge every runtime's updates (see llm_perf_collection.yml
-        # and scorecard_collect_results.yml).
         name: perf-updates-geniex-${{ matrix.pool }}
         path: ${{ github.workspace }}/geniex_perf_updates_${{ matrix.pool }}.jsonl
         if-no-files-found: ignore

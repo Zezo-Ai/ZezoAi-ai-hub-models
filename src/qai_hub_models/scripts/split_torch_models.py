@@ -238,33 +238,68 @@ def split_torch_models(
     # Split torch models into chunks
     all_torch_models = sorted(torch_models)
     if all_torch_models:
-        # Group models by test_split
-        custom_splits: dict[TestRunnerSplit, list[str]] = {}
-        # Track AOT and JIT separately so a split doesn't end up dominated by
-        # one (AOT compiles take much longer than JIT).
+        # Group models by test_split, splitting AOT/JIT within each group so
+        # a chunk doesn't end up dominated by one (AOT is much slower).
+        custom_splits_aot: dict[TestRunnerSplit, list[str]] = {}
+        custom_splits_jit: dict[TestRunnerSplit, list[str]] = {}
         all_models_jit = []
         all_models_aot = []
         for model in all_torch_models:
             code_gen = QAIHMModelCodeGen.from_model(model)
             scorecard_config = QAIHMModelScorecardConfig.from_model(model)
             if scorecard_config.test_split != TestRunnerSplit.DEFAULT:
-                custom_splits.setdefault(scorecard_config.test_split, []).append(model)
+                if code_gen.requires_aot_prepare:
+                    custom_splits_aot.setdefault(
+                        scorecard_config.test_split, []
+                    ).append(model)
+                else:
+                    custom_splits_jit.setdefault(
+                        scorecard_config.test_split, []
+                    ).append(model)
             elif code_gen.requires_aot_prepare:
                 all_models_aot.append(model)
             else:
                 all_models_jit.append(model)
 
-        # Add custom splits
-        for split_enum, split_models in sorted(
-            custom_splits.items(), key=lambda x: x[0].value
-        ):
-            splits.append(
-                {
-                    "split_name": split_enum.name,
-                    "models": ",".join(split_models),
-                    "runs_on": split_enum.runs_on,
-                }
+        estimates = _load_runtime_estimates(runtime_estimates_path) if stage else {}
+
+        # Add custom splits, LPT-chunked if over max_models_per_split.
+        custom_split_enums = sorted(
+            set(custom_splits_aot.keys()) | set(custom_splits_jit.keys()),
+            key=lambda x: x.value,
+        )
+        for split_enum in custom_split_enums:
+            aot_models = sorted(custom_splits_aot.get(split_enum, []))
+            jit_models = sorted(custom_splits_jit.get(split_enum, []))
+            total = len(aot_models) + len(jit_models)
+            max_per = split_enum.max_models_per_split
+            num_chunks = max(1, math.ceil(total / max_per))
+            if num_chunks == 1:
+                splits.append(
+                    {
+                        "split_name": split_enum.name,
+                        "models": ",".join(sorted(aot_models + jit_models)),
+                        "runs_on": split_enum.runs_on,
+                    }
+                )
+                continue
+            balanced_chunks = _split_aot_jit(
+                aot_models=aot_models,
+                jit_models=jit_models,
+                num_splits=num_chunks,
+                stage=stage,
+                estimates=estimates,
             )
+            for i, chunk in enumerate(balanced_chunks):
+                if chunk:
+                    # Dash-delimited for RFC 1123 (embedded in kube pod names).
+                    splits.append(
+                        {
+                            "split_name": f"{split_enum.name}-{i + 1}-of-{num_chunks}",
+                            "models": ",".join(chunk),
+                            "runs_on": split_enum.runs_on,
+                        }
+                    )
 
         # Split remaining torch models (JIT + AOT) into chunks
         num_default_splits = math.ceil(
@@ -274,7 +309,6 @@ def split_torch_models(
             num_default_splits = min(num_default_splits, max_pt_splits)
 
         if num_default_splits > 0:
-            estimates = _load_runtime_estimates(runtime_estimates_path) if stage else {}
             balanced = _split_aot_jit(
                 all_models_aot,
                 all_models_jit,
@@ -286,7 +320,7 @@ def split_torch_models(
                 if models_in_split:
                     splits.append(
                         {
-                            "split_name": f"torch_{i + 1}_of_{num_default_splits}",
+                            "split_name": f"torch-{i + 1}-of-{num_default_splits}",
                             "models": ",".join(models_in_split),
                         }
                     )
@@ -337,9 +371,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-format",
-        choices=["json", "github"],
+        choices=["json", "github", "llm-github-output"],
         default="json",
-        help="Output format: 'json' for pretty JSON, 'github' for GitHub Actions matrix format",
+        help=(
+            "Output format: 'json' for pretty JSON, 'github' for GitHub "
+            "Actions matrix format, or 'llm-github-output' for a "
+            "GITHUB_OUTPUT block with `models`, `llm_split_matrix`, and "
+            "`has_models` derived from just the llm-*-of-N chunks."
+        ),
     )
     parser.add_argument(
         "--collapse-to-single-split",
@@ -384,6 +423,16 @@ def main() -> None:
     if args.output_format == "github":
         # Output as a single line JSON for GitHub Actions
         print(json.dumps(splits))
+    elif args.output_format == "llm-github-output":
+        llm: list[dict[str, str]] = []
+        for s in splits:
+            name = str(s["split_name"])
+            if name == "llm" or name.startswith("llm-"):
+                llm.append({"split_name": name, "models": str(s["models"])})
+        models = ",".join(entry["models"] for entry in llm)
+        print(f"models={models}")
+        print(f"llm_split_matrix={json.dumps(llm)}")
+        print(f"has_models={'true' if models else 'false'}")
     else:
         # Pretty print JSON
         print(json.dumps(splits, indent=2))

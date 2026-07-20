@@ -119,9 +119,8 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.prepare_matrix.outputs.matrix_include) }}
-    # Perf submit is pure orchestration (S3 → QDC → poll); no GPU needed.
     runs-on: [tetra-ubuntu-2204, self-hosted]
-    timeout-minutes: 2880 # 2 days for multiple models/devices
+    timeout-minutes: 2880
     permissions:
       contents: read
       actions: read
@@ -133,35 +132,18 @@ jobs:
       QDC_PRIVATE_API_KEY: ${{ secrets.QDC_PRIVATE_API_KEY }}
       QAIHM_JUNIT_XML_PATH: ${{ github.workspace }}/test-results/models-junit.xml
       QAIRT_SDK_PATH: ${{ github.workspace }}/qairt_auto_sdk.zip
+      JOBS_FILE: ${{ github.workspace }}/src/qai_hub_models/scorecard/intermediates/genie_jobs_${{ matrix.pool }}_pool.yaml
 
     steps:
-    - name: Install git (Kube/container only)
-      if: ${{ !contains(runner.name, 'tetra') }}
-      run: |
-        if ! command -v git &>/dev/null; then
-          if [ "$(id -u)" -eq 0 ]; then
-            apt-get update -qq
-            apt-get install -y -qq git
-          else
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq git
-          fi
-        fi
-
     - uses: actions/checkout@v7
       with:
         fetch-depth: 1
-
-    - name: Install system dependencies (Kube/container only)
-      if: ${{ !contains(runner.name, 'tetra') }}
-      run: bash src/qai_hub_models/scripts/kube/setup_pod.sh
 
     - name: CI Setup
       uses: ./.github/actions/ci-setup
       with:
         python-version: USE_EXISTING_INSTALL
         venv-path: ${{ env.VENV_PATH }}
-        # global_requirements.txt provides transformers (genie_jobs.py needs it).
         bnt-venv-install-cmd: install_global_requirements
         aws-role-arn: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
         hub-deployments: ${{ inputs.deployment || 'prod' }}
@@ -196,24 +178,49 @@ jobs:
         name: Scorecard LLM Perf Release Assets (${{ inputs.release_assets_action_id }})
         path: ${{ github.workspace }}/llm-release-assets
 
-    - name: Run LLM Performance Collection
-      id: run_tests
+    - name: Submit LLM Perf Jobs
+      id: submit
       env:
         QAIHM_LLM_MODELS: ${{ inputs.model || 'all' }}
         QAIHM_TEST_DEVICES: ${{ matrix.devices }}
         QAIHM_LLM_PERF_PRECISIONS: ${{ inputs.precision }}
         QAIHM_RUN_EVAL: ${{ inputs.run_eval }}
         QAIHM_LLM_PERF_RELEASE_ASSETS: ${{ inputs.release_assets_action_id != '' && format('{0}/llm-release-assets/release-assets.yaml', github.workspace) || '' }}
+        AWS_ROLE_ARN: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
+        AWS_REGION: us-west-2
+        AWS_PROFILE_NAME: qaihm
+      run: |
+        source ${{ env.VENV_PATH }}/bin/activate
+        cd $GITHUB_WORKSPACE
+        python -m qai_hub_models.models._shared.llm.qdc.genie_jobs submit --jobs-file "$JOBS_FILE"
+
+    - name: Collect LLM Performance Results
+      id: run_tests
+      continue-on-error: true
+      env:
+        QAIHM_LLM_MODELS: ${{ inputs.model || 'all' }}
+        QAIHM_TEST_DEVICES: ${{ matrix.devices }}
+        QAIHM_LLM_PERF_PRECISIONS: ${{ inputs.precision }}
+        QAIHM_RUN_EVAL: ${{ inputs.run_eval }}
         QAIHM_LLM_PERF_UPDATES: ${{ github.workspace }}/genie_perf_updates_${{ matrix.pool }}.jsonl
         AWS_ROLE_ARN: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
         AWS_REGION: us-west-2
         AWS_PROFILE_NAME: qaihm
       run: |
-        cd $GITHUB_WORKSPACE && \
-          python3 scripts/build_and_test.py \
-            --venv='${{ env.VENV_PATH }}' \
-            --only \
-            collect_llm_perf
+        source ${{ env.VENV_PATH }}/bin/activate
+        cd $GITHUB_WORKSPACE
+        mkdir -p "$GITHUB_WORKSPACE/test-results"
+        python -m qai_hub_models.models._shared.llm.qdc.genie_jobs collect \
+          --jobs-file "$JOBS_FILE" \
+          --junit-xml "$GITHUB_WORKSPACE/test-results/models-junit-llm_perf.xml"
+
+    - name: Upload genie jobs yaml
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: genie-jobs-${{ matrix.pool }}
+        path: ${{ env.JOBS_FILE }}
+        if-no-files-found: ignore
 
     - name: Upload perf.yaml updates
       id: upload-perf-updates
@@ -276,19 +283,6 @@ jobs:
       actions: read
       pull-requests: write
     steps:
-    - name: Install git (Kube/container only)
-      if: ${{ !contains(runner.name, 'tetra') }}
-      run: |
-        if ! command -v git &>/dev/null; then
-          if [ "$(id -u)" -eq 0 ]; then
-            apt-get update -qq
-            apt-get install -y -qq git
-          else
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq git
-          fi
-        fi
-
     - uses: actions/checkout@v7
       with:
         fetch-depth: 0

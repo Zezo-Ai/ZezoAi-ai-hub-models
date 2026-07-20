@@ -17,6 +17,7 @@ import torch
 
 import qai_hub_models.models.qwen3_1_7b as _model_module
 from qai_hub_models import Precision, TargetRuntime
+from qai_hub_models.models._shared.llm.test import stub_llm_checkpoint_resolution
 from qai_hub_models.models.qwen3_1_7b import MODEL_ID, Model
 from qai_hub_models.scorecard import (
     ScorecardCompilePath,
@@ -76,6 +77,12 @@ PASSING_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
 EVAL_DEVICE = ScorecardDevice.get("Samsung Galaxy S25 (Family)")
 HAS_EVAL_DATASET = len(Model.get_eval_dataset_classes()) > 0
 export_model = select_pipeline(resolve_model(MODEL_ID))
+
+
+@pytest.fixture
+def _llm_stub_checkpoint_resolution() -> Generator[None, None, None]:
+    with stub_llm_checkpoint_resolution(Model):
+        yield
 
 
 @pytest.mark.compile
@@ -181,100 +188,17 @@ def torch_evaluate_mock_outputs(
     ids=pytest_device_idfn,
 )
 @pytest.mark.llm_export
+@pytest.mark.usefixtures("_llm_stub_checkpoint_resolution")
 def test_export(
     precision: Precision, scorecard_path: ScorecardProfilePath, device: ScorecardDevice
 ) -> None:
-    # When all compile/link jobs are cached, the released asset bytes come from
-    # target_model.download() off the cached jobs -- the ONNX that
-    # Model.from_pretrained would have built and the input_spec the splitter
-    # would have inferred are both unused. Skip the ~30-min torch.onnx export
-    # (inside resolve_default_checkpoint) and the splitter (inside
-    # get_input_spec), keeping the (component, graph) iteration shape so
-    # upload_model and compile_model still walk the right keys.
-    from pathlib import Path as _StubPath
-    from typing import Any
-
-    from transformers import AutoConfig, AutoTokenizer
-
-    from qai_hub_models.models._shared.llama3.model import (
-        LlamaDynamicQuantizablePreSplitMixin,
-    )
-    from qai_hub_models.models._shared.llm.model import (
-        DynamicQuantizablePreSplitMixin,
-    )
-    from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
-
-    def save_tokenizer_and_config(hf_repo_name: str, ckpt: Path) -> None:
-        # Pre-populate tokenizer.json and config.json in the encodings dir so
-        # downstream LLM_AIMETOnnx.__init__'s get_tokenizer(checkpoint) /
-        # get_llm_config(checkpoint) reads from disk instead of needing the
-        # 14 GB FP HuggingFace load.
-        if not (ckpt / "tokenizer.json").exists():
-            AutoTokenizer.from_pretrained(hf_repo_name).save_pretrained(ckpt)
-        if not (ckpt / "config.json").exists():
-            AutoConfig.from_pretrained(hf_repo_name).save_pretrained(ckpt)
-
-    def _stub_resolve_default_checkpoint(
-        cls: Any, precision: Precision, host_device: object, fp_model: object
-    ) -> tuple[str, None]:
-        precision_checkpoint = cls.default_checkpoint[precision]
-        encodings_path = _StubPath(
-            CachedWebModelAsset.from_asset_store(
-                cls.model_id,
-                cls.model_asset_version,
-                f"{precision_checkpoint}/model.encodings",
-            ).fetch()
+    skip_invalid_runtime_device(Model, scorecard_path.runtime, device)
+    try:
+        export_test_e2e(
+            export_model, Model, MODEL_ID, precision, scorecard_path, device
         )
-        ckpt = encodings_path.parent
-        save_tokenizer_and_config(cls.FPModel.hf_repo_name, ckpt)
-        return str(ckpt), None
-
-    def _stub_resolve_default_checkpoint_from_dynamic_cls(
-        cls: Any, precision: Precision, host_device: object, fp_model: object
-    ) -> tuple[str, None]:
-        precision_checkpoint = cls.default_checkpoint[precision]
-        encodings_path = _StubPath(
-            CachedWebModelAsset.from_asset_store(
-                cls.model_id, cls.model_asset_version, f"{precision_checkpoint}.zip"
-            ).fetch()
-        )
-        ckpt = encodings_path.parent
-        save_tokenizer_and_config(cls.FPModel.hf_repo_name, ckpt)
-        return str(ckpt), None
-
-    with pytest.MonkeyPatch.context() as mp:
-        # Patch both the base mixin and the Llama override. Non-Llama LLMs
-        # (Qwen, Qwen-VL) inherit resolve_default_checkpoint from the base
-        # directly; patching only the Llama subclass leaves them calling
-        # the base implementation, which downloads a ~14 GB zip and loads
-        # the FP torch model on every parameterized test.
-        mp.setattr(
-            DynamicQuantizablePreSplitMixin,
-            "resolve_default_checkpoint",
-            classmethod(_stub_resolve_default_checkpoint_from_dynamic_cls),
-        )
-        mp.setattr(
-            LlamaDynamicQuantizablePreSplitMixin,
-            "resolve_default_checkpoint",
-            classmethod(_stub_resolve_default_checkpoint),
-        )
-        mp.setattr(
-            Model,
-            "get_component_graph_input_spec",
-            lambda self, component_name, graph_name, *a, **kw: {},
-        )
-        mp.setattr(
-            Model,
-            "get_component_graph_hub_compile_options",
-            lambda self, *a, **kw: "",
-        )
-        skip_invalid_runtime_device(Model, scorecard_path.runtime, device)
-        try:
-            export_test_e2e(
-                export_model, Model, MODEL_ID, precision, scorecard_path, device
-            )
-        except CachedScorecardJobError as e:
-            pytest.skip(str(e))
+    except CachedScorecardJobError as e:
+        pytest.skip(str(e))
 
 
 # Cache serialize() and hub.upload_model() across the module so the same

@@ -20,16 +20,19 @@ from abc import ABC, abstractmethod
 from qualcomm_device_cloud_sdk.models import ArtifactType
 from transformers import AutoTokenizer
 
+from qai_hub_models.models._shared.llm.common import JobOutcome
 from qai_hub_models.models._shared.llm.model import LLMBase
 from qai_hub_models.models._shared.llm.qdc.qdc_jobs import (
     HUB_DEVICE_TO_QDC_DEVICE_MAP,
     QDCDevice,
     QDCJobs,
+    create_zip,
 )
 
 GENIE_JOB_TIMEOUT = 21600  # 6 hours
 
 DEFAULT_LLM_SYSTEM_PROMPT = LLMBase.default_system_prompt
+
 
 DEFAULT_EVAL_PROMPTS_PATH = os.path.normpath(
     os.path.join(
@@ -38,24 +41,6 @@ DEFAULT_EVAL_PROMPTS_PATH = os.path.normpath(
         "eval_prompts.json",
     )
 )
-
-
-def create_zip(zip_path: str, source_dir: str | os.PathLike) -> None:
-    """Create a zip archive from source_dir at zip_path."""
-    if isinstance(source_dir, os.PathLike):
-        source_dir = str(source_dir)
-
-    files_to_zip = []
-    for root, _, files in os.walk(source_dir):
-        for file in files:
-            file_path = os.path.join(root, file)
-            arcname = os.path.relpath(file_path, source_dir)
-            files_to_zip.append((file_path, arcname))
-
-    # Use ZIP_STORED (no compression) for speed - the files are already compressed binaries
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as zf:
-        for file_path, arcname in files_to_zip:
-            zf.write(file_path, arcname)
 
 
 def _prepare_eval_prompts_in_bundle(
@@ -710,11 +695,129 @@ def save_eval_metadata_json(
 
 _USE_DEFAULT_PROMPTS = object()
 
-# Separate retry budgets per failure class: "Error" (QDC infra abort) and
-# "Unsuccessful" (device-side script failure). Splitting them keeps a run of
-# one class from exhausting the other's budget.
-_QDC_MAX_ATTEMPTS_ERROR = 2
-_QDC_MAX_ATTEMPTS_UNSUCCESSFUL = 2
+
+def _resolve_eval_prompts(
+    eval_prompts: list[str] | None | object,
+) -> list[str] | None:
+    if eval_prompts is _USE_DEFAULT_PROMPTS:
+        with open(DEFAULT_EVAL_PROMPTS_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    if isinstance(eval_prompts, list):
+        return eval_prompts
+    return None
+
+
+def submit_genie_bundle_only(
+    api_token: str,
+    device: str,
+    genie_bundle_path: str,
+    job_name: str = "LLM Genie",
+    qairt_sdk_path: str | None = None,
+    qairt_version: str = "2.45.40.260406",
+    eval_prompts: list[str] | None | object = None,
+    num_trials: int = 25,
+    model_id: str | None = None,
+) -> str:
+    """Upload artifacts and submit a Genie job, returning the QDC job id.
+
+    Companion to ``collect_genie_bundle_result``. Does no waiting or
+    result parsing — the caller records the job id (typically to a
+    jobs_file) and polls later.
+    """
+    prompts_to_use = _resolve_eval_prompts(eval_prompts)
+
+    qdc_device = QDCDevice(device)
+    genie_job = GenieQDCJobs(
+        api_key=api_token,
+        app_name_header="GenieQDCJobApp",
+    )
+
+    job_artifacts, entry_script = genie_job.add_job_artifacts(
+        qdc_device,
+        genie_bundle_path,
+        qairt_sdk_path,
+        qairt_version,
+        eval_prompts=prompts_to_use,
+        num_trials=num_trials,
+        model_id=model_id,
+    )
+
+    job_id = genie_job.submit_automated_job(
+        qdc_device,
+        job_artifacts,
+        entry_script,
+        job_name=job_name,
+        timeout=GENIE_JOB_TIMEOUT,
+    )
+    if job_id is None:
+        raise RuntimeError("Job submission failed.")
+    print(f"Submitted QDC job with ID: {job_id}")
+    return job_id
+
+
+def collect_genie_bundle_result(
+    api_token: str,
+    device: str,
+    job_id: str,
+    eval_prompts: list[str] | None | object = None,
+) -> tuple[
+    float | None,
+    float | None,
+    float | None,
+    list[dict],
+    JobOutcome,
+    str | None,
+]:
+    """Poll a submitted Genie job and, on success, download + parse logs.
+
+    Returns ``(tps, prefill_tps, ttft, eval_results, outcome, reason)``.
+    On non-SUCCESS outcomes, the metric fields are None and ``reason`` is
+    a human-readable failure description. eval_prompts is only consulted
+    on success to attach prompt text to the parsed outputs.
+    """
+    prompts_to_use = _resolve_eval_prompts(eval_prompts)
+    genie_job = GenieQDCJobs(
+        api_key=api_token,
+        app_name_header="GenieQDCJobApp",
+    )
+
+    job_status = genie_job.status(job_id)
+    job_result = genie_job.result(job_id)
+    print(f"QDC job {job_id} completed with status: {job_status}, result: {job_result}")
+
+    if job_result is not None and job_result != "Successful":
+        reason = (
+            f"QDC job {job_id} on device '{device}' finished with "
+            f"status='{job_status}', result='{job_result}'"
+        )
+        outcome = (
+            JobOutcome.RETRYABLE_ERROR
+            if job_result == "Error"
+            else JobOutcome.RETRYABLE_UNSUCCESSFUL
+        )
+        print(f"[result={job_result}] {reason}")
+        return None, None, None, [], outcome, reason
+
+    genie_job.log_upload_status(job_id)
+    # The file listing lags log-upload-status on the QDC backend, so wait
+    # for it to populate -- otherwise a successful job yields no metrics.
+    job_log_files = genie_job.get_job_log_files(job_id, wait_for_logs=True)
+
+    if not job_log_files:
+        reason = (
+            f"QDC job {job_id} on device '{device}' reported result="
+            f"'{job_result}' but produced no retrievable log files"
+        )
+        print(f"[empty logs] {reason}")
+        return None, None, None, [], JobOutcome.RETRYABLE_EMPTY_LOGS, reason
+
+    tps, prefill_tps, ttft = genie_job.compute_metrics(job_log_files)
+
+    eval_results: list[dict] = []
+    if prompts_to_use:
+        eval_results = genie_job.compute_eval_results(job_log_files, prompts_to_use)
+
+    return tps, prefill_tps, ttft, eval_results, JobOutcome.SUCCESS, None
 
 
 def submit_genie_bundle_to_qdc_device(
@@ -735,229 +838,73 @@ def submit_genie_bundle_to_qdc_device(
     skipped by default; pass ``_USE_DEFAULT_PROMPTS`` for the built-in 100
     questions, or a list of prompts to use a custom set.
 
-    Parameters
-    ----------
-    api_token
-        API token for QDC authentication.
-    device
-        Hub device name to run the job on.
-    genie_bundle_path
-        Directory where genie files are stored. Must contain 'sample_prompt.txt'.
-    job_name
-        Name of QDC job.
-    qairt_sdk_path
-        Path to the QAIRT SDK zip file. Required for auto devices.
-    qairt_version
-        QAIRT SDK version to download on-device (e.g. ``"2.45.40.260406"``).
-    eval_prompts
-        Eval is off by default. Pass ``_USE_DEFAULT_PROMPTS`` to use the
-        built-in eval_prompts.json (100 questions), or a list of prompts to
-        evaluate a custom set.
-    num_trials
-        Number of profiling trials to run.
-    model_id
-        Model identifier used to load the HF tokenizer if the bundle
-        tokenizer lacks a chat template.
-
-    Returns
-    -------
-    tuple[float | None, float | None, float | None, list[dict]]
-        (avg_tokens_per_second, prefill_tokens_per_second,
-        min_time_to_first_token, eval_results)
-        where eval_results is a list of dicts with keys: idx, prompt, output.
+    Composed wrapper over ``submit_genie_bundle_only`` +
+    ``collect_genie_bundle_result``. Retries retryable outcomes up to
+    ``DEFAULT_ATTEMPTS`` times; the CI submit/collect split owns retries
+    independently via the jobs_file.
     """
-    prompts_to_use: list[str] | None
-    if eval_prompts is _USE_DEFAULT_PROMPTS:
-        with open(DEFAULT_EVAL_PROMPTS_PATH, encoding="utf-8") as f:
-            prompts_to_use = json.load(f)
-    elif isinstance(eval_prompts, list):
-        prompts_to_use = eval_prompts
-    else:
-        prompts_to_use = None
-
-    qdc_device = QDCDevice(device)
-    genie_job = GenieQDCJobs(
-        api_key=api_token,
-        app_name_header="GenieQDCJobApp",
+    from qai_hub_models.models._shared.llm.common import (
+        DEFAULT_ATTEMPTS,
+        poll_and_retry,
     )
 
-    job_artifacts, entry_script = genie_job.add_job_artifacts(
-        qdc_device,
-        genie_bundle_path,
-        qairt_sdk_path,
-        qairt_version,
-        eval_prompts=prompts_to_use,
-        num_trials=num_trials,
-        model_id=model_id,
-    )
-
-    error_attempts_left = _QDC_MAX_ATTEMPTS_ERROR
-    unsuccessful_attempts_left = _QDC_MAX_ATTEMPTS_UNSUCCESSFUL
-    empty_logs_attempts_left = _QDC_MAX_ATTEMPTS_UNSUCCESSFUL
-    last_failure_reason: str | None = None
-    while (
-        error_attempts_left > 0
-        and unsuccessful_attempts_left > 0
-        and empty_logs_attempts_left > 0
-    ):
-        job_id = genie_job.submit_automated_job(
-            qdc_device,
-            job_artifacts,
-            entry_script,
+    def _submit() -> str:
+        return submit_genie_bundle_only(
+            api_token,
+            device,
+            genie_bundle_path,
             job_name=job_name,
-            timeout=GENIE_JOB_TIMEOUT,
-        )
-        if job_id is None:
-            raise RuntimeError("Job submission failed.")
-
-        print(f"Submitted QDC job with ID: {job_id}")
-        job_status = genie_job.status(job_id)
-        job_result = genie_job.result(job_id)
-        print(
-            f"QDC job {job_id} completed with status: {job_status}, "
-            f"result: {job_result}"
+            qairt_sdk_path=qairt_sdk_path,
+            qairt_version=qairt_version,
+            eval_prompts=eval_prompts,
+            num_trials=num_trials,
+            model_id=model_id,
         )
 
-        if job_result is not None and job_result != "Successful":
-            if job_result == "Error":
-                error_attempts_left -= 1
-                budget_left = error_attempts_left
-                budget_total = _QDC_MAX_ATTEMPTS_ERROR
-            else:
-                unsuccessful_attempts_left -= 1
-                budget_left = unsuccessful_attempts_left
-                budget_total = _QDC_MAX_ATTEMPTS_UNSUCCESSFUL
-            last_failure_reason = (
-                f"QDC job {job_id} on device '{device}' finished with "
-                f"status='{job_status}', result='{job_result}'"
-            )
-            print(
-                f"[result={job_result}, {budget_total - budget_left}/{budget_total} "
-                f"attempts used] {last_failure_reason}"
-            )
-            if budget_left > 0:
-                print("Retrying QDC job execution...")
-            continue
+    def _collect(job_id: str) -> tuple[tuple, JobOutcome, str | None]:
+        tps, prefill_tps, ttft, eval_results, outcome, reason = (
+            collect_genie_bundle_result(api_token, device, job_id, eval_prompts)
+        )
+        return (tps, prefill_tps, ttft, eval_results), outcome, reason
 
-        genie_job.log_upload_status(job_id)
-        # The file listing lags log-upload-status on the QDC backend, so wait
-        # for it to populate -- otherwise a successful job yields no metrics.
-        job_log_files = genie_job.get_job_log_files(job_id, wait_for_logs=True)
-
-        # An empty listing here means the job succeeded but its logs never
-        # became retrievable; retry the whole job (transient) rather than
-        # asserting on None metrics downstream.
-        if not job_log_files:
-            empty_logs_attempts_left -= 1
-            last_failure_reason = (
-                f"QDC job {job_id} on device '{device}' reported result="
-                f"'{job_result}' but produced no retrievable log files"
-            )
-            print(
-                f"[empty logs, "
-                f"{_QDC_MAX_ATTEMPTS_UNSUCCESSFUL - empty_logs_attempts_left}/"
-                f"{_QDC_MAX_ATTEMPTS_UNSUCCESSFUL} attempts used] "
-                f"{last_failure_reason}"
-            )
-            if empty_logs_attempts_left > 0:
-                print("Retrying QDC job execution...")
-            continue
-
-        tps, prefill_tps, ttft = genie_job.compute_metrics(job_log_files)
-
-        eval_results: list[dict] = []
-        if prompts_to_use:
-            eval_results = genie_job.compute_eval_results(job_log_files, prompts_to_use)
-
-        return tps, prefill_tps, ttft, eval_results
-
-    raise RuntimeError(
-        f"{last_failure_reason} after exhausting retries "
-        f"(Error budget={_QDC_MAX_ATTEMPTS_ERROR}, "
-        f"Unsuccessful budget={_QDC_MAX_ATTEMPTS_UNSUCCESSFUL}). "
-        f"The device-side job did not complete successfully; "
-        f"check the QDC job logs for details."
+    return poll_and_retry(
+        initial_job_id=_submit(),
+        attempts_left=DEFAULT_ATTEMPTS - 1,
+        collect_fn=_collect,
+        resubmit_fn=_submit,
     )
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--api-token",
-        type=str,
-        required=True,
-        help="API token for authentication.",
-    )
-    parser.add_argument(
+def _add_bundle_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--api-token", type=str, required=True)
+    p.add_argument(
         "--device",
         type=str,
         required=True,
         choices=HUB_DEVICE_TO_QDC_DEVICE_MAP.keys(),
-        help="Device to use for the job.",
     )
-    parser.add_argument(
-        "--genie-bundle-path",
-        type=str,
-        required=True,
-        help="Directory where genie files are stored.",
-    )
-    parser.add_argument(
-        "--job-name",
-        type=str,
-        required=False,
-        default="LLM Genie",
-        help="QDC job name.",
-    )
-    parser.add_argument(
-        "--qairt-sdk-path",
-        type=str,
-        required=False,
-        default=None,
-        help=(
-            "Path to QAIRT SDK zip file. Required when targeting automotive devices "
-            "(e.g., SA8295P ADP, SA7255P ADP, SA8775P ADP). "
-            "Omitting this for an auto device will raise a ValueError at job submission time."
-        ),
-    )
-    parser.add_argument(
-        "--qairt-version",
-        type=str,
-        required=False,
-        default="2.45.40.260406",
-        help="QAIRT SDK version to download on-device (e.g. 2.45.40.260406).",
-    )
-    parser.add_argument(
+    p.add_argument("--genie-bundle-path", type=str, required=True)
+    p.add_argument("--job-name", type=str, default="LLM Genie")
+    p.add_argument("--qairt-sdk-path", type=str, default=None)
+    p.add_argument("--qairt-version", type=str, default="2.45.40.260406")
+    p.add_argument(
         "--eval-prompts",
         type=str,
-        required=False,
         default=None,
-        help=(
-            "Path to JSON file with list of prompt strings for evaluation. "
-            "If not provided, uses the built-in eval_prompts.json (100 questions)."
-        ),
+        help="Path to JSON file with prompts (defaults to built-in eval_prompts.json).",
     )
-    parser.add_argument(
-        "--output-json",
-        type=str,
-        required=False,
-        default=None,
-        help="Path to save eval results as JSON.",
-    )
-    parser.add_argument(
-        "--num-trials",
-        type=int,
-        required=False,
-        default=25,
-        help="Number of profiling trials to run (default: 25).",
-    )
+    p.add_argument("--output-json", type=str, default=None)
+    p.add_argument("--num-trials", type=int, default=25)
 
-    args = parser.parse_args()
 
-    eval_prompts = None
+def _cmd_run_bundle(args: argparse.Namespace) -> int:
+    """One-shot bundle submit-and-wait against a specific device."""
+    eval_prompts_val: list[str] | None = None
     if args.eval_prompts:
         with open(args.eval_prompts, encoding="utf-8") as f:
-            eval_prompts = json.load(f)
-        print(f"Loaded {len(eval_prompts)} eval prompts from {args.eval_prompts}")
+            eval_prompts_val = json.load(f)
+        assert eval_prompts_val is not None
+        print(f"Loaded {len(eval_prompts_val)} eval prompts from {args.eval_prompts}")
 
     if not os.path.exists(os.path.join(args.genie_bundle_path, "sample_prompt.txt")):
         raise FileNotFoundError(
@@ -965,16 +912,161 @@ if __name__ == "__main__":
             "Please add a file with prompt to run on-device."
         )
 
-    tps, prefill_tps, ttft, eval_results = submit_genie_bundle_to_qdc_device(
+    _, _, _, eval_results = submit_genie_bundle_to_qdc_device(
         args.api_token,
         args.device,
         args.genie_bundle_path,
         args.job_name,
         args.qairt_sdk_path,
         args.qairt_version,
-        eval_prompts=eval_prompts,
+        eval_prompts=eval_prompts_val,
         num_trials=args.num_trials,
     )
-
     if args.output_json:
         save_eval_results_json(eval_results, args.output_json)
+    return 0
+
+
+def _write_junit(junit_path: str, cases: list[tuple[str, str | None]]) -> None:
+    """Minimal junit XML compatible with generate_test_summary."""
+    import xml.etree.ElementTree as ET
+
+    root = ET.Element(
+        "testsuite",
+        {
+            "name": "llm_perf",
+            "tests": str(len(cases)),
+            "failures": str(sum(1 for _, m in cases if m)),
+        },
+    )
+    for name, msg in cases:
+        tc = ET.SubElement(root, "testcase", {"classname": "llm_perf", "name": name})
+        if msg:
+            fail = ET.SubElement(tc, "failure", {"message": msg[:200]})
+            fail.text = msg
+    pathlib.Path(junit_path).parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(root).write(junit_path, encoding="utf-8", xml_declaration=True)
+
+
+def _cmd_submit(args: argparse.Namespace) -> int:
+    import sys
+
+    from qai_hub_models.models._shared.llm import test as llm_test
+    from qai_hub_models.models._shared.llm.perf_collection import LLMPerfConfig
+    from qai_hub_models.scorecard.test.test_llm_perf import _build_params
+
+    if os.path.exists(args.jobs_file):
+        os.unlink(args.jobs_file)
+    cfg = LLMPerfConfig.from_environment()
+    submitted = 0
+    for model_id, precision, device in _build_params():
+        try:
+            llm_test.submit_llm_perf_job(
+                model_id=model_id,
+                device=device,
+                precision=precision,
+                output_dir=os.path.join(model_id, llm_test.GENIE_BUNDLES_ROOT),
+                jobs_file=args.jobs_file,
+                qairt_sdk_path=cfg.qairt_sdk_path,
+                skip_perf_update=cfg.skip_perf_update,
+            )
+            submitted += 1
+        except Exception as e:  # noqa: PERF203
+            print(
+                f"ERROR: submission failed for {model_id}/{precision}/"
+                f"{device.name}: {e}",
+                file=sys.stderr,
+            )
+    print(f"Submitted {submitted} genie job(s) to {args.jobs_file}")
+    return 0 if submitted else 1
+
+
+def _cmd_collect(args: argparse.Namespace) -> int:
+    import sys
+
+    from qai_hub_models.models._shared.llm import test as llm_test
+    from qai_hub_models.models._shared.llm.common import load_jobs, make_key
+    from qai_hub_models.models._shared.llm.llm_helpers import log_perf_on_device_result
+    from qai_hub_models.models._shared.llm.perf_collection import LLMPerfConfig
+    from qai_hub_models.scorecard.test.test_llm_perf import _build_params
+
+    if not os.path.exists(args.jobs_file):
+        print(f"jobs file not found: {args.jobs_file}", file=sys.stderr)
+        return 1
+
+    cfg = LLMPerfConfig.from_environment()
+    records = load_jobs(args.jobs_file)
+    cases: list[tuple[str, str | None]] = []
+    for model_id, precision, device in _build_params():
+        key = make_key(model_id, str(precision), "GENIE", device.name)
+        record = records.get(key)
+        case_name = f"{model_id}-{precision}-{device.name}"
+        if record is None:
+            print(f"jobs_file has no entry for {key}; skipping", file=sys.stderr)
+            continue
+        try:
+            tps, ttft, prefill_tps = llm_test.collect_llm_perf_job(
+                model_id=model_id,
+                device=device,
+                precision=precision,
+                record=record,
+                jobs_file=args.jobs_file,
+                output_dir=os.path.join(model_id, llm_test.GENIE_BUNDLES_ROOT),
+                qairt_sdk_path=cfg.qairt_sdk_path,
+                skip_perf_update=cfg.skip_perf_update,
+            )
+        except Exception as e:
+            print(
+                f"ERROR: collection failed for {case_name} (job {record.job_id}): {e}",
+                file=sys.stderr,
+            )
+            cases.append((case_name, str(e)))
+            continue
+        log_perf_on_device_result(
+            model_name=model_id,
+            precision=str(precision),
+            device=device.name,
+            tps=tps,
+            prefill_tps=prefill_tps,
+            ttft_ms=ttft,
+        )
+        cases.append((case_name, None))
+
+    if args.junit_xml:
+        _write_junit(args.junit_xml, cases)
+
+    failed = [name for name, msg in cases if msg]
+    if failed:
+        print(f"FAILED cases: {failed}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    ap = argparse.ArgumentParser()
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p_bundle = sub.add_parser(
+        "run-bundle", help="One-shot bundle submit-and-wait for a specific device."
+    )
+    _add_bundle_args(p_bundle)
+
+    p_submit = sub.add_parser(
+        "submit", help="Submit one QDC job per (model, precision, device)."
+    )
+    p_submit.add_argument("--jobs-file", required=True)
+
+    p_collect = sub.add_parser(
+        "collect", help="Poll jobs listed in the jobs file and update perf.yaml."
+    )
+    p_collect.add_argument("--jobs-file", required=True)
+    p_collect.add_argument("--junit-xml", default=None)
+
+    ns = ap.parse_args()
+    if ns.cmd == "run-bundle":
+        sys.exit(_cmd_run_bundle(ns))
+    if ns.cmd == "submit":
+        sys.exit(_cmd_submit(ns))
+    sys.exit(_cmd_collect(ns))

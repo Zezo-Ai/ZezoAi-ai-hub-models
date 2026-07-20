@@ -184,7 +184,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
-          name: Scorecard LLM Perf Release Assets (${{ inputs.action_id }})
+          name: Scorecard LLM Perf Release Assets (${{ inputs.action_id }}${{ inputs.split_name != '' && format(', {0}', inputs.split_name) || '' }})
           path: ${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/release-assets.yaml
           if-no-files-found: ignore
 

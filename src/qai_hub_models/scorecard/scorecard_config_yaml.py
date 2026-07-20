@@ -38,6 +38,12 @@ class TestRunnerSplit(Enum):
             return {"group": "GPU"}
         return None
 
+    @property
+    def max_models_per_split(self) -> int:
+        if self is TestRunnerSplit.LLM:
+            return 5
+        return 10**9
+
 
 class QAIHMModelScorecardConfig(BaseQAIHMConfig):
     """Schema for model scorecard-config.yaml — fields consumed only by internal CI."""

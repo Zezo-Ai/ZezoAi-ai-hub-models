@@ -4,11 +4,13 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pytest
 import ruamel.yaml
 
+from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
 from qai_hub_models.scorecard.artifacts import RUNTIME_STAGE_JOB_SUBMISSION
 from qai_hub_models.scorecard.envvars import SpecialModelSetting
 from qai_hub_models.scorecard.scorecard_config_yaml import (
@@ -246,6 +248,144 @@ def test_exclude_test_splits_drops_llm_split() -> None:
         models_str = s["models"]
         assert isinstance(models_str, str)
         assert not any(m.startswith("llama_v3") for m in models_str.split(",")), s
+
+
+class _FakeCodeGen:
+    def __init__(
+        self, test_split: _TestRunnerSplit, requires_aot_prepare: bool
+    ) -> None:
+        self.test_split = test_split
+        self.requires_aot_prepare = requires_aot_prepare
+
+
+def test_llm_split_chunks_when_exceeds_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """LLM split with more models than max_models_per_split emits llm-i-of-N chunks
+    all pinned to the GPU runner group, none named bare 'llm'.
+
+    Uses synthetic model IDs + a monkeypatched cap so this always exercises the
+    chunking path regardless of the live LLM roster.
+    """
+    aot_llms = [f"synth_llm_aot_{i}" for i in range(6)]
+    jit_llms = [f"synth_llm_jit_{i}" for i in range(4)]
+    all_llms = aot_llms + jit_llms
+    aot_set = set(aot_llms)
+
+    def _from_model(model_id: str) -> _FakeCodeGen:
+        return _FakeCodeGen(
+            test_split=_TestRunnerSplit.LLM,
+            requires_aot_prepare=(model_id in aot_set),
+        )
+
+    monkeypatch.setattr(QAIHMModelCodeGen, "from_model", staticmethod(_from_model))
+    monkeypatch.setattr(
+        QAIHMModelScorecardConfig, "from_model", staticmethod(_from_model)
+    )
+    monkeypatch.setattr(
+        "qai_hub_models.scripts.split_torch_models.validate_and_split_enabled_models",
+        lambda models: (set(all_llms), set()),
+    )
+    monkeypatch.setattr(
+        _TestRunnerSplit.LLM.__class__,
+        "max_models_per_split",
+        property(
+            lambda self: 2 if self is _TestRunnerSplit.LLM else 10**9,
+        ),
+    )
+
+    splits = split_torch_models({SpecialModelSetting.PYTORCH})
+    llm_splits = [
+        s
+        for s in splits
+        if s["split_name"] == "llm" or str(s["split_name"]).startswith("llm-")
+    ]
+    # Bare 'llm' must not appear once chunking kicks in.
+    assert all(s["split_name"] != "llm" for s in llm_splits), llm_splits
+    # Every chunk goes to the GPU runner.
+    for s in llm_splits:
+        assert s["runs_on"] == {"group": "GPU"}, s
+    # The chunks partition the LLM set exactly (no dupes, no misses).
+    packed = []
+    for s in llm_splits:
+        models_str = s["models"]
+        assert isinstance(models_str, str)
+        packed.extend(models_str.split(","))
+    assert sorted(packed) == sorted(all_llms)
+    # Chunk name denominator matches ceil(N / cap). LPT may leave a bin
+    # empty (dropped from the output), so len(llm_splits) can be <=.
+    expected = math.ceil(len(all_llms) / 2)
+    assert len(llm_splits) <= expected, (expected, llm_splits)
+    for s in llm_splits:
+        assert str(s["split_name"]).endswith(f"-of-{expected}"), s
+
+
+def test_llm_chunking_preserves_aot_first_within_chunk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chunking a custom split routes AOT models through _split_aot_jit's AOT path
+    so AOT compiles are scheduled first within each chunk (AOT is much slower).
+    """
+    aot_llms = ["synth_llm_aot_a", "synth_llm_aot_b", "synth_llm_aot_c"]
+    jit_llms = ["synth_llm_jit_a", "synth_llm_jit_b", "synth_llm_jit_c"]
+    all_llms = aot_llms + jit_llms
+    aot_set = set(aot_llms)
+
+    def _from_model(model_id: str) -> _FakeCodeGen:
+        return _FakeCodeGen(
+            test_split=_TestRunnerSplit.LLM,
+            requires_aot_prepare=(model_id in aot_set),
+        )
+
+    monkeypatch.setattr(QAIHMModelCodeGen, "from_model", staticmethod(_from_model))
+    monkeypatch.setattr(
+        QAIHMModelScorecardConfig, "from_model", staticmethod(_from_model)
+    )
+    monkeypatch.setattr(
+        "qai_hub_models.scripts.split_torch_models.validate_and_split_enabled_models",
+        lambda models: (set(all_llms), set()),
+    )
+    monkeypatch.setattr(
+        _TestRunnerSplit.LLM.__class__,
+        "max_models_per_split",
+        property(
+            lambda self: 2 if self is _TestRunnerSplit.LLM else 10**9,
+        ),
+    )
+
+    splits = split_torch_models({SpecialModelSetting.PYTORCH})
+    llm_splits = [s for s in splits if str(s["split_name"]).startswith("llm-")]
+    assert llm_splits, "expected llm-* chunks"
+
+    # Within each chunk, all AOT models must come before all JIT models.
+    for s in llm_splits:
+        models_str = s["models"]
+        assert isinstance(models_str, str)
+        chunk_models = models_str.split(",")
+        seen_jit = False
+        for m in chunk_models:
+            if m in aot_set:
+                assert not seen_jit, f"AOT after JIT within chunk {s}: {chunk_models}"
+            else:
+                seen_jit = True
+
+
+def test_small_custom_split_not_chunked() -> None:
+    """A custom split with <= max_models_per_split members stays a single split."""
+    pi05_models = {
+        m
+        for m in PYTORCH_RECIPE_MODEL_IDS
+        if QAIHMModelScorecardConfig.from_model(m).test_split is _TestRunnerSplit.PI0_5
+    }
+    if not pi05_models:
+        pytest.skip("No PI0_5 models available to exercise this case.")
+
+    splits = split_torch_models(pi05_models)
+    pi_splits = [
+        s
+        for s in splits
+        if s["split_name"] == "pi05" or str(s["split_name"]).startswith("pi05-")
+    ]
+    assert len(pi_splits) == 1
+    assert pi_splits[0]["split_name"] == "pi05"
 
 
 def test_exclude_test_splits_empty_torch_emits_no_torch_split() -> None:

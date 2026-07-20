@@ -4,10 +4,13 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import sys
-from collections.abc import Callable
+import tempfile
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from inspect import signature
 from pathlib import Path
 from typing import Any
@@ -20,7 +23,15 @@ import qai_hub as hub
 from qai_hub_models import Precision, QAIRTVersion, TargetRuntime
 from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.configs.tool_versions import ToolVersions
-from qai_hub_models.models._shared.llm.common import cleanup, get_qdc_api_token
+from qai_hub_models.models._shared.llm.common import (
+    DEFAULT_ATTEMPTS,
+    JobOutcome,
+    JobRecord,
+    cleanup,
+    get_qdc_api_token,
+    make_key,
+    save_job,
+)
 from qai_hub_models.models._shared.llm.model import (
     LLM_AIMETOnnx,
     LLMBase,
@@ -41,6 +52,79 @@ from qai_hub_models.utils.model_cache import CacheMode
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 
 GENIE_BUNDLES_ROOT = "genie_bundles"
+
+
+@contextmanager
+def stub_llm_checkpoint_resolution(model_cls: type) -> Iterator[pytest.MonkeyPatch]:
+    """Patch resolve_default_checkpoint (base + Llama override) plus
+    get_component_graph_input_spec / _hub_compile_options on model_cls so
+    LLM pytest tests skip the FP HuggingFace load.
+    """
+    from transformers import AutoConfig, AutoTokenizer
+
+    from qai_hub_models.models._shared.llama3.model import (
+        LlamaDynamicQuantizablePreSplitMixin,
+    )
+    from qai_hub_models.models._shared.llm.model import DynamicQuantizablePreSplitMixin
+    from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
+
+    def _ensure_tokenizer_and_config(cls: Any, ckpt: Path) -> None:
+        if not (ckpt / "tokenizer.json").exists():
+            AutoTokenizer.from_pretrained(cls.FPModel.hf_repo_name).save_pretrained(
+                ckpt
+            )
+        if not (ckpt / "config.json").exists():
+            AutoConfig.from_pretrained(cls.FPModel.hf_repo_name).save_pretrained(ckpt)
+
+    def _stub_resolve_zip_checkpoint(
+        cls: Any, precision: Precision, host_device: object, fp_model: object
+    ) -> tuple[str, None]:
+        # Qwen3 (base DynamicQuantizablePreSplitMixin) publishes the full .zip
+        # archive (dynamic ONNX + encodings + weights + tokenizer + config), so
+        # reuse the real fetch_default_checkpoint rather than fetching a bare
+        # model.encodings object that was never uploaded. Only the FP
+        # HuggingFace load (skipped by not passing fp_model) needs stubbing.
+        return cls.fetch_default_checkpoint(precision), None
+
+    def _stub_resolve_encodings_checkpoint(
+        cls: Any, precision: Precision, host_device: object, fp_model: object
+    ) -> tuple[str, None]:
+        # Llama fetches encodings only and re-exports ONNX from the FP torch
+        # model, so its asset store publishes a bare model.encodings.
+        precision_checkpoint = cls.default_checkpoint[precision]
+        encodings_path = Path(
+            CachedWebModelAsset.from_asset_store(
+                cls.model_id,
+                cls.model_asset_version,
+                f"{precision_checkpoint}/model.encodings",
+            ).fetch()
+        )
+        ckpt = encodings_path.parent
+        _ensure_tokenizer_and_config(cls, ckpt)
+        return str(ckpt), None
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            DynamicQuantizablePreSplitMixin,
+            "resolve_default_checkpoint",
+            classmethod(_stub_resolve_zip_checkpoint),
+        )
+        mp.setattr(
+            LlamaDynamicQuantizablePreSplitMixin,
+            "resolve_default_checkpoint",
+            classmethod(_stub_resolve_encodings_checkpoint),
+        )
+        mp.setattr(
+            model_cls,
+            "get_component_graph_input_spec",
+            lambda self, component_name, graph_name, *a, **kw: {},
+        )
+        mp.setattr(
+            model_cls,
+            "get_component_graph_hub_compile_options",
+            lambda self, *a, **kw: "",
+        )
+        yield mp
 
 
 def _mock_from_pretrained(
@@ -757,19 +841,21 @@ def fetch_genie_bundle_for_perf(
     return bundle_dir
 
 
-def run_llm_perf_test(
+def submit_llm_perf_job(
     model_id: str,
     device: ScorecardDevice,
     precision: Precision,
     output_dir: Path | str,
+    jobs_file: str,
     qairt_sdk_path: str | None = None,
     skip_perf_update: bool = False,
-) -> tuple[float | None, float | None, float | None]:
-    """Fetch the pre-compiled genie bundle, run QDC, update perf.yaml.
+) -> str:
+    """Fetch the genie bundle, submit one QDC job, upsert its record.
 
-    The genie bundle is downloaded from S3 using release-assets.yaml.
-
-    Returns (tokens_per_second, time_to_first_token_ms, prefill_tokens_per_second).
+    Does not wait. Returns the QDC job id. The collect side re-derives
+    the bundle from (model_id, precision, chipset) via
+    ``fetch_genie_bundle_for_perf`` -- nothing about local paths is
+    persisted.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -778,36 +864,115 @@ def run_llm_perf_test(
         model_id, precision, device.chipset, output_dir
     )
 
-    metadata = ModelMetadata.from_json(genie_bundle_path / "metadata.json")
-    assert metadata is not None and metadata.genie is not None
-    context_lengths = metadata.genie.context_lengths
-
-    # QDC run
     from qai_hub_models.models._shared.llm.qdc.genie_jobs import (
         _USE_DEFAULT_PROMPTS,
-        save_eval_metadata_json,
-        save_eval_results_json,
-        submit_genie_bundle_to_qdc_device,
+        submit_genie_bundle_only,
     )
 
     api_token = get_qdc_api_token(device)
 
-    # Eval is expensive (100 prompts); run only on the default scorecard device.
+    # Eval is expensive; only run on the default scorecard device.
     run_eval = (
         os.environ.get("QAIHM_RUN_EVAL", "true").lower() == "true"
         and device == DEFAULT_QDC_DEVICE
     )
-    tps, prefill_tps, ttft, eval_results = submit_genie_bundle_to_qdc_device(
+    eval_prompts = _USE_DEFAULT_PROMPTS if run_eval else None
+    job_name = f"Genie {model_id} {precision}"
+
+    job_id = submit_genie_bundle_only(
         api_token,
         device.reference_device.name,
         str(genie_bundle_path),
-        job_name=f"Genie {model_id} {precision}",
+        job_name=job_name,
         qairt_sdk_path=qairt_sdk_path,
-        eval_prompts=None if not run_eval else _USE_DEFAULT_PROMPTS,
+        eval_prompts=eval_prompts,
         model_id=model_id,
     )
 
-    # Update perf.yaml with only the max context length.
+    key = make_key(model_id, str(precision), "GENIE", device.name)
+    save_job(jobs_file, key, job_id, attempts_left=DEFAULT_ATTEMPTS)
+    return job_id
+
+
+def collect_llm_perf_job(
+    model_id: str,
+    device: ScorecardDevice,
+    precision: Precision,
+    record: JobRecord,
+    jobs_file: str,
+    output_dir: Path | str,
+    qairt_sdk_path: str | None = None,
+    skip_perf_update: bool = False,
+) -> tuple[float | None, float | None, float | None]:
+    """Poll a submitted Genie job. On retryable failure, re-fetch the
+    bundle from release-assets.yaml and resubmit; the jobs_file row is
+    rewritten with the new job id and one fewer attempt.
+
+    ``record`` is the current entry read from jobs_file (job_id +
+    attempts_left). Everything else is re-derived from (model_id,
+    precision, device) so the collect runner is independent of whatever
+    filesystem state the submit runner had.
+    """
+    from qai_hub_models.models._shared.llm.common import poll_and_retry
+    from qai_hub_models.models._shared.llm.qdc.genie_jobs import (
+        _USE_DEFAULT_PROMPTS,
+        collect_genie_bundle_result,
+        save_eval_metadata_json,
+        save_eval_results_json,
+        submit_genie_bundle_only,
+    )
+
+    api_token = get_qdc_api_token(device)
+    run_eval = (
+        os.environ.get("QAIHM_RUN_EVAL", "true").lower() == "true"
+        and device == DEFAULT_QDC_DEVICE
+    )
+    eval_prompts = _USE_DEFAULT_PROMPTS if run_eval else None
+    job_name = f"Genie {model_id} {precision}"
+    key = make_key(model_id, str(precision), "GENIE", device.name)
+    hub_device_name = device.reference_device.name
+
+    def _resubmit() -> str:
+        bundle_path = fetch_genie_bundle_for_perf(
+            model_id, precision, device.chipset, Path(output_dir)
+        )
+        return submit_genie_bundle_only(
+            api_token,
+            hub_device_name,
+            str(bundle_path),
+            job_name=job_name,
+            qairt_sdk_path=qairt_sdk_path,
+            eval_prompts=eval_prompts,
+            model_id=model_id,
+        )
+
+    def _collect(job_id: str) -> tuple[tuple, JobOutcome, str | None]:
+        tps, prefill_tps, ttft, eval_results, outcome, reason = (
+            collect_genie_bundle_result(
+                api_token, hub_device_name, job_id, eval_prompts=eval_prompts
+            )
+        )
+        return (tps, prefill_tps, ttft, eval_results), outcome, reason
+
+    tps, prefill_tps, ttft, eval_results = poll_and_retry(
+        initial_job_id=record.job_id,
+        attempts_left=record.attempts_left,
+        collect_fn=_collect,
+        resubmit_fn=_resubmit,
+        on_new_job_id=lambda new_id, left: save_job(
+            jobs_file, key, new_id, attempts_left=left
+        ),
+    )
+
+    metadata = ModelMetadata.from_json(
+        fetch_genie_bundle_for_perf(
+            model_id, precision, device.chipset, Path(output_dir)
+        )
+        / "metadata.json"
+    )
+    assert metadata is not None and metadata.genie is not None
+    context_lengths = metadata.genie.context_lengths
+
     if not skip_perf_update and tps is not None and ttft is not None:
         update_perf_yaml(
             model_id,
@@ -819,16 +984,56 @@ def run_llm_perf_test(
             prefill_tps,
         )
 
-    # Save eval results as JSON in the working directory (not output_dir)
-    # so the workflow artifact upload picks it up from $GITHUB_WORKSPACE.
     if eval_results:
         base = f"{model_id}_{device.chipset}_{precision}_eval"
         save_eval_results_json(eval_results, f"{base}.json")
-        # Sidecar carrying the (model, chipset, precision) identity, so the
-        # accuracy-CSV collector doesn't have to parse it back out of the
-        # ambiguous filename.
         save_eval_metadata_json(
             model_id, device.chipset, str(precision), f"{base}.meta.json"
         )
 
     return tps, ttft, prefill_tps
+
+
+def run_llm_perf_test(
+    model_id: str,
+    device: ScorecardDevice,
+    precision: Precision,
+    output_dir: Path | str,
+    qairt_sdk_path: str | None = None,
+    skip_perf_update: bool = False,
+) -> tuple[float | None, float | None, float | None]:
+    """Compose submit + collect over an ephemeral jobs_file.
+
+    Returns (tokens_per_second, time_to_first_token_ms, prefill_tokens_per_second).
+    """
+    with tempfile.NamedTemporaryFile(
+        prefix="genie_jobs_", suffix=".yaml", delete=False
+    ) as tmp:
+        jobs_file = tmp.name
+    try:
+        submit_llm_perf_job(
+            model_id=model_id,
+            device=device,
+            precision=precision,
+            output_dir=output_dir,
+            jobs_file=jobs_file,
+            qairt_sdk_path=qairt_sdk_path,
+            skip_perf_update=skip_perf_update,
+        )
+        from qai_hub_models.models._shared.llm.common import load_jobs
+
+        key = make_key(model_id, str(precision), "GENIE", device.name)
+        record = load_jobs(jobs_file)[key]
+        return collect_llm_perf_job(
+            model_id=model_id,
+            device=device,
+            precision=precision,
+            record=record,
+            jobs_file=jobs_file,
+            output_dir=output_dir,
+            qairt_sdk_path=qairt_sdk_path,
+            skip_perf_update=skip_perf_update,
+        )
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(jobs_file)

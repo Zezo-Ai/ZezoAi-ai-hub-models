@@ -8,19 +8,19 @@ import json
 import os
 import shutil
 import tempfile
-import zipfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from qualcomm_device_cloud_sdk.models import ArtifactType
 
+from qai_hub_models.models._shared.llm.common import JobOutcome
 from qai_hub_models.models._shared.llm.qdc.qdc_jobs import (
     QDCDevice,
     QDCJobs,
+    create_zip,
 )
 
 GENIEX_BENCH_JOB_TIMEOUT = 21600  # 6 hours
-_QDC_EXECUTION_MAX_ATTEMPTS = 2
 
 # Versioned URLs follow the geniex release workflow's flat S3 layout
 # (<stem>-<vX.Y.Z>.<ext>); the unversioned mirror is refreshed on every
@@ -36,15 +36,6 @@ def _bench_url(platform_stem: str, ext: str, version: str | None) -> str:
 DEFAULT_CONTEXT_LENGTHS = [512, 1024, 4096]
 
 _N_GEN = 128
-
-
-def _create_zip(zip_path: str, source_dir: os.PathLike | str) -> None:
-    source_dir_str = str(source_dir)
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as zf:
-        for root, _, files in os.walk(source_dir_str):
-            for fn in files:
-                abs_path = os.path.join(root, fn)
-                zf.write(abs_path, os.path.relpath(abs_path, source_dir_str))
 
 
 @dataclass
@@ -177,7 +168,7 @@ class GenieXBenchAndroidArtifactHandler(GenieXBenchArtifactHandler):
             self._stage_qairt_bundles(dest_dir, qairt_bundles)
 
         zip_path = os.path.join(os.path.dirname(dest_dir), "geniex_bench_test.zip")
-        _create_zip(zip_path, dest_dir)
+        create_zip(zip_path, dest_dir)
         return zip_path
 
 
@@ -241,7 +232,7 @@ class GenieXBenchLinuxArtifactHandler(GenieXBenchArtifactHandler):
             self._stage_qairt_bundles(dest_dir, qairt_bundles)
 
         zip_path = os.path.join(os.path.dirname(dest_dir), "geniex_bench_test.zip")
-        _create_zip(zip_path, dest_dir)
+        create_zip(zip_path, dest_dir)
         return zip_path
 
 
@@ -307,7 +298,7 @@ class GenieXBenchWindowsArtifactHandler(GenieXBenchArtifactHandler):
             self._stage_qairt_bundles(dest_dir, qairt_bundles)
 
         zip_path = os.path.join(os.path.dirname(dest_dir), "geniex_bench_test.zip")
-        _create_zip(zip_path, dest_dir)
+        create_zip(zip_path, dest_dir)
         return zip_path
 
 
@@ -451,27 +442,12 @@ def _hf_repo(model_url: str) -> str:
     return f"{parts[0]}/{parts[1]}"
 
 
-def submit_geniex_bench_to_qdc_device(
-    api_token: str,
-    hub_device_name: str,
-    chipset: str,
+def _build_matrix_rows(
     model_rows: list[tuple[str, str]],
-    context_lengths: list[int] = DEFAULT_CONTEXT_LENGTHS,
-    plugin: str = "llama_cpp",
-    device_alias: str = "hybrid",
-    job_name: str = "geniex-bench",
-    save_results_dir: str | None = None,
-    geniex_version: str | None = None,
-    llamacpp_quant: str | None = None,
-) -> list[GenieXBenchMetrics]:
-    # plugin="qairt": model_ref is a local genie bundle dir (uploaded
-    # under qairt_bundles/). plugin="llama_cpp": model_ref is a HF GGUF URL
-    # and llamacpp_quant is the GGUF quant token (e.g. "q4_0", "mxfp4"),
-    # taken from release-assets.yaml's precision key.
-    if plugin == "llama_cpp" and not llamacpp_quant:
-        raise ValueError("llamacpp_quant is required when plugin='llama_cpp'.")
-    qdc_device = QDCDevice(hub_device_name)
-
+    plugin: str,
+    device_alias: str,
+    llamacpp_quant: str | None,
+) -> tuple[list[str], dict[str, str]]:
     matrix_rows: list[str] = []
     qairt_bundles: dict[str, str] = {}
     for name, ref in model_rows:
@@ -481,6 +457,34 @@ def submit_geniex_bench_to_qdc_device(
         else:
             model_id = f"{_hf_repo(ref)}:{llamacpp_quant}"
         matrix_rows.append(f"{name}|{plugin}|{device_alias}|{model_id}||")
+    return matrix_rows, qairt_bundles
+
+
+def submit_geniex_bench_only(
+    api_token: str,
+    hub_device_name: str,
+    chipset: str,
+    model_rows: list[tuple[str, str]],
+    context_lengths: list[int] = DEFAULT_CONTEXT_LENGTHS,
+    plugin: str = "llama_cpp",
+    device_alias: str = "hybrid",
+    job_name: str = "geniex-bench",
+    geniex_version: str | None = None,
+    llamacpp_quant: str | None = None,
+) -> tuple[str, list[str], dict[str, str]]:
+    """Upload artifacts and submit a geniex-bench job, returning the id.
+
+    Companion to ``collect_geniex_bench_result``. Also returns the
+    computed ``matrix_rows`` and ``qairt_bundles`` so the caller can
+    persist them for a later resubmit.
+    """
+    if plugin == "llama_cpp" and not llamacpp_quant:
+        raise ValueError("llamacpp_quant is required when plugin='llama_cpp'.")
+
+    qdc_device = QDCDevice(hub_device_name)
+    matrix_rows, qairt_bundles = _build_matrix_rows(
+        model_rows, plugin, device_alias, llamacpp_quant
+    )
 
     geniex_job = GenieXBenchQDCJobs(
         api_key=api_token,
@@ -497,74 +501,67 @@ def submit_geniex_bench_to_qdc_device(
         geniex_version=geniex_version,
     )
 
-    last_failure_reason: str | None = None
-    for attempt in range(1, _QDC_EXECUTION_MAX_ATTEMPTS + 1):
-        job_id = geniex_job.submit_automated_job(
-            qdc_device,
-            job_artifacts,
-            entry_script,
-            job_name=job_name,
-            timeout=GENIEX_BENCH_JOB_TIMEOUT,
-        )
-        if job_id is None:
-            raise RuntimeError("Job submission failed.")
-
-        print(f"Submitted QDC job with ID: {job_id}")
-        job_status = geniex_job.status(job_id)
-        job_result = geniex_job.result(job_id)
-        print(
-            f"QDC job {job_id} completed with status: {job_status}, "
-            f"result: {job_result}"
-        )
-
-        if job_result is not None and job_result != "Successful":
-            last_failure_reason = (
-                f"QDC job {job_id} on device '{hub_device_name}' finished with "
-                f"status='{job_status}', result='{job_result}'"
-            )
-            print(
-                f"[attempt {attempt}/{_QDC_EXECUTION_MAX_ATTEMPTS}] "
-                f"{last_failure_reason}"
-            )
-            if attempt < _QDC_EXECUTION_MAX_ATTEMPTS:
-                print("Retrying QDC job execution...")
-                continue
-            raise RuntimeError(
-                f"{last_failure_reason} after {_QDC_EXECUTION_MAX_ATTEMPTS} "
-                f"attempt(s). The device-side job did not complete successfully; "
-                f"check the QDC job logs for details."
-            )
-
-        geniex_job.log_upload_status(job_id)
-        # The file listing lags log-upload-status on the QDC backend, so wait
-        # for it to populate -- otherwise a successful job yields no metrics.
-        job_log_files = geniex_job.get_job_log_files(job_id, wait_for_logs=True)
-
-        # An empty listing here means the job succeeded but its logs never
-        # became retrievable; retry the whole job (transient) rather than
-        # returning empty metrics.
-        if not job_log_files:
-            last_failure_reason = (
-                f"QDC job {job_id} on device '{hub_device_name}' reported result="
-                f"'{job_result}' but produced no retrievable log files"
-            )
-            print(
-                f"[attempt {attempt}/{_QDC_EXECUTION_MAX_ATTEMPTS}] "
-                f"{last_failure_reason}"
-            )
-            if attempt < _QDC_EXECUTION_MAX_ATTEMPTS:
-                print("Retrying QDC job execution...")
-                continue
-            raise RuntimeError(
-                f"{last_failure_reason} after {_QDC_EXECUTION_MAX_ATTEMPTS} "
-                f"attempt(s). Check the QDC job logs for details."
-            )
-
-        return geniex_job.compute_metrics(
-            job_log_files, save_results_dir=save_results_dir
-        )
-
-    raise RuntimeError(
-        f"QDC job execution failed for device '{hub_device_name}': "
-        f"{last_failure_reason}"
+    job_id = geniex_job.submit_automated_job(
+        qdc_device,
+        job_artifacts,
+        entry_script,
+        job_name=job_name,
+        timeout=GENIEX_BENCH_JOB_TIMEOUT,
     )
+    if job_id is None:
+        raise RuntimeError("Job submission failed.")
+    print(f"Submitted QDC job with ID: {job_id}")
+    return job_id, matrix_rows, qairt_bundles
+
+
+def collect_geniex_bench_result(
+    api_token: str,
+    hub_device_name: str,
+    job_id: str,
+    save_results_dir: str | None = None,
+) -> tuple[list[GenieXBenchMetrics], JobOutcome, str | None]:
+    """Poll a submitted geniex-bench job and download+parse logs on success.
+
+    Returns ``(metrics, outcome, reason)``. ``metrics`` is empty unless
+    ``outcome`` is SUCCESS; ``reason`` carries the failure description on
+    a non-SUCCESS outcome.
+    """
+    geniex_job = GenieXBenchQDCJobs(
+        api_key=api_token,
+        app_name_header="GenieXBenchQDCJobApp",
+    )
+
+    job_status = geniex_job.status(job_id)
+    job_result = geniex_job.result(job_id)
+    print(f"QDC job {job_id} completed with status: {job_status}, result: {job_result}")
+
+    if job_result is not None and job_result != "Successful":
+        reason = (
+            f"QDC job {job_id} on device '{hub_device_name}' finished with "
+            f"status='{job_status}', result='{job_result}'"
+        )
+        outcome = (
+            JobOutcome.RETRYABLE_ERROR
+            if job_result == "Error"
+            else JobOutcome.RETRYABLE_UNSUCCESSFUL
+        )
+        print(f"[result={job_result}] {reason}")
+        return [], outcome, reason
+
+    geniex_job.log_upload_status(job_id)
+    # The file listing lags log-upload-status on the QDC backend, so wait
+    # for it to populate -- otherwise a successful job yields no metrics.
+    job_log_files = geniex_job.get_job_log_files(job_id, wait_for_logs=True)
+
+    if not job_log_files:
+        reason = (
+            f"QDC job {job_id} on device '{hub_device_name}' reported result="
+            f"'{job_result}' but produced no retrievable log files"
+        )
+        print(f"[empty logs] {reason}")
+        return [], JobOutcome.RETRYABLE_EMPTY_LOGS, reason
+
+    metrics = geniex_job.compute_metrics(
+        job_log_files, save_results_dir=save_results_dir
+    )
+    return metrics, JobOutcome.SUCCESS, None

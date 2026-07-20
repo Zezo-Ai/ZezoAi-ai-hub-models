@@ -61,6 +61,7 @@ jobs:
     runs-on: [tetra-ubuntu-2204, self-hosted]
     outputs:
       models: ${{ steps.find.outputs.models }}
+      llm_split_matrix: ${{ steps.find.outputs.llm_split_matrix }}
       has_models: ${{ steps.find.outputs.has_models }}
     steps:
       - uses: actions/checkout@v7
@@ -84,34 +85,67 @@ jobs:
         run: |
           source "${{ env.VENV_PATH }}/bin/activate"
           MODELS=$(grep '^QAIHM_TEST_MODELS=' build/scorecard-yamls/${{ inputs.action_id }}/environment.env | cut -d= -f2 | tr -cd 'A-Za-z0-9_,\-')
-          MATRIX=$(python -m qai_hub_models.scripts.split_torch_models --models "$MODELS" --output-format github)
-          LLM_MODELS=$(echo "$MATRIX" | python -c "import json, sys; splits=json.load(sys.stdin); m=next((s['models'] for s in splits if s['split_name']=='llm'), ''); print(m)")
-          echo "models=$LLM_MODELS" >> "$GITHUB_OUTPUT"
-          if [ -n "$LLM_MODELS" ]; then
-            echo "has_models=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_models=false" >> "$GITHUB_OUTPUT"
-          fi
-          echo "LLM models: $LLM_MODELS"
+          python -m qai_hub_models.scripts.split_torch_models --models "$MODELS" --output-format llm-github-output >> "$GITHUB_OUTPUT"
 
   test_llm_export:
-    name: LLM Asset Upload
+    name: LLM Asset Upload (${{ matrix.split.split_name }})
     needs: determine_llm_models
     if: ${{ needs.determine_llm_models.outputs.has_models == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        split: ${{ fromJson(needs.determine_llm_models.outputs.llm_split_matrix) }}
     secrets: inherit
     uses: ./.github/workflows/scorecard_test_export_scripts.yml
     with:
       action_id: ${{ inputs.action_id }}
       s3_prefix: ${{ inputs.s3_prefix }}
-      models: ${{ needs.determine_llm_models.outputs.models }}
-      split_name: llm
+      models: ${{ matrix.split.models }}
+      split_name: ${{ matrix.split.split_name }}
       runs_on: '["tetra-ubuntu-2204", "self-hosted"]'
       build_and_test_target: test_llm_export_scripts
 
+  combine_llm_release_assets:
+    name: Combine LLM Release Assets
+    needs: [determine_llm_models, test_llm_export]
+    if: ${{ !cancelled() && needs.test_llm_export.result == 'success' }}
+    runs-on: [tetra-ubuntu-2204, self-hosted]
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: CI Setup
+        uses: ./.github/actions/ci-setup
+        with:
+          sudo-password: ${{ secrets.TETRASERVICE_PASSWORD }}
+          venv-path: ${{ env.VENV_PATH }}
+
+      - name: Download per-split release assets
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "Scorecard LLM Perf Release Assets (${{ inputs.action_id }}, llm-*)"
+          path: build/split-llm-release-assets
+
+      - name: Combine
+        run: |
+          source "${{ env.VENV_PATH }}/bin/activate"
+          python -m qai_hub_models.scripts.combine_split_artifacts \
+            --input-dir build/split-llm-release-assets \
+            --output-dir build/combined-llm-release-assets
+
+      - name: Upload combined LLM release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: Scorecard LLM Perf Release Assets (${{ inputs.action_id }})
+          path: build/combined-llm-release-assets/release-assets.yaml
+          if-no-files-found: error
+
   collect_llm_perf:
     name: Collect LLM Performance Numbers (Genie)
-    needs: [determine_llm_models, test_llm_export]
-    if: ${{ !cancelled() && needs.test_llm_export.result == 'success' && inputs.s3_prefix != '' && (inputs.test_runtimes == 'default' || inputs.test_runtimes == '' || contains(format(',{0},', inputs.test_runtimes), ',genie,')) }}
+    needs: [determine_llm_models, combine_llm_release_assets]
+    if: ${{ !cancelled() && needs.combine_llm_release_assets.result == 'success' && inputs.s3_prefix != '' && (inputs.test_runtimes == 'default' || inputs.test_runtimes == '' || contains(format(',{0},', inputs.test_runtimes), ',genie,')) }}
     secrets: inherit
     uses: ./.github/workflows/llm_perf_collection.yml
     with:
@@ -126,8 +160,8 @@ jobs:
 
   collect_llm_perf_geniex:
     name: Collect LLM Performance Numbers (GenieX-QAIRT)
-    needs: [determine_llm_models, test_llm_export]
-    if: ${{ !cancelled() && needs.test_llm_export.result == 'success' && inputs.s3_prefix != '' && (inputs.test_runtimes == 'default' || inputs.test_runtimes == '' || contains(format(',{0},', inputs.test_runtimes), ',geniex_qairt,')) }}
+    needs: [determine_llm_models, combine_llm_release_assets]
+    if: ${{ !cancelled() && needs.combine_llm_release_assets.result == 'success' && inputs.s3_prefix != '' && (inputs.test_runtimes == 'default' || inputs.test_runtimes == '' || contains(format(',{0},', inputs.test_runtimes), ',geniex_qairt,')) }}
     secrets: inherit
     uses: ./.github/workflows/llm_perf_collection_geniex.yml
     with:

@@ -10,19 +10,29 @@ import json
 import os
 import shutil
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
 from qai_hub_models.configs.model_metadata import ModelMetadata
-from qai_hub_models.models._shared.llm.common import get_qdc_api_token
+from qai_hub_models.models._shared.llm.common import (
+    DEFAULT_ATTEMPTS,
+    JobRecord,
+    get_qdc_api_token,
+    load_jobs,
+    make_key,
+    poll_and_retry,
+    save_job,
+)
 from qai_hub_models.models._shared.llm.perf_collection import (
     load_release_assets_for_model,
     update_perf_yaml,
 )
 from qai_hub_models.models._shared.llm.qdc.geniex_jobs import (
     GenieXBenchMetrics,
-    submit_geniex_bench_to_qdc_device,
+    collect_geniex_bench_result,
+    submit_geniex_bench_only,
 )
 from qai_hub_models.scorecard import ScorecardProfilePath
 from qai_hub_models.scorecard.device import (
@@ -146,6 +156,8 @@ def fetch_geniex_qairt_bundle(
             verbose=True,
         )
         shutil.unpack_archive(str(zip_path), extract_dir=str(output_dir))
+        # Delete the zip once extracted so it doesn't fill the runner disk.
+        zip_path.unlink(missing_ok=True)
         if not bundle_dir.exists():
             raise RuntimeError(
                 f"Extracted geniex_qairt bundle missing expected directory {bundle_dir}; "
@@ -233,10 +245,56 @@ def run_geniex_bench_job(
     geniex_version: str | None,
     llamacpp_quant: str | None = None,
 ) -> list[GenieXBenchMetrics]:
+    """Submit-and-wait shortcut used by the ``run`` subcommand.
+
+    ``submit`` / ``collect`` subcommands drive
+    ``submit_geniex_bench_only`` / ``collect_geniex_bench_result``
+    directly instead.
+    """
     sd = _scorecard_device(device_token)
-    # Dedicated-pool devices (cs_8_elite_qrd, cs_x_elite) use QDC_PRIVATE_API_KEY.
     api_token = get_qdc_api_token(sd)
     device_alias = ",".join(LLAMACPP_DEVICE_ALIASES) if plugin == "llama_cpp" else "npu"
+    _print_job_banner(
+        model_id, sd, plugin, device_alias, model_ref, context_lengths, geniex_version
+    )
+
+    save_dir = os.path.join(save_dir_root, model_id, sd.name)
+    job_name = f"geniex-bench {plugin} {model_id}"
+
+    def _submit() -> str:
+        job_id, _, _ = submit_geniex_bench_only(
+            api_token=api_token,
+            hub_device_name=sd.reference_device_name,
+            chipset=sd.chipset,
+            model_rows=[(model_id, model_ref)],
+            context_lengths=context_lengths,
+            plugin=plugin,
+            device_alias=device_alias,
+            job_name=job_name,
+            geniex_version=geniex_version,
+            llamacpp_quant=llamacpp_quant,
+        )
+        return job_id
+
+    return poll_and_retry(
+        initial_job_id=_submit(),
+        attempts_left=DEFAULT_ATTEMPTS - 1,
+        collect_fn=lambda job_id: collect_geniex_bench_result(
+            api_token, sd.reference_device_name, job_id, save_results_dir=save_dir
+        ),
+        resubmit_fn=_submit,
+    )
+
+
+def _print_job_banner(
+    model_id: str,
+    sd: ScorecardDevice,
+    plugin: str,
+    device_alias: str,
+    model_ref: str,
+    context_lengths: list[int],
+    geniex_version: str | None,
+) -> None:
     print(f"\n{'=' * 60}")
     print(f"Model:   {model_id}")
     print(f"Device:  {sd.name} ({sd.reference_device_name}, chipset={sd.chipset})")
@@ -246,8 +304,34 @@ def run_geniex_bench_job(
     print(f"GenieX:  {geniex_version or 'latest stable mirror'}")
     print(f"{'=' * 60}")
 
-    save_dir = os.path.join(save_dir_root, model_id, sd.name)
-    return submit_geniex_bench_to_qdc_device(
+
+def _submit_one(
+    model_id: str,
+    model_ref: str,
+    device_token: str,
+    context_lengths: list[int],
+    save_dir_root: str,
+    plugin: str,
+    geniex_version: str | None,
+    precision: Precision,
+    jobs_file: str,
+    llamacpp_quant: str | None = None,
+) -> str:
+    """Submit one geniex-bench job and upsert a jobs_file entry.
+
+    Returns the QDC job id. The collect side re-derives everything else
+    from (model_id, precision, chipset) via
+    ``fetch_geniex_qairt_bundle`` -- nothing local-path is persisted.
+    """
+    sd = _scorecard_device(device_token)
+    api_token = get_qdc_api_token(sd)
+    device_alias = ",".join(LLAMACPP_DEVICE_ALIASES) if plugin == "llama_cpp" else "npu"
+    _print_job_banner(
+        model_id, sd, plugin, device_alias, model_ref, context_lengths, geniex_version
+    )
+
+    job_name = f"geniex-bench {plugin} {model_id}"
+    job_id, _, _ = submit_geniex_bench_only(
         api_token=api_token,
         hub_device_name=sd.reference_device_name,
         chipset=sd.chipset,
@@ -255,76 +339,203 @@ def run_geniex_bench_job(
         context_lengths=context_lengths,
         plugin=plugin,
         device_alias=device_alias,
-        job_name=f"geniex-bench {plugin} {model_id}",
-        save_results_dir=save_dir,
+        job_name=job_name,
         geniex_version=geniex_version,
         llamacpp_quant=llamacpp_quant,
     )
+    runtime = "GENIEX_QAIRT" if plugin == "qairt" else "GENIEX_LLAMACPP"
+    key = make_key(model_id, str(precision), runtime, sd.name)
+    save_job(jobs_file, key, job_id, attempts_left=DEFAULT_ATTEMPTS)
+    return job_id
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Run geniex-bench benchmarks on QDC.")
-    ap.add_argument(
-        "--models", default="all", help='Comma-separated model IDs or "all".'
-    )
-    ap.add_argument(
-        "--devices",
-        default=DEFAULT_DEVICES,
-        help="Comma-separated cs_* names or hub device names, "
-        'or "all" for every geniex-bench-supported device.',
-    )
-    ap.add_argument(
-        "--plugin",
-        default="all",
-        choices=["all", "llama_cpp", "qairt"],
-    )
-    ap.add_argument(
-        "--precisions",
-        default="default",
-        help='Comma-separated precisions (e.g. "w4,w4a16"), "all" for every '
-        'supported precision, or "default" to use the model\'s default precision.',
-    )
-    ap.add_argument("--csv", default="geniex_bench_results.csv")
-    ap.add_argument("--results-dir", default="geniex_bench_results")
-    ap.add_argument("--skip-perf-update", action="store_true")
-    ap.add_argument(
-        "--perf-updates-json",
-        default="geniex_perf_updates.jsonl",
-        help="JSON-lines log of update_perf_yaml calls; replayed by apply_llm_perf_updates.py.",
-    )
-    ap.add_argument(
-        "--geniex-version",
-        default=None,
-        help='GenieX release tag (e.g. "v0.3.1") to pin geniex-bench/APK '
-        'downloads to. Defaults to the unversioned "latest stable" mirror.',
-    )
-    args = ap.parse_args()
-    if args.geniex_version and not args.geniex_version.startswith("v"):
+def _collect_one(
+    model_id: str,
+    precision: Precision,
+    device_name: str,
+    plugin: str,
+    record: JobRecord,
+    jobs_file: str,
+    save_dir_root: str,
+    geniex_version: str | None,
+    llamacpp_urls: dict[Precision, str] | None = None,
+) -> tuple[list[GenieXBenchMetrics], str]:
+    """Poll a submitted geniex-bench job. On retryable failure, re-fetch
+    the bundle from release-assets.yaml (qairt) or the HF URL (llama_cpp)
+    and resubmit; the jobs_file row is rewritten with the new job id and
+    one fewer attempt.
+
+    Returns ``(metrics, status)`` where status is ``"success"``,
+    ``"no_metrics"``, or ``"failed"``.
+    """
+    sd = ScorecardDevice.get(device_name)
+    api_token = get_qdc_api_token(sd)
+    device_alias = ",".join(LLAMACPP_DEVICE_ALIASES) if plugin == "llama_cpp" else "npu"
+    job_name = f"geniex-bench {plugin} {model_id}"
+    save_dir = os.path.join(save_dir_root, model_id, sd.name)
+    runtime = "GENIEX_QAIRT" if plugin == "qairt" else "GENIEX_LLAMACPP"
+    key = make_key(model_id, str(precision), runtime, sd.name)
+
+    if plugin == "llama_cpp" and (
+        llamacpp_urls is None or precision not in llamacpp_urls
+    ):
         print(
-            f"WARNING: --geniex-version={args.geniex_version!r} does not start "
-            f'with "v"; release tags are SemVer-prefixed (e.g. "v0.3.1"). The '
-            f"S3 download will likely 404.",
+            f"ERROR: cannot resubmit llama_cpp job for {model_id} "
+            f"@ {device_name}: no GGUF URL available",
             file=sys.stderr,
         )
+        return [], "failed"
 
-    plugins = ["llama_cpp", "qairt"] if args.plugin == "all" else [args.plugin]
-    precision_setting = LLMPerfPrecisionsEnvvar.parse(args.precisions)
+    def _resubmit() -> str:
+        if plugin == "qairt":
+            bundle_dir, ctx_list = fetch_geniex_qairt_bundle(
+                model_id, precision, sd.chipset, Path(save_dir_root) / "qairt_bundles"
+            )
+            if ctx_list:
+                ctx_list = [max(ctx_list)]
+            model_ref: str = str(bundle_dir)
+            llamacpp_quant: str | None = None
+        else:
+            assert llamacpp_urls is not None
+            model_ref = llamacpp_urls[precision]
+            ctx_list = LLAMACPP_CONTEXT_LENGTHS
+            llamacpp_quant = str(precision)
+        new_job_id, _, _ = submit_geniex_bench_only(
+            api_token=api_token,
+            hub_device_name=sd.reference_device_name,
+            chipset=sd.chipset,
+            model_rows=[(model_id, model_ref)],
+            context_lengths=ctx_list,
+            plugin=plugin,
+            device_alias=device_alias,
+            job_name=job_name,
+            geniex_version=geniex_version,
+            llamacpp_quant=llamacpp_quant,
+        )
+        return new_job_id
 
-    if args.devices.strip().lower() == "all":
+    try:
+        metrics = poll_and_retry(
+            initial_job_id=record.job_id,
+            attempts_left=record.attempts_left,
+            collect_fn=lambda job_id: collect_geniex_bench_result(
+                api_token, sd.reference_device_name, job_id, save_results_dir=save_dir
+            ),
+            resubmit_fn=_resubmit,
+            on_new_job_id=lambda new_id, left: save_job(
+                jobs_file, key, new_id, attempts_left=left
+            ),
+        )
+    except RuntimeError as e:
+        print(
+            f"ERROR: {e} for {model_id} @ {device_name}",
+            file=sys.stderr,
+        )
+        return [], "failed"
+    return metrics, ("success" if metrics else "no_metrics")
+
+
+def _rows_and_updates_from_metrics(
+    model_id: str,
+    sd: ScorecardDevice,
+    plugin: str,
+    precision: Precision,
+    metrics: list[GenieXBenchMetrics],
+    skip_perf_update: bool,
+) -> tuple[list[dict], list[dict]]:
+    """Extracted formatting so ``run`` and ``collect`` share output shape."""
+    csv_rows: list[dict] = []
+    perf_updates: list[dict] = []
+    for m in metrics:
+        base_plugin = m.plugin or plugin
+        plugin_label = (
+            f"{base_plugin}_{m.device_alias}"
+            if base_plugin == "llama_cpp" and m.device_alias
+            else base_plugin
+        )
+        csv_rows.append(
+            {
+                "model": model_id,
+                "plugin": plugin_label,
+                "precision": str(precision),
+                "device": sd.name,
+                "ctx": m.context_length,
+                "decode_tps": m.decode_tps,
+                "prefill_tps": m.prefill_tps,
+                "ttft_ms": m.ttft_ms,
+                "status": "success",
+            }
+        )
+        if not skip_perf_update:
+            profile_path = (
+                ScorecardProfilePath.GENIEX_QAIRT
+                if plugin == "qairt"
+                else ScorecardProfilePath.GENIEX_LLAMACPP
+            )
+            assert m.prompt_tokens > 0, (
+                f"prompt_tokens must be > 0 for TTFT range scaling, "
+                f"got {m.prompt_tokens}"
+            )
+            ttft_min = m.ttft_ms
+            ttft_max = m.ttft_ms * (m.context_length / 128)
+            update_kwargs = dict(
+                model_id=model_id,
+                device_name=sd.reference_device_name,
+                precision=str(precision),
+                context_length=m.context_length,
+                tps=m.decode_tps,
+                ttft_ms=ttft_min,
+                prefill_tps=m.prefill_tps,
+                ttft_max_ms=ttft_max,
+                profile_path=profile_path.value,
+                desired_compute_unit=m.device_alias,
+            )
+            perf_updates.append(update_kwargs)
+            update_perf_yaml(
+                model_id=model_id,
+                device_name=sd.reference_device_name,
+                precision=precision,
+                context_length=m.context_length,
+                tps=m.decode_tps,
+                ttft_ms=ttft_min,
+                prefill_tps=m.prefill_tps,
+                ttft_max_ms=ttft_max,
+                profile_path=profile_path,
+                desired_compute_unit=m.device_alias,
+            )
+    return csv_rows, perf_updates
+
+
+def _iter_work(
+    models_setting: str,
+    devices_setting: str,
+    plugin_setting: str,
+    precisions_setting: str,
+    results_dir: str,
+    geniex_version: str | None,
+) -> Iterator[tuple[str, str, Precision, str, str, list[int], str | None]]:
+    """Yield (plugin, model_id, precision, device_token, model_ref, ctx_list,
+    llamacpp_quant) tuples for every model x precision x device combo.
+
+    Shared by ``submit`` and ``run``. Handles all the discovery and
+    bundle-fetch logic so the two paths stay in step.
+    """
+    plugins = ["llama_cpp", "qairt"] if plugin_setting == "all" else [plugin_setting]
+    precision_setting = LLMPerfPrecisionsEnvvar.parse(precisions_setting)
+
+    if devices_setting.strip().lower() == "all":
         devices = list(ALL_GENIEX_DEVICES)
     else:
-        devices = [d.strip() for d in args.devices.split(",") if d.strip()]
+        devices = [d.strip() for d in devices_setting.split(",") if d.strip()]
 
-    rows: list[dict] = []
-    perf_updates: list[dict] = []
     for plugin in plugins:
         if plugin == "qairt":
-            models = discover_qairt_models(args.models)
+            models = discover_qairt_models(models_setting)
             if not models:
                 print("No models support the GENIEX_QAIRT runtime.")
                 continue
         else:
-            models = discover_llamacpp_models(args.models)
+            models = discover_llamacpp_models(models_setting)
             if not models:
                 print("No models support the GENIEX_LLAMACPP runtime.")
                 continue
@@ -352,123 +563,43 @@ def main() -> int:
             for precision in precisions:
                 for device_token in devices:
                     sd = _scorecard_device(device_token)
-                    # Per-(model, precision, device) failure must not abort the whole sweep.
-                    try:
-                        if plugin == "qairt":
-                            bundle_dir, ctx_list = fetch_geniex_qairt_bundle(
-                                model_id,
-                                precision,
-                                sd.chipset,
-                                Path(args.results_dir) / "qairt_bundles",
-                            )
-                            metrics = run_geniex_bench_job(
-                                model_id,
-                                str(bundle_dir),
-                                device_token,
-                                ctx_list,
-                                args.results_dir,
-                                plugin,
-                                args.geniex_version,
-                            )
-                        else:
-                            metrics = run_geniex_bench_job(
-                                model_id,
-                                llamacpp_urls[precision],
-                                device_token,
-                                LLAMACPP_CONTEXT_LENGTHS,
-                                args.results_dir,
-                                plugin,
-                                args.geniex_version,
-                                llamacpp_quant=str(precision),
-                            )
-                    except Exception as e:
-                        print(
-                            f"ERROR: geniex-bench job failed for {model_id} @ "
-                            f"{sd.name} (plugin={plugin}, precision={precision}): {e}",
-                            file=sys.stderr,
+                    if plugin == "qairt":
+                        bundle_dir, ctx_list = fetch_geniex_qairt_bundle(
+                            model_id,
+                            precision,
+                            sd.chipset,
+                            Path(results_dir) / "qairt_bundles",
                         )
-                        rows.append(
-                            {
-                                "model": model_id,
-                                "plugin": plugin,
-                                "precision": str(precision),
-                                "device": sd.name,
-                                "status": "failed",
-                            }
+                        # Only bench max(ctx); perf.yaml stores only that.
+                        if ctx_list:
+                            ctx_list = [max(ctx_list)]
+                        yield (
+                            plugin,
+                            model_id,
+                            precision,
+                            device_token,
+                            str(bundle_dir),
+                            ctx_list,
+                            None,
                         )
-                        continue
-
-                    if not metrics:
-                        rows.append(
-                            {
-                                "model": model_id,
-                                "plugin": plugin,
-                                "precision": str(precision),
-                                "device": sd.name,
-                                "status": "no_metrics",
-                            }
+                    else:
+                        yield (
+                            plugin,
+                            model_id,
+                            precision,
+                            device_token,
+                            llamacpp_urls[precision],
+                            LLAMACPP_CONTEXT_LENGTHS,
+                            str(precision),
                         )
-                        continue
 
-                    for m in metrics:
-                        base_plugin = m.plugin or plugin
-                        plugin_label = (
-                            f"{base_plugin}_{m.device_alias}"
-                            if base_plugin == "llama_cpp" and m.device_alias
-                            else base_plugin
-                        )
-                        rows.append(
-                            {
-                                "model": model_id,
-                                "plugin": plugin_label,
-                                "precision": str(precision),
-                                "device": sd.name,
-                                "ctx": m.context_length,
-                                "decode_tps": m.decode_tps,
-                                "prefill_tps": m.prefill_tps,
-                                "ttft_ms": m.ttft_ms,
-                                "status": "success",
-                            }
-                        )
-                        if not args.skip_perf_update:
-                            if plugin == "qairt":
-                                profile_path = ScorecardProfilePath.GENIEX_QAIRT
-                            else:
-                                profile_path = ScorecardProfilePath.GENIEX_LLAMACPP
 
-                            assert m.prompt_tokens > 0, (
-                                f"prompt_tokens must be > 0 for TTFT range "
-                                f"scaling, got {m.prompt_tokens}"
-                            )
-
-                            ttft_min = m.ttft_ms
-                            ttft_max = m.ttft_ms * (m.context_length / 128)
-                            update_kwargs = dict(
-                                model_id=model_id,
-                                device_name=sd.reference_device_name,
-                                precision=str(precision),
-                                context_length=m.context_length,
-                                tps=m.decode_tps,
-                                ttft_ms=ttft_min,
-                                prefill_tps=m.prefill_tps,
-                                ttft_max_ms=ttft_max,
-                                profile_path=profile_path.value,
-                                desired_compute_unit=m.device_alias,
-                            )
-                            perf_updates.append(update_kwargs)
-                            update_perf_yaml(
-                                model_id=model_id,
-                                device_name=sd.reference_device_name,
-                                precision=precision,
-                                context_length=m.context_length,
-                                tps=m.decode_tps,
-                                ttft_ms=ttft_min,
-                                prefill_tps=m.prefill_tps,
-                                ttft_max_ms=ttft_max,
-                                profile_path=profile_path,
-                                desired_compute_unit=m.device_alias,
-                            )
-
+def _write_final_outputs(
+    rows: list[dict],
+    perf_updates: list[dict],
+    csv_path: str,
+    perf_updates_json: str,
+) -> int:
     print(f"\n{'=' * 60}\nRESULTS SUMMARY\n{'=' * 60}")
     for r in rows:
         prec = r.get("precision", "-")
@@ -481,21 +612,326 @@ def main() -> int:
         else:
             print(f"  {r['model']} [{prec}] @ {r['device']}: {r['status']}")
 
-    write_csv(rows, args.csv)
-    print(f"\nResults saved to {args.csv}")
+    write_csv(rows, csv_path)
+    print(f"\nResults saved to {csv_path}")
     # JSON-lines (one update per line), matching the format emitted by
     # update_perf_yaml so apply_llm_perf_updates.py has a single format to read.
-    with open(args.perf_updates_json, "w") as f:
+    with open(perf_updates_json, "w") as f:
         f.writelines(json.dumps(u) + "\n" for u in perf_updates)
-    print(f"Wrote {len(perf_updates)} perf.yaml updates to {args.perf_updates_json}")
+    print(f"Wrote {len(perf_updates)} perf.yaml updates to {perf_updates_json}")
     write_summary(rows)
     failed = [r for r in rows if r["status"] != "success"]
     if not rows:
         print("No models were benchmarked (all skipped or no candidates).")
         return 0
-    if failed:
-        return 1
-    return 0
+    return 1 if failed else 0
+
+
+def _add_shared_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--models", default="all", help='Comma-separated model IDs or "all".'
+    )
+    parser.add_argument(
+        "--devices",
+        default=DEFAULT_DEVICES,
+        help="Comma-separated cs_* names or hub device names, "
+        'or "all" for every geniex-bench-supported device.',
+    )
+    parser.add_argument(
+        "--plugin",
+        default="all",
+        choices=["all", "llama_cpp", "qairt"],
+    )
+    parser.add_argument(
+        "--precisions",
+        default="default",
+        help='Comma-separated precisions (e.g. "w4,w4a16"), "all" for every '
+        'supported precision, or "default" to use the model\'s default precision.',
+    )
+    parser.add_argument("--results-dir", default="geniex_bench_results")
+    parser.add_argument(
+        "--geniex-version",
+        default=None,
+        help='GenieX release tag (e.g. "v0.3.1") to pin geniex-bench/APK '
+        'downloads to. Defaults to the unversioned "latest stable" mirror.',
+    )
+
+
+def _add_output_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--csv", default="geniex_bench_results.csv")
+    parser.add_argument("--skip-perf-update", action="store_true")
+    parser.add_argument(
+        "--perf-updates-json",
+        default="geniex_perf_updates.jsonl",
+        help="JSON-lines log of update_perf_yaml calls; replayed by apply_llm_perf_updates.py.",
+    )
+
+
+def _cmd_submit(args: argparse.Namespace) -> int:
+    if os.path.exists(args.jobs_file):
+        os.unlink(args.jobs_file)
+    submitted = 0
+    for (
+        plugin,
+        model_id,
+        precision,
+        device_token,
+        model_ref,
+        ctx_list,
+        llamacpp_quant,
+    ) in _iter_work(
+        args.models,
+        args.devices,
+        args.plugin,
+        args.precisions,
+        args.results_dir,
+        args.geniex_version,
+    ):
+        try:
+            _submit_one(
+                model_id,
+                model_ref,
+                device_token,
+                ctx_list,
+                args.results_dir,
+                plugin,
+                args.geniex_version,
+                precision,
+                args.jobs_file,
+                llamacpp_quant=llamacpp_quant,
+            )
+            submitted += 1
+        except Exception as e:  # noqa: PERF203
+            print(
+                f"ERROR: submission failed for {model_id} @ {device_token} "
+                f"(plugin={plugin}, precision={precision}): {e}",
+                file=sys.stderr,
+            )
+    print(f"Submitted {submitted} geniex-bench job(s) to {args.jobs_file}")
+    return 0 if submitted else 1
+
+
+def _cmd_collect(args: argparse.Namespace) -> int:
+    """Re-iterate the submit-side work list and pick up each job by key.
+
+    The jobs_file carries just (job_id, attempts_left), so we re-run the
+    same _iter_work discovery the submit side used and look each
+    (model, precision, plugin, device) tuple up in the jobs_file by key.
+    """
+    rows: list[dict] = []
+    perf_updates: list[dict] = []
+    records = load_jobs(args.jobs_file)
+    llamacpp_cache: dict[str, dict[Precision, str]] = {}
+    for (
+        plugin,
+        model_id,
+        precision,
+        device_token,
+        _model_ref,
+        _ctx_list,
+        _llamacpp_quant,
+    ) in _iter_work(
+        args.models,
+        args.devices,
+        args.plugin,
+        args.precisions,
+        args.results_dir,
+        args.geniex_version,
+    ):
+        sd = _scorecard_device(device_token)
+        runtime = "GENIEX_QAIRT" if plugin == "qairt" else "GENIEX_LLAMACPP"
+        key = make_key(model_id, str(precision), runtime, sd.name)
+        record = records.get(key)
+        if record is None:
+            print(
+                f"jobs_file has no entry for {key}; skipping (was it submitted?)",
+                file=sys.stderr,
+            )
+            continue
+
+        llamacpp_urls: dict[Precision, str] | None = None
+        if plugin == "llama_cpp":
+            llamacpp_urls = llamacpp_cache.setdefault(
+                model_id, _llamacpp_assets(model_id)
+            )
+
+        try:
+            metrics, status = _collect_one(
+                model_id=model_id,
+                precision=precision,
+                device_name=sd.name,
+                plugin=plugin,
+                record=record,
+                jobs_file=args.jobs_file,
+                save_dir_root=args.results_dir,
+                geniex_version=args.geniex_version,
+                llamacpp_urls=llamacpp_urls,
+            )
+        except Exception as e:
+            print(
+                f"ERROR: collection failed for {model_id} @ {sd.name}: {e}",
+                file=sys.stderr,
+            )
+            rows.append(
+                {
+                    "model": model_id,
+                    "plugin": plugin,
+                    "precision": str(precision),
+                    "device": sd.name,
+                    "status": "failed",
+                }
+            )
+            continue
+
+        if status != "success":
+            rows.append(
+                {
+                    "model": model_id,
+                    "plugin": plugin,
+                    "precision": str(precision),
+                    "device": sd.name,
+                    "status": status,
+                }
+            )
+            continue
+
+        csv_rows, updates = _rows_and_updates_from_metrics(
+            model_id, sd, plugin, precision, metrics, args.skip_perf_update
+        )
+        rows.extend(csv_rows)
+        perf_updates.extend(updates)
+
+    return _write_final_outputs(rows, perf_updates, args.csv, args.perf_updates_json)
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    """Legacy behavior: submit-and-wait per job, no jobs_file artifact.
+
+    Preserved so local users and existing scripts keep working. CI drives
+    the submit/collect subcommands instead.
+    """
+    rows: list[dict] = []
+    perf_updates: list[dict] = []
+    for (
+        plugin,
+        model_id,
+        precision,
+        device_token,
+        model_ref,
+        ctx_list,
+        llamacpp_quant,
+    ) in _iter_work(
+        args.models,
+        args.devices,
+        args.plugin,
+        args.precisions,
+        args.results_dir,
+        args.geniex_version,
+    ):
+        sd = _scorecard_device(device_token)
+        try:
+            metrics = run_geniex_bench_job(
+                model_id,
+                model_ref,
+                device_token,
+                ctx_list,
+                args.results_dir,
+                plugin,
+                args.geniex_version,
+                llamacpp_quant=llamacpp_quant,
+            )
+        except Exception as e:
+            print(
+                f"ERROR: geniex-bench job failed for {model_id} @ {sd.name} "
+                f"(plugin={plugin}, precision={precision}): {e}",
+                file=sys.stderr,
+            )
+            rows.append(
+                {
+                    "model": model_id,
+                    "plugin": plugin,
+                    "precision": str(precision),
+                    "device": sd.name,
+                    "status": "failed",
+                }
+            )
+            continue
+
+        if not metrics:
+            rows.append(
+                {
+                    "model": model_id,
+                    "plugin": plugin,
+                    "precision": str(precision),
+                    "device": sd.name,
+                    "status": "no_metrics",
+                }
+            )
+            continue
+
+        csv_rows, updates = _rows_and_updates_from_metrics(
+            model_id, sd, plugin, precision, metrics, args.skip_perf_update
+        )
+        rows.extend(csv_rows)
+        perf_updates.extend(updates)
+
+    return _write_final_outputs(rows, perf_updates, args.csv, args.perf_updates_json)
+
+
+def _warn_geniex_version(version: str | None) -> None:
+    if version and not version.startswith("v"):
+        print(
+            f"WARNING: --geniex-version={version!r} does not start "
+            f'with "v"; release tags are SemVer-prefixed (e.g. "v0.3.1"). The '
+            f"S3 download will likely 404.",
+            file=sys.stderr,
+        )
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Run geniex-bench benchmarks on QDC.")
+    sub = ap.add_subparsers(dest="cmd")
+
+    p_submit = sub.add_parser(
+        "submit", help="Submit jobs; append one row per submission to a jobs file."
+    )
+    _add_shared_args(p_submit)
+    p_submit.add_argument(
+        "--jobs-file",
+        default="geniex_jobs.yaml",
+        help="Path to write the YAML jobs file for the collect step.",
+    )
+
+    p_collect = sub.add_parser(
+        "collect", help="Poll jobs listed in the jobs file and emit CSV/JSONL."
+    )
+    _add_shared_args(p_collect)
+    p_collect.add_argument(
+        "--jobs-file",
+        default="geniex_jobs.yaml",
+        help="Path to the YAML jobs file produced by ``submit``.",
+    )
+    _add_output_args(p_collect)
+
+    p_run = sub.add_parser(
+        "run", help="Legacy submit-and-wait mode (default when no subcommand given)."
+    )
+    _add_shared_args(p_run)
+    _add_output_args(p_run)
+
+    # No subcommand -> ``run`` (backward-compat for flat-arg invocations).
+    argv = sys.argv[1:]
+    if argv and argv[0] not in {"submit", "collect", "run", "-h", "--help"}:
+        argv = ["run", *argv]
+    args = ap.parse_args(argv)
+
+    _warn_geniex_version(getattr(args, "geniex_version", None))
+
+    if args.cmd == "submit":
+        return _cmd_submit(args)
+    if args.cmd == "collect":
+        return _cmd_collect(args)
+    return _cmd_run(args)
 
 
 if __name__ == "__main__":

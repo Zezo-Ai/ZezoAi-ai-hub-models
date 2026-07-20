@@ -2,10 +2,16 @@
 # Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
+import fcntl
 import gc
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+from typing import Any, TypeVar
 
+import ruamel.yaml
 import torch
 from packaging.version import Version
 
@@ -80,3 +86,98 @@ class LLMIOType(Enum):
     # - attention_mask
     # - position_ids (integer position ids)
     huggingface_input_ids = "huggingface_input_ids"
+
+
+# --- Persistent QDC job records for LLM perf collection ----------------------
+# Flat YAML mapping of `<model>_<precision>_<runtime>_<device>` -> record.
+# Submit writes one entry per QDC job; collect polls each and on retryable
+# failure re-fetches the bundle from release-assets.yaml and resubmits. Kept
+# here (not in qdc/qdc_jobs.py) so it stays importable without the QDC SDK.
+
+_JobRecordRetT = TypeVar("_JobRecordRetT")
+
+DEFAULT_ATTEMPTS = 2
+
+
+class JobOutcome(str, Enum):
+    SUCCESS = "success"
+    RETRYABLE_ERROR = "retryable_error"
+    RETRYABLE_UNSUCCESSFUL = "retryable_unsuccessful"
+    RETRYABLE_EMPTY_LOGS = "retryable_empty_logs"
+
+
+@dataclass
+class JobRecord:
+    job_id: str
+    attempts_left: int = 2
+
+
+def make_key(model_id: str, precision: str, runtime: str, device_name: str) -> str:
+    return f"{model_id}_{precision}_{runtime}_{device_name}"
+
+
+def load_jobs(jobs_file: str | Path) -> dict[str, JobRecord]:
+    p = Path(jobs_file)
+    if not p.exists() or p.stat().st_size == 0:
+        return {}
+    with p.open(encoding="utf-8") as f:
+        raw = ruamel.yaml.YAML().load(f) or {}
+    return {
+        k: JobRecord(
+            job_id=str(v["job_id"]),
+            attempts_left=int(v.get("attempts_left", DEFAULT_ATTEMPTS)),
+        )
+        for k, v in raw.items()
+        if isinstance(v, dict) and "job_id" in v
+    }
+
+
+def poll_and_retry(
+    initial_job_id: str,
+    attempts_left: int,
+    collect_fn: Callable[[str], tuple[_JobRecordRetT, JobOutcome, str | None]],
+    resubmit_fn: Callable[[], str],
+    on_new_job_id: Callable[[str, int], None] | None = None,
+) -> _JobRecordRetT:
+    """Poll a QDC job; on retryable failure, resubmit until ``attempts_left`` runs out."""
+    job_id = initial_job_id
+    while True:
+        result, outcome, reason = collect_fn(job_id)
+        if outcome is JobOutcome.SUCCESS:
+            return result
+        if attempts_left <= 0:
+            raise RuntimeError(
+                f"{reason} after exhausting retry budget. "
+                f"Check QDC job logs for details."
+            )
+        job_id = resubmit_fn()
+        attempts_left -= 1
+        if on_new_job_id is not None:
+            on_new_job_id(job_id, attempts_left)
+        print(f"Retrying with new job {job_id} (attempts_left={attempts_left})")
+
+
+def save_job(
+    jobs_file: str | Path,
+    key: str,
+    job_id: str,
+    attempts_left: int = DEFAULT_ATTEMPTS,
+) -> None:
+    """Upsert one row into ``jobs_file``. fcntl.LOCK_EX-guarded for parallel submitters."""
+    p = Path(jobs_file)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a+", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            f.seek(0)
+            raw = f.read()
+            mapping: dict[str, Any] = (
+                dict(ruamel.yaml.YAML().load(raw) or {}) if raw.strip() else {}
+            )
+            mapping[key] = {"job_id": job_id, "attempts_left": attempts_left}
+            f.seek(0)
+            f.truncate(0)
+            ruamel.yaml.YAML().dump(mapping, f)
+            f.flush()
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)

@@ -4,9 +4,11 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
+import os
 import random
 import time
 import uuid
+import zipfile
 from collections.abc import Callable, Iterator
 from typing import TypeVar
 
@@ -654,3 +656,17 @@ class QDCJobs:
             lambda: qdc_api.upload_file(self.client, file_path, artifact_type),
             f"upload_file({file_path})",
         )
+
+
+def create_zip(zip_path: str, source_dir: str | os.PathLike) -> None:
+    """Zip ``source_dir`` into ``zip_path`` with no compression.
+
+    ZIP_STORED (no compression) is used for speed; the bundled files are
+    already-compressed binaries.
+    """
+    source_dir = str(source_dir)
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as zf:
+        for root, _, files in os.walk(source_dir):
+            for fn in files:
+                abs_path = os.path.join(root, fn)
+                zf.write(abs_path, os.path.relpath(abs_path, source_dir))
