@@ -27,6 +27,7 @@ If the traceback points to our code, route to `ai-hub-models`.
 | ValueError/KeyError in `export.py` | `models/*/export.py` | `ai-hub-models` | Export script logic error. Check which PR last modified the export template or the model's export.py. |
 | Errors in `testing_export_eval.py` | `utils/testing_export_eval.py` | `ai-hub-models` | Test infrastructure bug — compile_via_export, link_via_export, etc. |
 | Errors in `scorecard/` | `scorecard/*.py` | `ai-hub-models` | Scorecard infrastructure — execution_helpers, collect_results, etc. |
+| Scorecard jobs fail with `null` input or `TypeError` on workflow-level inputs (e.g. `skip_llm`) while other matrix legs succeed | `.github/workflows/scorecard.yml` | `ai-hub-models` | **Workflow YAML input mismatch.** `workflow_call` inputs defined but not mirrored in `workflow_dispatch` → triggers pass `null`. Fix: add defensive fallbacks or mirror inputs. See tetracode#20246, PR #3961. |
 | "Install QAIHM[dev,<model>] (wheel) failed" | Model's `requirements.txt` | `ai-hub-models` | Dependency doesn't have wheels for the CI Python version or platform. Route to model owner. |
 | Codegen/template errors | `scripts/templates/*.j2` | `ai-hub-models` | Jinja template rendering failure in codegen. |
 | "Check for code-gen changes" pre-commit failure | `scripts/run_codegen.py` | `ai-hub-models` | Committed code-gen output is stale. Re-run `run_codegen.py` for the affected model. |

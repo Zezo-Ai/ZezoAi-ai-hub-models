@@ -49,6 +49,14 @@ Use alongside `error-patterns.md` and `runtime-guide.md` for triage.
 
 ## Numerics Regression Signatures
 
+### QAIRT Version Bump — w8a16 Catastrophic Accuracy Drops
+
+| Signal | Confidence | Team |
+|--------|-----------|------|
+| Multiple w8a16 models on same device drop 30–50%+ device accuracy, FP accuracy stable | HIGH | Compiler/ONNX2EP (QAIRT regression) |
+| Catastrophic drop (>30% accuracy loss) concentrated on one device + one precision | HIGH | Compiler/ONNX2EP — likely QAIRT quantizer path regression. External: AISW JIRA. |
+| Drop disappears when switching to quantizer_v2 (PSNR recovers) | HIGH | Compiler/ONNX2EP — QAIRT quantizer v1 path regression confirmed. See tetracode#20197 (Jul 2026, S25 w8a16 cluster). |
+
 ### Quantization Drift
 
 | Signal | Confidence | Team |
@@ -100,6 +108,8 @@ Use alongside `error-patterns.md` and `runtime-guide.md` for triage.
 | `vit` | Samsung Galaxy S25 | `qnn_dlc` | Reports `-inf` timing (w8a8). QAIRT 2.47 regression suspected. Tracked in tetracode#19775. Sustained across Jun 12 + Jun 18. |
 | `maskrcnn` (roi_head) | Samsung Galaxy S25 | `qnn_dlc` | 2x+ slowdown or `-inf` on S25. Appeared in Jun 25 dev + Jun 29 prod + Jul 2 dev scorecards. Tracked jointly with S25/QAIRT cluster. |
 | `yolor` | Samsung Galaxy S25 | `qnn_dlc`, `onnx` | `-inf` or 12x slowdown on S25. Appeared Jun 25 dev + Jun 29 prod scorecards. Part of broader S25/QAIRT 2.47 cluster. |
+| `detr_resnet101` | Samsung Galaxy S25 | `onnx` | `-inf` timing (w8a16_mixed_int16). Appeared Jul 2 dev + Jul 9 dev scorecards. Layer norm issue under investigation (QAIRT 2.48 vs 2.45). Tracked jointly with S25 cluster. |
+| `detr_resnet50_dc5` | Samsung Galaxy S25 | `onnx` | `-inf` timing (w8a16_mixed_int16). Same root cause as `detr_resnet101`. Appeared Jul 2 dev + Jul 9 dev scorecards. |
 
 ---
 

@@ -215,3 +215,12 @@ The czar rotates weekly. Assign to the `ai-hub-models` label and let the current
 - **Actual fix:** PR #3626 added `use_pt2=False` override for these models (the quantize jobs were failing due to PT2 export path, same root cause as sam3/zipformer).
 - **Score:** PARTIAL — team was wrong (actual fix was ai-hub-models, not Quantization), but noting "AIMET quantize regression" was a reasonable hypothesis without seeing the workbench job logs.
 - **Lesson:** Workbench quantize job failures can have AIMET OR model-code root causes. When quantize fails for models that just gained PT2 defaults, check whether the quantize pipeline is hitting the torch.export path. Fix may be in our serialization config, not AIMET.
+
+## Example 24: Scorecard Workflow YAML Input Mismatch — Misrouted as Infra (triage-wrong)
+**Issue:** tetracode#20246 "[QAIHM Nightly] Test Failures - 2026-07-08"
+- **Error:** Scorecard submit-jobs (torch) failed on py3.11 and py3.12; mediapipe `np.allclose` failures on same nightly
+- **Agent triage:** Identified mediapipe allclose mismatches (routed to `ai-hub-models`) + disk-full runner failures (routed to `Cloud services`). Missed that the scorecard submission failures had a distinct root cause.
+- **Actual fix:** PR #3961 — `skip_llm` was defined in `workflow_call` but not `workflow_dispatch`, so nightly triggers passed `null` causing scorecard submit jobs to misbehave. The fix added defensive fallbacks in `scorecard.yml`.
+- **Score:** VERIFIED-INCORRECT (`triage-wrong` label applied by human)
+- **Key signal:** Scorecard submit-jobs failures on multiple Python versions with the same error pattern, distinct from the mediapipe test failures and the disk-full infrastructure issue.
+- **Lesson:** When scorecard submission/workflow jobs fail separately from unit/model test failures, always check `.github/workflows/scorecard.yml` for input parameter mismatches. Don't conflate scorecard workflow failures with other concurrent test failures (mediapipe, disk-full) — they may have independent root causes requiring separate RCA.
