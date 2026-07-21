@@ -125,7 +125,7 @@ jobs:
       - name: Download per-split release assets
         uses: actions/download-artifact@v8
         with:
-          pattern: "Scorecard LLM Perf Release Assets (${{ inputs.action_id }}, llm-*)"
+          pattern: "Scorecard LLM Perf Release Assets (${{ inputs.action_id }}, llm*)"
           path: build/split-llm-release-assets
 
       - name: Combine
