@@ -16,7 +16,11 @@ from qai_hub_models.utils.args import export_parser
 from qai_hub_models.utils.asset_loaders import check_unpublished_model_warning
 from qai_hub_models.utils.export.dispatch import resolve_model, select_pipeline
 
-SUPPORTED_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {}
+SUPPORTED_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
+    Precision.float: [
+        TargetRuntime.TFLITE,
+    ],
+}
 
 
 DEFAULT_EXPORT_DEVICE = "Samsung Galaxy S25 (Family)"

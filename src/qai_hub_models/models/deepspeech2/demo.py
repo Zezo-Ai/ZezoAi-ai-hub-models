@@ -30,7 +30,7 @@ def main(is_test: bool = False) -> None:
     print("Loading DeepSpeech2 model...")
     model = demo_model_from_cli_args(DeepSpeech2, MODEL_ID, args)
 
-    # For on-device or Hub models, we need to match the compiled fixed shape (3500 frames)
+    # For on-device or Hub models, we need to match the compiled fixed shape
     context_len = None
     is_on_device = (
         args.eval_mode == "on-device" if hasattr(args, "eval_mode") else False

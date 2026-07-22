@@ -17,7 +17,11 @@ from qai_hub_models.utils.asset_loaders import check_unpublished_model_warning
 from qai_hub_models.utils.evaluate.dispatch import select_evaluate_pipeline
 from qai_hub_models.utils.export.dispatch import resolve_model
 
-SUPPORTED_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {}
+SUPPORTED_PRECISION_RUNTIMES: dict[Precision, list[TargetRuntime]] = {
+    Precision.float: [
+        TargetRuntime.TFLITE,
+    ],
+}
 
 
 DEFAULT_EVAL_DEVICE = "Samsung Galaxy S25 (Family)"

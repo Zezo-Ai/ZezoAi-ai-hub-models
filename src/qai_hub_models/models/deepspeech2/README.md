@@ -25,7 +25,7 @@ qai-hub-models perf DeepSpeech2
 qai-hub-models numerics DeepSpeech2
 
 # Download a ready-to-deploy asset
-qai-hub-models fetch DeepSpeech2 --runtime qnn_context_binary --precision float
+qai-hub-models fetch DeepSpeech2 --runtime tflite --precision float
 ```
 See the [CLI README](../../../../cli/README.md)
 for the full list of commands and filters.
@@ -68,7 +68,7 @@ To run the model on Qualcomm® devices, you must export the model for use with a
 TensorFlow Lite, ONNX Runtime, or Qualcomm AI Engine Direct.
 Use the following command to export the model:
 ```bash
-qai-hub-models export deepspeech2 --target-runtime qnn_context_binary --precision float
+qai-hub-models export deepspeech2 --target-runtime tflite --precision float
 ```
 Additional options are documented with the `--help` option.
 

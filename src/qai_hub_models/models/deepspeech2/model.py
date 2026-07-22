@@ -152,7 +152,7 @@ class DeepSpeech2(BaseModel):
     @staticmethod
     def get_input_spec(
         batch_size: int = 1,
-        num_frames: int = 3500,
+        num_frames: int = 800,
         num_features: int = 161,
     ) -> InputSpec:
         return {
