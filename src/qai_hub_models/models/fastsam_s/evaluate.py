@@ -32,19 +32,17 @@ DEFAULT_EVAL_DEVICE = "Samsung Galaxy S25 (Family)"
 evaluate_model = select_evaluate_pipeline(resolve_model(MODEL_ID))
 
 
-def build_parser(cli_mode: bool = False) -> argparse.ArgumentParser:
+def build_parser() -> argparse.ArgumentParser:
     """Build the argparse parser for this model's evaluate script.
 
     Exposed so the qai-hub-models CLI dispatcher can reuse the model's native
-    parser without re-running main(). When *cli_mode* is True, runtime,
-    precision, and device/chipset must be explicitly specified.
+    parser without re-running main().
     """
     return evaluate_parser(
         model_cls=Model,
         supported_dataset_classes=Model.get_eval_dataset_classes(),
         supported_precision_runtimes=SUPPORTED_PRECISION_RUNTIMES,
         default_device=DEFAULT_EVAL_DEVICE,
-        cli_mode=cli_mode,
     )
 
 

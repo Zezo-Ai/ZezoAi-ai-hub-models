@@ -60,19 +60,13 @@ def _confirm_run_ok(model_id_or_module: str) -> bool:
     return check_unpublished_model_warning()
 
 
-def build_export_parser_for(
-    resolved: ResolvedModel, cli_mode: bool = True
-) -> argparse.ArgumentParser:
+def build_export_parser_for(resolved: ResolvedModel) -> argparse.ArgumentParser:
     """Build the export parser from an already-resolved model.
 
     Parameters
     ----------
     resolved
         Model metadata from :func:`resolve_model`.
-    cli_mode
-        If True, ``--target-runtime``, ``--precision`` (unless
-        ``separate_quantize_script``), and ``--device``/``--chipset`` are
-        required and have no defaults.
 
     Returns
     -------
@@ -85,33 +79,26 @@ def build_export_parser_for(
         supported_precision_runtimes=resolved.code_gen.supported_precision_runtimes,
         default_export_device=resolved.code_gen.default_device,
         omit_precision=resolved.code_gen.separate_quantize_script,
-        cli_mode=cli_mode,
     )
 
 
-def build_export_parser(
-    model_id_or_module: str, cli_mode: bool = True
-) -> argparse.ArgumentParser:
+def build_export_parser(model_id_or_module: str) -> argparse.ArgumentParser:
     """Build the argparse parser for exporting this model.
 
-    Equivalent to the `build_parser(cli_mode=True)` function that was
-    previously generated in each `models/<model_id>/export.py`.
+    Equivalent to the `build_parser()` function that was previously generated
+    in each `models/<model_id>/export.py`.
 
     Parameters
     ----------
     model_id_or_module
         Model ID (e.g. ``"mobilenet_v2"``) or an importable dotted module path.
-    cli_mode
-        If True, ``--target-runtime``, ``--precision`` (unless
-        ``separate_quantize_script``), and ``--device``/``--chipset`` are
-        required and have no defaults.
 
     Returns
     -------
     argparse.ArgumentParser
         The model's native export argument parser.
     """
-    return build_export_parser_for(resolve_model(model_id_or_module), cli_mode)
+    return build_export_parser_for(resolve_model(model_id_or_module))
 
 
 def run_export(model_id_or_module: str, args: argparse.Namespace) -> None:
@@ -133,18 +120,13 @@ def run_export(model_id_or_module: str, args: argparse.Namespace) -> None:
     select_pipeline(resolved)(resolved.model_id, **vars(args))
 
 
-def build_evaluate_parser_for(
-    resolved: ResolvedModel, cli_mode: bool = True
-) -> argparse.ArgumentParser:
+def build_evaluate_parser_for(resolved: ResolvedModel) -> argparse.ArgumentParser:
     """Build the evaluate parser from an already-resolved model.
 
     Parameters
     ----------
     resolved
         Model metadata from :func:`resolve_model`.
-    cli_mode
-        If True, ``--target-runtime``, ``--precision``, and ``--device``/``--chipset``
-        are required and have no defaults.
 
     Returns
     -------
@@ -161,32 +143,26 @@ def build_evaluate_parser_for(
         if resolved.code_gen.num_calibration_samples
         else None,
         default_device=resolved.code_gen.default_device,
-        cli_mode=cli_mode,
     )
 
 
-def build_evaluate_parser(
-    model_id_or_module: str, cli_mode: bool = True
-) -> argparse.ArgumentParser:
+def build_evaluate_parser(model_id_or_module: str) -> argparse.ArgumentParser:
     """Build the argparse parser for evaluating this model.
 
-    Equivalent to the `build_parser(cli_mode=True)` function that was
-    previously generated in each `models/<model_id>/evaluate.py`.
+    Equivalent to the `build_parser()` function that was previously generated
+    in each `models/<model_id>/evaluate.py`.
 
     Parameters
     ----------
     model_id_or_module
         Model ID (e.g. ``"mobilenet_v2"``) or an importable dotted module path.
-    cli_mode
-        If True, ``--target-runtime``, ``--precision``, and ``--device``/``--chipset``
-        are required and have no defaults.
 
     Returns
     -------
     argparse.ArgumentParser
         The model's native evaluate argument parser.
     """
-    return build_evaluate_parser_for(resolve_model(model_id_or_module), cli_mode)
+    return build_evaluate_parser_for(resolve_model(model_id_or_module))
 
 
 def run_evaluate(model_id_or_module: str, args: argparse.Namespace) -> None:
@@ -223,7 +199,7 @@ def run_model_script(model_id: str, script: str, forwarded: list[str]) -> None:
     """
     resolved = resolve_model(model_id)
     if script == "export":
-        parser = build_export_parser_for(resolved, cli_mode=True)
+        parser = build_export_parser_for(resolved)
         parser.prog = f"qai_hub_models export {model_id}"
         args = parser.parse_args(forwarded)
         if not _confirm_run_ok(model_id):
@@ -232,7 +208,7 @@ def run_model_script(model_id: str, script: str, forwarded: list[str]) -> None:
         return
 
     if script == "evaluate":
-        parser = build_evaluate_parser_for(resolved, cli_mode=True)
+        parser = build_evaluate_parser_for(resolved)
         parser.prog = f"qai_hub_models evaluate {model_id}"
         args = parser.parse_args(forwarded)
         if not _confirm_run_ok(model_id):
