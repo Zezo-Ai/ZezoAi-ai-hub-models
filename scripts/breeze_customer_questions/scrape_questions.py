@@ -310,8 +310,9 @@ def _scrape_github(since_date: str, max_questions: int) -> list[dict[str, Any]]:
                         "list",
                         "--repo",
                         repo,
+                        # Closed = already resolved; skip. Sister CSV exporter keeps `all`.
                         "--state",
-                        "all",
+                        "open",
                         "--search",
                         f"created:>={since_date}",
                         "--limit",
