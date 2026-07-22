@@ -1,0 +1,40 @@
+name: OWL-ViT
+id: owl_vit
+status: pending
+status_reason: animated banner is not available
+headline: Open-Vocabulary Object Detection with Vision Transformers.
+domain: Computer Vision
+description: OWL-ViT (Open-World Localization with Vision Transformers) is an open-vocabulary object detector that uses a CLIP-based ViT-B/32 backbone. Given an image and one or more free-form text queries, the model predicts bounding boxes and confidence scores for each query.
+use_case: Object Detection
+tags:
+- foundation
+applicable_scenarios:
+- Open-Vocabulary Detection
+- Zero-Shot Object Detection
+- Factory Automation
+related_models:
+- yolov8_det
+- yolov11_det
+- owlv2
+form_factors:
+- Phone
+- Tablet
+has_static_banner: true
+has_animated_banner: false
+dataset : []
+technical_details:
+  Model checkpoint: google/owlvit-base-patch32
+  Input image resolution: 768x768
+  Number of parameters: 153M
+  Model size (float): 613 MB
+license_type: apache-2.0
+research_paper: https://arxiv.org/abs/2205.06230
+research_paper_title: Simple Open-Vocabulary Object Detection with Vision Transformers
+source_repo: https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit
+license: https://github.com/google-research/scenic/blob/main/LICENSE
+numerics_benchmark:
+  dataset_name: coco
+  metric_name: Mean Average Precision
+  value: 44.7
+  unit: mAP
+  source: https://arxiv.org/abs/2205.06230
