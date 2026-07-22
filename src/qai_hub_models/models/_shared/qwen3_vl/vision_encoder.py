@@ -411,12 +411,13 @@ class Qwen3VLVisionEncoder(BaseModel):
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         onnx_path = output_path / filename
+        data_location = Path(filename).stem + ".data"
         onnx.save_model(
             onnx_model,
             str(onnx_path),
             save_as_external_data=True,
             all_tensors_to_one_file=True,
-            location=filename + ".data",
+            location=data_location,
         )
         return onnx_path
 

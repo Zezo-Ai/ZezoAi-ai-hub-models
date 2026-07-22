@@ -764,6 +764,7 @@ def setup_test_quantization(
     num_samples: int = 0,
     use_seq_mse: bool = False,
     image_size: tuple[int, int] | None = None,
+    spinquant_config: dict | None = None,
 ) -> str:
     if not (
         (Path(output_path) / "model.encodings").exists()
@@ -781,6 +782,7 @@ def setup_test_quantization(
             num_samples=num_samples,
             use_seq_mse=use_seq_mse,
             image_size=image_size,
+            spinquant_config=spinquant_config,
         )
         cleanup()
     return output_path

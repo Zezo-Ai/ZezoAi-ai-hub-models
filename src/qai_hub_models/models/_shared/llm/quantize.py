@@ -242,6 +242,11 @@ def quantize(
     fp_model = fp_model.to("cpu")
     del fp_model
 
+    # save_calibrated_checkpoint() frees quant_sim, but the cached instance
+    # (keyed by checkpoint path) lingers; evict it so a later load for the same
+    # path rebuilds from the saved ONNX instead of reusing the gutted instance.
+    quantized_model_cls.release()
+
 
 def llm_quantize(
     quantized_model_cls: type[LLM_AIMETOnnx],

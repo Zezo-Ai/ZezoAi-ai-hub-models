@@ -200,6 +200,9 @@ def test_quantize_and_demo(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
         precision=Precision.w4a16,
         checkpoint="DEFAULT",
         use_seq_mse=False,
+        # Qwen3-1.7B's W4A16 recipe requires SpinQuant (R1+R3); without it the
+        # quantized model emits garbage instead of a usable response.
+        spinquant_config={"enable_r1": True, "enable_r2": False, "enable_r3": True},
     )
     # Disable thinking mode: the 1.7B model otherwise loops in an unterminated
     # reasoning trace and never emits the answer within the token budget.

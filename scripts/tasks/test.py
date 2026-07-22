@@ -16,6 +16,7 @@ from .changes import get_all_models, get_changed_files_in_package
 from .constants import (
     BUILD_ROOT,
     COMPILE_SINGLE_INSTANTIATION_ENV_VAR,
+    GENIE_BUNDLES_ROOT,
     PY_PACKAGE_INSTALL_ROOT,
     PY_PACKAGE_MODELS_ROOT,
     PY_PACKAGE_SRC_ROOT,
@@ -242,14 +243,15 @@ class GPUPyTestModelsTask(CompositeTask):
                     )
                 )
 
-            # Free disk between models: venv + HF cache + QAIHM store + TMPDIR.
+            # Free disk between models: venv + HF cache + QAIHM store + TMPDIR + genie bundles (multi-GB each, otherwise never removed).
             tasks.append(
                 RunCommandsTask(
                     f"Cleanup After Model {model_name}",
                     f"rm -rf {model_venv}"
                     f" {home_dir}/.cache/huggingface/hub/models--*"
                     f" {home_dir}/.qaihm/models/*"
-                    f" {tmp_dir}/*",
+                    f" {tmp_dir}/*"
+                    f" {GENIE_BUNDLES_ROOT}",
                 )
             )
 
