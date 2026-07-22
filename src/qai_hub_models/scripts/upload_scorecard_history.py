@@ -60,6 +60,12 @@ HISTORY_ARTIFACTS: list[tuple[ScorecardArtifact, str]] = [
     (ScorecardArtifact.NUMERICS_REGRESSIONS, "numerics-regressions.json"),
     (ScorecardArtifact.RESULTS_CSV, "results.csv"),
     (ScorecardArtifact.SCORECARD_FAILURE_ANALYSIS, "scorecard_failure_analysis.csv"),
+    # Per-run toolchain snapshot. Used by the next run of the same deployment
+    # as the "previous" side of its toolchain-version diff (so dev diffs
+    # against dev, prod against prod). Without this, collect_scorecard_results
+    # falls back to the checked-in intermediates copy, which only refreshes
+    # when a prod scorecard PR merges to main.
+    (ScorecardArtifact.TOOL_VERSIONS, "tool-versions.yaml"),
 ]
 
 
@@ -118,6 +124,7 @@ def upload_scorecard_to_s3(
         date=date.isoformat(),
         branch=branch,
         deployment=deployment,
+        run_name=run_name,
         commit_sha=commit_sha,
         github_run_url=run_url,
         artifacts=uploaded,

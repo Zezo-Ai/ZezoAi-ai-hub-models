@@ -82,6 +82,55 @@ def list_runs(
     return manifests[:last]
 
 
+def find_latest_run(
+    deployment: str,
+    exclude_run_id: str = "",
+    run_name_prefix: str = "weekly-",
+) -> ScorecardManifest | None:
+    """Return the most recent manifest for the given deployment, or None.
+
+    Used to source the "previous" baseline for the toolchain-version diff and
+    the cross-deployment context table. Excludes exclude_run_id so a partial
+    re-run of the same scorecard doesn't compare against itself.
+
+    run_name_prefix defaults to "weekly-" so ad-hoc workflow_dispatches (which
+    carry the dispatcher's chosen tableau_branch_name) don't drown out real
+    scheduled runs in the picker. Pass run_name_prefix="" to consider every
+    manifest, including manual and test dispatches.
+    """
+    for manifest in list_runs(last=25):
+        if manifest.deployment != deployment:
+            continue
+        if exclude_run_id and manifest.run_id == exclude_run_id:
+            continue
+        if run_name_prefix and not manifest.run_name.startswith(run_name_prefix):
+            continue
+        return manifest
+    return None
+
+
+def download_single_artifact(
+    manifest: ScorecardManifest, artifact: str, dest: Path
+) -> Path | None:
+    """Download one artifact from a specific run, or return None if missing.
+
+    Takes the manifest (not just the run_id) because the S3 layout keys on
+    {run_id}-{run_name} — see upload_scorecard_history.upload_scorecard_to_s3.
+    Passing the manifest keeps the key construction in one place and prevents
+    callers from silently missing artifacts when they only have the run_id.
+
+    Returns the local path on success, None if either the run or the artifact
+    is absent (so callers can fall back gracefully).
+    """
+    bucket, _ = get_qaihm_s3_or_exit(QAIHM_PRIVATE_S3_BUCKET)
+    s3_key = f"{S3_PREFIX}/{manifest.run_id}-{manifest.run_name}/{artifact}"
+    if not s3_file_exists(bucket, s3_key):
+        return None
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    s3_download(bucket, s3_key, dest, verbose=False)
+    return dest
+
+
 def download_artifacts(
     run_id: str,
     artifact: str | None = None,

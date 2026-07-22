@@ -8,10 +8,17 @@ import json
 from pathlib import Path
 from unittest import mock
 
+from qai_hub_models import QAIRTVersion
+from qai_hub_models.scorecard.results.yaml import ToolVersionsByPathYaml
 from qai_hub_models.scripts import file_scorecard_regression_issue as mod
 from qai_hub_models.scripts.file_scorecard_regression_issue import (
     MAX_ISSUE_BODY_LEN,
+    ScorecardContext,
+    ScorecardContextCell,
+    _cell_from_manifest_and_versions,
+    _short_qairt,
     build_issue_body,
+    build_scorecard_context,
 )
 
 # --- Fixtures ---
@@ -216,6 +223,140 @@ def test_build_issue_body_rejects_malformed_job_ids() -> None:
     )
     assert "javascript:" not in body
     assert "alert(1)" not in body
+
+
+def test_short_qairt_uses_semver_parts() -> None:
+    """QAIRT versions shown in the context grid drop the build id (ident)."""
+    # Full form: major.minor.patch.ident -> major.minor.patch
+    v = QAIRTVersion("2.48.0.260626120635", validate_exists_on_ai_hub=False)
+    assert _short_qairt(v) == "2.48.0"
+    # No ident: unchanged.
+    v = QAIRTVersion("2.45.0", validate_exists_on_ai_hub=False)
+    assert _short_qairt(v) == "2.45.0"
+    # No patch: drop straight to api_version.
+    v = QAIRTVersion("2.45", validate_exists_on_ai_hub=False)
+    assert _short_qairt(v) == "2.45"
+
+
+def test_context_block_renders_and_labels_current_deployment() -> None:
+    """The 2x2 context grid renders above the perf table and marks the current run."""
+    ctx = ScorecardContext(
+        dev_latest=ScorecardContextCell("111", "2026-07-09", "2.48.0"),
+        dev_previous=ScorecardContextCell("100", "2026-07-02", "2.47.0"),
+        prod_latest=ScorecardContextCell("99", "2026-07-04", "2.47.0"),
+        prod_previous=ScorecardContextCell("80", "2026-06-27", "2.45.0"),
+        current_env="dev",
+    )
+    body = build_issue_body(
+        PERF_REGRESSIONS[:1],
+        [],
+        "https://run",
+        "https://perf",
+        "https://num",
+        deployment="dev",
+        context=ctx,
+    )
+    assert "## Scorecard Context" in body
+    # All four cells appear.
+    assert "Run 111" in body and "QAIRT 2.48.0" in body
+    assert "Run 100" in body and "QAIRT 2.47.0" in body
+    assert "Run 99" in body
+    assert "Run 80" in body and "QAIRT 2.45.0" in body
+    # Current-env annotation clarifies which side of the comparison this is.
+    assert "**Dev** scorecard" in body
+    # Context sits above the regression table.
+    assert body.index("## Scorecard Context") < body.index("## Performance Regressions")
+
+
+def test_context_omitted_when_none() -> None:
+    """No context arg → no context section (safe for local dry runs)."""
+    body = build_issue_body(
+        PERF_REGRESSIONS[:1],
+        [],
+        "https://run",
+        "https://perf",
+        "https://num",
+        deployment="dev",
+        context=None,
+    )
+    assert "## Scorecard Context" not in body
+
+
+def test_build_scorecard_context_places_current_run_on_correct_side() -> None:
+    """A dev scorecard puts its own run in the Dev column; the other cells
+    come from S3 lookups of the opposite deployment.
+    """
+    current_versions = mock.MagicMock()
+    current_versions.tool_versions = {}
+    same_prev_cell = ScorecardContextCell("100", "2026-07-02", "2.47.0")
+    prod_latest_cell = ScorecardContextCell("99", "2026-07-04", "2.47.0")
+    prod_prev_cell = ScorecardContextCell("80", "2026-06-27", "2.45.0")
+
+    def fake_lookup(deployment: str, exclude_run_id: str = "") -> ScorecardContextCell:
+        if deployment == "dev":
+            return same_prev_cell
+        # First prod call returns the latest; the second (exclude=latest)
+        # returns the previous. The build_scorecard_context helper passes the
+        # latest run id in on the second call.
+        if exclude_run_id == prod_latest_cell.run_id:
+            return prod_prev_cell
+        return prod_latest_cell
+
+    with mock.patch.object(mod, "_lookup_context_cell", side_effect=fake_lookup):
+        ctx = build_scorecard_context(
+            current_deployment="dev",
+            current_run_id="111",
+            current_tool_versions=current_versions,
+        )
+    # Current run lands in dev_latest even though S3 doesn't know about it yet.
+    assert ctx.dev_latest.run_id == "111"
+    assert ctx.dev_previous.run_id == "100"
+    assert ctx.prod_latest.run_id == "99"
+    assert ctx.prod_previous.run_id == "80"
+    assert ctx.current_env == "dev"
+
+
+def test_cell_from_manifest_rejects_malformed_run_id_and_date() -> None:
+    """S3-sourced run_id/date must pass the same allowlist as user inputs
+    before rendering into issue markdown, else a crafted manifest could inject
+    markdown / links / arbitrary text into the tetracode issue body.
+    """
+    tv = ToolVersionsByPathYaml()
+    cell = _cell_from_manifest_and_versions(
+        "malicious](https://evil.example)", "not-a-date", tv
+    )
+    assert cell.run_id == ""
+    assert cell.date == ""
+    # Well-formed inputs pass through untouched.
+    good = _cell_from_manifest_and_versions("29003645353", "2026-07-13", tv)
+    assert good.run_id == "29003645353"
+    assert good.date == "2026-07-13"
+
+
+def test_build_scorecard_context_normalizes_prod_subdomain() -> None:
+    """Prod runs pass current_deployment="workbench" (the AI Hub subdomain), but
+    S3 manifests store the normalized env label "prod". Ensure the S3 lookups
+    query "prod" and "dev", never the raw subdomains.
+    """
+    current_versions = mock.MagicMock()
+    current_versions.tool_versions = {}
+    seen_deployments: list[str] = []
+
+    def fake_lookup(deployment: str, exclude_run_id: str = "") -> ScorecardContextCell:
+        seen_deployments.append(deployment)
+        return ScorecardContextCell()
+
+    with mock.patch.object(mod, "_lookup_context_cell", side_effect=fake_lookup):
+        ctx = build_scorecard_context(
+            current_deployment="workbench",
+            current_run_id="222",
+            current_tool_versions=current_versions,
+        )
+    # All lookups must use normalized labels — never "workbench".
+    assert "workbench" not in seen_deployments
+    assert set(seen_deployments) == {"prod", "dev"}
+    assert ctx.current_env == "prod"
+    assert ctx.prod_latest.run_id == "222"
 
 
 def test_main_writes_output(tmp_path: Path) -> None:

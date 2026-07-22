@@ -487,6 +487,11 @@ jobs:
       - name: Write Scorecard Regression Issue
         id: write-scorecard-regression-issue
         if: ${{ !cancelled() && steps.create-perf-files.outcome == 'success' && inputs.notify_slack }}
+        env:
+          # Route free-form workflow inputs through env: rather than raw
+          # ${{ ... }} substitution so a crafted value can't inject shell
+          # metacharacters into the run script body.
+          ACTION_ID: ${{ inputs.action_id || github.run_id }}
         run: |
           DEPLOYMENT=${{ env.QAIHM_TEST_DEPLOYMENT }}
           DEPLOYMENT_URL=$( [ "$DEPLOYMENT" = "prod" ] && echo "workbench" || echo "$DEPLOYMENT" )
@@ -512,6 +517,8 @@ jobs:
             --numerics-diff-url "${{ steps.upload-numerics-diff-summary.outputs.artifact-url || 'N/A' }}" \
             --deployment "$DEPLOYMENT_URL" \
             --previous-deployment "$PREVIOUS_DEPLOYMENT_URL" \
+            --current-run-id "$ACTION_ID" \
+            --tool-versions-path "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/tool-versions.yaml" \
             --output "${{ env.QAIHM_TEST_ARTIFACTS_DIR }}/regression-issue.json" \
             $TEST_ARGS
 

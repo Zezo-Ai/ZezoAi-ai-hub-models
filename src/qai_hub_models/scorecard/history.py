@@ -21,6 +21,13 @@ class ScorecardManifest(BaseQAIHMConfig):
     date: str
     branch: str = "main"
     deployment: str = "prod"
+    # Distinguishes scheduled weekly runs ("weekly-prod", "weekly-dev") from
+    # ad-hoc workflow_dispatches (which carry the dispatcher's chosen
+    # tableau_branch_name). Callers can filter by this to skip test/manual
+    # runs when picking the "previous" baseline for the toolchain-version
+    # diff or the Scorecard Context grid. Empty string on manifests uploaded
+    # before this field was introduced.
+    run_name: str = ""
     commit_sha: str = ""
     github_run_url: str = ""
     artifacts: list[str] = []

@@ -1,10 +1,24 @@
 {# Template for scorecard regression GitHub issue body.
    Column names come from PrettyTable definitions in performance_diff.py
    and numerics_diff.py — this template renders them dynamically. #}
+{%- macro _cell(c) -%}
+{% if c.run_id %}Run {{ c.run_id }} · {{ c.date }}{% if c.qairt %} · QAIRT {{ c.qairt }}{% endif %}{% else %}—{% endif %}
+{%- endmacro -%}
 # Scorecard Regressions (2x+)
 
 Date: {{ today }}
 
+{% if context %}
+## Scorecard Context
+
+|          | Dev | Prod |
+| -------- | --- | ---- |
+| Latest   | {{ _cell(context.dev_latest) }} | {{ _cell(context.prod_latest) }} |
+| Previous | {{ _cell(context.dev_previous) }} | {{ _cell(context.prod_previous) }} |
+
+_This report: **{{ context.current_env|capitalize }}** scorecard, comparing against the previous **{{ context.current_env|capitalize }}** run._
+
+{% endif %}
 {% if perf_regressions %}
 ## Performance Regressions
 

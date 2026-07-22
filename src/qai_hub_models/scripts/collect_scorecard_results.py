@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import logging
 import multiprocessing
 import os
 import shutil
 import sys
+import tempfile
 import traceback
 from itertools import cycle
 from pathlib import Path
@@ -73,6 +75,10 @@ from qai_hub_models.scorecard.utils.numerics_yaml_helpers import (
     create_numerics_yaml,
     get_chipset_registry,
 )
+from qai_hub_models.scripts.download_scorecard_results import (
+    download_single_artifact,
+    find_latest_run,
+)
 from qai_hub_models.utils.hub_clients import (
     default_hub_client_as,
     deployment_is_prod,
@@ -122,6 +128,58 @@ def remove_failed_jobs(config: dict) -> None:
                     and perf_metrics[key]["inference_time"] == "null"
                 ):
                     del perf_metrics[key]
+
+
+def _load_previous_tool_versions(deployment: str) -> ToolVersionsByPathYaml:
+    """Load the previous run's tool-versions.yaml for a per-deployment diff.
+
+    Sourcing baseline:
+      1. Most recent completed run of the same deployment in the S3 history
+         (dev diffs against dev, prod against prod).
+      2. Checked-in intermediates as a fallback — used the first time a new
+         deployment shows up, and on test branches that can't reach S3.
+
+    Without the S3 baseline the diff falls back to intermediates, which only
+    refreshes when a prod scorecard PR merges to main — so a dev run's
+    "previous" would silently stay pinned to the last merged prod run.
+    """
+    try:
+        previous = find_latest_run(deployment)
+    except Exception:
+        logging.warning(
+            "Could not query scorecard S3 history; falling back to checked-in "
+            "intermediates for the toolchain diff baseline.",
+            exc_info=True,
+        )
+        previous = None
+
+    if previous is not None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "tool-versions.yaml"
+            downloaded = download_single_artifact(previous, "tool-versions.yaml", dest)
+            if downloaded is not None:
+                print(
+                    f"Loaded previous {deployment} tool-versions from S3 "
+                    f"run {previous.run_id} (baseline for toolchain diff)."
+                )
+                return ToolVersionsByPathYaml.from_yaml(
+                    downloaded, create_empty_if_no_file=True
+                )
+        print(
+            f"Previous {deployment} run {previous.run_id} has no "
+            f"tool-versions.yaml in S3 (likely uploaded before the artifact "
+            f"was added). Falling back to intermediates."
+        )
+    else:
+        print(
+            f"No previous {deployment} run found in scorecard S3 history; "
+            f"falling back to intermediates for the toolchain diff baseline."
+        )
+
+    return ToolVersionsByPathYaml.from_yaml(
+        ScorecardArtifact.TOOL_VERSIONS.intermediates_path,
+        create_empty_if_no_file=True,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -763,16 +821,11 @@ if __name__ == "__main__":
         report_path = os.path.join(
             args.artifacts_dir, f"performance-summary-{now_str}.txt"
         )
-        # Diff toolchain versions between this run's intermediates (current)
-        # and the checked-in intermediates from the previous results branch (previous).
         current_tool_versions = ToolVersionsByPathYaml.from_yaml(
             ScorecardArtifact.TOOL_VERSIONS.path,
             create_empty_if_no_file=True,
         )
-        previous_tool_versions = ToolVersionsByPathYaml.from_yaml(
-            ScorecardArtifact.TOOL_VERSIONS.intermediates_path,
-            create_empty_if_no_file=True,
-        )
+        previous_tool_versions = _load_previous_tool_versions(args.deployment)
         toolchain_changes = current_tool_versions.diff(previous_tool_versions)
         perf_report.dump_summary(report_path, toolchain_changes=toolchain_changes)
 
