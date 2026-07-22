@@ -119,10 +119,12 @@ jobs:
       - name: Create QAIHM PR
         if: ${{ inputs.create_pr }}
         id: create-qaihm-pr
+        continue-on-error: true
         uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.STAGING_GH_TOKEN }}
           result-encoding: string
+          retries: 3
           script: |
             const { repo, owner } = context.repo;
             const head = '${{ env.PR_REF_NAME }}';
