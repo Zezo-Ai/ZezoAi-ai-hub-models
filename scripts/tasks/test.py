@@ -52,7 +52,7 @@ from .venv import (
 
 def _model_has_nightly_tests(model_name: str) -> bool:
     """Return True if pytest can collect any nightly-marked tests for this model."""
-    test_path = os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "test.py")
+    test_path = os.path.join(SCORECARD_PACKAGE_MODELS_ROOT, model_name, "test.py")
     if not os.path.exists(test_path):
         return False
     result = subprocess.run(
@@ -135,7 +135,7 @@ class GPUPyTestModelsTask(CompositeTask):
         for model_name in get_all_models():
             if (
                 os.path.exists(
-                    os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "test.py")
+                    os.path.join(SCORECARD_PACKAGE_MODELS_ROOT, model_name, "test.py")
                 )
                 and (is_quantized_llm_model(model_name))
                 and not check_scorecard_config_field(
@@ -235,7 +235,7 @@ class GPUPyTestModelsTask(CompositeTask):
                         group_name=f"Run {test_suite} Tests For Model {model_name}",
                         venv=model_venv,
                         commands=[
-                            f"{common_command} && {guard} && pytest -v -s --capture=no {isolation} src/qai_hub_models/models/{model_name}/test.py {options}",
+                            f"{common_command} && {guard} && pytest -v -s --capture=no {isolation} src/qai_hub_models/scorecard/models/{model_name}/test.py {options}",
                         ],
                         raise_on_failure=False,
                         # Ignore "no tests collected" return code

@@ -96,7 +96,7 @@ Each model lives in `qai_hub_models/models/<model_id>/` and requires:
 
 ### Auto-generated Files
 
-- `README.md`, `export.py`, `test_generated.py` via `python qai_hub_models/scripts/run_codegen.py -m <model_id>`
+- `README.md`, `export.py`, and `scorecard/models/<model_id>/test_generated.py` via `python qai_hub_models/scripts/run_codegen.py -m <model_id>`
 - `evaluate.py` - Only generated if model defines `eval_datasets()` and `get_evaluator()`
 - `perf.yaml` - Generated weekly by CI
 

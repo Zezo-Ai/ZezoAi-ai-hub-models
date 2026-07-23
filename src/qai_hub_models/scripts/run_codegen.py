@@ -335,18 +335,10 @@ def generate_code_for_model(model_name: str) -> list[str]:
     elif test_path.exists() and _is_auto_generated(test_path):
         os.remove(test_path)
 
-    # Transition-only: remove the auto-generated test file from its old home
-    # under models/<id>/. Kept for one PR of grace so in-flight branches
-    # don't leave orphans. Delete this block once no branches reference
-    # the old location (tetracode#20296 PR 3 cleanup).
-    old_test_path = model_dir / "test_generated.py"
-    if old_test_path.exists() and _is_auto_generated(old_test_path):
-        os.remove(old_test_path)
-
     should_generate_conftest = (
         should_generate_tests and not export_options.is_precompiled
     )
-    # tetracode#20296: emit conftest.py at BOTH the hand-written test.py's
+    # Emit conftest.py at BOTH the hand-written test.py's
     # location (models/<id>/) and the moved test_generated.py's location
     # (scorecard/models/<id>/) so cached_from_pretrained applies to tests
     # in both dirs (pytest conftest discovery doesn't walk sideways). The
