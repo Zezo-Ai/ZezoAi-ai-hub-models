@@ -20,7 +20,9 @@ from qai_hub_models.models._shared.llm.perf_collection import (
     clear_llm_metrics_for_profile_path,
     update_perf_yaml,
 )
+from qai_hub_models.scorecard.devices_and_chipsets_yaml import load_similar_devices
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
+from qai_hub_models.scorecard.perf_yaml import QAIHMModelPerf
 
 
 def _load_updates_file(path: Path) -> list[dict]:
@@ -88,6 +90,14 @@ def apply_updates(updates: list[dict]) -> int:
             desired_compute_unit=u["desired_compute_unit"],
         )
         models.add(u["model_id"])
+
+    similar_devices_mapping = load_similar_devices()
+    for model_id in models:
+        perf = QAIHMModelPerf.from_model(model_id, not_exists_ok=True)
+        if perf.empty:
+            continue
+        perf.apply_similar_devices(similar_devices_mapping)
+        perf.to_model_yaml(model_id)
 
     print(f"Applied {len(updates)} perf updates across {len(models)} models:")
     for model_id in sorted(models):

@@ -190,6 +190,72 @@ def test_to_proto_excludes_similar_devices() -> None:
     assert similar_names & set(proto_all.supported_devices)
 
 
+def test_apply_similar_devices_refreshes_stale_entry() -> None:
+    """A similar-device entry seeded with stale metrics must be overwritten
+    on re-apply. This is what the LLM pipeline relies on:
+    apply_llm_perf_updates.py loads the committed perf.yaml (which already
+    has similar-device entries from a prior run) and expects
+    apply_similar_devices to refresh them from the freshly upserted
+    reference device numbers.
+    """
+    mapping = load_similar_devices()
+
+    perf = QAIHMModelPerf.from_model("inception_v3")
+
+    # Plant a distinctive sentinel in a similar device's slot on top of a
+    # reference that inception_v3 already has perf for, then verify the
+    # sentinel is gone after apply_similar_devices.
+    stale_time = 999999.0
+    seeded_similar: str | None = None
+
+    for prec in perf.precisions.values():
+        for comp in prec.components.values():
+            existing_by_name = {str(d): d for d in comp.performance_metrics}
+            for similar_name, (_, reference_names) in mapping.items():
+                for ref_name in reference_names:
+                    if ref_name not in existing_by_name:
+                        continue
+                    ref_bucket = comp.performance_metrics[existing_by_name[ref_name]]
+                    similar_device = ScorecardDevice(
+                        name=similar_name,
+                        reference_device_name=similar_name,
+                        register=False,
+                    )
+                    stale_bucket = {
+                        path: details.model_copy(
+                            update={"inference_time_milliseconds": stale_time},
+                            deep=True,
+                        )
+                        for path, details in ref_bucket.items()
+                    }
+                    comp.performance_metrics[similar_device] = stale_bucket
+                    seeded_similar = similar_name
+                    break
+                if seeded_similar:
+                    break
+            if seeded_similar:
+                break
+        if seeded_similar:
+            break
+
+    assert seeded_similar is not None, (
+        "test setup: no similar device found with a reference in inception_v3's perf"
+    )
+
+    perf.apply_similar_devices(mapping)
+
+    for prec in perf.precisions.values():
+        for comp in prec.components.values():
+            for device, bucket in comp.performance_metrics.items():
+                if str(device) != seeded_similar:
+                    continue
+                for details in bucket.values():
+                    assert details.inference_time_milliseconds != stale_time, (
+                        f"stale similar-device entry for {seeded_similar} was "
+                        f"not overwritten by apply_similar_devices"
+                    )
+
+
 def test_apply_similar_devices_adds_real_chipset() -> None:
     """When perf data is duplicated onto a similar device, its real chipset
     should be added to ``supported_chipsets``.

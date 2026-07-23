@@ -152,6 +152,12 @@ class QAIHMModelPerf(BaseQAIHMConfig):
         """
         Duplicate performance entries from supported devices to similar unsupported devices.
 
+        Any pre-existing similar-device entry is overwritten from the first reference
+        device that currently has results, so a re-run against a perf.yaml already
+        populated by a prior call refreshes the borrowed metrics rather than leaving
+        them frozen at the earlier values. This matters for the LLM pipeline, where
+        apply_llm_perf_updates.py loads the committed perf.yaml before calling this.
+
         Parameters
         ----------
         mapping
@@ -175,9 +181,6 @@ class QAIHMModelPerf(BaseQAIHMConfig):
                 existing_devices = {str(d): d for d in component.performance_metrics}
 
                 for unsupported_name, (_, reference_names) in mapping.items():
-                    if unsupported_name in existing_devices:
-                        continue
-
                     for name in reference_names:
                         if name in existing_devices:
                             component.performance_metrics[

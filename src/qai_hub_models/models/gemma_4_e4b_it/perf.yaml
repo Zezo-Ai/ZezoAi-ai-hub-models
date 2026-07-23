@@ -1,242 +1,336 @@
-supported_devices:
-- Snapdragon 8 Elite Gen 5 QRD
-- Snapdragon 8 Elite QRD
-- Snapdragon X2 Elite CRD
-- Snapdragon X Elite CRD
-- Dragonwing IQ-9075 EVK
-supported_chipsets:
-- qualcomm-snapdragon-8-elite-gen5
-- qualcomm-snapdragon-8-elite
-- qualcomm-snapdragon-x2-elite
-- qualcomm-snapdragon-x-elite
-- qualcomm-qcs9075
 precisions:
   q4_0:
     components:
       Gemma-4-E4B-it:
         performance_metrics:
-          Snapdragon 8 Elite Gen 5 QRD:
-            geniex_llamacpp:
-              llm_metrics:
-              - context_length: 4096
-                tokens_per_second: 13.347809
-                time_to_first_token_range_milliseconds:
-                  min: 2223.176625
-                  max: 71141.652
-                prefill_tokens_per_second: 57.575727
-                desired_compute_unit: cpu
-              - context_length: 512
-                tokens_per_second: 17.905892
-                time_to_first_token_range_milliseconds:
-                  min: 1129.84925
-                  max: 4519.397
-                prefill_tokens_per_second: 113.303439
-                desired_compute_unit: cpu
-              - context_length: 4096
-                tokens_per_second: 11.701253
-                time_to_first_token_range_milliseconds:
-                  min: 2240.31025
-                  max: 71689.928
-                prefill_tokens_per_second: 57.136005
-                desired_compute_unit: gpu
-              - context_length: 512
-                tokens_per_second: 17.771069
-                time_to_first_token_range_milliseconds:
-                  min: 1246.53075
-                  max: 4986.123
-                prefill_tokens_per_second: 102.701058
-                desired_compute_unit: gpu
-              - context_length: 4096
-                tokens_per_second: 13.26779
-                time_to_first_token_range_milliseconds:
-                  min: 265.45246875
-                  max: 8494.479
-                prefill_tokens_per_second: 482.273732
-                desired_compute_unit: npu
-              - context_length: 512
-                tokens_per_second: 16.824563
-                time_to_first_token_range_milliseconds:
-                  min: 195.887
-                  max: 783.548
-                prefill_tokens_per_second: 653.998845
-                desired_compute_unit: npu
-          Snapdragon 8 Elite QRD:
-            geniex_llamacpp:
-              llm_metrics:
-              - context_length: 4096
-                tokens_per_second: 12.238845
-                time_to_first_token_range_milliseconds:
-                  min: 2369.5864375
-                  max: 75826.766
-                prefill_tokens_per_second: 54.018261
-                desired_compute_unit: cpu
-              - context_length: 512
-                tokens_per_second: 17.234032
-                time_to_first_token_range_milliseconds:
-                  min: 1262.87975
-                  max: 5051.519
-                prefill_tokens_per_second: 101.377426
-                desired_compute_unit: cpu
-              - context_length: 4096
-                tokens_per_second: 12.105188
-                time_to_first_token_range_milliseconds:
-                  min: 2424.85496875
-                  max: 77595.359
-                prefill_tokens_per_second: 52.787209
-                desired_compute_unit: gpu
-              - context_length: 512
-                tokens_per_second: 16.777481
-                time_to_first_token_range_milliseconds:
-                  min: 1356.80775
-                  max: 5427.231
-                prefill_tokens_per_second: 94.358035
-                desired_compute_unit: gpu
-              - context_length: 4096
-                tokens_per_second: 12.358648
-                time_to_first_token_range_milliseconds:
-                  min: 299.68165625
-                  max: 9589.813
-                prefill_tokens_per_second: 427.189172
-                desired_compute_unit: npu
-              - context_length: 512
-                tokens_per_second: 16.021655
-                time_to_first_token_range_milliseconds:
-                  min: 198.8185
-                  max: 795.274
-                prefill_tokens_per_second: 644.65684
-                desired_compute_unit: npu
-          Snapdragon X2 Elite CRD:
-            geniex_llamacpp:
-              llm_metrics:
-              - context_length: 4096
-                tokens_per_second: 12.013094
-                time_to_first_token_range_milliseconds:
-                  min: 1250.67746875
-                  max: 40021.679
-                prefill_tokens_per_second: 102.345872
-                desired_compute_unit: cpu
-              - context_length: 512
-                tokens_per_second: 23.827865
-                time_to_first_token_range_milliseconds:
-                  min: 680.42725
-                  max: 2721.709
-                prefill_tokens_per_second: 188.169919
-                desired_compute_unit: cpu
-              - context_length: 4096
-                tokens_per_second: 13.238633
-                time_to_first_token_range_milliseconds:
-                  min: 1140.75040625
-                  max: 36504.013
-                prefill_tokens_per_second: 112.211652
-                desired_compute_unit: gpu
-              - context_length: 512
-                tokens_per_second: 25.136049
-                time_to_first_token_range_milliseconds:
-                  min: 729.007
-                  max: 2916.028
-                prefill_tokens_per_second: 175.66956
-                desired_compute_unit: gpu
-              - context_length: 4096
-                tokens_per_second: 17.911474
-                time_to_first_token_range_milliseconds:
-                  min: 193.84078125
-                  max: 6202.905
-                prefill_tokens_per_second: 660.407841
-                desired_compute_unit: npu
-              - context_length: 512
-                tokens_per_second: 20.846358
-                time_to_first_token_range_milliseconds:
-                  min: 146.913
-                  max: 587.652
-                prefill_tokens_per_second: 871.625855
-                desired_compute_unit: npu
-          Snapdragon X Elite CRD:
-            geniex_llamacpp:
-              llm_metrics:
-              - context_length: 4096
-                tokens_per_second: 11.823266
-                time_to_first_token_range_milliseconds:
-                  min: 803.18884375
-                  max: 25702.043
-                prefill_tokens_per_second: 159.369259
-                desired_compute_unit: cpu
-              - context_length: 512
-                tokens_per_second: 20.525636
-                time_to_first_token_range_milliseconds:
-                  min: 539.67775
-                  max: 2158.711
-                prefill_tokens_per_second: 237.254191
-                desired_compute_unit: cpu
-              - context_length: 4096
-                tokens_per_second: 8.192524
-                time_to_first_token_range_milliseconds:
-                  min: 932.55509375
-                  max: 29841.763
-                prefill_tokens_per_second: 137.262292
-                desired_compute_unit: gpu
-              - context_length: 512
-                tokens_per_second: 19.702914
-                time_to_first_token_range_milliseconds:
-                  min: 613.5875
-                  max: 2454.35
-                prefill_tokens_per_second: 208.682581
-                desired_compute_unit: gpu
-              - context_length: 4096
-                tokens_per_second: 10.034623
-                time_to_first_token_range_milliseconds:
-                  min: 464.1780625
-                  max: 14853.698
-                prefill_tokens_per_second: 275.770003
-                desired_compute_unit: npu
-              - context_length: 512
-                tokens_per_second: 11.882264
-                time_to_first_token_range_milliseconds:
-                  min: 352.02125
-                  max: 1408.085
-                prefill_tokens_per_second: 363.875415
-                desired_compute_unit: npu
           Dragonwing IQ-9075 EVK:
             geniex_llamacpp:
               llm_metrics:
               - context_length: 4096
-                tokens_per_second: 10.071341
-                time_to_first_token_range_milliseconds:
-                  min: 2126.68853125
-                  max: 68054.033
+                desired_compute_unit: cpu
                 prefill_tokens_per_second: 60.188016
-                desired_compute_unit: cpu
-              - context_length: 512
-                tokens_per_second: 13.439978
                 time_to_first_token_range_milliseconds:
-                  min: 1748.0915
-                  max: 6992.366
+                  max: 68054.033
+                  min: 2126.68853125
+                tokens_per_second: 10.071341
+              - context_length: 512
+                desired_compute_unit: cpu
                 prefill_tokens_per_second: 73.228891
-                desired_compute_unit: cpu
-              - context_length: 4096
-                tokens_per_second: 10.054127
                 time_to_first_token_range_milliseconds:
-                  min: 2094.9564375
-                  max: 67038.606
+                  max: 6992.366
+                  min: 1748.0915
+                tokens_per_second: 13.439978
+              - context_length: 4096
+                desired_compute_unit: gpu
                 prefill_tokens_per_second: 61.099681
-                desired_compute_unit: gpu
-              - context_length: 512
-                tokens_per_second: 13.431804
                 time_to_first_token_range_milliseconds:
-                  min: 1754.37625
-                  max: 7017.505
+                  max: 67038.606
+                  min: 2094.9564375
+                tokens_per_second: 10.054127
+              - context_length: 512
+                desired_compute_unit: gpu
                 prefill_tokens_per_second: 72.966456
-                desired_compute_unit: gpu
+                time_to_first_token_range_milliseconds:
+                  max: 7017.505
+                  min: 1754.37625
+                tokens_per_second: 13.431804
               - context_length: 4096
-                tokens_per_second: 7.626485
-                time_to_first_token_range_milliseconds:
-                  min: 500.7065625
-                  max: 16022.61
+                desired_compute_unit: npu
                 prefill_tokens_per_second: 255.654802
-                desired_compute_unit: npu
-              - context_length: 512
-                tokens_per_second: 8.859328
                 time_to_first_token_range_milliseconds:
-                  min: 391.9085
-                  max: 1567.634
-                prefill_tokens_per_second: 326.824087
+                  max: 16022.61
+                  min: 500.7065625
+                tokens_per_second: 7.626485
+              - context_length: 512
                 desired_compute_unit: npu
+                prefill_tokens_per_second: 326.824087
+                time_to_first_token_range_milliseconds:
+                  max: 1567.634
+                  min: 391.9085
+                tokens_per_second: 8.859328
+          Dragonwing IQ-X7181:
+            geniex_llamacpp:
+              llm_metrics:
+              - context_length: 4096
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 159.369259
+                time_to_first_token_range_milliseconds:
+                  max: 25702.043
+                  min: 803.18884375
+                tokens_per_second: 11.823266
+              - context_length: 512
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 237.254191
+                time_to_first_token_range_milliseconds:
+                  max: 2158.711
+                  min: 539.67775
+                tokens_per_second: 20.525636
+              - context_length: 4096
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 137.262292
+                time_to_first_token_range_milliseconds:
+                  max: 29841.763
+                  min: 932.55509375
+                tokens_per_second: 8.192524
+              - context_length: 512
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 208.682581
+                time_to_first_token_range_milliseconds:
+                  max: 2454.35
+                  min: 613.5875
+                tokens_per_second: 19.702914
+              - context_length: 4096
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 275.770003
+                time_to_first_token_range_milliseconds:
+                  max: 14853.698
+                  min: 464.1780625
+                tokens_per_second: 10.034623
+              - context_length: 512
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 363.875415
+                time_to_first_token_range_milliseconds:
+                  max: 1408.085
+                  min: 352.02125
+                tokens_per_second: 11.882264
+          Dragonwing Q-8750:
+            geniex_llamacpp:
+              llm_metrics:
+              - context_length: 4096
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 54.018261
+                time_to_first_token_range_milliseconds:
+                  max: 75826.766
+                  min: 2369.5864375
+                tokens_per_second: 12.238845
+              - context_length: 512
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 101.377426
+                time_to_first_token_range_milliseconds:
+                  max: 5051.519
+                  min: 1262.87975
+                tokens_per_second: 17.234032
+              - context_length: 4096
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 52.787209
+                time_to_first_token_range_milliseconds:
+                  max: 77595.359
+                  min: 2424.85496875
+                tokens_per_second: 12.105188
+              - context_length: 512
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 94.358035
+                time_to_first_token_range_milliseconds:
+                  max: 5427.231
+                  min: 1356.80775
+                tokens_per_second: 16.777481
+              - context_length: 4096
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 427.189172
+                time_to_first_token_range_milliseconds:
+                  max: 9589.813
+                  min: 299.68165625
+                tokens_per_second: 12.358648
+              - context_length: 512
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 644.65684
+                time_to_first_token_range_milliseconds:
+                  max: 795.274
+                  min: 198.8185
+                tokens_per_second: 16.021655
+          Snapdragon 8 Elite Gen 5 QRD:
+            geniex_llamacpp:
+              llm_metrics:
+              - context_length: 4096
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 57.575727
+                time_to_first_token_range_milliseconds:
+                  max: 71141.652
+                  min: 2223.176625
+                tokens_per_second: 13.347809
+              - context_length: 512
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 113.303439
+                time_to_first_token_range_milliseconds:
+                  max: 4519.397
+                  min: 1129.84925
+                tokens_per_second: 17.905892
+              - context_length: 4096
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 57.136005
+                time_to_first_token_range_milliseconds:
+                  max: 71689.928
+                  min: 2240.31025
+                tokens_per_second: 11.701253
+              - context_length: 512
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 102.701058
+                time_to_first_token_range_milliseconds:
+                  max: 4986.123
+                  min: 1246.53075
+                tokens_per_second: 17.771069
+              - context_length: 4096
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 482.273732
+                time_to_first_token_range_milliseconds:
+                  max: 8494.479
+                  min: 265.45246875
+                tokens_per_second: 13.26779
+              - context_length: 512
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 653.998845
+                time_to_first_token_range_milliseconds:
+                  max: 783.548
+                  min: 195.887
+                tokens_per_second: 16.824563
+          Snapdragon 8 Elite QRD:
+            geniex_llamacpp:
+              llm_metrics:
+              - context_length: 4096
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 54.018261
+                time_to_first_token_range_milliseconds:
+                  max: 75826.766
+                  min: 2369.5864375
+                tokens_per_second: 12.238845
+              - context_length: 512
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 101.377426
+                time_to_first_token_range_milliseconds:
+                  max: 5051.519
+                  min: 1262.87975
+                tokens_per_second: 17.234032
+              - context_length: 4096
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 52.787209
+                time_to_first_token_range_milliseconds:
+                  max: 77595.359
+                  min: 2424.85496875
+                tokens_per_second: 12.105188
+              - context_length: 512
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 94.358035
+                time_to_first_token_range_milliseconds:
+                  max: 5427.231
+                  min: 1356.80775
+                tokens_per_second: 16.777481
+              - context_length: 4096
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 427.189172
+                time_to_first_token_range_milliseconds:
+                  max: 9589.813
+                  min: 299.68165625
+                tokens_per_second: 12.358648
+              - context_length: 512
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 644.65684
+                time_to_first_token_range_milliseconds:
+                  max: 795.274
+                  min: 198.8185
+                tokens_per_second: 16.021655
+          Snapdragon X Elite CRD:
+            geniex_llamacpp:
+              llm_metrics:
+              - context_length: 4096
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 159.369259
+                time_to_first_token_range_milliseconds:
+                  max: 25702.043
+                  min: 803.18884375
+                tokens_per_second: 11.823266
+              - context_length: 512
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 237.254191
+                time_to_first_token_range_milliseconds:
+                  max: 2158.711
+                  min: 539.67775
+                tokens_per_second: 20.525636
+              - context_length: 4096
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 137.262292
+                time_to_first_token_range_milliseconds:
+                  max: 29841.763
+                  min: 932.55509375
+                tokens_per_second: 8.192524
+              - context_length: 512
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 208.682581
+                time_to_first_token_range_milliseconds:
+                  max: 2454.35
+                  min: 613.5875
+                tokens_per_second: 19.702914
+              - context_length: 4096
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 275.770003
+                time_to_first_token_range_milliseconds:
+                  max: 14853.698
+                  min: 464.1780625
+                tokens_per_second: 10.034623
+              - context_length: 512
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 363.875415
+                time_to_first_token_range_milliseconds:
+                  max: 1408.085
+                  min: 352.02125
+                tokens_per_second: 11.882264
+          Snapdragon X2 Elite CRD:
+            geniex_llamacpp:
+              llm_metrics:
+              - context_length: 4096
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 102.345872
+                time_to_first_token_range_milliseconds:
+                  max: 40021.679
+                  min: 1250.67746875
+                tokens_per_second: 12.013094
+              - context_length: 512
+                desired_compute_unit: cpu
+                prefill_tokens_per_second: 188.169919
+                time_to_first_token_range_milliseconds:
+                  max: 2721.709
+                  min: 680.42725
+                tokens_per_second: 23.827865
+              - context_length: 4096
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 112.211652
+                time_to_first_token_range_milliseconds:
+                  max: 36504.013
+                  min: 1140.75040625
+                tokens_per_second: 13.238633
+              - context_length: 512
+                desired_compute_unit: gpu
+                prefill_tokens_per_second: 175.66956
+                time_to_first_token_range_milliseconds:
+                  max: 2916.028
+                  min: 729.007
+                tokens_per_second: 25.136049
+              - context_length: 4096
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 660.407841
+                time_to_first_token_range_milliseconds:
+                  max: 6202.905
+                  min: 193.84078125
+                tokens_per_second: 17.911474
+              - context_length: 512
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 871.625855
+                time_to_first_token_range_milliseconds:
+                  max: 587.652
+                  min: 146.913
+                tokens_per_second: 20.846358
+supported_chipsets:
+- qualcomm-snapdragon-8-elite-gen5
+- qualcomm-snapdragon-8-elite
+- qualcomm-snapdragon-x2-elite
+- qualcomm-snapdragon-x-elite
+- qualcomm-qcs7181
+- qualcomm-qcs8750
+- qualcomm-qcs9075
+supported_devices:
+- Snapdragon 8 Elite Gen 5 QRD
+- Snapdragon 8 Elite QRD
+- Dragonwing Q-8750
+- Snapdragon X2 Elite CRD
+- Snapdragon X Elite CRD
+- Dragonwing IQ-X7181
+- Dragonwing IQ-9075 EVK

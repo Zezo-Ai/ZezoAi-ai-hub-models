@@ -282,6 +282,8 @@ jobs:
       contents: write
       actions: read
       pull-requests: write
+    env:
+      QAIHM_CI_USE_EDITABLE_INSTALL: 1
     steps:
     - uses: actions/checkout@v7
       with:

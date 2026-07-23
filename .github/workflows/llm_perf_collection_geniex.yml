@@ -266,6 +266,8 @@ jobs:
     outputs:
       branch_name: ${{ steps.push_changes.outputs.branch_name }}
       has_changes: ${{ steps.check_changes.outputs.has_changes }}
+    env:
+      QAIHM_CI_USE_EDITABLE_INSTALL: 1
     steps:
     - uses: actions/checkout@v7
       with:
