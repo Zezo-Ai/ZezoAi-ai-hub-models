@@ -14,8 +14,8 @@ from transformers import AutoProcessor
 
 from qai_hub_models import Precision
 from qai_hub_models.datasets import instantiate_dataset
-from qai_hub_models.evaluators.llm_evaluator import LLMEvaluator
 from qai_hub_models.models._shared.llm.generator_factory import make_generator
+from qai_hub_models.models._shared.llm.llm_evaluator import LLMEvaluator
 from qai_hub_models.models._shared.llm.model import (
     DEFAULT_CALIBRATION_SEQ_LEN,
     DEFAULT_CONTEXT_LENGTH,

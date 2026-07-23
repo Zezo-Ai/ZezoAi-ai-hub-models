@@ -12,7 +12,9 @@ import torch
 from typing_extensions import Self
 
 from qai_hub_models.configs.model_metadata import ModelMetadata
-from qai_hub_models.evaluators.detection_evaluator import DetectionEvaluator
+from qai_hub_models.models._shared.detection.detection_evaluator import (
+    DetectionEvaluator,
+)
 from qai_hub_models.models._shared.yolo.utils import detect_postprocess
 from qai_hub_models.models.gear_guard_net.dataset_coco_ppe import CocoPPEDataset
 from qai_hub_models.models.gear_guard_net.dataset_gear_guard import GearGuardDataset

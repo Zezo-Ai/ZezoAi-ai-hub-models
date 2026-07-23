@@ -15,7 +15,7 @@ from tqdm import tqdm
 from transformers import PreTrainedTokenizerBase
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-from qai_hub_models.evaluators.llm_evaluator import LLMEvaluator
+from qai_hub_models.models._shared.llm.llm_evaluator import LLMEvaluator
 from qai_hub_models.utils.base_evaluator import _DataLoader
 from qai_hub_models.utils.metrics import (
     MMMU,

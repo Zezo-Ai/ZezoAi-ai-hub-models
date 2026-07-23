@@ -16,7 +16,7 @@ from qai_hub_models.datasets.imagenet import (
     ImagenetColorizationDataset,
     ImagenetteColorizationDataset,
 )
-from qai_hub_models.evaluators.colorization_evaluator import ColorizationEvaluator
+from qai_hub_models.models.ddcolor.evaluator import ColorizationEvaluator
 from qai_hub_models.models.ddcolor.external_repos.ddcolor.infer_hf import DDColorHF
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator

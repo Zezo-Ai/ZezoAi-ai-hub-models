@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import torch
 from torch.nn import CrossEntropyLoss
 
-from qai_hub_models.evaluators.llm_evaluator import LLMEvaluator
+from qai_hub_models.models._shared.llm.llm_evaluator import LLMEvaluator
 from qai_hub_models.utils.metrics import (
     PERPLEXITY,
     MetricMetadata,

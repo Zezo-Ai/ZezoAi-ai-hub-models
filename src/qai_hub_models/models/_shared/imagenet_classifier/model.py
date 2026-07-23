@@ -14,7 +14,9 @@ from typing_extensions import Self
 
 from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.datasets.imagenet import ImagenetDataset, ImagenetteDataset
-from qai_hub_models.evaluators.classification_evaluator import ClassificationEvaluator
+from qai_hub_models.models._shared.imagenet_classifier.classification_evaluator import (
+    ClassificationEvaluator,
+)
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator

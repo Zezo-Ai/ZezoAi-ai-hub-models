@@ -13,7 +13,9 @@ from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
 from qai_hub_models.datasets.coco import CocoDataset
-from qai_hub_models.evaluators.detection_evaluator import DetectionEvaluator
+from qai_hub_models.models._shared.detection.detection_evaluator import (
+    DetectionEvaluator,
+)
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator

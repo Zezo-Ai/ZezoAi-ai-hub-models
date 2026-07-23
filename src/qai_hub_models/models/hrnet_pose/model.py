@@ -14,8 +14,8 @@ from qai_hub_models.datasets.coco.coco_person_keypoints import (
     CocoDetectorKeypointsDataset,
 )
 from qai_hub_models.datasets.mpii import MPIIDataset
-from qai_hub_models.evaluators.hrnet_evaluator import HRNetPoseEvaluator
-from qai_hub_models.evaluators.pose_evaluator import MPIIPoseEvaluator
+from qai_hub_models.models._shared.pose.pose_evaluator import MPIIPoseEvaluator
+from qai_hub_models.models.hrnet_pose.evaluator import HRNetPoseEvaluator
 from qai_hub_models.models.hrnet_pose.external_repos import EXTERNAL_REPO_PATHS
 from qai_hub_models.models.hrnet_pose.external_repos.hrnet.lib.config import cfg
 from qai_hub_models.models.hrnet_pose.external_repos.hrnet.lib.models.pose_hrnet import (

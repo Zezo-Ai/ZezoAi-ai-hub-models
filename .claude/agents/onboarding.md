@@ -216,7 +216,7 @@ Create or reuse a dataset in `qai_hub_models/datasets/`:
 - Register the dataset name
 
 ### 2. Add an Evaluator
-Create or reuse an evaluator in `qai_hub_models/evaluators/`:
+Create or reuse an evaluator in the model's folder (single-consumer) or under `qai_hub_models/models/_shared/<name>/` (multi-consumer):
 - Inherit from base evaluator class
 - Implement accuracy metrics for your task (e.g., mAP for detection, IoU for segmentation)
 

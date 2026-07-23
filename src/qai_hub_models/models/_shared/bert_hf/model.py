@@ -15,7 +15,7 @@ from qai_hub_models import (
     TargetRuntime,
 )
 from qai_hub_models.datasets.wikitext import WikiTextMasked
-from qai_hub_models.evaluators.maskedlm_evaluator import MaskedLMEvaluator
+from qai_hub_models.models._shared.bert_hf.maskedlm_evaluator import MaskedLMEvaluator
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import BaseModel

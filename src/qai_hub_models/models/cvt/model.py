@@ -19,7 +19,7 @@ from qai_hub_models import (
     TargetRuntime,
 )
 from qai_hub_models.datasets.nuscenes import NuscenesBevCVTDataset
-from qai_hub_models.evaluators.nuscenes_bev_evaluator import (
+from qai_hub_models.models._shared.cvt_gkt.nuscenes_bev_evaluator import (
     NuscenesBevSegmentationEvaluator,
 )
 from qai_hub_models.models.cvt.external_repos.cross_view_transformers.cross_view_transformer.common import (

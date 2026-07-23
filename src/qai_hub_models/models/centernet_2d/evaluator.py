@@ -9,7 +9,9 @@ from collections.abc import Callable, Collection
 
 import torch
 
-from qai_hub_models.evaluators.detection_evaluator import DetectionEvaluator
+from qai_hub_models.models._shared.detection.detection_evaluator import (
+    DetectionEvaluator,
+)
 
 
 class CenternetDetectionEvaluator(DetectionEvaluator):

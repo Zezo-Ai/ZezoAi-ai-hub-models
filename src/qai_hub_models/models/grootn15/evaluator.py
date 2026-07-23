@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
+from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.metrics import MetricMetadata
 
 

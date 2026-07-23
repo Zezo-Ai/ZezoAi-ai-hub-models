@@ -8,8 +8,10 @@ from __future__ import annotations
 import torch
 from typing_extensions import Self
 
-from qai_hub_models.evaluators.mobile_facenet_evaluator import MobileFaceNetEvaluator
 from qai_hub_models.models.mobile_facenet.dataset import LFWDataset
+from qai_hub_models.models.mobile_facenet.evaluator import (
+    MobileFaceNetEvaluator,
+)
 from qai_hub_models.models.mobile_facenet.external_repos.pytorch_mobile_facenet.mobilefacenet import (
     MobileFaceNet as SourceMobileFaceNet,
 )

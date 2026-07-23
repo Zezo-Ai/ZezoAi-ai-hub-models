@@ -10,7 +10,9 @@ import torch
 from qai_hub_models import SampleInputsType
 from qai_hub_models.datasets.bsd import BSD300Dataset
 from qai_hub_models.datasets.set14 import Set14Dataset
-from qai_hub_models.evaluators.superres_evaluator import SuperResolutionOutputEvaluator
+from qai_hub_models.models._shared.super_resolution.superres_evaluator import (
+    SuperResolutionOutputEvaluator,
+)
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator

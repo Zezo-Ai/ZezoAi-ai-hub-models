@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from qai_hub_models import SampleInputsType
 from qai_hub_models.datasets.celebahq import CelebAHQDataset
-from qai_hub_models.evaluators.inpaint_evaluator import InpaintEvaluator
+from qai_hub_models.models._shared.repaint.inpaint_evaluator import InpaintEvaluator
 from qai_hub_models.models._shared.repaint.utils import preprocess_inputs
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.base_dataset import BaseDataset

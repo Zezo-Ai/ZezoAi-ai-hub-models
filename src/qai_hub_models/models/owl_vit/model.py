@@ -9,10 +9,10 @@ import torch
 from transformers import OwlViTForObjectDetection
 from typing_extensions import Self
 
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.models._shared.owl.model import Owl
 from qai_hub_models.models._shared.owl.model_patches import apply_patches
 from qai_hub_models.utils.base_dataset import BaseDataset
+from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.input_spec import (
     InputSpec,
 )

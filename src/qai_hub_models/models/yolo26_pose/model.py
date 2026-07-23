@@ -142,7 +142,9 @@ class Yolo26PoseDetector(Yolo):
         }
 
     def get_evaluator(self) -> BaseEvaluator:
-        from qai_hub_models.evaluators.yolo_pose_evaluator import YoloPoseEvaluator
+        from qai_hub_models.models._shared.yolo.yolo_pose_evaluator import (
+            YoloPoseEvaluator,
+        )
 
         return YoloPoseEvaluator()
 

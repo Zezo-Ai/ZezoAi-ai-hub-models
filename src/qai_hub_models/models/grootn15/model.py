@@ -17,8 +17,6 @@ from transformers import AutoConfig
 
 from qai_hub_models import TargetRuntime
 from qai_hub_models.configs.tensor_spec import TensorSpec
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
-from qai_hub_models.evaluators.lerobot_evaluator import LeRobotEvaluator
 from qai_hub_models.models.grootn15.constants import (
     DEFAULT_DATA_CONFIG,
     DEFAULT_EMBODIMENT_TAG,
@@ -26,6 +24,7 @@ from qai_hub_models.models.grootn15.constants import (
     MODEL_ID,
     VLM_LANGUAGE_TOKENS,
 )
+from qai_hub_models.models.grootn15.evaluator import LeRobotEvaluator
 from qai_hub_models.models.grootn15.external_repos.gr00t.gr00t.data.transform.base import (
     ComposedModalityTransform,
 )
@@ -49,6 +48,7 @@ from qai_hub_models.models.grootn15.model_adaptations import (
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 from qai_hub_models.utils.base_collection_model import WorkbenchModelCollection
+from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.checkpoint import CheckpointSpec, FromPretrainedMixin
 from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, make_torch_inputs

@@ -16,7 +16,9 @@ from qai_hub_models import SampleInputsType
 from qai_hub_models.configs.tensor_spec import TensorSpec
 from qai_hub_models.datasets.pandaset import PandaSetDataset
 from qai_hub_models.datasets.semantic_kitti import SemanticKittiDataset
-from qai_hub_models.evaluators.semantic_kitti_evaluator import SemanticKittiEvaluator
+from qai_hub_models.models._shared.semantic_kitti.semantic_kitti_evaluator import (
+    SemanticKittiEvaluator,
+)
 from qai_hub_models.models.rangenet_plus_plus.external_repos.lidar_bonnetal.train.tasks.semantic.modules.segmentator import (
     Segmentator,
 )

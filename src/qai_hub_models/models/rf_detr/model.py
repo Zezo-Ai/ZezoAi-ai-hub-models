@@ -15,7 +15,9 @@ import torch
 import torch.nn.functional as F
 from typing_extensions import Self
 
-from qai_hub_models.evaluators.detection_evaluator import DetectionEvaluator
+from qai_hub_models.models._shared.detection.detection_evaluator import (
+    DetectionEvaluator,
+)
 from qai_hub_models.models._shared.detr.model import DETR
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import SerializationSettings

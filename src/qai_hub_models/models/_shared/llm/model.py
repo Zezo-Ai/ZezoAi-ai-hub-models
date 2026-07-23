@@ -453,11 +453,13 @@ def _get_evaluator(
     device: torch.device,
     **task_kwargs: Any,
 ) -> BaseEvaluator:
-    from qai_hub_models.evaluators.kldiv_evaluator import KLDivEvaluator
-    from qai_hub_models.evaluators.llm_response_evaluator import LLMResponseEvaluator
-    from qai_hub_models.evaluators.mmlu_evaluator import MMLUEvaluator
-    from qai_hub_models.evaluators.mmmu_evaluator import MMMUEvaluator
-    from qai_hub_models.evaluators.ppl_evaluator import PerplexityEvaluator
+    from qai_hub_models.models._shared.llm.kldiv_evaluator import KLDivEvaluator
+    from qai_hub_models.models._shared.llm.llm_response_evaluator import (
+        LLMResponseEvaluator,
+    )
+    from qai_hub_models.models._shared.llm.mmlu_evaluator import MMLUEvaluator
+    from qai_hub_models.models._shared.llm.mmmu_evaluator import MMMUEvaluator
+    from qai_hub_models.models._shared.llm.ppl_evaluator import PerplexityEvaluator
 
     if "wikitext" in task:
         return PerplexityEvaluator(context_length, device, tokenizer)

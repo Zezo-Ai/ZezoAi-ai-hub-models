@@ -18,9 +18,9 @@ from torch import nn
 from typing_extensions import Self
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
 from qai_hub_models.models.common import SampleInputsType  # noqa: TID251
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
+from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.input_spec import InputSpec, OutputSpec, TensorSpec
 

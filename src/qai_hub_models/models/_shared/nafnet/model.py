@@ -10,7 +10,7 @@ from pathlib import Path
 
 import torch
 
-from qai_hub_models.evaluators.denoising_evaluator import DenoisingEvaluator
+from qai_hub_models.models._shared.nafnet.denoising_evaluator import DenoisingEvaluator
 from qai_hub_models.models._shared.nafnet.model_patches import (
     AutoLayerNorm2d,
     NAFLocal_Base,

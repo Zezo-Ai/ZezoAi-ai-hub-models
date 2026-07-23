@@ -168,7 +168,7 @@ class YoloV8OBB(Yolo):
         write_labels_file("dota_v1_labels.txt", output_dir, metadata)
 
     def get_evaluator(self) -> BaseEvaluator:
-        from qai_hub_models.evaluators.obb_evaluator import OBBEvaluator
+        from qai_hub_models.models.yolov8_obb.evaluator import OBBEvaluator
 
         image_height, image_width = self.get_input_spec()["image"][0][2:]
         return OBBEvaluator(

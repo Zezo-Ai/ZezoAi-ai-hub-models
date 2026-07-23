@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import torch
 
-from qai_hub_models.evaluators.superres_evaluator import SuperResolutionOutputEvaluator
+from qai_hub_models.models._shared.super_resolution.superres_evaluator import (
+    SuperResolutionOutputEvaluator,
+)
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.metrics import MetricMetadata
 

@@ -13,10 +13,10 @@ from transformers import AutoProcessor
 
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.datasets.coco.coco_owl import CocoOwlDataset
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
-from qai_hub_models.evaluators.owl_evaluator import (
+from qai_hub_models.models._shared.owl.owl_evaluator import (
     OwlDetectionEvaluator,
 )
+from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.bounding_box_processing import box_xywh_to_xyxy
 from qai_hub_models.utils.input_spec import (

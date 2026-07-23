@@ -14,7 +14,7 @@ from qai_hub_models.datasets.kinetics400 import (
     preprocess_video_kinetics_400,
     read_video_at_fps,
 )
-from qai_hub_models.evaluators.video_classification_evaluator import (
+from qai_hub_models.models._shared.video_classifier.video_classification_evaluator import (
     VideoClassificationEvaluator,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset

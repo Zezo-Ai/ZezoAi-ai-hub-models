@@ -13,7 +13,7 @@ from torch.nn import functional as F
 from transformers import PreTrainedTokenizerBase
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
-from qai_hub_models.evaluators.llm_evaluator import LLMEvaluator
+from qai_hub_models.models._shared.llm.llm_evaluator import LLMEvaluator
 from qai_hub_models.utils.metrics import (
     KL_DIVERGENCE,
     MetricMetadata,

@@ -184,7 +184,9 @@ class Yolo(BaseModel):
     def get_evaluator(self) -> BaseEvaluator:
         # This is imported here so segmentation models don't have to install
         # detection evaluator dependencies.
-        from qai_hub_models.evaluators.detection_evaluator import DetectionEvaluator
+        from qai_hub_models.models._shared.detection.detection_evaluator import (
+            DetectionEvaluator,
+        )
 
         image_height, image_width = self.get_input_spec()["image"][0][2:]
         return DetectionEvaluator(
@@ -257,7 +259,7 @@ class Yolo(BaseModel):
 class YoloSegEvalMixin(BaseModel):
     def get_evaluator(self) -> BaseEvaluator:
         # This is imported here so detection models don't have to install the requirements for the segmentation dataset.
-        from qai_hub_models.evaluators.yolo_segmentation_evaluator import (
+        from qai_hub_models.models._shared.yolo.yolo_segmentation_evaluator import (
             YoloSegmentationOutputEvaluator,
         )
 

@@ -291,7 +291,7 @@ See [`imagenette.py`](qai_hub_models/datasets/imagenette.py) for an example data
 
 ### 2. Add an Evaluator
 
-Create or reuse an evaluator in `qai_hub_models/evaluators/`. Inherit from `BaseEvaluator` and implement the required methods.
+Create or reuse an evaluator. Place it in the model's own folder if it's only used by that model, or in the appropriate shared folder under `qai_hub_models/models/_shared/<name>/` if it's used by multiple models. Inherit from `BaseEvaluator` and implement the required methods.
 
 **Required methods:**
 
@@ -308,7 +308,7 @@ Create or reuse an evaluator in `qai_hub_models/evaluators/`. Inherit from `Base
 |--------|-------------|
 | `get_metric_metadata(self)` | Return `MetricMetadata` for website publishing |
 
-See [`classification_evaluator.py`](qai_hub_models/evaluators/classification_evaluator.py) for an example evaluator implementation.
+See [`classification_evaluator.py`](qai_hub_models/models/_shared/imagenet_classifier/classification_evaluator.py) for an example evaluator implementation.
 
 ### 3. Update the Model
 

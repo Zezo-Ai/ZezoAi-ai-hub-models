@@ -11,13 +11,13 @@ import numpy as np
 from tqdm import tqdm
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.evaluators.lerobot_evaluator import LeRobotEvaluator
 from qai_hub_models.models.grootn15 import MODEL_ID
 from qai_hub_models.models.grootn15.app import (
     GrootApp,
     build_app,
     get_default_dataset_path,
 )
+from qai_hub_models.models.grootn15.evaluator import LeRobotEvaluator
 from qai_hub_models.models.grootn15.external_repos.gr00t.gr00t.data.dataset import (
     LeRobotSingleDataset,
 )

@@ -11,8 +11,9 @@ from typing_extensions import Self
 
 from qai_hub_models import Precision
 from qai_hub_models.configs.tensor_spec import TensorSpec
-from qai_hub_models.evaluators.base_evaluators import BaseEvaluator
-from qai_hub_models.evaluators.coco_detection_evaluator import COCODetectionEvaluator
+from qai_hub_models.models._shared.detection.coco_detection_evaluator import (
+    COCODetectionEvaluator,
+)
 from qai_hub_models.models._shared.yolo.model import Yolo
 from qai_hub_models.models._shared.yolo.utils import detect_postprocess
 from qai_hub_models.models.yolov6.external_repos.yolov6.yolov6.layers.common import (
@@ -26,6 +27,7 @@ from qai_hub_models.utils.asset_loaders import (
     load_path,
     qaihm_temp_dir,
 )
+from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.input_spec import OutputSpec
 
 MODEL_ASSET_VERSION = 1

@@ -9,7 +9,7 @@ import torch
 from typing_extensions import Self
 
 from qai_hub_models.datasets.celebahq import CelebAHQDataset
-from qai_hub_models.evaluators.inpaint_evaluator import InpaintEvaluator
+from qai_hub_models.models._shared.repaint.inpaint_evaluator import InpaintEvaluator
 from qai_hub_models.models._shared.repaint.model import RepaintModel
 from qai_hub_models.models.aotgan.external_repos.aotgan.src.model.aotgan import (
     InpaintGenerator,

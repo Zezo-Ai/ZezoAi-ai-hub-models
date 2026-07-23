@@ -11,7 +11,9 @@ from typing_extensions import Self
 
 from qai_hub_models import SampleInputsType
 from qai_hub_models.datasets.ade20k import ADESegmentationDataset
-from qai_hub_models.evaluators.segmentation_evaluator import SegmentationOutputEvaluator
+from qai_hub_models.models._shared.segmentation.segmentation_evaluator import (
+    SegmentationOutputEvaluator,
+)
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator

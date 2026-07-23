@@ -32,7 +32,7 @@ class Fast_SAM(UltralyticsSingleClassSegmentor):
         return cls(cast(SegmentationModel, FastSAM(model=ckpt_name).model))
 
     def get_evaluator(self) -> BaseEvaluator:
-        from qai_hub_models.evaluators.class_agnostic_ar_evaluator import (
+        from qai_hub_models.models._shared.fastsam.class_agnostic_ar_evaluator import (
             ClassAgnosticARkEvaluator,
         )
 

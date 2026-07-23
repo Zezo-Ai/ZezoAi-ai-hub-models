@@ -15,8 +15,12 @@ from qai_hub_models.datasets.coco.coco_person_keypoints import (
     CocoDetectorKeypointsDataset,
 )
 from qai_hub_models.datasets.coco.cocobody import CocoBodyDataset
-from qai_hub_models.evaluators.utils.pose import IN_VIS_THRE, get_final_preds, oks_nms
 from qai_hub_models.extern.xtcocotools.cocoeval import COCOeval
+from qai_hub_models.models._shared.pose.pose_utils import (
+    IN_VIS_THRE,
+    get_final_preds,
+    oks_nms,
+)
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
 from qai_hub_models.utils.metrics import (
     MEAN_AVERAGE_PRECISION,
