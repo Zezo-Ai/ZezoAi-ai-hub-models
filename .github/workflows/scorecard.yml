@@ -282,9 +282,25 @@ jobs:
           name: test-results-accuracy
           path: build/all-test-results/accuracy
 
+      # Probe first: the artifact is absent when the export matrix is empty
+      # (e.g. LLM-only dispatch), and download-artifact emits a red ##[error]
+      # that flips the run conclusion to failure.
+      - name: Check Export Test Results Artifact Exists
+        id: check_export_results
+        if: ${{ needs.collect_results_split.result != 'skipped' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          EXISTS=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate -q '.artifacts[] | select(.name == "test-results-export") | .id' | head -n1)
+          if [ -n "$EXISTS" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download Export Test Results
         id: download_export_results
-        if: ${{ needs.collect_results_split.result != 'skipped' }}
+        if: ${{ needs.collect_results_split.result != 'skipped' && steps.check_export_results.outputs.exists == 'true' }}
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -296,7 +312,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ACCURACY_SKIPPED: ${{ needs.collect_results_split.result == 'skipped' || !(inputs.test_scope == 'accuracy' || inputs.test_scope == 'perf_and_accuracy') }}
-          EXPORT_SKIPPED: ${{ needs.collect_results_split.result == 'skipped' }}
+          EXPORT_SKIPPED: ${{ needs.collect_results_split.result == 'skipped' || steps.check_export_results.outputs.exists != 'true' }}
         run: |
           source "${{ env.VENV_PATH }}/bin/activate"
           mkdir -p build/combined-test-results

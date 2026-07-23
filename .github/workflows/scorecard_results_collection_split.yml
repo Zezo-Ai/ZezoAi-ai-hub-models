@@ -182,6 +182,7 @@ jobs:
 
       - name: Download All Split Export Test Results
         id: download_export_test_results
+        if: ${{ needs.split_models.outputs.export_matrix != '[]' }}
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -219,7 +220,7 @@ jobs:
 
       - name: Download All Split Accuracy CSV Artifacts
         id: download_accuracy_csvs
-        if: ${{ inputs.run_accuracy }}
+        if: ${{ inputs.run_accuracy && needs.split_models.outputs.accuracy_matrix != '[]' }}
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -255,7 +256,7 @@ jobs:
 
       - name: Download All Split Accuracy Test Results
         id: download_accuracy_test_results
-        if: ${{ inputs.run_accuracy }}
+        if: ${{ inputs.run_accuracy && needs.split_models.outputs.accuracy_matrix != '[]' }}
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:

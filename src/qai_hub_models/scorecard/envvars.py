@@ -44,6 +44,13 @@ class SpecialModelSetting(Enum):
     #  Models enabled for the weekly "bench" scorecard.
     BENCH = "bench"
 
+    # LLMs assigned to weekend rotation week1 / week2 via scorecard-config.yaml weekend_group.
+    LLM_WEEK1 = "llm_week1"
+    LLM_WEEK2 = "llm_week2"
+
+    # LLMs that publish downloadable release assets (rerun together on a QAIRT bump).
+    LLM_DOWNLOADABLE = "llm_downloadable"
+
     def __repr__(self) -> str:
         return self.value
 
@@ -87,6 +94,8 @@ Special options:
  * 'pytorch' -- Enable pytorch model recipes (all models under qai_hub_models/models)
  * 'pytorch_no_llm' -- Enable pytorch recipes except those flagged test_split: llm
  * 'static' -- Enable test models in qai_hub_models/scorecard/static
+ * 'llm_week1' / 'llm_week2' -- Enable the LLMs in that weekend rotation (scorecard-config.yaml weekend_group)
+ * 'llm_downloadable' -- Enable LLMs that publish downloadable release assets
 """
     SPECIAL_SETTING_ENUM = SpecialModelSetting
 

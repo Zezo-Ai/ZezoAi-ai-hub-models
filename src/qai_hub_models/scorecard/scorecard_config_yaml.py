@@ -6,13 +6,29 @@
 from __future__ import annotations
 
 import os
-from enum import Enum
+from enum import Enum, unique
 from typing import Literal
 
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
-from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT, QAIHM_PACKAGE_ROOT
+from qai_hub_models.utils.path_helpers import (
+    MODEL_IDS,
+    QAIHM_MODELS_ROOT,
+    QAIHM_PACKAGE_ROOT,
+)
 
 SCORECARD_MODELS_ROOT = QAIHM_PACKAGE_ROOT / "scorecard" / "models"
+
+
+@unique
+class LLMWeekendGroup(Enum):
+    WEEK1 = "week1"
+    WEEK2 = "week2"
+
+    def __repr__(self) -> str:
+        return self.value
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class TestRunnerSplit(Enum):
@@ -79,6 +95,12 @@ class QAIHMModelScorecardConfig(BaseQAIHMConfig):
     # When this is not possible, set this field to indicate an inconsistency.
     global_requirements_incompatible: bool = False
 
+    # Weekend LLM scorecard rotation bucket. Required for scorecard-eligible LLMs.
+    weekend_group: LLMWeekendGroup | None = None
+
+    # True if the LLM publishes downloadable release assets (rerun on a QAIRT bump).
+    downloadable_llm_asset: bool = False
+
     @classmethod
     def from_model(cls, model_id: str) -> QAIHMModelScorecardConfig:
         """Load scorecard-config.yaml for the given model."""
@@ -100,3 +122,42 @@ class QAIHMModelScorecardConfig(BaseQAIHMConfig):
         through a QDC workflow.
         """
         return self.test_split is TestRunnerSplit.LLM
+
+
+def _scorecard_llm_configs() -> dict[str, QAIHMModelScorecardConfig]:
+    """{model_id: scorecard_config} for every scorecard-eligible test_split: llm model."""
+    out: dict[str, QAIHMModelScorecardConfig] = {}
+    for model_id in MODEL_IDS:
+        sc = QAIHMModelScorecardConfig.from_model(model_id)
+        if sc.is_llm and sc.runs_in_scorecard:
+            out[model_id] = sc
+    return out
+
+
+def get_llm_model_ids() -> set[str]:
+    """Scorecard-eligible pytorch recipes with test_split == llm."""
+    return set(_scorecard_llm_configs())
+
+
+def get_week_model_ids(week: LLMWeekendGroup) -> set[str]:
+    """LLM model IDs assigned to the given weekend rotation bucket."""
+    return {m for m, sc in _scorecard_llm_configs().items() if sc.weekend_group is week}
+
+
+def get_downloadable_llm_model_ids() -> set[str]:
+    """LLM model IDs that publish downloadable release assets."""
+    return {
+        m for m, sc in _scorecard_llm_configs().items() if sc.downloadable_llm_asset
+    }
+
+
+def validate_llm_weekend_coverage() -> None:
+    """Every scorecard-eligible test_split: llm model must set weekend_group. Raises on drift."""
+    missing = sorted(
+        m for m, sc in _scorecard_llm_configs().items() if sc.weekend_group is None
+    )
+    if missing:
+        raise ValueError(
+            "Scorecard-eligible test_split: llm models are missing weekend_group in "
+            f"scorecard-config.yaml (must be week1 or week2): {missing}."
+        )
