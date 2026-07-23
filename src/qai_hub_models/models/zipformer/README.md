@@ -72,7 +72,7 @@ Additional options are documented with the `--help` option.
   [here](https://github.com/huggingface/transformers/blob/v4.42.3/LICENSE).
 
 ## References
-* [Zipformer A faster and better encoder for automatic speech recognition](https://openreview.net/forum?id=9WD9KwssyT)
+* [Zipformer A faster and better encoder for automatic speech recognition](https://arxiv.org/abs/2310.11230)
 * [Source Model Implementation](https://github.com/k2-fsa/icefall)
 
 ## Community
