@@ -1338,9 +1338,7 @@ class Qwen3VLQuantizablePreSplitBase(  # type: ignore[misc]
         """
         if not super()._has_onnx_on_disk(ckpt, sequence_length, context_length):
             return False
-        veg_complete = (ckpt / "vision_encoder.onnx").exists() and (
-            ckpt / "vision_encoder.data"
-        ).exists()
+        veg_complete = (ckpt / "vision_encoder.onnx").exists()
         embedding_complete = (ckpt / "embedding_weights.raw").exists()
         return veg_complete and embedding_complete
 

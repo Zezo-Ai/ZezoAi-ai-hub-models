@@ -2564,6 +2564,14 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             )
             if fp_model is not None:
                 fp_model.to("cpu")
+        elif checkpoint is not None and not cls._has_onnx_on_disk(
+            Path(str(checkpoint)), sequence_length, context_length
+        ):
+            # Checkpoint provided, but ONNX not found - fail loudly
+            raise ValueError(
+                "The quantized checkpoint (with custom weights) must have "
+                "an ONNX model."
+            )
         else:
             # No ONNX on disk -- export, then load
             if fp_model is None:
