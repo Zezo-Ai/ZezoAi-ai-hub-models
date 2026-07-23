@@ -109,4 +109,12 @@ jobs:
               pull_number: result.data.number,
               team_reviewers: ['ai-hub-models-reviewers'],
             });
+            // This is a scheduled sync with no human triggerer, so always
+            // assign the lm_driver sync owner.
+            await github.rest.issues.addAssignees({
+              owner,
+              repo,
+              issue_number: result.data.number,
+              assignees: ['ashvkuma_QCOM'],
+            });
             console.log(`PR created: ${result.data.html_url}`);

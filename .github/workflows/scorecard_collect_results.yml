@@ -619,6 +619,16 @@ jobs:
               pull_number: result.data.number,
               team_reviewers: ['ai-hub-models-reviewers'],
             })
+            // Assign the PR to whoever triggered the run. Scheduled runs have
+            // no human triggerer, so leave those unassigned.
+            if (context.eventName !== 'schedule') {
+              await github.rest.issues.addAssignees({
+                owner,
+                repo,
+                issue_number: result.data.number,
+                assignees: ['${{ github.actor }}'],
+              });
+            }
             return result.data.html_url
 
 
