@@ -26,13 +26,21 @@ def fake_module(tmp_path: Path) -> Iterator[ModuleType]:
     module_dir.mkdir()
     init_path = module_dir / "__init__.py"
     init_path.write_text("")
-    (module_dir / "code-gen.yaml").write_text("")
 
     module = ModuleType("test_model")
     module.__file__ = str(init_path)
     module.Model = Mock(__name__="Model")  # type: ignore[attr-defined]
     sys.modules["test_model"] = module
-    yield module
+
+    manifest_instance = Mock()
+    manifest_instance.name = "test_model"
+    manifest_instance.can_use_quantize_job = False
+    manifest_instance.supports_quantization = False
+    with patch(
+        "qai_hub_models.utils.export.dispatch.QAIHMModelManifest.from_yaml",
+        return_value=manifest_instance,
+    ):
+        yield module
     del sys.modules["test_model"]
 
 
@@ -43,26 +51,29 @@ def test_resolve_model_reads_module_and_configs(fake_module: ModuleType) -> None
 
     assert result.model_id == "test_model"
     assert result.model_cls is fake_module.Model
-    assert result.code_gen is not None
+    assert result.manifest is not None
     assert result.display_name == "test_model"
     assert result.source_dir == Path(fake_module.__file__).parent
     assert result.app_cls is None
 
 
-def test_resolve_model_uses_info_yaml_when_present(fake_module: ModuleType) -> None:
-    """resolve_model prefers display name from info.yaml when it exists."""
+def test_resolve_model_uses_manifest_name(fake_module: ModuleType) -> None:
+    """resolve_model reads display name from manifest.yaml."""
     assert fake_module.__file__ is not None
     source_dir = Path(fake_module.__file__).parent
-    (source_dir / "info.yaml").write_text("name: Custom Display Name\n")
 
-    with patch("qai_hub_models.utils.export.dispatch.QAIHMModelInfo") as mock_info:
-        info_instance = Mock()
-        info_instance.name = "Custom Display Name"
-        mock_info.from_yaml.return_value = info_instance
+    manifest_instance = Mock()
+    manifest_instance.name = "Custom Display Name"
+    manifest_instance.can_use_quantize_job = False
+    manifest_instance.supports_quantization = False
+    with patch(
+        "qai_hub_models.utils.export.dispatch.QAIHMModelManifest.from_yaml",
+        return_value=manifest_instance,
+    ) as mock_from_yaml:
         result = resolve_model("test_model")
 
     assert result.display_name == "Custom Display Name"
-    mock_info.from_yaml.assert_called_once()
+    mock_from_yaml.assert_called_once_with(source_dir / "manifest.yaml")
 
 
 def test_resolve_model_loads_app_cls_when_present(fake_module: ModuleType) -> None:
@@ -130,7 +141,7 @@ def test_select_pipeline_excludes_model_id_from_bindings() -> None:
     resolved = ResolvedModel(
         model_id="foo",
         model_cls=FakeModel,
-        code_gen=Mock(),
+        manifest=Mock(),
         display_name="Foo",
         source_dir=Path("/fake"),
     )
@@ -145,7 +156,7 @@ def test_resolved_model_dataclass_defaults() -> None:
     r = ResolvedModel(
         model_id="foo",
         model_cls=Mock(),
-        code_gen=Mock(),
+        manifest=Mock(),
         display_name="Foo",
         source_dir=Path("/fake"),
     )

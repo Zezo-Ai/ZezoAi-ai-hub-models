@@ -34,7 +34,7 @@ If the traceback points to our code, route to `ai-hub-models`.
 | `NotImplementedError` at `base_model.py` in `component_precision()` | `utils/base_model.py` | `ai-hub-models` | Multi-component model missing `component_precision()` override. Fix: implement the method in the model class. |
 | "Mismatch between accuracy csv models" in scorecard integration test | `scorecard/static/scripts/validate_integration_test.py` | `ai-hub-models` | A model in the integration test set failed all inference jobs (no accuracy row). Check if the model is chronically flaky — may need replacement in the test set. |
 | `GuardOnDataDependentSymNode` during `torch.export.export` | `models/*/model*.py` | `ai-hub-models` | Model uses data-dependent control flow incompatible with PT2/torch.export. Fix: set `use_pt2=False` for that component or refactor the dynamic shape logic. See tetracode#19926, PR #3626. |
-| `PT2 serialization (use_pt2=True) requires torch>=2.9` | `utils/base_model.py` | `ai-hub-models` | CI runner has torch<2.9 but model defaults `use_pt2=True`. Fix: pin `use_pt2=False` in the model's code-gen.yaml or model.py for affected components. See tetracode#19926, PR #3626. |
+| `PT2 serialization (use_pt2=True) requires torch>=2.9` | `utils/base_model.py` | `ai-hub-models` | CI runner has torch<2.9 but model defaults `use_pt2=True`. Fix: pin `use_pt2=False` in the model's manifest.yaml or model.py for affected components. See tetracode#19926, PR #3626. |
 | `AttributeError: 'tuple' object has no attribute 'shape'` in `transpose_channel.py` | `utils/transpose_channel.py` | `ai-hub-models` | Scorecard accuracy collection crash — model inference returned a tuple where a tensor was expected. Fix in transpose_channel.py or model's postprocessing. See tetracode#19944. |
 
 **Key principle:** If the stack trace is in `qai_hub_models/`, it's almost always `ai-hub-models` regardless of which runtime or compiler is mentioned in the error message.
@@ -60,7 +60,7 @@ out-of-band causes to check:
 
 - **S3 test-asset swap** — `qaihub-public-assets` bucket contents changed without a repo commit (e.g., test images regenerated). Check S3 object `Last-Modified` if accessible.
 - **External dataset change** — COCO/ImageNet/HF dataset host updated upstream.
-- **Workbench schema change** — fields added/removed on `QAIHMModelCodeGen`, `Hub.Device`, or other workbench-side configs that our code consumes. See historical-patterns.md `Scorecard Submission Schema Drift`.
+- **Workbench schema change** — fields added/removed on `QAIHMModelManifest`, `Hub.Device`, or other workbench-side configs that our code consumes. See historical-patterns.md `Scorecard Submission Schema Drift`.
 - **Third-party model library API drift** — ultralytics, transformers, torch nightly behavior change without our requirements pinning catching it.
 
 **Real example:** Issue #19498 (TrOCR cross-version regression). Agent confidently
@@ -94,7 +94,7 @@ lowers confidence on bisected suspects when the out-of-band signals are present.
 | "Weight Sharing is not supported on v<XX> target" | `Compiler/ONNX2EP` | Older chipsets lack weight-sharing support. Device limitation. |
 | "Graph name is a duplicate. Aborting creation of graph" | `ai-hub-models` | Likely our serialization config issue. |
 | AOT link fails but JIT compile succeeds (same model/device) | `Compiler/ONNX2EP` | QAIRT converter dtype mismatch in AOT path. |
-| Link job fails for disabled/unpublished model | `ai-hub-models` | Model should be excluded from link test suite. Fix: update `code-gen.yaml` or test infrastructure. |
+| Link job fails for disabled/unpublished model | `ai-hub-models` | Model should be excluded from link test suite. Fix: update `manifest.yaml` or test infrastructure. |
 | "Input model must be a QNN DLC model" | `ai-hub-models` | Wrong compile target — model was compiled to context binary instead of DLC before linking. |
 
 ### Scorecard Auto-Filed Issues
@@ -142,7 +142,7 @@ lowers confidence on bisected suspects when the out-of-band signals are present.
 | QAIRT version not found / `hub.get_devices()` error after version removal | `ai-hub-models` | Old QAIRT version dropped from workbench. Upgrade pin. |
 | Third-party model library API change (ultralytics, etc.) | `ai-hub-models` | Library updated, model code needs adapting. |
 | Workbench client private API change (config class reordered) | `ai-hub-models` | Private API changed. Update client usage. |
-| GitHub repo transferred → old URL returns persistent 502 | `ai-hub-models` | Update URL in info.yaml or `_info_yaml_enums.py`. NOT a transient failure. |
+| GitHub repo transferred → old URL returns persistent 502 | `ai-hub-models` | Update URL in manifest.yaml or `_info_yaml_enums.py`. NOT a transient failure. |
 
 ## MEDIUM Confidence Patterns
 

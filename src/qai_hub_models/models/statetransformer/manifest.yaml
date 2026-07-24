@@ -1,0 +1,41 @@
+name: StateTransformer
+id: statetransformer
+status: published
+headline: Multi-agent trajectory prediction model for autonomous driving.
+domain: Computer Vision
+description: StateTransformer is a transformer-based model designed for trajectory
+  prediction in self-driving scenarios. It integrates rasterized map data, agent context,
+  and temporal dynamics to generate accurate future trajectories.
+use_case: Driver Assistance
+tags:
+- bu-auto
+applicable_scenarios:
+- Self driving cars
+related_models: []
+form_factors:
+- Auto
+has_static_banner: true
+has_animated_banner: true
+dataset:
+- nuPlan
+- Waymo
+technical_details:
+  Model checkpoint: pretrained-mixtral-small
+  Input resolution: 1x224x224x58, 1x224x224x58, 1x4x7
+  Number of parameters: 90.7M
+  Model size (float): 348 MB
+license_type: mit
+private_perf_form_factors:
+- Auto
+license: https://github.com/Tsinghua-MARS-Lab/StateTransformer/blob/main/setup.py
+external_repos:
+  statetransformer:
+    repo_url: https://github.com/Tsinghua-MARS-Lab/StateTransformer.git
+    commit_sha: b82f9bcf5c9056d0fc5afe9da3350d9bd1c5a9c5
+    patches_filename: statetransformer_patches.diff
+has_on_target_demo: true
+disabled_paths:
+  float:
+    qnn_dlc:
+      scorecard_failure: 'Failing jobs: jgkd1d0yp'
+pip_install_flags: git+https://github.com/motional/nuplan-devkit.git@d60b4cd2071de9bb041509c43f5226dd22f248c0#egg=nuplan_devkit

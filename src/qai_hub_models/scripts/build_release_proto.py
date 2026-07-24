@@ -23,7 +23,7 @@ from qai_hub_models_cli.proto.release_assets_pb2 import ModelReleaseAssets
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models._version import __version__
 from qai_hub_models.configs._info_yaml_enums import MODEL_STATUS
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.configs.proto_helpers import (
     domain_to_proto,
     runtime_to_proto,
@@ -54,7 +54,6 @@ from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
 Format = Literal["yaml", "json", "proto"]
 
 MODEL_YAMLS_TO_COPY = [
-    "info.yaml",
     "perf.yaml",
     "numerics.yaml",
 ]
@@ -177,15 +176,16 @@ def _build_model_protos(
     fmts: list[Format],
     internal: bool = False,
 ) -> tuple[list[Path], str | None]:
-    info = QAIHMModelInfo.from_model(model_id)
-    if not internal and info.status != MODEL_STATUS.PUBLISHED:
-        return [], f"status={info.status.value}"
+    manifest = QAIHMModelManifest.from_model(model_id)
+    assert manifest.status is not None
+    if not internal and manifest.status != MODEL_STATUS.PUBLISHED:
+        return [], f"status={manifest.status.value}"
 
     written: list[Path] = []
 
     output_dir.mkdir(parents=True, exist_ok=True)
     written.extend(
-        _write_proto_multi(info.to_proto(aihm_version), output_dir / "info", fmts)
+        _write_proto_multi(manifest.to_proto(aihm_version), output_dir / "info", fmts)
     )
 
     perf = QAIHMModelPerf.from_model(model_id, not_exists_ok=True)
@@ -207,7 +207,7 @@ def _build_model_protos(
             )
         )
 
-    if internal or not info.restrict_model_sharing:
+    if internal or not manifest.restrict_model_sharing:
         written.extend(
             _write_release_assets_proto(
                 model_id, aihm_version, output_dir, fmts, internal=internal
@@ -271,17 +271,18 @@ def cmd_website(args: argparse.Namespace) -> None:
     _copy_global_yamls(output_root, args.version)
 
     def build_model(model_id: str) -> tuple[int, str | None]:
-        info = QAIHMModelInfo.from_model(model_id)
+        manifest = QAIHMModelManifest.from_model(model_id)
         model_src = QAIHM_MODELS_ROOT / model_id
         model_dst = output_root / "models" / model_id
         model_dst.mkdir(parents=True, exist_ok=True)
         written = 0
 
+        # Copy perf.yaml and numerics.yaml verbatim
         for yaml_name in MODEL_YAMLS_TO_COPY:
             src = (model_src / yaml_name).resolve()
             dst = (model_dst / yaml_name).resolve()
             if src.exists():
-                if info.status != MODEL_STATUS.PUBLISHED:
+                if manifest.status != MODEL_STATUS.PUBLISHED:
                     # The website build is usually in-source (meaning it is targeting the repo source tree rather than dumped to a separate folder).
                     # We need to delete the in-source YAML file instead of just not copying it.
                     if src == dst:
@@ -291,7 +292,16 @@ def cmd_website(args: argparse.Namespace) -> None:
                         shutil.copy2(src, dst)
                     written += 1
 
-        if info.restrict_model_sharing or info.status != MODEL_STATUS.PUBLISHED:
+        # Derive info.yaml from manifest for the website
+        info_dst = model_dst / "info.yaml"
+        if manifest.status == MODEL_STATUS.PUBLISHED:
+            manifest.to_website_info_yaml(info_dst)
+            written += 1
+        elif model_src.resolve() == model_dst.resolve() and info_dst.exists():
+            # Delete unpublished model's info.yaml in in-source builds
+            info_dst.unlink()
+
+        if manifest.restrict_model_sharing or manifest.status != MODEL_STATUS.PUBLISHED:
             dst_yml = model_dst / "release-assets.yaml"
             # The website build is usually in-source (meaning it is targeting the repo source tree rather than dumped to a separate folder).
             # We need to delete the in-source YAML file instead of just not writing it.
@@ -323,14 +333,14 @@ def _similar_chipsets() -> frozenset[str]:
 def _manifest_filter_fields(
     release_assets: QAIHMModelReleaseAssets,
     perf: QAIHMModelPerf,
-    info: QAIHMModelInfo,
+    manifest: QAIHMModelManifest,
 ) -> dict[str, Any]:
     """
     Derive the manifest filter fields for a single model.
 
     Runtimes and precisions are unioned across both the model's released assets
     and its perf data (a model is quantized if either source reports a non-float
-    precision). Chipsets come from perf data, and tags from info.yaml.
+    precision). Chipsets come from perf data, and tags from manifest.yaml.
 
     Parameters
     ----------
@@ -338,14 +348,15 @@ def _manifest_filter_fields(
         The model's release assets.
     perf
         The model's perf data.
-    info
-        The model's info.yaml config.
+    manifest
+        The model's manifest.yaml config.
 
     Returns
     -------
     dict[str, Any]
         Keyword arguments for ``ManifestModelEntry``.
     """
+    assert manifest.use_case is not None
     precisions: set[Precision] = set(release_assets.precisions)
     runtimes: set[TargetRuntime] = set()
     for prec_details in release_assets.precisions.values():
@@ -373,8 +384,8 @@ def _manifest_filter_fields(
         is_quantized=any(p != Precision.float for p in precisions),
         supported_runtimes=sorted(runtime_to_proto(r) for r in runtimes),
         supported_chipsets=supported_chipsets,
-        tags=[tag_to_proto(t) for t in info.tags],
-        use_case=use_case_to_proto(info.use_case),
+        tags=[tag_to_proto(t) for t in manifest.tags],
+        use_case=use_case_to_proto(manifest.use_case),
     )
 
 
@@ -394,9 +405,11 @@ def _build_manifest(
 
     global_s3_folder = ASSET_CONFIG.get_global_release_s3_folder(version)
 
-    model_infos: list[tuple[str, set[str], QAIHMModelInfo, str, dict[str, Any]]] = []
+    model_infos: list[
+        tuple[str, set[str], QAIHMModelManifest, str, dict[str, Any]]
+    ] = []
     for model_id, written in model_written_paths.items():
-        info = QAIHMModelInfo.from_model(model_id)
+        manifest_obj = QAIHMModelManifest.from_model(model_id)
         release_assets = QAIHMModelReleaseAssets.from_model(
             model_id, not_exists_ok=True
         )
@@ -407,11 +420,11 @@ def _build_manifest(
             (
                 model_id,
                 written_stems,
-                info,
+                manifest_obj,
                 f"s3://{QAIHM_PRIVATE_S3_BUCKET}/{s3_folder}"
                 if internal
                 else ASSET_CONFIG.get_asset_url(s3_folder),
-                _manifest_filter_fields(release_assets, perf, info),
+                _manifest_filter_fields(release_assets, perf, manifest_obj),
             )
         )
 
@@ -425,16 +438,23 @@ def _build_manifest(
             if internal
             else ASSET_CONFIG.get_asset_url(platform_ref),
         )
-        for model_id, written_stems, info, s3_folder, filter_fields in model_infos:
+        for (
+            model_id,
+            written_stems,
+            manifest_obj,
+            s3_folder,
+            filter_fields,
+        ) in model_infos:
             url_kwargs: dict[str, str] = {}
             for stem, field in _STEM_TO_FIELD:
                 if stem in written_stems:
                     url_kwargs[field] = os.path.join(s3_folder, f"{stem}{ext}")
+            assert manifest_obj.domain is not None
             manifest.models.append(
                 manifest_pb2.ManifestModelEntry(
                     id=model_id,
-                    display_name=info.name,
-                    domain=domain_to_proto(info.domain),
+                    display_name=manifest_obj.name,
+                    domain=domain_to_proto(manifest_obj.domain),
                     manifest_urls=manifest_pb2.ModelManifestUrls(**url_kwargs),
                     **filter_fields,
                 )

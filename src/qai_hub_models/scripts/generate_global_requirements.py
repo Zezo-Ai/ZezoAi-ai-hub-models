@@ -48,15 +48,15 @@ def get_files_to_process() -> list[Path]:
         ).global_requirements_incompatible:
             continue
 
-        code_gen_yaml_file = QAIHM_MODELS_ROOT / model_name / "code-gen.yaml"
-        if code_gen_yaml_file.exists():
-            code_gen_config = load_yaml(code_gen_yaml_file)
+        manifest_yaml_file = QAIHM_MODELS_ROOT / model_name / "manifest.yaml"
+        if manifest_yaml_file.exists():
+            manifest_config = load_yaml(manifest_yaml_file)
 
             # Don't include models that aren't applicable for this python version
-            ge_version = code_gen_config.get(
+            ge_version = manifest_config.get(
                 "python_version_greater_than_or_equal_to", None
             )
-            l_version = code_gen_config.get("python_version_less_than", None)
+            l_version = manifest_config.get("python_version_less_than", None)
             if ge_version and current_version < version.parse(ge_version):
                 continue
             if l_version and current_version >= version.parse(l_version):

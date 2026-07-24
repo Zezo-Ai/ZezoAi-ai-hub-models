@@ -26,7 +26,7 @@ from qai_hub_models import (
     Precision,
     TargetRuntime,
 )
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.models._shared.llm.model import (
     DEFAULT_EXPORT_SEQUENCE_LENGTHS,
@@ -255,7 +255,7 @@ def export_model(
     model_name = get_export_model_name(
         model_cls, model_id, precision, additional_model_kwargs
     )
-    model_display_name = QAIHMModelInfo.from_model(model_id).name
+    model_display_name = QAIHMModelManifest.from_model(model_id).name or model_id
 
     output_path = Path(output_dir or Path.cwd() / "build" / model_id)
 

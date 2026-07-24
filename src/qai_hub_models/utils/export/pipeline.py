@@ -19,7 +19,7 @@ from typing import Any
 import qai_hub as hub
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.ai_hub_access import can_access_qualcomm_ai_hub
 from qai_hub_models.utils.args import get_export_model_name, get_model_kwargs
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
@@ -131,7 +131,7 @@ def export_model(
             f"`qai-hub-models fetch {model_id}` instead."
         )
 
-    code_gen = QAIHMModelCodeGen.from_model(model_id)
+    manifest = QAIHMModelManifest.from_model(model_id)
     model_cls = resolve_model_cls(model_id)
     display_name = resolve_model_display_name(model_id)
     source_dir = resolve_model_dir(model_id)
@@ -140,8 +140,8 @@ def export_model(
     )
     output_path = Path(output_dir or Path.cwd() / "export_assets")
 
-    if not code_gen.can_use_quantize_job and precision != Precision.float:
-        assert precision in code_gen.supported_precisions, (
+    if not manifest.can_use_quantize_job and precision != Precision.float:
+        assert precision in manifest.supported_precisions, (
             f"Precision {precision!s} is not supported by {model_name}"
         )
 
@@ -163,7 +163,7 @@ def export_model(
 
     # 2. Quantize (float skips this entirely; aimet-quantized models also skip).
     quantize_job: hub.client.QuantizeJob | None = None
-    if precision != Precision.float and code_gen.can_use_quantize_job:
+    if precision != Precision.float and manifest.can_use_quantize_job:
         if quantized_model_id:
             prequantized = hub.get_model(quantized_model_id)
             assert prequantized is not None
@@ -207,7 +207,7 @@ def export_model(
         source_model,
         input_spec,
         extra_options=compile_options,
-        calibration_data=_aimet_calibration_data(model, code_gen),
+        calibration_data=_aimet_calibration_data(model, manifest),
     )
 
     # 4. Link (AOT runtimes only).
@@ -285,12 +285,12 @@ def export_model(
                 input_spec,
                 target_runtime,
                 outputs_to_skip=list(
-                    (code_gen.outputs_to_skip_validation or {}).keys()
+                    (manifest.outputs_to_skip_validation or {}).keys()
                 ),
-                metrics=code_gen.inference_metrics,
+                metrics=manifest.inference_metrics,
             )
         print_tool_versions(tool_versions, tool_versions_from_device)
-        if code_gen.has_on_target_demo:
+        if manifest.has_on_target_demo:
             print_on_target_demo_cmd(link_job or compile_job, source_dir, device)
         if download_path is not None:
             print(f"{model_name} was saved to {download_path}\n")
@@ -313,12 +313,12 @@ def export_model(
 
 
 def _aimet_calibration_data(
-    model: BaseModel, code_gen: QAIHMModelCodeGen
+    model: BaseModel, manifest: QAIHMModelManifest
 ) -> hub.Dataset | None:
     """AIMET models bake calibration data into the compile job rather than a quantize job."""
-    if not (code_gen.is_aimet and code_gen.num_calibration_samples):
+    if not (manifest.is_aimet and manifest.num_calibration_samples):
         return None
     get_calib = getattr(model, "get_calibration_data", None)
     if get_calib is None:
         return None
-    return get_calib(num_samples=code_gen.num_calibration_samples)
+    return get_calib(num_samples=manifest.num_calibration_samples)

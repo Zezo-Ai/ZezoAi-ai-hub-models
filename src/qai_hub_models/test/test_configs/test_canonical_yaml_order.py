@@ -6,7 +6,7 @@
 Asserts that ``BaseQAIHMConfig.to_yaml`` produces deterministic output
 regardless of the input order of dict keys.
 
-The test loads a model's perf.yaml / numerics.yaml / code-gen.yaml, recursively
+The test loads a model's perf.yaml / numerics.yaml / manifest.yaml, recursively
 reverses every dict's key order, parses the scrambled YAML back through the
 config class, re-saves via ``to_yaml`` to a tmp file, and asserts the result is
 byte-identical to the original on-disk file. If the on-disk file is canonical
@@ -24,7 +24,7 @@ from typing import Any
 import pytest
 import ruamel.yaml
 
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.numerics_yaml import QAIHMModelNumerics
 from qai_hub_models.scorecard.perf_yaml import QAIHMModelPerf
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
@@ -84,9 +84,9 @@ def test_numerics_yaml_to_yaml_is_order_independent(
 
 
 @pytest.mark.parametrize("model_id", CANONICALIZED_MODELS)
-def test_code_gen_yaml_to_yaml_is_order_independent(
+def test_manifest_yaml_to_yaml_is_order_independent(
     model_id: str, tmp_path: Path
 ) -> None:
     _assert_to_yaml_is_order_independent(
-        QAIHMModelCodeGen, QAIHM_MODELS_ROOT / model_id / "code-gen.yaml", tmp_path
+        QAIHMModelManifest, QAIHM_MODELS_ROOT / model_id / "manifest.yaml", tmp_path
     )

@@ -22,7 +22,7 @@ from mypy_boto3_s3.service_resource import Bucket
 from typing_extensions import assert_never
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.configs.tool_versions import ToolVersions
 from qai_hub_models.datasets.common import BaseDataset
 from qai_hub_models.scorecard import (
@@ -1335,7 +1335,7 @@ def export_test_e2e(
         _,
     ) = patch_hub_with_cached_jobs(
         test_params,
-        patch_quantization=not QAIHMModelCodeGen.from_model(model_id).is_aimet,
+        patch_quantization=not QAIHMModelManifest.from_model(model_id).is_aimet,
         patch_compile=True,
         patch_link=scorecard_path.runtime.uses_hub_link,
         patch_profile=has_cached_profile_jobs,
@@ -1829,7 +1829,7 @@ def accuracy_on_sample_inputs_via_export(
         inference_job_patch,
     ) = patch_hub_with_cached_jobs(
         test_params,
-        patch_quantization=not QAIHMModelCodeGen.from_model(model_id).is_aimet,
+        patch_quantization=not QAIHMModelManifest.from_model(model_id).is_aimet,
         patch_compile=True,
         patch_link=scorecard_path.runtime.uses_hub_link,
         patch_profile=False,
@@ -2073,7 +2073,7 @@ def accuracy_on_dataset_via_evaluate_and_export(
         inference_job_patch,
     ) = patch_hub_with_cached_jobs(
         params=test_params,
-        patch_quantization=not QAIHMModelCodeGen.from_model(model_id).is_aimet,
+        patch_quantization=not QAIHMModelManifest.from_model(model_id).is_aimet,
         patch_compile=True,
         patch_link=scorecard_path.runtime.uses_hub_link,
         patch_inference=True,

@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.models._shared.llm.common import (
     DEFAULT_ATTEMPTS,
@@ -65,7 +65,7 @@ LLAMACPP_CONTEXT_LENGTHS = [512, 4096]
 
 
 def _qairt_precisions(model_id: str) -> list[Precision]:
-    cg = QAIHMModelCodeGen.from_model(model_id)
+    cg = QAIHMModelManifest.from_model(model_id)
     return [
         p
         for p in cg.supported_precisions

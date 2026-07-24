@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.external_repo import setup_external_repos
 from qai_hub_models.utils.path_helpers import MODEL_IDS, QAIHM_MODELS_ROOT
 
@@ -47,7 +48,11 @@ def main() -> None:
 
     if args.all and SHARED_DIR.exists():
         for shared_folder in sorted(SHARED_DIR.iterdir()):
-            if not (shared_folder / "code-gen.yaml").exists():
+            manifest_path = shared_folder / "manifest.yaml"
+            if not manifest_path.exists():
+                continue
+            manifest = QAIHMModelManifest.from_yaml(manifest_path)
+            if not manifest.external_repos:
                 continue
             print(f"Setting up shared external repo: {shared_folder.name}...")
             try:

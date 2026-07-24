@@ -26,7 +26,7 @@ from qai_hub.client import Client, CompileJob, InputSpecs, SourceModelType, User
 from qai_hub.public_rest_api import get_dataset, get_model
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.info_yaml import MODEL_DOMAIN, MODEL_TAG, MODEL_USE_CASE
+from qai_hub_models.configs.manifest_yaml import MODEL_DOMAIN, MODEL_TAG, MODEL_USE_CASE
 from qai_hub_models.scorecard.device import DEFAULT_SCORECARD_DEVICE, ScorecardDevice
 from qai_hub_models.scorecard.path_profile import (
     ScorecardProfilePathJITParseableAllList,

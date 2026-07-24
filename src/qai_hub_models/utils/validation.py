@@ -7,7 +7,7 @@ from __future__ import annotations
 import inspect
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.datasets.common import BaseDataset
 from qai_hub_models.protocols import FromPretrainedProtocol
 from qai_hub_models.utils.base_collection_model import (
@@ -29,8 +29,8 @@ def _is_valid_dataset_class(dataset_cls: type) -> bool:
     )
 
 
-def _quantized_precision_names(code_gen: QAIHMModelCodeGen) -> list[str]:
-    return [str(p) for p in code_gen.supported_precisions if p != Precision.float]
+def _quantized_precision_names(manifest: QAIHMModelManifest) -> list[str]:
+    return [str(p) for p in manifest.supported_precisions if p != Precision.float]
 
 
 def validate_io_names(instance: WorkbenchModel) -> list[str]:
@@ -153,7 +153,7 @@ def _litemp_implemented(model: WorkbenchModel, precision: Precision) -> bool:
 
 def validate_mixed_precision_litemp(
     model: WorkbenchModel,
-    code_gen: QAIHMModelCodeGen,
+    manifest: QAIHMModelManifest,
 ) -> list[str]:
     """
     Validate that models with mixed-precision support implement
@@ -163,8 +163,8 @@ def validate_mixed_precision_litemp(
     ----------
     model
         The model instance to validate.
-    code_gen
-        The model's code-gen.yaml configuration.
+    manifest
+        The model's manifest.yaml configuration.
 
     Returns
     -------
@@ -173,7 +173,7 @@ def validate_mixed_precision_litemp(
     """
     mixed_precisions = [
         p
-        for p in code_gen.supported_precisions
+        for p in manifest.supported_precisions
         if isinstance(p, Precision) and p.override_type is not None
     ]
     return [
@@ -194,7 +194,7 @@ def _component_precision_implemented(component: WorkbenchModel) -> bool:
 
 def validate_component_precision(
     model: WorkbenchModelCollection | MultiGraphWorkbenchModelCollection,
-    code_gen: QAIHMModelCodeGen,
+    manifest: QAIHMModelManifest,
 ) -> list[str]:
     """
     Validate that components implement component_precision() when the
@@ -206,8 +206,8 @@ def validate_component_precision(
     ----------
     model
         The collection model to validate.
-    code_gen
-        The model's code-gen.yaml configuration.
+    manifest
+        The model's manifest.yaml configuration.
 
     Returns
     -------
@@ -217,7 +217,7 @@ def validate_component_precision(
     """
     has_mixed = any(
         p in [Precision.mixed, Precision.mixed_with_float]
-        for p in code_gen.supported_precisions
+        for p in manifest.supported_precisions
     )
     if not has_mixed:
         return []
@@ -261,7 +261,7 @@ def perform_runtime_model_validation(
     model_cls
         The model class to validate.
     model_id
-        The model identifier used to load code-gen.yaml.
+        The model identifier used to load manifest.yaml.
     app_cls
         For collection models, the App class so calibration checks
         can verify CollectionAppQuantizeProtocol compliance. Passing ``None``
@@ -274,7 +274,7 @@ def perform_runtime_model_validation(
     AssertionError
         If any validation check fails.
     """
-    code_gen = QAIHMModelCodeGen.from_model(model_id)
+    manifest = QAIHMModelManifest.from_model(model_id)
     errors: list[str] = []
 
     assert issubclass(model_cls, FromPretrainedProtocol)
@@ -284,10 +284,10 @@ def perform_runtime_model_validation(
         (WorkbenchModelCollection, MultiGraphWorkbenchModelCollection),
     ):
         errors.extend(validate_io_names_collection(model))
-        errors.extend(validate_component_precision(model, code_gen))
+        errors.extend(validate_component_precision(model, manifest))
     elif isinstance(model, WorkbenchModel):
         errors.extend(validate_io_names(model))
-        errors.extend(validate_mixed_precision_litemp(model, code_gen))
+        errors.extend(validate_mixed_precision_litemp(model, manifest))
         errors.extend(validate_eval_datasets_have_evaluator(model))
     else:
         raise NotImplementedError()

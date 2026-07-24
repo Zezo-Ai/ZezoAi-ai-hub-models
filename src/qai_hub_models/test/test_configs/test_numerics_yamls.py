@@ -7,7 +7,7 @@ import tempfile
 
 import pandas as pd
 
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.artifacts import ScorecardArtifact
 from qai_hub_models.scorecard.numerics_yaml import (
     QAIHMModelNumerics,
@@ -60,7 +60,7 @@ def test_accuracy_yaml_creation() -> None:
     original_yaml = load_yaml(accuracy_yaml_path)
 
     # Create accuracy struct from scratch using accuracy.csv
-    info = QAIHMModelInfo.from_model(model_id)
+    info = QAIHMModelManifest.from_model(model_id)
     new_struct = create_numerics_struct(
         model_id,
         pd.read_csv(ScorecardArtifact.ACCURACY_CSV.intermediates_path),

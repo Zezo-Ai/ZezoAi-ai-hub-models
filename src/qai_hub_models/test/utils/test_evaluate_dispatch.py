@@ -21,7 +21,7 @@ def test_select_evaluate_pipeline_binds_resolved_context() -> None:
     resolved = ResolvedModel(
         model_id="foo",
         model_cls=FakeModel,
-        code_gen=Mock(),
+        manifest=Mock(),
         display_name="Foo",
         source_dir=Path("/fake"),
         supports_quant_cpu=True,
@@ -44,7 +44,7 @@ def test_select_evaluate_pipeline_picks_collection_for_collection_model() -> Non
     resolved = ResolvedModel(
         model_id="fake_collection",
         model_cls=FakeCollectionModel,
-        code_gen=Mock(),
+        manifest=Mock(),
         display_name="Fake Collection",
         source_dir=Path("/fake"),
         app_cls=Mock(),

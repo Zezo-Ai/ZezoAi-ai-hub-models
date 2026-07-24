@@ -36,7 +36,7 @@ sudo apt install libegl-dev
 
 #### Windows
 You can export this model on windows without extra system dependencies.
-To run the demo, you will need to install LibEGL libraries. Options include ANGLE or Mesa3D. This is not a well-tested path; we recommend using WSL or a Linux machine for the demo.
+ To run the demo, you will need to install LibEGL libraries. Options include ANGLE or Mesa3D. This is not a well-tested path; we recommend using WSL or a Linux machine for the demo.
 
 ### 2. Install the package
 Install the package via pip:

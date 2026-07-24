@@ -10,7 +10,7 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 from qai_hub_models import TargetRuntime
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, UNPUBLISHED_MODEL_WARNING
 from qai_hub_models.utils.path_helpers import MODEL_IDS
 
@@ -32,13 +32,13 @@ def main() -> None:
         generate_and_write_model_readme(model_id)
 
 
-def get_shared_template_args(model_info: QAIHMModelInfo) -> dict[str, Any]:
+def get_shared_template_args(manifest: QAIHMModelManifest) -> dict[str, Any]:
     """
     Get template arguments shared between regular README and HF model card.
 
     Parameters
     ----------
-    model_info
+    manifest
         Model info object.
 
     Returns
@@ -46,60 +46,58 @@ def get_shared_template_args(model_info: QAIHMModelInfo) -> dict[str, Any]:
     template_args: dict[str, Any]
         Dictionary of shared template arguments.
     """
-    model_code_gen = model_info.code_gen_config
-
     # {genie_url} (legacy Genie) and {geniex_url} (GenieX) are distinct
     # placeholders pointing at different tutorials. A section that mixes both is
     # almost always a typo (e.g. using {genie_url} while expecting the GenieX
     # URL), and the wrong link would render silently. Reject it at generation
     # time instead.
-    additional_readme_section = model_code_gen.additional_readme_section
+    additional_readme_section = manifest.additional_readme_section
     if (
         "{genie_url}" in additional_readme_section
         and "{geniex_url}" in additional_readme_section
     ):
         raise ValueError(
-            f"{model_info.id}: additional_readme_section mixes the legacy "
+            f"{manifest.id}: additional_readme_section mixes the legacy "
             "{genie_url} and {geniex_url} placeholders. Use only one."
         )
 
-    orchestrator_runtimes = set(model_code_gen.orchestrator_runtimes)
+    orchestrator_runtimes = set(manifest.orchestrator_runtimes)
     has_geniex_runtime = any(r in orchestrator_runtimes for r in GENIEX_RUNTIMES)
     has_genie_runtime = TargetRuntime.GENIE in orchestrator_runtimes
     # restrict_model_sharing means artifacts cannot be redistributed, so the
     # user must run the export step themselves before pointing GenieX at a
     # local path. That is exactly what needs_local_export gates in the README.
-    needs_local_export = model_info.restrict_model_sharing
+    needs_local_export = manifest.restrict_model_sharing
 
     # The macro and additional_readme_section both emit a "Deploying X
     # on-device" heading; rendering both would produce duplicate sections.
     if has_geniex_runtime and additional_readme_section:
         raise ValueError(
-            f"{model_info.id}: has both a GenieX orchestrator runtime and an "
+            f"{manifest.id}: has both a GenieX orchestrator runtime and an "
             "additional_readme_section. Remove the additional_readme_section "
             "so the deploying_on_device macro renders the deployment guidance."
         )
 
     return {
         # Model info
-        "model_id": model_info.id,
-        "model_name": model_info.name,
-        "model_description": model_info.description,
-        "model_url": f"{ASSET_CONFIG.models_website_url}/models/{model_info.id}",
+        "model_id": manifest.id,
+        "model_name": manifest.name,
+        "model_description": manifest.description,
+        "model_url": f"{ASSET_CONFIG.models_website_url}/models/{manifest.id}",
         "additional_readme_section": additional_readme_section.replace(
             "{genie_url}", ASSET_CONFIG.genie_url
         ).replace("{geniex_url}", ASSET_CONFIG.geniex_url),
         # Source and references
-        "source_repo": model_info.source_repo,
-        "research_paper_title": model_info.research_paper_title,
-        "research_paper_url": model_info.research_paper,
-        "license_url": model_info.license,
+        "source_repo": manifest.source_repo,
+        "research_paper_title": manifest.research_paper_title,
+        "research_paper_url": manifest.research_paper,
+        "license_url": manifest.license,
         # Flags
-        "include_gen_ai_terms": model_info.is_gen_ai_model,
-        "voice_ai_sdk": model_info.voice_ai_sdk,
+        "include_gen_ai_terms": manifest.is_gen_ai_model,
+        "voice_ai_sdk": manifest.voice_ai_sdk,
         "voice_ai_url": (
-            ASSET_CONFIG.get_voice_ai_url(model_info.voice_ai_sdk)
-            if model_info.voice_ai_sdk is not None
+            ASSET_CONFIG.get_voice_ai_url(manifest.voice_ai_sdk)
+            if manifest.voice_ai_sdk is not None
             else None
         ),
         # On-device deployment section (driven by orchestrator_runtimes)
@@ -114,52 +112,53 @@ def get_shared_template_args(model_info: QAIHMModelInfo) -> dict[str, Any]:
 
 def generate_and_write_model_readme(model_id: str) -> Path:
     """Generate a README for this model from the jinja template and write it."""
-    model_info = QAIHMModelInfo.from_model(model_id)
-    model_code_gen = model_info.code_gen_config
+    manifest = QAIHMModelManifest.from_model(model_id)
+    assert manifest.status is not None
+    assert manifest.headline is not None
 
     # Convert precisions to strings for Jinja template. Populated for both
     # quantize-job models and separate_quantize_script (LLM) models; the
     # macro decides whether to render the demo's --quantize hint vs. the
     # DEFAULT_<PRECISION> checkpoint list based on separate_quantize_script.
     supported_precisions = None
-    if model_code_gen.supported_precisions and (
-        model_code_gen.can_use_quantize_job or model_code_gen.separate_quantize_script
+    if manifest.supported_precisions and (
+        manifest.can_use_quantize_job or manifest.separate_quantize_script
     ):
-        supported_precisions = [str(p) for p in model_code_gen.supported_precisions]
+        supported_precisions = [str(p) for p in manifest.supported_precisions]
 
-    template_vars = get_shared_template_args(model_info)
+    template_vars = get_shared_template_args(manifest)
     template_vars.update(
         {
             # Model info
-            "model_status": model_info.status.value,
+            "model_status": manifest.status.value,
             "unpublished_model_warning": UNPUBLISHED_MODEL_WARNING,
-            "model_headline": model_info.headline.strip("."),
-            "model_package": model_info.get_package_name(),
-            "model_assets_shareable": not model_info.restrict_model_sharing,
-            "default_runtime": model_code_gen.default_runtime.value,
-            "default_precision": str(model_code_gen.default_precision),
+            "model_headline": manifest.headline.strip("."),
+            "model_package": manifest.get_package_name(),
+            "model_assets_shareable": not manifest.restrict_model_sharing,
+            "default_runtime": manifest.default_runtime.value,
+            "default_precision": str(manifest.default_precision),
             "supported_precisions": supported_precisions,
-            "separate_quantize_script": model_code_gen.separate_quantize_script,
+            "separate_quantize_script": manifest.separate_quantize_script,
             # Package installation
-            "has_model_requirements": model_info.has_model_requirements(),
-            "pip_pre_build_reqs": model_code_gen.pip_pre_build_reqs,
-            "pip_install_flags": model_code_gen.pip_install_flags,
-            "pip_install_flags_gpu": model_code_gen.pip_install_flags_gpu,
-            "python_version_gte": model_code_gen.python_version_greater_than_or_equal_to,
-            "python_version_lt": model_code_gen.python_version_less_than,
+            "has_model_requirements": manifest.has_model_requirements(),
+            "pip_pre_build_reqs": manifest.pip_pre_build_reqs,
+            "pip_install_flags": manifest.pip_install_flags,
+            "pip_install_flags_gpu": manifest.pip_install_flags_gpu,
+            "python_version_gte": manifest.python_version_greater_than_or_equal_to,
+            "python_version_lt": manifest.python_version_less_than,
             # Flags
-            "include_example_and_usage": not model_code_gen.skip_example_usage,
-            "has_on_target_demo": model_code_gen.has_on_target_demo,
-            "readme_export_device": model_code_gen.default_device
-            if model_code_gen.requires_aot_prepare
+            "include_example_and_usage": not manifest.skip_example_usage,
+            "has_on_target_demo": manifest.has_on_target_demo,
+            "readme_export_device": manifest.default_device
+            if manifest.requires_aot_prepare
             else None,
-            "local_device_deployment": model_code_gen.local_device_deployment,
+            "local_device_deployment": manifest.local_device_deployment,
             # System-level dependencies installation instructions
-            "readme_install_system_deps": model_code_gen.readme_install_system_deps,
+            "readme_install_system_deps": manifest.readme_install_system_deps,
         }
     )
 
-    readme_path = model_info.get_readme_path()
+    readme_path = manifest.get_readme_path()
     with open(readme_path, "w") as readme_file:
         readme_file.write(README_TEMPLATE.module.render(**template_vars))  # type: ignore[attr-defined]
     return readme_path

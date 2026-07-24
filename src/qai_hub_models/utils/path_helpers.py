@@ -41,10 +41,10 @@ def _get_all_models(
         if not subdir.is_dir():
             continue
         # Heuristic to see if this is a model we should generate export.py for.
-        if (subdir / "info.yaml").exists():
+        if (subdir / "manifest.yaml").exists():
             if (
                 public_only
-                and load_yaml(subdir / "info.yaml").get("status") != "published"
+                and load_yaml(subdir / "manifest.yaml").get("status") != "published"
             ):
                 continue
             all_models.append(subdir.name)

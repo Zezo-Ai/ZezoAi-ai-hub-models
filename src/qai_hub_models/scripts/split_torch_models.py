@@ -14,7 +14,7 @@ from typing import Literal
 
 import ruamel.yaml
 
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.artifacts import (
     RUNTIME_ALL_STAGES,
     ScorecardArtifact,
@@ -245,10 +245,10 @@ def split_torch_models(
         all_models_jit = []
         all_models_aot = []
         for model in all_torch_models:
-            code_gen = QAIHMModelCodeGen.from_model(model)
+            manifest = QAIHMModelManifest.from_model(model)
             scorecard_config = QAIHMModelScorecardConfig.from_model(model)
             if scorecard_config.test_split != TestRunnerSplit.DEFAULT:
-                if code_gen.requires_aot_prepare:
+                if manifest.requires_aot_prepare:
                     custom_splits_aot.setdefault(
                         scorecard_config.test_split, []
                     ).append(model)
@@ -256,7 +256,7 @@ def split_torch_models(
                     custom_splits_jit.setdefault(
                         scorecard_config.test_split, []
                     ).append(model)
-            elif code_gen.requires_aot_prepare:
+            elif manifest.requires_aot_prepare:
                 all_models_aot.append(model)
             else:
                 all_models_jit.append(model)

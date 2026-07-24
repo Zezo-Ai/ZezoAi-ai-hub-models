@@ -19,7 +19,7 @@ from typing import Any
 import qai_hub as hub
 
 from qai_hub_models import TargetRuntime
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.ai_hub_access import can_access_qualcomm_ai_hub
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.base_collection_model import PrecompiledCollectionModel
@@ -55,7 +55,7 @@ _GENIE_BLURB = (
 def _export_precompiled_single(
     model_cls: type[PrecompiledWorkbenchModel],
     model_id: str,
-    code_gen: QAIHMModelCodeGen,
+    manifest: QAIHMModelManifest,
     device: hub.Device,
     skip_profiling: bool,
     skip_downloading: bool,
@@ -113,7 +113,7 @@ def _export_precompiled_single(
 def _export_precompiled_collection(
     model_cls: type[PrecompiledCollectionModel],
     model_id: str,
-    code_gen: QAIHMModelCodeGen,
+    manifest: QAIHMModelManifest,
     device: hub.Device,
     components: list[str] | None,
     skip_profiling: bool,
@@ -238,9 +238,9 @@ def export_model(
             f"`qai-hub-models fetch {model_id}` instead."
         )
 
-    code_gen = QAIHMModelCodeGen.from_model(model_id)
+    manifest = QAIHMModelManifest.from_model(model_id)
     model_cls = resolve_model_cls(model_id)
-    precision = code_gen.default_precision
+    precision = manifest.default_precision
     target_runtime = TargetRuntime.QNN_CONTEXT_BINARY
     output_path = Path(output_dir or Path.cwd() / "export_assets")
     is_collection = issubclass(model_cls, PrecompiledCollectionModel)
@@ -257,7 +257,7 @@ def export_model(
         return _export_precompiled_collection(
             model_cls,
             model_id,
-            code_gen,
+            manifest,
             device,
             components,
             skip_profiling,
@@ -271,7 +271,7 @@ def export_model(
     return _export_precompiled_single(
         model_cls,
         model_id,
-        code_gen,
+        manifest,
         device,
         skip_profiling,
         skip_downloading,

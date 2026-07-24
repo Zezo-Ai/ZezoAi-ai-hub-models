@@ -9,7 +9,7 @@ You need a dataset and evaluator. Check if existing ones fit your task (browse `
 ## Steps
 
 1. Add `eval_datasets()`, `calibration_dataset_name()`, and `get_evaluator()` methods to model.py — look at any existing model with quantization support for the pattern
-2. Add supported precisions to `code-gen.yaml` (e.g., `w8a8`, `w8a16`)
+2. Add supported precisions to `manifest.yaml` (e.g., `w8a8`, `w8a16`)
 3. Re-run codegen to generate `evaluate.py`
 4. Run evaluation at both float and quantized precision
 5. Verify accuracy drop is acceptable

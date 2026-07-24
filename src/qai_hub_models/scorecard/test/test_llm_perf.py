@@ -21,7 +21,7 @@ import os
 import pytest
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.models._shared.llm import test
 from qai_hub_models.models._shared.llm.llm_helpers import log_perf_on_device_result
 from qai_hub_models.models._shared.llm.perf_collection import (
@@ -39,7 +39,7 @@ def _llm_model_ids() -> list[str]:
         if not (QAIHM_MODELS_ROOT / model_id / "quantize.py").exists():
             continue
         try:
-            info = QAIHMModelInfo.from_model(model_id)
+            info = QAIHMModelManifest.from_model(model_id)
         except Exception:
             continue
         if info.model_type_llm:

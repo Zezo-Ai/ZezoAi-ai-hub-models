@@ -27,7 +27,10 @@ from qai_hub_models_cli.proto import (
 from qai_hub_models_cli.proto.shared import tensor_spec_pb2, tool_versions_pb2
 
 from qai_hub_models.configs._info_yaml_llm_details import LLMDetails
-from qai_hub_models.configs.info_yaml import NumericsAccuracyBenchmark, QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import (
+    NumericsAccuracyBenchmark,
+    QAIHMModelManifest,
+)
 from qai_hub_models.configs.model_metadata import (
     ChipsetAttributes,
     GenieChatTemplate,
@@ -187,10 +190,47 @@ class TestSharedFieldCoverage:
 class TestInfoFieldCoverage:
     def test_model_info(self) -> None:
         _check_coverage(
-            QAIHMModelInfo,
+            QAIHMModelManifest,
             info_pb2.ModelInfo.DESCRIPTOR,
             pydantic_field_renames={"license": "license_url"},
-            pydantic_only={"code_gen_config"},
+            pydantic_only={
+                # Scorecard-config lives on the manifest object but is not
+                # part of info.proto (it's internal-only CI state).
+                "scorecard_config",
+                # Shared/dataset dependency declarations. Not part of the
+                # public info.proto schema — used only by internal setup.
+                "templates",
+                "datasets",
+                # Build/export config fields. These drive codegen and export
+                # dispatch, and are not part of the public info.proto schema.
+                "additional_readme_section",
+                "default_device",
+                "disabled_paths",
+                "external_repos",
+                "has_multi_graph",
+                "has_on_target_demo",
+                "inference_metrics",
+                "is_aimet",
+                "is_collection_model",
+                "is_precompiled",
+                "local_device_deployment",
+                "num_calibration_samples",
+                "only_allow_orchestrator_runtimes",
+                "orchestrator_runtimes",
+                "outputs_to_skip_validation",
+                "pip_install_flags",
+                "pip_install_flags_gpu",
+                "pip_pre_build_reqs",
+                "python_version_greater_than_or_equal_to",
+                "python_version_greater_than_or_equal_to_reason",
+                "python_version_less_than",
+                "python_version_less_than_reason",
+                "readme_install_system_deps",
+                "requires_aot_prepare",
+                "separate_quantize_script",
+                "skip_example_usage",
+                "supported_precisions",
+            },
             proto_only={"aihm_version"},
         )
 

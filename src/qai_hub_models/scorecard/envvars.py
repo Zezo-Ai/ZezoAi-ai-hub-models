@@ -34,7 +34,7 @@ class SpecialModelSetting(Enum):
     # Enable all models that are pyTorch recipes.
     PYTORCH = "pytorch"
 
-    # Enable pyTorch recipes minus those whose code-gen.yaml sets
+    # Enable pyTorch recipes minus those whose scorecard-config.yaml sets
     # test_split: llm (i.e. exclude LLMs/VLMs).
     PYTORCH_NO_LLM = "pytorch_no_llm"
 
@@ -106,10 +106,10 @@ Special options:
 
 @unique
 class SpecialPrecisionSetting(Enum):
-    # Run all of the precisions defined in code-gen.yaml for each model
+    # Run all of the precisions defined in manifest.yaml for each model
     DEFAULT = "default"
 
-    # Run all of the precisions defined in code-gen.yaml for each model, except float
+    # Run all of the precisions defined in manifest.yaml for each model, except float
     DEFAULT_MINUS_FLOAT = "default_minus_float"
 
     # For models that have w8a16 in supported precisions, run them in w8a16
@@ -334,7 +334,7 @@ class QAIRTVersionEnvvar(QAIHMStringEnvvar):
 @pytest_cli_envvar
 class IgnoreKnownFailuresEnvvar(QAIHMBoolEnvvar):
     """
-    If this is false, test infra won't run model + runtime + precision combos that have failure reasons set in code-gen.yaml.
+    If this is false, test infra won't run model + runtime + precision combos that have failure reasons set in manifest.yaml.
     This is the state for testing in PRs.
 
     If True, test infra will run all enabled test paramaterizations regardless of whether a specific parameterization is known to fail.
@@ -343,7 +343,7 @@ class IgnoreKnownFailuresEnvvar(QAIHMBoolEnvvar):
 
     VARNAME = "QAIHM_TEST_IGNORE_KNOWN_FAILURES"
     CLI_ARGNAMES = ["--ignore-known-failures"]
-    CLI_HELP_MESSAGE = "If set, precision + scorecard path pairs that are 'skipped' in code-gen.yaml are included."
+    CLI_HELP_MESSAGE = "If set, precision + scorecard path pairs that are 'skipped' in manifest.yaml are included."
 
     @classmethod
     def default(cls) -> bool:
@@ -423,7 +423,7 @@ class SpecialLLMPerfPrecisionSetting(Enum):
     # llm_perf_collection.yml dispatches.
     DEFAULT = "default"
 
-    # Run every precision listed in the model's code-gen.yaml supported_precisions.
+    # Run every precision listed in the model's manifest.yaml supported_precisions.
     # Used by the weekly scorecard-driven LLM perf collection.
     ALL = "all"
 
@@ -444,7 +444,7 @@ class LLMPerfPrecisionsEnvvar(
     Envvar:
         Comma-separated precisions (e.g. ``w4,w4a16``) or one of the
         SpecialLLMPerfPrecisionSetting values. Explicit precisions are
-        intersected with the model's code-gen.yaml supported_precisions;
+        intersected with the model's manifest.yaml supported_precisions;
         unsupported precisions are dropped.
     """
 
@@ -453,7 +453,7 @@ class LLMPerfPrecisionsEnvvar(
     CLI_HELP_MESSAGE = """Comma-separated list of precisions to collect LLM perf for.
 Special options:
  * 'default' -- Use the test's pinned default_precisions, or supported_precisions if unpinned
- * 'all'     -- Use every supported precision from the model's code-gen.yaml
+ * 'all'     -- Use every supported precision from the model's manifest.yaml
 """
     SPECIAL_SETTING_ENUM = SpecialLLMPerfPrecisionSetting
 

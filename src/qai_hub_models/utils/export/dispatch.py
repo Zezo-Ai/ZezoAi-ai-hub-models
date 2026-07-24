@@ -14,8 +14,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.base_collection_model import (
     CollectionModel,
     PrecompiledCollectionModel,
@@ -47,7 +46,7 @@ class ResolvedModel:
 
     model_id: str
     model_cls: type
-    code_gen: QAIHMModelCodeGen
+    manifest: QAIHMModelManifest
     display_name: str
     source_dir: Path
     app_cls: type | None = None
@@ -67,8 +66,8 @@ def resolve_model(model_id_or_module: str) -> ResolvedModel:
     -------
     ResolvedModel
         The imported ``Model`` class, optional ``App`` class, ``source_dir``
-        derived from the module's ``__file__``, and ``code-gen.yaml`` /
-        ``info.yaml`` read from that directory when present.
+        derived from the module's ``__file__``, and ``manifest.yaml`` read
+        from that directory.
     """
     module_path = (
         f"qai_hub_models.models.{model_id_or_module}"
@@ -82,23 +81,17 @@ def resolve_model(model_id_or_module: str) -> ResolvedModel:
             f"Point at a regular package with an __init__.py instead."
         )
     source_dir = Path(module.__file__).parent
-    info_path = source_dir / "info.yaml"
-    code_gen = QAIHMModelCodeGen.from_yaml(
-        source_dir / "code-gen.yaml", create_empty_if_no_file=True
-    )
+    model_cls = module.Model
+    manifest = QAIHMModelManifest.from_yaml(source_dir / "manifest.yaml")
     return ResolvedModel(
         model_id=source_dir.name,
-        model_cls=module.Model,
-        code_gen=code_gen,
-        display_name=(
-            QAIHMModelInfo.from_yaml(info_path).name
-            if info_path.exists()
-            else source_dir.name
-        ),
+        model_cls=model_cls,
+        manifest=manifest,
+        display_name=manifest.name or source_dir.name,
         source_dir=source_dir,
         app_cls=getattr(module, "App", None),
         supports_quant_cpu=(
-            code_gen.can_use_quantize_job and code_gen.supports_quantization
+            manifest.can_use_quantize_job and manifest.supports_quantization
         ),
     )
 

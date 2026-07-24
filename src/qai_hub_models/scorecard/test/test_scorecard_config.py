@@ -6,11 +6,10 @@ from __future__ import annotations
 
 import pytest
 
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.envvars import SpecialModelSetting
 from qai_hub_models.scorecard.scorecard_config_yaml import (
     LLMWeekendGroup,
-    QAIHMModelScorecardConfig,
     get_downloadable_llm_model_ids,
     get_llm_model_ids,
     get_week_model_ids,
@@ -31,15 +30,14 @@ REGIONAL_MODELS = {
 
 @pytest.mark.parametrize("model_id", MODEL_IDS)
 def test_pip_flags_require_global_requirements_incompatible(model_id: str) -> None:
-    """If code-gen.yaml sets pip_install_flags or pip_pre_build_reqs, the model's
+    """If manifest.yaml sets pip_install_flags or pip_pre_build_reqs, the model's
     scorecard-config.yaml must have global_requirements_incompatible: true.
     """
-    cj = QAIHMModelCodeGen.from_model(model_id)
-    if cj.pip_install_flags is None and cj.pip_pre_build_reqs is None:
+    manifest = QAIHMModelManifest.from_model(model_id)
+    if manifest.pip_install_flags is None and manifest.pip_pre_build_reqs is None:
         return
-    sc = QAIHMModelScorecardConfig.from_model(model_id)
-    assert sc.global_requirements_incompatible, (
-        f"{model_id}: pip_install_flags/pip_pre_build_reqs is set in code-gen.yaml, "
+    assert manifest.scorecard_config.global_requirements_incompatible, (
+        f"{model_id}: pip_install_flags/pip_pre_build_reqs is set in manifest.yaml, "
         "but global_requirements_incompatible is not true in scorecard-config.yaml."
     )
 

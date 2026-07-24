@@ -7,14 +7,14 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scripts.generate_global_readme import generate_global_readme
 
 TEST_MODELS = ["resnet50", "easyocr", "litehrnet"]
 
 
 def test_generate_global_readme() -> None:
-    models = [QAIHMModelInfo.from_model(model_id) for model_id in TEST_MODELS]
+    models = [QAIHMModelManifest.from_model(model_id) for model_id in TEST_MODELS]
 
     with TemporaryDirectory() as tmp_dir:
         os.makedirs(os.path.join(tmp_dir, "src"))

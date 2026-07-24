@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import ruamel.yaml
 
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.artifacts import RUNTIME_STAGE_JOB_SUBMISSION
 from qai_hub_models.scorecard.envvars import SpecialModelSetting
 from qai_hub_models.scorecard.scorecard_config_yaml import (
@@ -276,7 +276,7 @@ def test_llm_split_chunks_when_exceeds_cap(monkeypatch: pytest.MonkeyPatch) -> N
             requires_aot_prepare=(model_id in aot_set),
         )
 
-    monkeypatch.setattr(QAIHMModelCodeGen, "from_model", staticmethod(_from_model))
+    monkeypatch.setattr(QAIHMModelManifest, "from_model", staticmethod(_from_model))
     monkeypatch.setattr(
         QAIHMModelScorecardConfig, "from_model", staticmethod(_from_model)
     )
@@ -335,7 +335,7 @@ def test_llm_chunking_preserves_aot_first_within_chunk(
             requires_aot_prepare=(model_id in aot_set),
         )
 
-    monkeypatch.setattr(QAIHMModelCodeGen, "from_model", staticmethod(_from_model))
+    monkeypatch.setattr(QAIHMModelManifest, "from_model", staticmethod(_from_model))
     monkeypatch.setattr(
         QAIHMModelScorecardConfig, "from_model", staticmethod(_from_model)
     )

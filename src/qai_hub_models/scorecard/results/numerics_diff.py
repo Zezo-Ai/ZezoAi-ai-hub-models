@@ -10,8 +10,10 @@ import json
 from prettytable import PrettyTable
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
-from qai_hub_models.configs.info_yaml import NumericsAccuracyBenchmark
+from qai_hub_models.configs.manifest_yaml import (
+    NumericsAccuracyBenchmark,
+    QAIHMModelManifest,
+)
 from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.scorecard.devices_and_chipsets_yaml import DevicesAndChipsetsYaml
 from qai_hub_models.scorecard.numerics_yaml import QAIHMModelNumerics
@@ -254,7 +256,7 @@ class NumericsDiff:
             and new_metric_details.metric_enablement_threshold
             and (abs(device_vs_float) >= new_metric_details.metric_enablement_threshold)
         ):
-            info = QAIHMModelCodeGen.from_model(model_id)
+            info = QAIHMModelManifest.from_model(model_id)
             reasons = info.disabled_paths.get_disable_reasons(precision, path.runtime)
             self.device_vs_float_greater_than_enablement_threshold.append(
                 (
@@ -287,7 +289,7 @@ class NumericsDiff:
                 abs(device_vs_benchmark)
                 >= new_metric_details.metric_enablement_threshold
             ):
-                info = QAIHMModelCodeGen.from_model(model_id)
+                info = QAIHMModelManifest.from_model(model_id)
                 reasons = info.disabled_paths.get_disable_reasons(
                     precision, path.runtime
                 )

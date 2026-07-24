@@ -15,7 +15,7 @@ from pathlib import Path
 from qai_hub.client import JobType
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.device import ScorecardDevice, cs_universal
 from qai_hub_models.scorecard.envvars import (
     EnabledDevicesEnvvar,
@@ -64,16 +64,16 @@ def _extract_codegen_test_options(
     bool,
     bool,
 ]:
-    cj = QAIHMModelCodeGen.from_model(model_id)
-    sc = QAIHMModelScorecardConfig.from_model(model_id)
-    options = _extract_runtime_and_precision_options(cj)
+    manifest = QAIHMModelManifest.from_model(model_id)
+    sc = manifest.scorecard_config
+    options = _extract_runtime_and_precision_options(manifest)
     return (
         sc.skip_hub_tests_and_scorecard or sc.skip_scorecard,
         (
             ComponentNamesYaml.from_intermediates().get(model_id)
             or ["dummy_single_component"]
         )
-        if cj.is_collection_model
+        if manifest.is_collection_model
         else None,
         {
             Precision.parse(precision_name): [
@@ -91,9 +91,9 @@ def _extract_codegen_test_options(
                 "test_passing_precision_runtimes"
             ].items()
         },
-        ScorecardDevice.get(cj.default_device),
+        ScorecardDevice.get(manifest.default_device),
         options["can_use_quantize_job"],
-        cj.requires_aot_prepare,
+        manifest.requires_aot_prepare,
     )
 
 

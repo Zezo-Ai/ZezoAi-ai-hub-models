@@ -23,7 +23,7 @@ from .constants import (
     REQUIREMENTS_PATH,
 )
 from .task import CompositeTask, RunCommandsTask, RunCommandsWithVenvTask
-from .util import get_code_gen_str_field, get_pip, has_cuda_gpu, uv_installed
+from .util import get_manifest_str_field, get_pip, has_cuda_gpu, uv_installed
 
 
 @functools.cache
@@ -409,8 +409,8 @@ class SyncModelVenvTask(SyncLocalQAIHMVenvTask):
         super().__init__(
             venv_path,
             extras,
-            get_code_gen_str_field(model_name, "pip_install_flags"),
-            get_code_gen_str_field(model_name, "pip_pre_build_reqs"),
+            get_manifest_str_field(model_name, "pip_install_flags"),
+            get_manifest_str_field(model_name, "pip_pre_build_reqs"),
             qaihm_wheel_dir,
             cli_wheel_dir=cli_wheel_dir,
             junit_xml_path=junit_xml_path,
@@ -431,8 +431,8 @@ class SyncModelRequirementsVenvTask(RunCommandsWithVenvTask):
         requirements_txt = os.path.join(
             PY_PACKAGE_MODELS_ROOT, model_name, "requirements.txt"
         )
-        extra_flags = get_code_gen_str_field(model_name, "pip_install_flags")
-        pre_install = get_code_gen_str_field(model_name, "pip_pre_build_reqs")
+        extra_flags = get_manifest_str_field(model_name, "pip_install_flags")
+        pre_install = get_manifest_str_field(model_name, "pip_pre_build_reqs")
         if os.path.exists(requirements_txt):
             commands = [
                 f'{get_pip()} install {"--force-reinstall" if pip_force_install else None} -r "{requirements_txt}" {extra_flags or ""}'

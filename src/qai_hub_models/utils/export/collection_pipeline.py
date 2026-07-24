@@ -18,7 +18,7 @@ from typing import Any
 import qai_hub as hub
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.ai_hub_access import can_access_qualcomm_ai_hub
 from qai_hub_models.utils.args import get_export_model_name, get_model_kwargs
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
@@ -141,7 +141,7 @@ def export_model(
             f"`qai-hub-models fetch {model_id}` instead."
         )
 
-    code_gen = QAIHMModelCodeGen.from_model(model_id)
+    manifest = QAIHMModelManifest.from_model(model_id)
     model_cls = resolve_model_cls(model_id)
     app = resolve_model_app_cls(model_id)
     display_name = resolve_model_display_name(model_id)
@@ -173,7 +173,7 @@ def export_model(
 
     # 2. Quantize each non-float component.
     quantize_jobs: ComponentGroup[hub.client.QuantizeJob] | None = None
-    if precision != Precision.float and code_gen.can_use_quantize_job:
+    if precision != Precision.float and manifest.can_use_quantize_job:
         component_precisions = resolve_component_precisions(
             model, precision, components
         )
@@ -314,12 +314,12 @@ def export_model(
                     input_specs[component_name],
                     target_runtime,
                     outputs_to_skip=list(
-                        (code_gen.outputs_to_skip_validation or {}).keys()
+                        (manifest.outputs_to_skip_validation or {}).keys()
                     ),
-                    metrics=code_gen.inference_metrics,
+                    metrics=manifest.inference_metrics,
                 )
         print_tool_versions(tool_versions, tool_versions_from_device)
-        if code_gen.has_on_target_demo:
+        if manifest.has_on_target_demo:
             print_on_target_demo_cmd(
                 list((link_jobs or compile_jobs).values()),
                 source_dir,

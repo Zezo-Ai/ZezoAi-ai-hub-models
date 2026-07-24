@@ -20,8 +20,7 @@ from pathlib import Path
 import pandas as pd
 import ruamel.yaml
 
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.artifacts import ScorecardArtifact
 from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.scorecard.devices_and_chipsets_yaml import load_similar_devices
@@ -63,9 +62,6 @@ from qai_hub_models.scorecard.results.yaml import (
     QuantizeScorecardJobYaml,
     ToolVersionsByPathYaml,
     get_model_component_and_graph_names,
-)
-from qai_hub_models.scorecard.scorecard_config_yaml import (
-    QAIHMModelScorecardConfig,
 )
 from qai_hub_models.scorecard.static.list_models import (
     validate_and_split_enabled_models,
@@ -329,10 +325,11 @@ def process_model(
         return None
 
 
-def _get_pytorch_tags(model_info: QAIHMModelInfo) -> list[str]:
-    tags = [tag.value for tag in model_info.tags]
+def _get_pytorch_tags(manifest: QAIHMModelManifest) -> list[str]:
+    assert manifest.status is not None
+    tags = [tag.value for tag in manifest.tags]
     tags.append("pytorch")
-    tags.append(model_info.status.value)
+    tags.append(manifest.status.value)
     return tags
 
 
@@ -405,12 +402,11 @@ def process_e2e_recipe_model(
         print(f"{model_id} | {pstr}")
 
     # Load configs
-    model_info = QAIHMModelInfo.from_model(model_id)
-    cj = model_info.code_gen_config
-    sc = QAIHMModelScorecardConfig.from_model(model_id)
+    manifest = QAIHMModelManifest.from_model(model_id)
+    sc = manifest.scorecard_config
 
     # Skip certain models
-    if cj.is_precompiled or sc.skip_hub_tests_and_scorecard or sc.skip_scorecard:
+    if manifest.is_precompiled or sc.skip_hub_tests_and_scorecard or sc.skip_scorecard:
         return ResultsSpreadsheet(), None, None
 
     # Get enabled test paths for this model
@@ -420,7 +416,7 @@ def process_e2e_recipe_model(
         )
     )
     test_params = ModelTestConfig.from_recipe_model(
-        model_info, component_names, graph_names, component_graph_names
+        manifest, component_names, graph_names, component_graph_names
     )
 
     # Get summaries for this model and its components.
@@ -434,16 +430,17 @@ def process_e2e_recipe_model(
         inference_job_yamls,
     )
 
+    assert manifest.domain is not None
+    assert manifest.use_case is not None
     entries: ResultsSpreadsheet = ResultsSpreadsheet()
-    code_gen_config = QAIHMModelCodeGen.from_model(model_id)
     entries.set_model_metadata(
         model_id,
-        model_info.domain,
-        model_info.use_case,
-        _get_pytorch_tags(model_info),
-        known_failure_reasons=model_info.code_gen_config.disabled_paths,
-        default_quantized_precision=code_gen_config.default_quantized_precision,
-        default_device=ScorecardDevice.get(code_gen_config.default_device),
+        manifest.domain,
+        manifest.use_case,
+        _get_pytorch_tags(manifest),
+        known_failure_reasons=manifest.disabled_paths,
+        default_quantized_precision=manifest.default_quantized_precision,
+        default_device=ScorecardDevice.get(manifest.default_device),
     )
     if gen_csv:
         print_with_id("Adding to Spreadsheet")
@@ -452,14 +449,14 @@ def process_e2e_recipe_model(
 
     if sync_code_gen and not sc.freeze_perf_yaml and not sc.is_llm:
         # Enable or disable runtimes on this model depending on whether the default device has passing jobs
-        update_code_gen_failure_reasons(summaries, test_params.enabled_paths, cj)
-        code_gen_path = cj.to_model_yaml(model_id)
-        print_with_id(f"Updated Runtime Failure Reasons in {code_gen_path}")
+        update_code_gen_failure_reasons(summaries, test_params.enabled_paths, manifest)
+        manifest_path = manifest.to_model_yaml()
+        print_with_id(f"Updated Runtime Failure Reasons in {manifest_path}")
 
         # Update model status & reason, if applicable
-        if update_model_publish_status(model_info):
-            info_yaml_path, _ = model_info.to_model_yaml(write_code_gen=False)
-            print_with_id(pstr=f"Updated publish status at {info_yaml_path}")
+        if update_model_publish_status(manifest):
+            manifest_path = manifest.to_model_yaml()
+            print_with_id(pstr=f"Updated publish status at {manifest_path}")
 
     model_card = QAIHMModelPerf()
     prev_model_card = QAIHMModelPerf()
@@ -740,8 +737,8 @@ if __name__ == "__main__":
         assert chipset_registry is not None
         assert global_numerics_diff is not None
         try:
-            model_info = QAIHMModelInfo.from_model(model_id)
-            sc = QAIHMModelScorecardConfig.from_model(model_id)
+            manifest = QAIHMModelManifest.from_model(model_id)
+            sc = manifest.scorecard_config
             if (
                 sc.skip_hub_tests_and_scorecard
                 or sc.skip_scorecard
@@ -758,7 +755,7 @@ if __name__ == "__main__":
                 accuracy_df,
                 chipset_registry,
                 model_diff,
-                benchmark=model_info.numerics_benchmark,
+                benchmark=manifest.numerics_benchmark,
                 threshold_override=sc.numerics_threshold_override,
             )
             global_numerics_diff.merge_from(model_diff)
@@ -769,18 +766,14 @@ if __name__ == "__main__":
             if numerics.metrics:
                 # Update failure reasons according to what NumericsDiff says is
                 # above the acceptable accuracy threshold.
-                update_code_gen_accuracy_failure_reasons(
-                    model_id, model_info.code_gen_config, model_diff
-                )
+                update_code_gen_accuracy_failure_reasons(model_id, manifest, model_diff)
 
                 # Update numerics.yaml to remove failing paths
-                numerics = remove_numerics_failures(
-                    numerics, model_info.code_gen_config.disabled_paths
-                )
+                numerics = remove_numerics_failures(numerics, manifest.disabled_paths)
 
                 if args.sync_code_gen and using_prod_hub:
                     # If sync-code-gen is on, save the updated failure reasons to disk.
-                    model_info.code_gen_config.to_model_yaml(model_id)
+                    manifest.to_model_yaml()
 
                     # Do not remove failing paths if frozen or LLM
                     # LLMs because it is handled by apply_llm_perf_updates.
@@ -789,14 +782,14 @@ if __name__ == "__main__":
                             perf=QAIHMModelPerf.from_model(
                                 model_id, not_exists_ok=True
                             ),
-                            failure_reason=model_info.code_gen_config.disabled_paths,
+                            failure_reason=manifest.disabled_paths,
                         )
                         perf.apply_similar_devices(load_similar_devices())
                         perf.to_model_yaml(model_id)
 
-                    # Un-publish or re-publish the model if needed by updating info.yaml.
-                    if update_model_publish_status(model_info):
-                        model_info.to_model_yaml(write_code_gen=False)
+                    # Un-publish or re-publish the model if needed by updating manifest.yaml.
+                    if update_model_publish_status(manifest):
+                        manifest.to_model_yaml()
 
             numerics.to_model_yaml(model_id)
             print(f"{model_id} numerics update complete")

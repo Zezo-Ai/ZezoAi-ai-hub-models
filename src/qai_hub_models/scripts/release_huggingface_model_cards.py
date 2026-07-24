@@ -15,7 +15,7 @@ from tempfile import TemporaryDirectory
 from huggingface_hub import HfApi
 
 from qai_hub_models._version import __version__ as qaihm_version
-from qai_hub_models.configs.info_yaml import MODEL_STATUS, QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import MODEL_STATUS, QAIHMModelManifest
 from qai_hub_models.scorecard.envvars import EnabledModelsEnvvar
 from qai_hub_models.scorecard.perf_yaml import QAIHMModelPerf
 from qai_hub_models.scorecard.static.list_models import (
@@ -112,13 +112,14 @@ def release_model_to_hf(
         If True, generates model card without pushing to HuggingFace.
     """
     # Generate model card & license.
-    model_info = QAIHMModelInfo.from_model(model_id)
+    manifest = QAIHMModelManifest.from_model(model_id)
+    assert manifest.name is not None
     model_perf = QAIHMModelPerf.from_model(model_id, not_exists_ok=True)
 
     # Generate and write model card
     release_path = Path(output_dir) / model_id
     write_hf_model_card_and_license(
-        model_info=model_info,
+        manifest=manifest,
         model_perf=model_perf,
         output_dir=release_path,
     )
@@ -126,7 +127,7 @@ def release_model_to_hf(
     # Push the model card if the model is public and this is not a dry-run.
     if (
         not dry_run
-        and model_info.status == MODEL_STATUS.PUBLISHED
+        and manifest.status == MODEL_STATUS.PUBLISHED
         and len(model_perf.supported_chipsets) > 0
     ):
         assert huggingface_token is not None, (
@@ -137,7 +138,7 @@ def release_model_to_hf(
         )
         commit_and_push_to_hf(
             release_root_path=release_path,
-            hf_model_name=model_info.name,
+            hf_model_name=manifest.name,
             version=version,
             commit_description=commit_msg,
             hf_token=huggingface_token,
@@ -152,7 +153,7 @@ def get_deprecated_hf_model_repo_names() -> set[str]:
     do not have a corresponding model in qai_hub_models/models, excluding any models in HF_REPO_NAMES_TO_NEVER_DEPRECATE.
     """
     all_model_names = [
-        QAIHMModelInfo.from_model(model_id).name for model_id in MODEL_IDS
+        QAIHMModelManifest.from_model(model_id).name for model_id in MODEL_IDS
     ]
     public_hf_api = HfApi(token=False)  # no auth; so you only get public models
     models = list(public_hf_api.list_models(author="qualcomm"))

@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import cast
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.info_yaml import MODEL_DOMAIN, MODEL_USE_CASE
+from qai_hub_models.configs.manifest_yaml import MODEL_DOMAIN, MODEL_USE_CASE
 from qai_hub_models.configs.model_disable_reasons import ModelDisableReasonsMapping
 from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath

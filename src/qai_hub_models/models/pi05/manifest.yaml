@@ -1,0 +1,43 @@
+name: Pi0.5
+id: pi05
+status: published
+headline: State-of-the-art generalist robotic foundation model trained on vision,
+  language, and action to enable dexterous, zero-shot physical task execution across
+  diverse robot platforms.
+domain: Multimodal
+description: Pi0.5 is a vision-language-action model that co-trains on diverse data
+  sources (robot demos, web data, semantic subtasks) to enable open-world generalization
+  for long-horizon robotic manipulation.
+use_case: Robotics
+tags:
+- generative-ai
+- robotics
+applicable_scenarios:
+- Robotics
+related_models: []
+form_factors:
+- Auto
+has_static_banner: true
+has_animated_banner: true
+dataset: []
+technical_details:
+  Number of cameras: 3
+  Action chunk size: 50
+  Vision resolution: 224x224
+  Quantization: Mixed (w4a16 backbone, w8a16 vision encoder and action expert)
+license_type: apache-2.0
+research_paper: https://www.physicalintelligence.company/download/pi05.pdf
+research_paper_title: 'Pi0.5: a Vision-Language-Action Model with Open-World Generalization'
+source_repo: https://github.com/Physical-Intelligence/openpi
+license: https://github.com/Physical-Intelligence/openpi/blob/main/LICENSE
+is_aimet: true
+supported_precisions:
+- mixed
+default_device: Dragonwing IQ-9075 EVK
+is_collection_model: true
+requires_aot_prepare: true
+pip_install_flags: git+https://github.com/huggingface/transformers.git@fix/lerobot_openpi
+pip_install_flags_gpu: git+https://github.com/huggingface/transformers.git@fix/lerobot_openpi
+  onnxruntime-gpu==1.23.2
+  https://github.com/quic/aimet/releases/download/2.26.0/aimet_onnx-2.26.0+cu121-cp310-cp310-manylinux_2_34_x86_64.whl
+  -f https://download.pytorch.org/whl/torch_stable.html

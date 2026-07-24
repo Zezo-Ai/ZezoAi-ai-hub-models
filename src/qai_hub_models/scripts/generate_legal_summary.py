@@ -9,9 +9,9 @@ import csv
 
 from qai_hub_models.configs._info_yaml_enums import MODEL_LICENSE
 from qai_hub_models.configs._info_yaml_llm_details import LLM_CALL_TO_ACTION
-from qai_hub_models.configs.info_yaml import (
+from qai_hub_models.configs.manifest_yaml import (
     MODEL_STATUS,
-    QAIHMModelInfo,
+    QAIHMModelManifest,
 )
 from qai_hub_models.utils.path_helpers import MODEL_IDS
 
@@ -53,7 +53,7 @@ def main() -> None:
         scorecard_csv.writerow(csv_header)
 
         for model_id in model_ids:
-            model = QAIHMModelInfo.from_model(model_id)
+            model = QAIHMModelManifest.from_model(model_id)
             if (
                 not args.include_unpublished_models
                 and model.status == MODEL_STATUS.UNPUBLISHED
@@ -67,6 +67,7 @@ def main() -> None:
             ):
                 coming_soon_status = "'Coming Soon' (No Asset Published)"
 
+            assert model.license_type is not None
             license_type: MODEL_LICENSE | str = model.license_type
             if model.license_type == MODEL_LICENSE.COMMERCIAL:
                 license_type = "commercial (contract required to access)"

@@ -8,7 +8,7 @@ import os
 import pytest
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.device import cs_8_gen_3
 from qai_hub_models.scorecard.devices_and_chipsets_yaml import load_similar_devices
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
@@ -74,7 +74,7 @@ def test_generate_perf(hub_test_deployment: str) -> None:
 def _build_perf_card(model_id: str) -> QAIHMModelPerf:
     """Build a perf card from the checked-in intermediate job IDs."""
     job_ids = ProfileScorecardJobYaml.from_intermediates()
-    model_info = QAIHMModelInfo.from_model(model_id)
+    manifest = QAIHMModelManifest.from_model(model_id)
 
     component_names, graph_names, component_graph_names = (
         get_model_component_and_graph_names(
@@ -84,7 +84,7 @@ def _build_perf_card(model_id: str) -> QAIHMModelPerf:
         )
     )
     test_params = ModelTestConfig.from_recipe_model(
-        model_info, component_names, graph_names, component_graph_names
+        manifest, component_names, graph_names, component_graph_names
     )
     summaries = test_params.get_all_export_test_summaries(
         None,

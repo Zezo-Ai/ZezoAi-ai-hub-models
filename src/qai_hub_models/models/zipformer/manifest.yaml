@@ -1,0 +1,65 @@
+name: Zipformer
+id: zipformer
+status: published
+headline: Transformer-based automatic speech recognition (ASR) model for English and
+  Chinese language.
+domain: Audio
+description: Zipformer streaming ASR (Automatic Speech Recognition) model is a state-of-the-art
+  system designed for transcribing spoken language into written text streamingly.
+  This model is based on the transformer architecture and has been optimized for edge
+  inference by replacing linear layers with convolutional (conv) layers. It exhibits
+  robust performance in realistic, noisy environments, making it highly reliable for
+  real-world applications. Specifically, it excels in long-form transcription, capable
+  of accurately transcribing audios. Time to the first token is the encoder's latency,
+  while time to each additional token is joiner's latency, where we assume a max decoded
+  length specified below.
+use_case: Speech Recognition
+tags:
+- foundation
+applicable_scenarios:
+- Smart Home
+- Accessibility
+related_models:
+- whisper_small
+form_factors:
+- Phone
+- Tablet
+- IoT
+has_static_banner: true
+has_animated_banner: true
+dataset: []
+technical_details:
+  Model checkpoint: pfluo/k2fsa-zipformer-chinese-english-mixed
+  Input resolution: 80x71 (0.71 seconds audio)
+  Max decoded sequence length: 200 tokens
+  Number of parameters (encoder): 63.2M
+  Model size (encoder) (float): 242 MB
+  Number of parameters (decoder): 3.47M
+  Model size (decoder) (float): 13.2 MB
+  Number of parameters (joiner): 3.21M
+  Model size (joiner) (float): 12.2 MB
+license_type: apache-2.0
+research_paper: https://arxiv.org/abs/2310.11230
+research_paper_title: Zipformer A faster and better encoder for automatic speech recognition
+source_repo: https://github.com/k2-fsa/icefall
+license: https://github.com/huggingface/transformers/blob/v4.42.3/LICENSE
+external_repos:
+  icefall:
+    repo_url: https://github.com/k2-fsa/icefall.git
+    commit_sha: 693f069de73fd91d7c2009571245d97221cc3a3f
+    patches_filename: icefall_patches.diff
+supported_precisions:
+- float
+- mixed
+disabled_paths:
+  mixed:
+    qnn_context_binary:
+      scorecard_failure: 'Failing jobs: jpr9rnv9p'
+    qnn_dlc:
+      scorecard_failure: 'Failing jobs: j56vx7y7p'
+    precompiled_qnn_onnx:
+      scorecard_failure: 'Failing jobs: j576md4qg'
+is_collection_model: true
+requires_aot_prepare: true
+pip_pre_build_reqs: torch==2.9.0+cpu -f https://download.pytorch.org/whl/torch/
+pip_install_flags: k2==1.24.4.dev20251029+cpu.torch2.9.0 -f https://k2-fsa.github.io/k2/cpu.html

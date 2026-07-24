@@ -15,12 +15,9 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 from qai_hub_models import Precision, TargetRuntime
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
-from qai_hub_models.scorecard.scorecard_config_yaml import QAIHMModelScorecardConfig
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scripts.generate_global_readme import generate_global_readme
 from qai_hub_models.scripts.generate_model_readme import generate_and_write_model_readme
-from qai_hub_models.utils.asset_loaders import load_yaml
 from qai_hub_models.utils.path_helpers import (
     MODEL_IDS,
     QAIHM_MODELS_ROOT,
@@ -39,7 +36,7 @@ def _is_auto_generated(path: Path) -> bool:
     return HEADER in head
 
 
-def _get_steps(export_options: QAIHMModelCodeGen) -> dict[str, str]:
+def _get_steps(manifest: QAIHMModelManifest) -> dict[str, str]:
     steps = {}
     # step_number needs to be an object (not a primitive) for its state
     # to persist across function calls
@@ -50,7 +47,7 @@ def _get_steps(export_options: QAIHMModelCodeGen) -> dict[str, str]:
         steps[name] = str(step_number) + ". " + step
         step_number += 1
 
-    if export_options.is_precompiled:
+    if manifest.is_precompiled:
         add_step("init", "Initialize model")
         add_step("upload", "Upload model assets to hub")
     else:
@@ -58,7 +55,7 @@ def _get_steps(export_options: QAIHMModelCodeGen) -> dict[str, str]:
             "init",
             "Instantiates a PyTorch model and converts it to a traced TorchScript format",
         )
-        if export_options.can_use_quantize_job:
+        if manifest.can_use_quantize_job:
             add_step(
                 "quantize",
                 "Converts the PyTorch model to ONNX and quantizes the ONNX model.",
@@ -66,7 +63,7 @@ def _get_steps(export_options: QAIHMModelCodeGen) -> dict[str, str]:
         add_step("compile", "Compiles the model to an asset that can be run on device")
     add_step("profile", "Profiles the model performance on a real device")
 
-    if not export_options.is_precompiled:
+    if not manifest.is_precompiled:
         add_step("inference", "Inferences the model on sample inputs")
 
     add_step(
@@ -74,23 +71,23 @@ def _get_steps(export_options: QAIHMModelCodeGen) -> dict[str, str]:
         "Extracts relevant tool (eg. SDK) versions used to compile and profile this model",
     )
 
-    if not export_options.is_precompiled:
+    if not manifest.is_precompiled:
         add_step("download", "Downloads the model asset to the local directory")
     else:
         add_step("download", "Saves the model asset to the local directory")
 
     summary_step = "Summarizes the results from profiling"
-    if not export_options.is_precompiled:
+    if not manifest.is_precompiled:
         summary_step += " and inference"
     add_step("summary", summary_step)
     return steps
 
 
 def _extract_runtime_and_precision_options(
-    export_options: QAIHMModelCodeGen,
-    export_options_dict: dict | None = None,
+    manifest: QAIHMModelManifest,
+    manifest_dict: dict | None = None,
 ) -> dict[str, Any]:
-    export_options_dict = export_options_dict or {}
+    manifest_dict = manifest_dict or {}
 
     # All runtime + precision pairs that are enabled for testing and are compatibile with this model.
     # NOTE:
@@ -98,50 +95,44 @@ def _extract_runtime_and_precision_options(
     #   For example, models that allow JIT (on-device) compile will not test AOT runtimes; we assume that if it works on JIT it will work on AOT.
     test_enabled_precision_runtimes: dict[str, list[str]] = {
         str(precision): [rt.name for rt in runtimes]
-        for precision, runtimes in export_options.get_supported_paths_for_testing().items()
+        for precision, runtimes in manifest.get_supported_paths_for_testing().items()
     }
 
-    # All runtime + precision pairs that are enabled for testing and have no known failure reasons set in code-gen.yaml
+    # All runtime + precision pairs that are enabled for testing and have no known failure reasons set in manifest.yaml
     # NOTE:
     #   Certain supported pairs may be excluded from this list if they are not enabled for testing.
     #   For example, models that allow JIT (on-device) compile will not test AOT runtimes; we assume that if it works on JIT it will work on AOT.
     test_passing_precision_runtimes: dict[str, list[str]] = {
         str(precision): [rt.name for rt in runtimes]
-        for precision, runtimes in export_options.get_supported_paths_for_testing(
+        for precision, runtimes in manifest.get_supported_paths_for_testing(
             only_include_passing=True
         ).items()
     }
 
     # All runtime + precision pairs that are supported for this model, for use in the export script.
     def _supported_runtimes(precision: Precision) -> list[str]:
-        rts = [r for r in TargetRuntime if export_options.is_supported(precision, r)]
+        rts = [r for r in TargetRuntime if manifest.is_supported(precision, r)]
         # Demote legacy GENIE so GENIEX_QAIRT wins the CLI default; remove when GENIE is gone (tetracode#20247).
         rts.sort(key=lambda r: 1 if r == TargetRuntime.GENIE else 0)
         return [r.name for r in rts]
 
     supported_precision_runtimes: dict[str, list[str]] = {
         str(precision): _supported_runtimes(precision)
-        for precision in export_options.supported_precisions
+        for precision in manifest.supported_precisions
     }
     supported_precision_runtimes = {
         p: rs for p, rs in supported_precision_runtimes.items() if rs
     }  # drop empty precision entries
 
-    export_options_dict["default_runtime"] = export_options.default_runtime.name
-    export_options_dict["supported_precision_runtimes"] = supported_precision_runtimes
-    export_options_dict["test_enabled_precision_runtimes"] = (
-        test_enabled_precision_runtimes
-    )
-    export_options_dict["test_passing_precision_runtimes"] = (
-        test_passing_precision_runtimes
-    )
-    export_options_dict["default_aihub_job_precision"] = str(
-        export_options.default_precision
-    )
-    export_options_dict["can_use_quantize_job"] = export_options.can_use_quantize_job
-    export_options_dict["supports_quantization"] = export_options.supports_quantization
+    manifest_dict["default_runtime"] = manifest.default_runtime.name
+    manifest_dict["supported_precision_runtimes"] = supported_precision_runtimes
+    manifest_dict["test_enabled_precision_runtimes"] = test_enabled_precision_runtimes
+    manifest_dict["test_passing_precision_runtimes"] = test_passing_precision_runtimes
+    manifest_dict["default_aihub_job_precision"] = str(manifest.default_precision)
+    manifest_dict["can_use_quantize_job"] = manifest.can_use_quantize_job
+    manifest_dict["supports_quantization"] = manifest.supports_quantization
 
-    return export_options_dict
+    return manifest_dict
 
 
 def _generate_export(
@@ -149,21 +140,21 @@ def _generate_export(
     model_name: str,
     model_display_name: str,
     model_status: str,
-    export_options: QAIHMModelCodeGen,
+    manifest: QAIHMModelManifest,
     model_dir: Path,
 ) -> str:
     template = environment.get_template("export_template.j2")
 
-    export_options_dict = export_options.model_dump()
-    _extract_runtime_and_precision_options(export_options, export_options_dict)
+    manifest_dict = manifest.model_dump()
+    _extract_runtime_and_precision_options(manifest, manifest_dict)
 
     file_contents = template.render(
-        export_options_dict,
+        manifest_dict,
         model_name=model_name,
         model_display_name=model_display_name,
         model_status=model_status,
         header=HEADER,
-        steps=_get_steps(export_options),
+        steps=_get_steps(manifest),
     )
     export_file_path = os.path.join(model_dir, "export.py")
     with open(export_file_path, "w") as f:
@@ -174,12 +165,12 @@ def _generate_export(
 def _generate_unit_tests(
     environment: Environment,
     model_name: str,
-    export_options: dict[str, Any],
+    manifest: dict[str, Any],
     test_path: Path,
 ) -> str:
     template = environment.get_template("unit_test_template.j2")
     file_contents = template.render(
-        export_options,
+        manifest,
         model_name=model_name,
         header=HEADER,
     )
@@ -192,12 +183,12 @@ def _generate_unit_tests(
 def _generate_conftest(
     environment: Environment,
     model_name: str,
-    export_options: dict[str, Any],
+    manifest: dict[str, Any],
     conftest_path: Path,
 ) -> str:
     template = environment.get_template("conftest_template.j2")
     file_contents = template.render(
-        export_options,
+        manifest,
         model_name=model_name,
         header=HEADER,
     )
@@ -210,12 +201,12 @@ def _generate_evaluate(
     environment: Environment,
     model_name: str,
     model_status: str,
-    export_options: dict[str, Any],
+    manifest: dict[str, Any],
     evaluate_path: Path,
 ) -> str:
     template = environment.get_template("evaluate_template.j2")
     file_contents = template.render(
-        export_options,
+        manifest,
         model_name=model_name,
         model_status=model_status,
         header=HEADER,
@@ -245,7 +236,7 @@ def _generate_external_repos_init(
 
 
 def _generate_shared_external_repos(environment: Environment) -> list[str]:
-    """Generate __init__.py for each _shared/*/code-gen.yaml."""
+    """Generate __init__.py for each _shared/*/manifest.yaml that declares external_repos."""
     shared_dir = QAIHM_MODELS_ROOT / "_shared"
     if not shared_dir.exists():
         return []
@@ -253,11 +244,11 @@ def _generate_shared_external_repos(environment: Environment) -> list[str]:
     template = environment.get_template("external_repos_init_template.j2")
     generated = []
     for shared_folder in sorted(shared_dir.iterdir()):
-        codegen_path = shared_folder / "code-gen.yaml"
-        if not codegen_path.exists():
+        manifest_path = shared_folder / "manifest.yaml"
+        if not manifest_path.exists():
             continue
-        config = load_yaml(codegen_path)
-        if not config.get("external_repos"):
+        manifest = QAIHMModelManifest.from_yaml(manifest_path)
+        if not manifest.external_repos:
             continue
         external_repos_dir = shared_folder / "external_repos"
         os.makedirs(external_repos_dir, exist_ok=True)
@@ -274,21 +265,17 @@ def _generate_shared_external_repos(environment: Environment) -> list[str]:
 
 def generate_code_for_model(model_name: str) -> list[str]:
     model_dir = QAIHM_MODELS_ROOT / model_name
-    export_options = QAIHMModelCodeGen.from_model(model_name)
-    scorecard_config = QAIHMModelScorecardConfig.from_model(model_name)
+    manifest = QAIHMModelManifest.from_model(model_name)
+    scorecard_config = manifest.scorecard_config
 
     if scorecard_config.skip_export:
         print(f"Skipping export.py generation for {model_name}.")
         return []
 
-    try:
-        model_info = QAIHMModelInfo.from_model(model_name)
-        model_display_name = model_info.name
-        model_status = model_info.status.value
-    except ValueError:
-        # Info yaml does not exist
-        model_display_name = "no_info_yaml_found"
-        model_status = "unpublished"
+    model_display_name = manifest.name or model_name
+    model_status = (
+        manifest.status.value if manifest.status is not None else "unpublished"
+    )
 
     environment = Environment(
         loader=FileSystemLoader(Path(__file__).parent / "templates/"),
@@ -300,24 +287,24 @@ def generate_code_for_model(model_name: str) -> list[str]:
             model_name,
             model_display_name,
             model_status,
-            export_options,
+            manifest,
             model_dir,
         )
     ]
     # Generate or clean up external repo files
     external_repos_dir = model_dir / "external_repos"
-    if export_options.external_repos:
+    if manifest.external_repos:
         generated_files.append(
             _generate_external_repos_init(environment, model_name, model_dir)
         )
     elif external_repos_dir.exists():
         shutil.rmtree(external_repos_dir)
 
-    export_options_dict = export_options.model_dump()
-    _extract_runtime_and_precision_options(export_options, export_options_dict)
+    manifest_dict = manifest.model_dump()
+    _extract_runtime_and_precision_options(manifest, manifest_dict)
 
-    export_options_dict["has_external_repos"] = bool(export_options.external_repos)
-    export_options_dict["is_llm"] = scorecard_config.is_llm
+    manifest_dict["has_external_repos"] = bool(manifest.external_repos)
+    manifest_dict["is_llm"] = scorecard_config.is_llm
 
     should_generate_tests = not scorecard_config.skip_hub_tests_and_scorecard
     scorecard_model_dir = QAIHM_PACKAGE_ROOT / "scorecard" / "models" / model_name
@@ -328,17 +315,21 @@ def generate_code_for_model(model_name: str) -> list[str]:
         if not init_path.exists():
             init_path.touch()
         generated_files.append(
-            _generate_unit_tests(
-                environment, model_name, export_options_dict, test_path
-            )
+            _generate_unit_tests(environment, model_name, manifest_dict, test_path)
         )
     elif test_path.exists() and _is_auto_generated(test_path):
         os.remove(test_path)
 
-    should_generate_conftest = (
-        should_generate_tests and not export_options.is_precompiled
-    )
-    # Emit conftest.py at BOTH the hand-written test.py's
+    # Transition-only: remove the auto-generated test file from its old home
+    # under models/<id>/. Kept for one PR of grace so in-flight branches
+    # don't leave orphans. Delete this block once no branches reference
+    # the old location (tetracode#20296 PR 3 cleanup).
+    old_test_path = model_dir / "test_generated.py"
+    if old_test_path.exists() and _is_auto_generated(old_test_path):
+        os.remove(old_test_path)
+
+    should_generate_conftest = should_generate_tests and not manifest.is_precompiled
+    # tetracode#20296: emit conftest.py at BOTH the hand-written test.py's
     # location (models/<id>/) and the moved test_generated.py's location
     # (scorecard/models/<id>/) so cached_from_pretrained applies to tests
     # in both dirs (pytest conftest discovery doesn't walk sideways). The
@@ -352,20 +343,20 @@ def generate_code_for_model(model_name: str) -> list[str]:
         if should_generate_conftest:
             generated_files.append(
                 _generate_conftest(
-                    environment, model_name, export_options_dict, conftest_path
+                    environment, model_name, manifest_dict, conftest_path
                 )
             )
         elif conftest_path.exists() and _is_auto_generated(conftest_path):
             os.remove(conftest_path)
 
     evaluate_path = model_dir / "evaluate.py"
-    if not export_options.is_precompiled and not scorecard_config.skip_evaluate:
+    if not manifest.is_precompiled and not scorecard_config.skip_evaluate:
         generated_files.append(
             _generate_evaluate(
                 environment,
                 model_name,
                 model_status,
-                export_options_dict,
+                manifest_dict,
                 evaluate_path,
             )
         )
@@ -418,11 +409,11 @@ def main() -> None:
             raise ValueError(f"Failed to generate export files for {model}") from e
 
     # Generate global README
-    all_model_infos = [QAIHMModelInfo.from_model(mid) for mid in MODEL_IDS]
+    all_manifests = [QAIHMModelManifest.from_model(mid) for mid in MODEL_IDS]
     modified_files.extend(
         str(p)
         for p in generate_global_readme(
-            all_model_infos, QAIHM_REPO_ROOT, QAIHM_PACKAGE_SRC_ROOT
+            all_manifests, QAIHM_REPO_ROOT, QAIHM_PACKAGE_SRC_ROOT
         )
     )
 

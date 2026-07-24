@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from qai_hub_models._version import __version__
 from qai_hub_models.configs._info_yaml_enums import MODEL_STATUS
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.devices_and_chipsets_yaml import DevicesAndChipsetsYaml
 from qai_hub_models.scorecard.numerics_yaml import QAIHMModelNumerics
 from qai_hub_models.scorecard.perf_yaml import QAIHMModelPerf
@@ -32,7 +32,7 @@ def get_manifest_proto() -> ReleaseManifest:
     from qai_hub_models.scripts.build_release_proto import _manifest_filter_fields
 
     def _build_entry(model_id: str) -> ManifestModelEntry | None:
-        info = QAIHMModelInfo.from_model(model_id)
+        info = QAIHMModelManifest.from_model(model_id)
         info_proto = info.to_proto(__version__)
         if not is_internal_repo() and info.status != MODEL_STATUS.PUBLISHED:
             return None
@@ -64,7 +64,7 @@ def get_manifest_proto() -> ReleaseManifest:
 
 def get_info_proto(model_id: str) -> ModelInfo:
     """Build a ModelInfo proto from local model config (dev installs)."""
-    return QAIHMModelInfo.from_model(model_id).to_proto(__version__)
+    return QAIHMModelManifest.from_model(model_id).to_proto(__version__)
 
 
 def get_perf_proto(model_id: str) -> ModelPerf:

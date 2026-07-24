@@ -32,10 +32,10 @@ IS_RELEASE_BUILD = os.environ.get("QAIHM_RELEASE_BUILD", "0").lower() in [
 def _get_model_status(
     model_dir: pathlib.Path,
 ) -> Literal["published", "unpublished", "pending"] | None:
-    info_yaml = model_dir / "info.yaml"
-    if not info_yaml.exists():
+    manifest_yaml = model_dir / "manifest.yaml"
+    if not manifest_yaml.exists():
         return None
-    with open(info_yaml) as f:
+    with open(manifest_yaml) as f:
         for line in f:
             if m := re.match(r"^status:\s*(\S+)", line):
                 out = m.group(1)

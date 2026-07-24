@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.artifacts import ScorecardArtifact
 from qai_hub_models.scorecard.envvars import (
     ArtifactsDirEnvvar,
@@ -24,9 +24,6 @@ from qai_hub_models.scorecard.results.code_gen import (
     update_model_publish_status,
 )
 from qai_hub_models.scorecard.results.yaml import ScorecardAssetYaml
-from qai_hub_models.scorecard.scorecard_config_yaml import (
-    QAIHMModelScorecardConfig,
-)
 from qai_hub_models.scorecard.static.list_models import (
     validate_and_split_enabled_models,
 )
@@ -65,8 +62,8 @@ def main() -> None:
     scorecard_assets = ScorecardAssetYaml.from_yaml(args.release_assets_yaml)
     for model_id in sorted(pytorch_models):
         try:
-            model_info = QAIHMModelInfo.from_model(model_id)
-            sc = QAIHMModelScorecardConfig.from_model(model_id)
+            manifest = QAIHMModelManifest.from_model(model_id)
+            sc = manifest.scorecard_config
             if (
                 sc.skip_hub_tests_and_scorecard
                 or sc.skip_scorecard
@@ -77,7 +74,7 @@ def main() -> None:
             if scorecard_model_assets := scorecard_assets.models.get(model_id):
                 # Remove assets for unsupported paths
                 scorecard_model_assets = remove_asset_failures(
-                    scorecard_model_assets, model_info.code_gen_config.disabled_paths
+                    scorecard_model_assets, manifest.disabled_paths
                 )
 
                 if scorecard_model_assets.has_ephemeral_s3_keys:
@@ -96,9 +93,9 @@ def main() -> None:
                 )  # deletes existing file
 
             # Update model status & reason, if applicable
-            if update_model_publish_status(model_info):
-                info_yaml_path, _ = model_info.to_model_yaml(write_code_gen=False)
-                print(f"Updated publish status at {info_yaml_path}")
+            if update_model_publish_status(manifest):
+                manifest_path = manifest.to_model_yaml()
+                print(f"Updated publish status at {manifest_path}")
 
         except Exception as e:
             raise ValueError(

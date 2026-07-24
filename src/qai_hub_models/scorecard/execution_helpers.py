@@ -134,7 +134,7 @@ def get_model_test_precisions(
     enabled_model_test_precisions
         All Precisions that are enabled for testing with this model.
     passing_model_test_precisions
-        All Precisions that are enabled for testing with this model and have no known failure reasons in code-gen.yaml
+        All Precisions that are enabled for testing with this model and have no known failure reasons in manifest.yaml
         If None, assumes this is the same as enabled_model_test_precisions
     can_use_quantize_job
         Whether this model can use quantize job.

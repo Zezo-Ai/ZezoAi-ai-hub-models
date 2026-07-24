@@ -193,7 +193,7 @@ def test_aimet_onnx_utils_change_detects_sd() -> None:
     assert "stable_diffusion_v1_5" in models
 
 
-# ── get_ci_test_models: code-gen.yaml detection ──────────────────────
+# ── get_ci_test_models: manifest.yaml detection ─────────────────────
 
 get_ci_test_models = _changes.get_ci_test_models
 get_changed_files_in_package = _changes.get_changed_files_in_package
@@ -229,15 +229,15 @@ def _run_get_ci_test_models_with_changed_files(changed_files_content: str) -> se
     return result
 
 
-def test_codegen_yaml_change_detects_model() -> None:
+def test_manifest_yaml_change_detects_model() -> None:
     """
-    Changing only a model's code-gen.yaml should detect that model.
+    Changing only a model's manifest.yaml should detect that model.
 
-    This was the bug in issue #19031: code-gen.yaml changes were never
+    This was the bug in issue #19031: config yaml changes were never
     fed into get_ci_test_models because get_changed_files_in_package
     was only called with suffix='.py' and suffix='requirements.txt'.
     """
-    changed_files = "src/qai_hub_models/models/cvt/code-gen.yaml\n"
+    changed_files = "src/qai_hub_models/models/cvt/manifest.yaml\n"
     models = _run_get_ci_test_models_with_changed_files(changed_files)
     assert "cvt" in models
 

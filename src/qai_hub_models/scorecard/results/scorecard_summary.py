@@ -10,7 +10,7 @@ from typing import Generic, final
 from qai_hub import JobType
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard import (
     ScorecardDevice,
     ScorecardProfilePath,
@@ -142,8 +142,8 @@ class ScorecardJobSummary(Generic[ScorecardPathT]):
             perf.precisions[params.precision] = QAIHMModelPerf.PrecisionDetails()
 
         precision_details = perf.precisions[params.precision]
-        component_id = (
-            params.component or QAIHMModelInfo.from_model(params.model_id).name
+        component_id = params.component or (
+            QAIHMModelManifest.from_model(params.model_id).name or params.model_id
         )
         if component_id not in precision_details.components:
             # This field is set only when the parent precision is "mixed", since it is not otherwise
@@ -302,20 +302,20 @@ class ModelTestConfig:
 
     @staticmethod
     def from_recipe_model(
-        model_info: QAIHMModelInfo,
+        manifest: QAIHMModelManifest,
         component_names: list[str] | None = None,
         graph_names: list[str] | None = None,
         component_graph_names: ComponentGroup[list[str]] | None = None,
     ) -> ModelTestConfig:
         """Load the test configuration for the given PyTorch recipe model."""
-        model_id = model_info.id
-        cj = model_info.code_gen_config
+        assert manifest.id is not None
+        model_id = manifest.id
 
         # Get enabled test paths for this model
-        model_supported_paths = cj.get_supported_paths_for_testing(
+        model_supported_paths = manifest.get_supported_paths_for_testing(
             only_include_passing=False
         )
-        model_passing_paths = cj.get_supported_paths_for_testing(
+        model_passing_paths = manifest.get_supported_paths_for_testing(
             only_include_passing=True
         )
         enabled_paths = get_enabled_paths_for_testing(
@@ -323,21 +323,21 @@ class ModelTestConfig:
             model_supported_paths,
             model_passing_paths,
             ScorecardProfilePath,
-            cj.can_use_quantize_job,
+            manifest.can_use_quantize_job,
         )
 
         profile_tests = get_profile_parameterized_pytest_config(
             model_id,
             model_supported_paths,
             model_passing_paths,
-            cj.can_use_quantize_job,
+            manifest.can_use_quantize_job,
         )
         inference_tests = get_evaluation_parameterized_pytest_config(
             model_id,
-            ScorecardDevice.get(cj.default_device),
+            ScorecardDevice.get(manifest.default_device),
             model_supported_paths,
             model_passing_paths,
-            cj.can_use_quantize_job,
+            manifest.can_use_quantize_job,
         )
 
         return ModelTestConfig(

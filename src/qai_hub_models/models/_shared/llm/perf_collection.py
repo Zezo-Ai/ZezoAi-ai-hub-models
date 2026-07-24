@@ -22,8 +22,7 @@ from dataclasses import dataclass, field
 from filelock import FileLock
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard import ScorecardDevice
 from qai_hub_models.scorecard.device import (
     LLM_COMPILE_DEVICES,
@@ -77,9 +76,9 @@ class LLMPerfConfig:
 
 
 def get_supported_precisions(model_id: str) -> list[Precision]:
-    """Get the supported precisions for a model from code-gen.yaml."""
-    code_gen = QAIHMModelCodeGen.from_model(model_id)
-    return code_gen.supported_precisions
+    """Get the supported precisions for a model from manifest.yaml."""
+    manifest = QAIHMModelManifest.from_model(model_id)
+    return manifest.supported_precisions
 
 
 def load_release_assets_for_model(model_id: str) -> QAIHMModelReleaseAssets:
@@ -267,8 +266,9 @@ def _update_perf_yaml_locked(
 ) -> None:
     perf = QAIHMModelPerf.from_model(model_id, not_exists_ok=True)
 
-    info = QAIHMModelInfo.from_model(model_id)
-    component_name = info.name
+    manifest = QAIHMModelManifest.from_model(model_id)
+    assert manifest.name is not None
+    component_name = manifest.name
 
     device = ScorecardDevice.get(device_name, return_unregistered=True)
     if device not in perf.supported_devices:

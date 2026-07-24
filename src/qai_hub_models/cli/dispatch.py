@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 from typing import cast
 
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.args import evaluate_parser, export_parser
 from qai_hub_models.utils.asset_loaders import (
     check_unpublished_model_warning,
@@ -52,7 +52,10 @@ def _confirm_run_ok(model_id_or_module: str) -> bool:
     """
     if model_id_or_module in MODEL_IDS:
         try:
-            status = QAIHMModelInfo.from_model(model_id_or_module).status.value
+            manifest_status = QAIHMModelManifest.from_model(model_id_or_module).status
+            status = (
+                manifest_status.value if manifest_status is not None else "unpublished"
+            )
         except ValueError:
             status = "unpublished"
         if status == "published":
@@ -76,9 +79,9 @@ def build_export_parser_for(resolved: ResolvedModel) -> argparse.ArgumentParser:
     return export_parser(
         model_cls=resolved.model_cls,
         export_fn=select_pipeline(resolved),
-        supported_precision_runtimes=resolved.code_gen.supported_precision_runtimes,
-        default_export_device=resolved.code_gen.default_device,
-        omit_precision=resolved.code_gen.separate_quantize_script,
+        supported_precision_runtimes=resolved.manifest.get_supported_paths_for_testing(),
+        default_export_device=resolved.manifest.default_device,
+        omit_precision=resolved.manifest.separate_quantize_script,
     )
 
 
@@ -137,12 +140,12 @@ def build_evaluate_parser_for(resolved: ResolvedModel) -> argparse.ArgumentParse
     return evaluate_parser(
         model_cls=model_cls,
         supported_dataset_classes=model_cls.get_eval_dataset_classes(),
-        supported_precision_runtimes=resolved.code_gen.supported_precision_runtimes,
+        supported_precision_runtimes=resolved.manifest.get_supported_paths_for_testing(),
         uses_quantize_job=resolved.supports_quant_cpu,
-        num_calibration_samples=resolved.code_gen.num_calibration_samples
-        if resolved.code_gen.num_calibration_samples
+        num_calibration_samples=resolved.manifest.num_calibration_samples
+        if resolved.manifest.num_calibration_samples
         else None,
-        default_device=resolved.code_gen.default_device,
+        default_device=resolved.manifest.default_device,
     )
 
 

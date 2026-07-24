@@ -73,7 +73,7 @@ class QAIHMModelScorecardConfig(BaseQAIHMConfig):
     # Second knob for skipping of scorecard generation. Use case, skip scorecard but run hub tests.
     skip_scorecard: bool = False
 
-    # If set to true, Scorecard will still run this model, but perf.yaml and associated code-gen.yaml / README.md changes will not be written to disk.
+    # If set to true, Scorecard will still run this model, but perf.yaml and associated manifest.yaml / README.md changes will not be written to disk.
     # This is useful for models whose assets cannot be changed in a release, but we still want to continue testing said models.
     freeze_perf_yaml: bool = False
 

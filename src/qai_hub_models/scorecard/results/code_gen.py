@@ -9,8 +9,7 @@ import copy
 
 from qai_hub_models import Precision
 from qai_hub_models.configs._info_yaml_enums import MODEL_STATUS
-from qai_hub_models.configs.code_gen_yaml import QAIHMModelCodeGen
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.configs.model_disable_reasons import (
     ModelDisableReasons,
     ModelDisableReasonsMapping,
@@ -44,13 +43,13 @@ MAX_ACCEPTABLE_INFERENCE_TIME_MS = 4000
 
 def _clean_old_failure_reasons(
     precisions: list[Precision],
-    code_gen_config: QAIHMModelCodeGen,
+    manifest: QAIHMModelManifest,
     clean_general: bool,
     clean_accuracy: bool,
 ) -> None:
     """In the code gen config, delete failure reasons for all enabled runtimes + given precision pairs."""
     passing_precisions: list[Precision] = []
-    for precision, reasons_by_runtime in code_gen_config.disabled_paths.data.items():
+    for precision, reasons_by_runtime in manifest.disabled_paths.data.items():
         if precision in precisions:
             for path in ScorecardProfilePath:
                 if (not path.is_published or path.enabled) and (
@@ -64,7 +63,7 @@ def _clean_old_failure_reasons(
                         reasons_by_runtime.pop(path.runtime)
 
         # Delete precisions that are no longer valid
-        if precision not in code_gen_config.supported_precisions:
+        if precision not in manifest.supported_precisions:
             runtimes_to_remove = []
             for runtime, reasons in list(reasons_by_runtime.items()):
                 if clean_general:
@@ -80,28 +79,28 @@ def _clean_old_failure_reasons(
             passing_precisions.append(precision)
 
     for precision in passing_precisions:
-        code_gen_config.disabled_paths.data.pop(precision)
+        manifest.disabled_paths.data.pop(precision)
 
 
 def update_code_gen_failure_reasons(
     summaries: list[ScorecardExportTestSummary],
     enabled_test_paths: dict[Precision, list[ScorecardProfilePath]],
-    code_gen_config: QAIHMModelCodeGen,
+    manifest: QAIHMModelManifest,
 ) -> None:
     """
-    Updates the provided model_info.code_gen_config to reflect job failures in the provided summaries.
+    Updates the provided manifest's disabled_paths to reflect job failures in the provided summaries.
     <path>_scorecard_failure will be set if certain jobs fail, and will be unset if no failing jobs are found.
 
     If relevant jobs can't be found in the given scorecard summaries, then no changes are made to the config.
     """
-    default_device = ScorecardDevice.get(code_gen_config.default_device)
+    default_device = ScorecardDevice.get(manifest.default_device)
     if not default_device.enabled:
         return
 
     supported_precisions = list(enabled_test_paths.keys())
     _clean_old_failure_reasons(
         precisions=supported_precisions,
-        code_gen_config=code_gen_config,
+        manifest=manifest,
         clean_general=True,
         clean_accuracy=False,
     )
@@ -116,7 +115,7 @@ def update_code_gen_failure_reasons(
         if not params.path.is_published:
             continue
 
-        disable_reasons = code_gen_config.disabled_paths.get_disable_reasons(
+        disable_reasons = manifest.disabled_paths.get_disable_reasons(
             params.precision, params.path.runtime
         )
         if disable_reasons.scorecard_failure:
@@ -132,17 +131,17 @@ def update_code_gen_failure_reasons(
 
 
 def update_code_gen_accuracy_failure_reasons(
-    model_id: str, code_gen_config: QAIHMModelCodeGen, model_diff: NumericsDiff
+    model_id: str, manifest: QAIHMModelManifest, model_diff: NumericsDiff
 ) -> None:
     supported_precisions = get_model_test_precisions(
         model_id,
-        set(code_gen_config.supported_precisions),
-        can_use_quantize_job=code_gen_config.can_use_quantize_job,
+        set(manifest.supported_precisions),
+        can_use_quantize_job=manifest.can_use_quantize_job,
     )
 
     _clean_old_failure_reasons(
         precisions=supported_precisions,
-        code_gen_config=code_gen_config,
+        manifest=manifest,
         clean_general=False,
         clean_accuracy=True,
     )
@@ -159,9 +158,9 @@ def update_code_gen_accuracy_failure_reasons(
         ):
             continue
 
-        if precision not in code_gen_config.disabled_paths.data:
-            code_gen_config.disabled_paths.data[precision] = {}
-        reasons_by_runtime = code_gen_config.disabled_paths.data[precision]
+        if precision not in manifest.disabled_paths.data:
+            manifest.disabled_paths.data[precision] = {}
+        reasons_by_runtime = manifest.disabled_paths.data[precision]
         if path.runtime not in reasons_by_runtime:
             reasons_by_runtime[path.runtime] = ModelDisableReasons()
         reasons = reasons_by_runtime[path.runtime]
@@ -184,9 +183,9 @@ def update_code_gen_accuracy_failure_reasons(
                 or bf_precision not in supported_precisions
             ):
                 continue
-            if bf_precision not in code_gen_config.disabled_paths.data:
-                code_gen_config.disabled_paths.data[bf_precision] = {}
-            reasons_by_runtime = code_gen_config.disabled_paths.data[bf_precision]
+            if bf_precision not in manifest.disabled_paths.data:
+                manifest.disabled_paths.data[bf_precision] = {}
+            reasons_by_runtime = manifest.disabled_paths.data[bf_precision]
             if bf_path.runtime not in reasons_by_runtime:
                 reasons_by_runtime[bf_path.runtime] = ModelDisableReasons()
             reasons = reasons_by_runtime[bf_path.runtime]
@@ -198,33 +197,33 @@ def update_code_gen_accuracy_failure_reasons(
                 for sc_path in ScorecardProfilePath:
                     if not sc_path.is_published or not sc_path.enabled:
                         continue
-                    if p not in code_gen_config.disabled_paths.data:
-                        code_gen_config.disabled_paths.data[p] = {}
-                    reasons_by_runtime = code_gen_config.disabled_paths.data[p]
+                    if p not in manifest.disabled_paths.data:
+                        manifest.disabled_paths.data[p] = {}
+                    reasons_by_runtime = manifest.disabled_paths.data[p]
                     if sc_path.runtime not in reasons_by_runtime:
                         reasons_by_runtime[sc_path.runtime] = ModelDisableReasons()
                     reasons = reasons_by_runtime[sc_path.runtime]
                     reasons.scorecard_accuracy_failure = f"Torch accuracy ({benchmark_failure[6]}) deviates from benchmark ({benchmark_failure[7]}) by {benchmark_failure[8]}, threshold: {benchmark_failure[9]}"
 
 
-def update_model_publish_status(model_info: QAIHMModelInfo) -> bool:
+def update_model_publish_status(manifest: QAIHMModelManifest) -> bool:
     """Update the model publishing status based on failure reasons. Returns true if the status was changed, false otherwise."""
     # Update model status & reason, if applicable
-    can_promote, reason = model_info.can_promote_to_published()
-    if model_info.status == MODEL_STATUS.PENDING:
+    can_promote, reason = manifest.can_promote_to_published()
+    if manifest.status == MODEL_STATUS.PENDING:
         if can_promote:
-            model_info.status = MODEL_STATUS.PUBLISHED
-            model_info.status_reason = None
-            print(f"{model_info.id} | Set model to PUBLISHED")
+            manifest.status = MODEL_STATUS.PUBLISHED
+            manifest.status_reason = None
+            print(f"{manifest.id} | Set model to PUBLISHED")
             return True
         # Model has passing runtimes but is missing other requirements
-        print(f"{model_info.id} | Skipping promotion to PUBLISHED: {reason}")
-    elif model_info.status == MODEL_STATUS.PUBLISHED:
+        print(f"{manifest.id} | Skipping promotion to PUBLISHED: {reason}")
+    elif manifest.status == MODEL_STATUS.PUBLISHED:
         if not can_promote:
             # Demote PUBLISHED to PENDING if no longer eligible
-            model_info.status = MODEL_STATUS.PENDING
-            model_info.status_reason = reason
-            print(f"{model_info.id} | Set model to PENDING ({reason})")
+            manifest.status = MODEL_STATUS.PENDING
+            manifest.status_reason = reason
+            print(f"{manifest.id} | Set model to PENDING ({reason})")
             return True
 
     return False

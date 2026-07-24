@@ -36,7 +36,7 @@ This model is compatible with the Qualcomm Voice AI SDK. Download the SDK from t
 #### Linux
 ```bash
 sudo apt install ffmpeg libportaudio2
-```
+ ```
 
 #### Windows
 ```

@@ -15,7 +15,7 @@ import ruamel.yaml
 from qai_hub_models import Precision
 from qai_hub_models._version import __version__ as qaihm_version
 from qai_hub_models.configs._info_yaml_llm_details import LLM_CALL_TO_ACTION
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.scorecard.devices_and_chipsets_yaml import DevicesAndChipsetsYaml
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
@@ -203,11 +203,11 @@ def get_performance_table_rows(
     return rows, is_llm
 
 
-def generate_hf_model_LICENSE(model_info: QAIHMModelInfo) -> str:
+def generate_hf_model_LICENSE(manifest: QAIHMModelManifest) -> str:
     string_stream = StringIO()
-    if model_info.license is not None:
+    if manifest.license is not None:
         print(
-            f"The license of the original trained model can be found at {model_info.license}.",
+            f"The license of the original trained model can be found at {manifest.license}.",
             file=string_stream,
         )
     return string_stream.getvalue()
@@ -279,33 +279,31 @@ def generate_hf_manifest(
 
 
 def generate_hf_model_card(
-    model_info: QAIHMModelInfo,
+    manifest: QAIHMModelManifest,
     model_perf: QAIHMModelPerf,
     model_card_template: jinja2.Template = MODEL_CARD_TEMPLATE,
 ) -> str:
     """Generate a model_card for this model from the Jinja template."""
+    assert manifest.id is not None
     # Get shared template args
-    context = get_shared_template_args(model_info)
-    code_gen = model_info.code_gen_config
+    context = get_shared_template_args(manifest)
 
     # Generate HuggingFace metadata YAML
     string_stream = StringIO()
-    ruamel.yaml.YAML().dump(
-        model_info.get_hugging_face_metadata(), stream=string_stream
-    )
+    ruamel.yaml.YAML().dump(manifest.get_hugging_face_metadata(), stream=string_stream)
 
     # Build performance table rows
     perf_rows, is_llm = get_performance_table_rows(model_perf)
 
     # Build download links table rows
     download_links = []
-    if not model_info.restrict_model_sharing:
-        download_links = get_download_links_rows(model_info.id, qaihm_version)
+    if not manifest.restrict_model_sharing:
+        download_links = get_download_links_rows(manifest.id, qaihm_version)
 
     # Determine if we should show purchase statement
     show_purchase_statement = (
-        model_info.llm_details is not None
-        and model_info.llm_details.call_to_action
+        manifest.llm_details is not None
+        and manifest.llm_details.call_to_action
         == LLM_CALL_TO_ACTION.CONTACT_FOR_PURCHASE
     )
 
@@ -315,19 +313,17 @@ def generate_hf_model_card(
             # Metadata
             "hugging_face_metadata": string_stream.getvalue(),
             # Model info
-            "use_case": str(model_info.use_case).lower().capitalize(),
-            "technical_details": model_info.technical_details,
-            "restrict_model_sharing": model_info.restrict_model_sharing,
+            "use_case": str(manifest.use_case).lower().capitalize(),
+            "technical_details": manifest.technical_details,
+            "restrict_model_sharing": manifest.restrict_model_sharing,
             # Assets
             "static_image": ASSET_CONFIG.get_web_asset_url(
-                model_info.id, QAIHM_WEB_ASSET.STATIC_IMG
+                manifest.id, QAIHM_WEB_ASSET.STATIC_IMG
             ),
-            "qaihm_model_url": ASSET_CONFIG.get_qaihm_repo(
-                model_info.id, relative=False
-            ),
+            "qaihm_model_url": ASSET_CONFIG.get_qaihm_repo(manifest.id, relative=False),
             # Flags
             "is_llm": is_llm,
-            "is_precompiled": code_gen.is_precompiled,
+            "is_precompiled": manifest.is_precompiled,
             "show_purchase_statement": show_purchase_statement,
             # Performance data
             "perf_rows": perf_rows,
@@ -340,7 +336,7 @@ def generate_hf_model_card(
 
 
 def write_hf_model_card_and_license(
-    model_info: QAIHMModelInfo,
+    manifest: QAIHMModelManifest,
     model_perf: QAIHMModelPerf,
     output_dir: str | os.PathLike,
 ) -> None:
@@ -348,8 +344,9 @@ def write_hf_model_card_and_license(
     Generate both the model card and LICENSE content for HuggingFace;
     output_dir will be ready for direct release to HuggingFace.
     """
-    model_card = generate_hf_model_card(model_info, model_perf)
-    license_text = generate_hf_model_LICENSE(model_info)
+    assert manifest.id is not None
+    model_card = generate_hf_model_card(manifest, model_perf)
+    license_text = generate_hf_model_LICENSE(manifest)
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -364,11 +361,11 @@ def write_hf_model_card_and_license(
         license_file.write(license_text)
 
     # Write release_assets.json with download URLs for release assets.
-    if not model_info.restrict_model_sharing:
-        manifest = generate_hf_manifest(model_info.id, qaihm_version)
-        if manifest is not None:
-            manifest_path = output_dir / "release_assets.json"
-            manifest.to_json(manifest_path)
+    if not manifest.restrict_model_sharing:
+        release_assets = generate_hf_manifest(manifest.id, qaihm_version)
+        if release_assets is not None:
+            release_assets_path = output_dir / "release_assets.json"
+            release_assets.to_json(release_assets_path)
 
 
 def write_deprecated_hf_model_card(output_dir: str | os.PathLike) -> None:

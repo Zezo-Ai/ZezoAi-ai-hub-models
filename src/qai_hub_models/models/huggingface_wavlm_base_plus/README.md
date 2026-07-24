@@ -37,7 +37,7 @@ for the full list of commands and filters.
 sudo apt install ffmpeg
 ```
 
-#### Windows
+ #### Windows
 ```
 winget install ffmpeg
 ```

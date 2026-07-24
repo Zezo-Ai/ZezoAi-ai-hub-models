@@ -61,11 +61,11 @@
         Text describing system-level dependencies to install.
     readme_export_device : str, optional
         When set, appends ``--device "<value>"`` to the README export command.
-        Derived from ``requires_aot_prepare`` in code-gen.yaml.
+        Derived from ``requires_aot_prepare`` in manifest.yaml.
     model_assets_shareable : bool, optional
         Whether pre-exported assets may be shared. When True, a "Download
         pre-exported assets" section is added near the top. Derived from the
-        negation of ``restrict_model_sharing`` in info.yaml.
+        negation of ``restrict_model_sharing`` in manifest.yaml.
 #}
 {% macro render(
     model_name,

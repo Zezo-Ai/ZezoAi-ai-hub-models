@@ -26,7 +26,7 @@ Before contributing:
 ## Terminology
 
 - **model_id** - The folder name (e.g., `yolov7`, `ddrnet23_slim`)
-- **model_name** - The published display name in info.yaml (e.g., "YOLOv7", "DDRNet23-Slim")
+- **model_name** - The published display name in manifest.yaml (e.g., "YOLOv7", "DDRNet23-Slim")
 
 ## Model Directory Structure
 
@@ -38,7 +38,7 @@ Each model lives in `qai_hub_models/models/<model_id>/` and requires:
 | `app.py` | End-to-end application with pre/post-processing (can be inherited from `models/_shared/`) |
 | `demo.py` | CLI demo running the app on sample data |
 | `test.py` | Unit tests for the model |
-| `info.yaml` | Metadata for the public website |
+| `manifest.yaml` | Website metadata + codegen/export options (single unified schema) |
 
 **Note:** Many models extend shared implementations from `models/_shared/`. For example, segmentation models can inherit from `CityscapesSegmentor` and use the shared `SegmentationApp`. Check existing models solving similar tasks before writing everything from scratch.
 
@@ -51,7 +51,7 @@ Each model lives in `qai_hub_models/models/<model_id>/` and requires:
 | File | Purpose |
 |------|---------|
 | `requirements.txt` | Model-specific dependencies (pinned versions required) |
-| `code-gen.yaml` | Custom options for export.py generation |
+| `scorecard-config.yaml` | CI/scorecard-only knobs (e.g., `global_requirements_incompatible`, `skip_scorecard`, `test_split`) |
 
 ### Auto-generated Files
 
@@ -74,14 +74,14 @@ When adding dependencies:
 
 1. Check `qai_hub_models/requirements.txt` first - don't duplicate
 2. Check `global_requirements.txt` - use the same version if possible
-3. If a different version is required, set `global_requirements_incompatible: true` in `code-gen.yaml`
+3. If a different version is required, set `global_requirements_incompatible: true` in the model's `scorecard-config.yaml`
 4. After adding new packages, run `python qai_hub_models/scripts/generate_global_requirements.py`
 5. If the package is not in `global_requirements.txt`, you can choose any version as long as its dependencies are compatible with existing global requirements
 
-**Additional code-gen.yaml options for complex dependency scenarios:**
-- `global_requirements_incompatible` - Set when versions differ from global requirements
-- `pip_pre_build_reqs` - Packages that must be installed before the model's requirements (for broken build dependencies)
-- `pip_install_flags` - Extra pip flags needed when installing (requires `global_requirements_incompatible: true`)
+**Additional options for complex dependency scenarios:**
+- `global_requirements_incompatible` (in `scorecard-config.yaml`) - Set when versions differ from global requirements
+- `pip_pre_build_reqs` (in `manifest.yaml`) - Packages that must be installed before the model's requirements (for broken build dependencies)
+- `pip_install_flags` (in `manifest.yaml`) - Extra pip flags needed when installing (requires `global_requirements_incompatible: true` in `scorecard-config.yaml`)
 
 ---
 
@@ -127,7 +127,7 @@ When your model depends on external code (e.g., from a GitHub repo or third-part
    ```
    timm==0.9.2
    ```
-   If not on PyPI, install directly from GitHub by adding to `code-gen.yaml`:
+   If not on PyPI, install directly from GitHub by adding to `manifest.yaml`:
    ```yaml
    additional_pip_requirements:
      - git+https://github.com/owner/repo.git@v1.0.0
@@ -220,14 +220,14 @@ Sample data is typically stored in S3 and loaded using asset utilities.
 
 ---
 
-## 6. info.yaml
+## 6. manifest.yaml
 
-Metadata about the model for the public website.
+The manifest is a single unified schema holding both website-facing metadata and codegen/export options. It replaces the earlier split between `info.yaml` and `code-gen.yaml`.
 
-- See [`ddrnet23_slim/info.yaml`](qai_hub_models/models/ddrnet23_slim/info.yaml) for an example
-- See `QAIHMModelInfo` in `qai_hub_models/models/_configs/info_yaml.py` for field details
+- See [`ddrnet23_slim/manifest.yaml`](qai_hub_models/models/ddrnet23_slim/manifest.yaml) for an example
+- See `QAIHMModelManifest` in `qai_hub_models/configs/manifest_yaml.py` for field details
 
-**Key fields:**
+**Website metadata fields:**
 - `name`, `id`, `status` - Model identity (id must match folder name). **Set `status: pending` for new models.** The scorecard will automatically update this to `public` once the model passes validation.
 - `headline`, `description`, `use_case`, `domain` - Public-facing description
 - `tags`, `applicable_scenarios`, `related_models` - Categorization
@@ -236,28 +236,18 @@ Metadata about the model for the public website.
 - `license_type`, `source_repo`, `research_paper` - Attribution
 - `labels_file` - Path to labels file for classification models
 
-See `QAIHMModelInfo` in [`info_yaml.py`](qai_hub_models/models/_configs/info_yaml.py) or an example like [`ddrnet23_slim/info.yaml`](qai_hub_models/models/ddrnet23_slim/info.yaml) for the full list of available fields.
-
-Auto-fill size and parameter count:
-```bash
-python qai_hub_models/scripts/autofill_info_yaml.py -m <model_id>
-```
-
----
-
-## 7. code-gen.yaml (Optional)
-
-Options for generating `export.py`, `evaluate.py`, and `test_generated.py`.
-
-- See [`ddrnet23_slim/code-gen.yaml`](qai_hub_models/models/ddrnet23_slim/code-gen.yaml) for a basic example
-- See [`yolov7/code-gen.yaml`](qai_hub_models/models/yolov7/code-gen.yaml) for an example with `disabled_paths`
-- See `QAIHMModelCodeGen` in `qai_hub_models/models/_configs/code_gen_yaml.py` for all options
-
-**Common options:**
+**Codegen / export options:**
 - `supported_precisions` - List of precisions to enable (float, w8a8, w8a16, w4a16, etc.)
 - `has_on_target_demo` - Set to true if the model supports on-device demo
 - `disabled_paths` - Disable specific precision/runtime combinations with reason
-- `global_requirements_incompatible` - Set to true if model needs different package versions
+- `is_collection_model` - True for multi-component (encoder-decoder) models
+
+Auto-fill size and parameter count:
+```bash
+python qai_hub_models/scripts/autofill_manifest_yaml.py -m <model_id>
+```
+
+CI-only knobs (skip_scorecard, test_split, global_requirements_incompatible, numerics_threshold_override, ...) live in a separate `scorecard-config.yaml` under `scorecard/models/<model_id>/`. See `QAIHMModelScorecardConfig` in `qai_hub_models/scorecard/scorecard_config_yaml.py`.
 
 ---
 
@@ -327,7 +317,7 @@ def get_evaluator(self) -> BaseEvaluator:
     return YourEvaluator(...)  # Return an instance
 ```
 
-### 4. Update code-gen.yaml
+### 4. Update manifest.yaml
 
 Add supported precisions (defaults to `float` only if not specified):
 ```yaml
@@ -375,8 +365,8 @@ Before submitting a PR:
 # Run codegen for your model
 python qai_hub_models/scripts/run_codegen.py -m <model_id>
 
-# Auto-fill info.yaml
-python qai_hub_models/scripts/autofill_info_yaml.py -m <model_id>
+# Auto-fill manifest.yaml
+python qai_hub_models/scripts/autofill_manifest_yaml.py -m <model_id>
 
 # Run all pre-commit hooks
 pre-commit run --all-files

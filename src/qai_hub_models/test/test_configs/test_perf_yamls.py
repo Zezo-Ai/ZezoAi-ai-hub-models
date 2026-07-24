@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.device import ScorecardDevice
 from qai_hub_models.scorecard.devices_and_chipsets_yaml import (
     SCORECARD_DEVICE_YAML_PATH,
@@ -59,7 +59,7 @@ def test_perf_yaml() -> None:
                 # If there is 1 component, make sure it matches the model name.
                 if len(precision_perf.components) == 1:
                     if not model_name:
-                        model_name = QAIHMModelInfo.from_model(model_id).name
+                        model_name = QAIHMModelManifest.from_model(model_id).name
                     component_name = next(iter(precision_perf.components))
                     if component_name != model_name:
                         raise ValueError(  # noqa: TRY301

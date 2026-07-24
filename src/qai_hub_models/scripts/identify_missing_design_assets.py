@@ -5,8 +5,8 @@
 """Report models missing design assets (static banner required for publishing).
 
 Scans:
-  1. All info.yaml files checked into the repo on the current branch.
-  2. All open PRs in the repo for info.yaml files with missing banners.
+  1. All manifest.yaml files checked into the repo on the current branch.
+  2. All open PRs in the repo for manifest.yaml files with missing banners.
 """
 
 from __future__ import annotations
@@ -61,9 +61,9 @@ def _blocked_by_banners(info: dict) -> bool:
 def scan_local_models() -> list[dict[str, str]]:
     """Return models where missing banners are the blocker."""
     missing: list[dict[str, str]] = []
-    for info_path in sorted(MODELS_ROOT.glob("*/info.yaml")):
-        model_id = info_path.parent.name
-        with open(info_path, encoding="utf-8") as f:
+    for manifest_path in sorted(MODELS_ROOT.glob("*/manifest.yaml")):
+        model_id = manifest_path.parent.name
+        with open(manifest_path, encoding="utf-8") as f:
             info = yaml.safe_load(f)
         if info is None:
             continue
@@ -85,7 +85,7 @@ def scan_local_models() -> list[dict[str, str]]:
 # Open PR scan
 # -----------------------------------------------------------------------------
 def scan_open_prs() -> list[dict[str, str]]:
-    """Check open PRs for info.yaml files where banners are the blocker."""
+    """Check open PRs for manifest.yaml files where banners are the blocker."""
     missing: list[dict[str, str]] = []
 
     try:
@@ -123,16 +123,16 @@ def scan_open_prs() -> list[dict[str, str]]:
         pr_number = pr.get("number")
         pr_title = pr.get("title", "")
 
-        # Filter for info.yaml files from the files list (no extra subprocess)
+        # Filter for manifest.yaml files from the files list (no extra subprocess)
         pr_files = pr.get("files") or []
-        info_yamls = [
+        manifest_yamls = [
             f.get("path", "")
             for f in pr_files
-            if f.get("path", "").endswith("info.yaml")
+            if f.get("path", "").endswith("manifest.yaml")
             and "/models/" in f.get("path", "")
         ]
 
-        if not info_yamls:
+        if not manifest_yamls:
             continue
 
         # Validate branch name before using in API call
@@ -141,9 +141,9 @@ def scan_open_prs() -> list[dict[str, str]]:
             logger.warning("Skipping PR %s: unsafe branch name %r", pr_number, branch)
             continue
 
-        for info_path in info_yamls:
-            # Extract model_id from path like src/qai_hub_models/models/<model_id>/info.yaml
-            parts = info_path.split("/")
+        for manifest_path in manifest_yamls:
+            # Extract model_id from path like src/qai_hub_models/models/<model_id>/manifest.yaml
+            parts = manifest_path.split("/")
             try:
                 models_idx = parts.index("models")
                 model_id = parts[models_idx + 1]
@@ -158,7 +158,7 @@ def scan_open_prs() -> list[dict[str, str]]:
                     [
                         "gh",
                         "api",
-                        f"repos/{REPO}/contents/{info_path}",
+                        f"repos/{REPO}/contents/{manifest_path}",
                         "-H",
                         "Accept: application/vnd.github.raw+json",
                         "--method",
@@ -181,7 +181,7 @@ def scan_open_prs() -> list[dict[str, str]]:
             raw = content_result.stdout
             if len(raw.encode()) > MAX_YAML_BYTES:
                 logger.warning(
-                    "Skipping oversized info.yaml for model in PR %s", pr_number
+                    "Skipping oversized manifest.yaml for model in PR %s", pr_number
                 )
                 continue
             try:

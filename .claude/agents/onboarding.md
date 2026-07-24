@@ -42,7 +42,7 @@ Key steps:
 ## Terminology
 
 - **model_id** - The folder name (e.g., `yolov7`, `ddrnet23_slim`)
-- **model_name** - The published display name in info.yaml (e.g., "YOLOv7", "DDRNet23-Slim")
+- **model_name** - The published display name in manifest.yaml (e.g., "YOLOv7", "DDRNet23-Slim")
 
 ## Model Directory Structure
 
@@ -85,13 +85,13 @@ Each model lives in `qai_hub_models/models/<model_id>/` and requires:
    - `test_trace`: TorchScript accuracy (mark with `@pytest.mark.trace`)
    - `test_demo`: Demo runs without error
 
-5. **info.yaml** - Model metadata for public website
-   - Auto-fill size/params: `python qai_hub_models/scripts/autofill_info_yaml.py -m <model_id>`
+5. **manifest.yaml** - Model metadata + codegen/export options (single unified schema)
+   - Auto-fill size/params: `python qai_hub_models/scripts/autofill_manifest_yaml.py -m <model_id>`
+   - Website metadata fields (name, id, status, headline, description, use_case, domain, license_type, research_paper, source_repo, technical_details, ...) live alongside codegen/export options (supported_precisions, is_collection_model, use_pt2, global_requirements_incompatible, ...) in the same file.
    - Fields like `use_case`, `tags`, `domain`, and `license_type` are validated enums. Check `qai_hub_models/configs/_info_yaml_enums.py` for valid values. If your use case doesn't exist, you'll need to add it to the enum.
 
 ### Optional Files
 
-- **code-gen.yaml** - Custom options for export.py generation
 - **requirements.txt** - Model-specific dependencies (pinned versions required)
 
 ### Auto-generated Files
@@ -151,10 +151,10 @@ Always look at a similar existing model's app.py and demo.py to see which utilit
 See also `CONTRIBUTING.md` at the repo root for the official contribution guide.
 
 1. Create folder `qai_hub_models/models/<model_id>/`
-2. Implement required files: `__init__.py`, `model.py`, `app.py`, `demo.py`, `test.py`, `info.yaml` (and `code-gen.yaml` if non-default options are needed)
+2. Implement required files: `__init__.py`, `model.py`, `app.py`, `demo.py`, `test.py`, `manifest.yaml`
 3. Add `requirements.txt` if model needs additional dependencies
 4. Run codegen: `python qai_hub_models/scripts/run_codegen.py -m <model_id>`
-5. Auto-fill info.yaml: `python qai_hub_models/scripts/autofill_info_yaml.py -m <model_id>`
+5. Auto-fill manifest.yaml: `python qai_hub_models/scripts/autofill_manifest_yaml.py -m <model_id>`
 6. Run verification steps (see acceptance criteria below)
 
 ## Acceptance Criteria
@@ -173,8 +173,8 @@ A model is fully onboarded when all of the following pass:
 - [ ] Majority of ops run on NPU (check profile data for CPU fallback ops)
 
 ### Metadata
-- [ ] `info.yaml` has all required fields filled in (name, id, status, headline, description, use_case, domain, license_type, research_paper, source_repo)
-- [ ] `info.yaml` technical_details includes parameter count, model size, and input resolution. Use `python qai_hub_models/scripts/autofill_info_yaml.py -m <model_id>` to generate these values rather than computing them manually — this ensures they match the compiled model.
+- [ ] `manifest.yaml` has all required fields filled in (name, id, status, headline, description, use_case, domain, license_type, research_paper, source_repo)
+- [ ] `manifest.yaml` technical_details includes parameter count, model size, and input resolution. Use `python qai_hub_models/scripts/autofill_manifest_yaml.py -m <model_id>` to generate these values rather than computing them manually — this ensures they match the compiled model.
 - [ ] Model license is verified. **Non-commercial licenses (CC-BY-NC, etc.) cannot be added — stop immediately and inform the user.** GPL/copyleft licenses are acceptable only if the model itself is released under that license. Permissive licenses (Apache 2.0, MIT, BSD) are preferred.
 - [ ] Dataset license is also verified — same rules apply. Check the dataset source for license restrictions before using it.
 
@@ -236,7 +236,7 @@ def get_evaluator(cls) -> type[BaseEvaluator]:
     return <YourEvaluator>
 ```
 
-### 4. Update code-gen.yaml
+### 4. Update manifest.yaml
 Add supported precisions:
 ```yaml
 supported_precisions:
@@ -274,4 +274,4 @@ For model checkpoints or test data not available via public URLs:
 
 - All packages in `requirements.txt` must be pinned to exact versions (e.g., `torch==2.0.1`)
 - Check `global_requirements.txt` before adding new deps
-- If a different version than global is required, set `global_requirements_incompatible: true` in `code-gen.yaml`
+- If a different version than global is required, set `global_requirements_incompatible: true` in the model's `scorecard-config.yaml`

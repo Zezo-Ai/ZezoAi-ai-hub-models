@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from qai_hub_models._version import __version__ as qaihm_version
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.release_assets_yaml import QAIHMModelReleaseAssets
 from qai_hub_models.scripts.release_huggingface_model_cards import (
     HF_REPO_NAMES_TO_NEVER_DEPRECATE,
@@ -33,7 +33,7 @@ def test_generate_and_dry_run_release_hf_model_cards() -> None:
     # Get all models
     model_ids = MODEL_IDS
     all_model_names = [
-        QAIHMModelInfo.from_model(model_id).name for model_id in model_ids
+        QAIHMModelManifest.from_model(model_id).name for model_id in model_ids
     ]
 
     # Create mock HF models list that includes all real models plus a fake deprecated one
@@ -128,32 +128,32 @@ def test_generate_and_dry_run_release_hf_model_cards() -> None:
         # Verify release_assets.json is created for models with release assets
         models_with_manifest = 0
         for model_id in model_ids:
-            model_info = QAIHMModelInfo.from_model(model_id)
+            manifest = QAIHMModelManifest.from_model(model_id)
             release_assets = QAIHMModelReleaseAssets.from_model(
                 model_id, not_exists_ok=True
             )
 
             model_output_dir = output_dir / model_id
-            manifest_path = model_output_dir / "release_assets.json"
+            release_manifest_path = model_output_dir / "release_assets.json"
 
             # Models with release assets and no sharing restriction should have manifest
-            if not release_assets.empty and not model_info.restrict_model_sharing:
-                assert manifest_path.is_file(), (
-                    f"Expected {manifest_path} to exist for model {model_id}"
+            if not release_assets.empty and not manifest.restrict_model_sharing:
+                assert release_manifest_path.is_file(), (
+                    f"Expected {release_manifest_path} to exist for model {model_id}"
                 )
                 models_with_manifest += 1
 
                 # Verify manifest structure
-                manifest = load_json(manifest_path)
-                assert "version" in manifest, (
+                release_manifest = load_json(release_manifest_path)
+                assert "version" in release_manifest, (
                     "release_assets.json should have 'version' key"
                 )
-                assert "precisions" in manifest, (
+                assert "precisions" in release_manifest, (
                     "release_assets.json should have 'precisions' key"
                 )
 
                 # Verify at least one precision has download_url
-                for precision_data in manifest["precisions"].values():
+                for precision_data in release_manifest["precisions"].values():
                     if "universal_assets" in precision_data:
                         for runtime, asset_data in precision_data[
                             "universal_assets"
@@ -163,7 +163,7 @@ def test_generate_and_dry_run_release_hf_model_cards() -> None:
                             )
             # Models without release assets should not have manifest
             elif release_assets.empty:
-                assert not manifest_path.exists(), (
+                assert not release_manifest_path.exists(), (
                     f"Model {model_id} has no release assets, should not have release_assets.json"
                 )
 

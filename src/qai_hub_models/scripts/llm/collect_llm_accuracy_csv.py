@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 
 from qai_hub_models import Precision
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard.path_profile import ScorecardProfilePath
 from qai_hub_models.scorecard.utils.testing_async_utils import write_accuracy
 from qai_hub_models.utils.base_dataset import DatasetMetadata
@@ -44,11 +44,11 @@ def _reference_grade(model_id: str, dataset_name: str) -> float | None:
     (dataset_name, "LLM Response Grade", "%"). Otherwise returns None.
     """
     try:
-        model_info = QAIHMModelInfo.from_model(model_id)
+        manifest = QAIHMModelManifest.from_model(model_id)
     except Exception as e:
-        print(f"  Could not load info.yaml for {model_id}: {e}")
+        print(f"  Could not load manifest.yaml for {model_id}: {e}")
         return None
-    benchmark = model_info.numerics_benchmark
+    benchmark = manifest.numerics_benchmark
     if benchmark is None:
         return None
     if (

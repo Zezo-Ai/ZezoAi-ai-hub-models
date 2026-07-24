@@ -14,7 +14,7 @@ import importlib
 from pathlib import Path
 from typing import Any
 
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
 
 
@@ -30,8 +30,8 @@ def resolve_model_app_cls(model_id: str) -> Any | None:
 
 
 def resolve_model_display_name(model_id: str) -> str:
-    """Resolve the human-readable model name from ``info.yaml``."""
-    return QAIHMModelInfo.from_model(model_id).name
+    """Resolve the human-readable model name from ``manifest.yaml``."""
+    return QAIHMModelManifest.from_model(model_id).name or model_id
 
 
 def resolve_model_dir(model_id: str) -> Path:

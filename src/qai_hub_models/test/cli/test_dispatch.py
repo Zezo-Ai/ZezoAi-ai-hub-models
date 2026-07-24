@@ -54,7 +54,7 @@ def test_dispatch_export_prompts_for_unpublished_model() -> None:
             "qai_hub_models.cli.dispatch.build_export_parser_for",
             return_value=fake_parser,
         ),
-        patch("qai_hub_models.cli.dispatch.QAIHMModelInfo.from_model") as mock_info,
+        patch("qai_hub_models.cli.dispatch.QAIHMModelManifest.from_model") as mock_info,
         patch(
             "qai_hub_models.cli.dispatch.check_unpublished_model_warning",
             return_value=False,
@@ -111,7 +111,7 @@ def test_dispatch_evaluate_prompts_for_unpublished_model() -> None:
             "qai_hub_models.cli.dispatch.build_evaluate_parser_for",
             return_value=fake_parser,
         ),
-        patch("qai_hub_models.cli.dispatch.QAIHMModelInfo.from_model") as mock_info,
+        patch("qai_hub_models.cli.dispatch.QAIHMModelManifest.from_model") as mock_info,
         patch(
             "qai_hub_models.cli.dispatch.check_unpublished_model_warning",
             return_value=False,

@@ -22,10 +22,10 @@ except ImportError as e:
         "and then run: pip install gitpython"
     ) from e
 
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.asset_loaders import (
     EXECUTING_IN_CI_ENVIRONMENT,
     LOCAL_STORE_DEFAULT_PATH,
-    load_yaml,
     query_yes_no,
 )
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
@@ -59,36 +59,32 @@ class RepoConfig:
 # ---------------------------------------------------------------------------
 
 
-def _load_repo_configs(
-    codegen_path: Path, external_repos_path: Path
-) -> dict[str, RepoConfig]:
-    """Read code-gen.yaml and return RepoConfig dict.
+def _load_repo_configs(manifest_path: Path) -> dict[str, RepoConfig]:
+    """Read ``external_repos:`` from manifest.yaml.
 
     Parameters
     ----------
-    codegen_path
-        Path to the code-gen.yaml file.
-    external_repos_path
-        Path to the external_repos directory (for resolving patch files).
+    manifest_path
+        Path to the manifest.yaml file.
 
     Returns
     -------
     dict[str, RepoConfig]
-        Mapping of repo name to configuration, or empty dict if no external repos.
+        Mapping of repo name to configuration, or empty dict if no external
+        repos are declared or the manifest doesn't exist.
     """
-    if not codegen_path.exists():
+    if not manifest_path.exists():
         return {}
-    config = load_yaml(codegen_path)
-    external_repos = config.get("external_repos")
-    if not external_repos:
+    manifest = QAIHMModelManifest.from_yaml(manifest_path)
+    if not manifest.external_repos:
         return {}
     return {
         name: RepoConfig(
-            repo_url=cfg["repo_url"],
-            commit_sha=cfg["commit_sha"],
-            patches_filename=cfg.get("patches_filename"),
+            repo_url=cfg.repo_url,
+            commit_sha=cfg.commit_sha,
+            patches_filename=cfg.patches_filename,
         )
-        for name, cfg in external_repos.items()
+        for name, cfg in manifest.external_repos.items()
     }
 
 
@@ -101,8 +97,8 @@ def _resolve_external_repos(
     else:
         base_dir = QAIHM_MODELS_ROOT / name
     external_repos_path = base_dir / "external_repos"
-    codegen_path = base_dir / "code-gen.yaml"
-    return _load_repo_configs(codegen_path, external_repos_path), external_repos_path
+    manifest_path = base_dir / "manifest.yaml"
+    return _load_repo_configs(manifest_path), external_repos_path
 
 
 # ---------------------------------------------------------------------------
@@ -736,7 +732,7 @@ def get_repo_cache_paths(name: str, shared: bool = False) -> list[Path]:
 
 
 def setup_external_repos(name: str, shared: bool = False) -> dict[str, Path]:
-    """Setup external repos by reading code-gen.yaml and cloning if needed.
+    """Setup external repos by reading manifest.yaml and cloning if needed.
 
     Parameters
     ----------

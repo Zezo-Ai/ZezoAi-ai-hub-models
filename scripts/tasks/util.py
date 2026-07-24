@@ -51,12 +51,12 @@ def new_cd(x: str | os.PathLike[str]) -> contextlib.AbstractContextManager[None]
 
 
 @functools.cache
-def check_code_gen_field(model_name: str, field_name: str) -> bool:
+def check_manifest_field(model_name: str, field_name: str) -> bool:
     """
     This process does not have the yaml package, so use this primitive way
-    to check if a code gen field is true and apply branching logic within CI/scorecard.
+    to check if a manifest field is true and apply branching logic within CI/scorecard.
     """
-    yaml_path = Path(PY_PACKAGE_MODELS_ROOT) / model_name / "code-gen.yaml"
+    yaml_path = Path(PY_PACKAGE_MODELS_ROOT) / model_name / "manifest.yaml"
     if yaml_path.exists():
         with open(yaml_path) as f:
             if f"{field_name}: true" in f.read():
@@ -81,41 +81,40 @@ def check_scorecard_config_field(model_name: str, field_name: str) -> bool:
 
 
 @functools.cache
-def check_info_field(model_name: str, field_name: str) -> bool:
-    """
-    This process does not have the yaml package, so use this primitive way
-    to check if a code gen field is true and apply branching logic within CI/scorecard.
-    """
-    yaml_path = Path(PY_PACKAGE_MODELS_ROOT) / model_name / "info.yaml"
-    if yaml_path.exists():
-        with open(yaml_path) as f:
-            if f"{field_name}: true" in f.read():
-                return True
-    return False
-
-
-@functools.cache
-def get_code_gen_str_field(model_name: str, field_name: str) -> str | None:
-    """This process does not have the yaml package, so use this primitive way to get code-gen field value."""
-    yaml_path = Path(PY_PACKAGE_MODELS_ROOT) / model_name / "code-gen.yaml"
-    if yaml_path.exists():
-        with open(yaml_path) as f:
-            field = f"{field_name}:"
-            for line in f:
-                if line.startswith(field):
-                    field = line[len(field) : -1].strip()
-                    if (field[0] == '"' and field[-1] == '"') or (
-                        field[0] == "'" and field[-1] == "'"
-                    ):
-                        field = field[1:-1]
-                    return field
-
-    return None
+def get_manifest_str_field(model_name: str, field_name: str) -> str | None:
+    """This process does not have the yaml package, so use this primitive way to get manifest field value."""
+    yaml_path = Path(PY_PACKAGE_MODELS_ROOT) / model_name / "manifest.yaml"
+    if not yaml_path.exists():
+        return None
+    prefix = f"{field_name}:"
+    with open(yaml_path) as f:
+        lines = f.readlines()
+    parts: list[str] = []
+    for i, line in enumerate(lines):
+        if not line.startswith(prefix):
+            continue
+        parts.append(line[len(prefix) :].rstrip("\n").strip())
+        for cont in lines[i + 1 :]:
+            if cont[:1] in (" ", "\t"):
+                parts.append(cont.strip())
+            else:
+                break
+        break
+    if not parts:
+        return None
+    field = " ".join(p for p in parts if p)
+    if not field:
+        return None
+    if (field[0] == '"' and field[-1] == '"') or (field[0] == "'" and field[-1] == "'"):
+        field = field[1:-1]
+    return field
 
 
 def is_quantized_llm_model(model_name: str) -> bool:
     quantize_script = Path(PY_PACKAGE_MODELS_ROOT) / model_name / "quantize.py"
-    return check_info_field(model_name, "model_type_llm") and quantize_script.exists()
+    return (
+        check_manifest_field(model_name, "model_type_llm") and quantize_script.exists()
+    )
 
 
 def can_support_aimet(platform: str = sys.platform) -> bool:
@@ -127,17 +126,17 @@ def can_support_aimet(platform: str = sys.platform) -> bool:
 
 
 def get_is_hub_quantized(model_name: str) -> bool:
-    return not check_code_gen_field(
+    return not check_manifest_field(
         model_name, "is_precompiled"
-    ) and not check_code_gen_field(model_name, "is_aimet")
+    ) and not check_manifest_field(model_name, "is_aimet")
 
 
 def get_requires_aot_prepare(model_name: str) -> bool:
-    return check_code_gen_field(model_name, "requires_aot_prepare")
+    return check_manifest_field(model_name, "requires_aot_prepare")
 
 
 def model_needs_aimet(model_name: str) -> bool:
-    return check_code_gen_field(model_name, "is_aimet")
+    return check_manifest_field(model_name, "is_aimet")
 
 
 def get_model_python_version_requirements(
@@ -146,20 +145,21 @@ def get_model_python_version_requirements(
     # Returns minimum required version,
     # and "less than" required version (eg. python version must be less than the provided version)
     # None == No version set (any version OK)
-    info = os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "code-gen.yaml")
+    manifest = os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "manifest.yaml")
     req_less_than, min_version = None, None
-    if os.path.exists(info):
-        with open(info) as f:
-            info_data = f.read()
+    if os.path.exists(manifest):
+        with open(manifest) as f:
+            manifest_data = f.read()
         req_less_than = re.search(
-            r'python_version_less_than:\s*["\']([\d.]+)["\']', info_data
+            r'python_version_less_than:\s*["\']([\d.]+)["\']', manifest_data
         )
         if req_less_than:
             spl = req_less_than.group(1).split(".")
             req_less_than = int(spl[0]), int(spl[1])
 
         min_version = re.search(
-            r'python_version_greater_than_or_equal_to:\s*["\']([\d.]+)["\']', info_data
+            r'python_version_greater_than_or_equal_to:\s*["\']([\d.]+)["\']',
+            manifest_data,
         )
         if min_version:
             spl = min_version.group(1).split(".")

@@ -147,9 +147,8 @@ MANUAL_EDGES = {
     "src/qai_hub_models/common.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/configs/_info_yaml_enums.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/configs/_info_yaml_llm_details.py": REPRESENTATIVE_EXPORT_FILES,
-    "src/qai_hub_models/configs/code_gen_yaml.py": REPRESENTATIVE_EXPORT_FILES,
+    "src/qai_hub_models/configs/manifest_yaml.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/scorecard/devices_and_chipsets_yaml.py": REPRESENTATIVE_EXPORT_FILES,
-    "src/qai_hub_models/configs/info_yaml.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/configs/model_disable_reasons.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/configs/model_metadata.py": REPRESENTATIVE_EXPORT_FILES,
     "src/qai_hub_models/scorecard/numerics_yaml.py": REPRESENTATIVE_EXPORT_FILES,
@@ -307,7 +306,7 @@ def resolve_affected_models(
                 "test.py",
                 "demo.py",
                 "requirements.txt",
-                "code-gen.yaml",
+                "manifest.yaml",
             ]:
                 continue
             if not include_model and file_path.name == "model.py":
@@ -318,12 +317,12 @@ def resolve_affected_models(
                 continue
             if not include_demo and file_path.name == "demo.py":
                 continue
-            if not include_cj_yaml and file_path.name == "code-gen.yaml":
+            if not include_cj_yaml and file_path.name == "manifest.yaml":
                 continue
 
             model_name = file_path.parent.name
             if (file_path.parent / "model.py").exists() and (
-                file_path.parent / "info.yaml"
+                file_path.parent / "manifest.yaml"
             ).exists():
                 changed_models.add(model_name)
         elif (
@@ -387,7 +386,7 @@ def get_ci_test_models(
     """
     files = list(get_changed_files_in_package(suffix="requirements.txt"))
     files.extend(get_changed_files_in_package(suffix=".py"))
-    files.extend(get_changed_files_in_package(suffix="code-gen.yaml"))
+    files.extend(get_changed_files_in_package(suffix="manifest.yaml"))
     return resolve_affected_models(
         files,
         include_model,
@@ -404,7 +403,7 @@ def get_all_models() -> list[str]:
     model_names: set[str] = set()
     for model_name in os.listdir(PY_PACKAGE_MODELS_ROOT):
         if os.path.exists(
-            os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "info.yaml")
+            os.path.join(PY_PACKAGE_MODELS_ROOT, model_name, "manifest.yaml")
         ):
             model_names.add(model_name)
 
@@ -444,12 +443,12 @@ class PrintCITestModelsTask(Task):
         return False
 
     def run_task(self) -> bool:
-        # model / demo / test changed, or code-gen.yaml changed
+        # model / demo / test changed, or manifest.yaml changed
         model_or_yaml_changed = get_ci_test_models(
             include_export=False, include_generated_tests=False
         )
 
-        # export.py or test_generated.py changed, but the rest of the model, including code-gen.yaml was not affected
+        # export.py or test_generated.py changed, but the rest of the model, including manifest.yaml was not affected
         # models will hit this when global templates change
         only_code_generation_changed = get_ci_test_models(
             include_model=False,

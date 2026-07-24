@@ -9,7 +9,7 @@ from mypy_boto3_s3.service_resource import Bucket
 
 from qai_hub_models import Precision
 from qai_hub_models._version import __version__
-from qai_hub_models.configs.info_yaml import QAIHMModelInfo
+from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard import ScorecardProfilePath
 from qai_hub_models.scorecard.envvars import EnabledModelsEnvvar, SpecialModelSetting
 from qai_hub_models.scorecard.release_assets_yaml import QAIHMModelReleaseAssets
@@ -127,7 +127,7 @@ def release_assets_for_model(
     replace_existing: bool = False,
 ) -> None:
     """Release all assets for a given model ID."""
-    info = QAIHMModelInfo.from_model(model_id)
+    info = QAIHMModelManifest.from_model(model_id)
     if info.restrict_model_sharing:
         print(f"{model_id} SKIPPED; restrict_model_sharing is set in info.yaml\n")
         return
