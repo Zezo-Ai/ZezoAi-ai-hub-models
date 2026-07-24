@@ -666,14 +666,29 @@ def create_zip(zip_path: str, source_dir: str | os.PathLike) -> None:
     already-compressed binaries.
     """
     source_dir = str(source_dir)
+    entries: list[tuple[str, str]] = []
+    for root, _, files in os.walk(source_dir):
+        for fn in files:
+            abs_path = os.path.join(root, fn)
+            entries.append((abs_path, os.path.relpath(abs_path, source_dir)))
+    create_zip_from_entries(zip_path, entries)
+
+
+def create_zip_from_entries(zip_path: str, entries: list[tuple[str, str]]) -> None:
+    """Zip an explicit list of (source_path, arcname) into ``zip_path``.
+
+    ZIP_STORED with force_zip64 so stored members over 2 GiB don't abort
+    mid-write. Streams each source through shutil.copyfileobj so peak RAM
+    is constant regardless of member size.
+
+    Prefer this over :func:`create_zip` when the bundle would otherwise
+    require a full-tree copytree to compose: pass paths from the original
+    locations directly so /scratch doesn't need to hold a duplicate copy.
+    """
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
-        for root, _, files in os.walk(source_dir):
-            for fn in files:
-                abs_path = os.path.join(root, fn)
-                arcname = os.path.relpath(abs_path, source_dir)
-                # force_zip64 so stored members over 2 GiB don't abort mid-write.
-                with (
-                    open(abs_path, "rb") as src,
-                    zf.open(arcname, "w", force_zip64=True) as dest,
-                ):
-                    shutil.copyfileobj(src, dest)
+        for src_path, arcname in entries:
+            with (
+                open(src_path, "rb") as src,
+                zf.open(arcname, "w", force_zip64=True) as dest,
+            ):
+                shutil.copyfileobj(src, dest)

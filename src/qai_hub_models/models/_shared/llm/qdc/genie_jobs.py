@@ -26,7 +26,7 @@ from qai_hub_models.models._shared.llm.qdc.qdc_jobs import (
     HUB_DEVICE_TO_QDC_DEVICE_MAP,
     QDCDevice,
     QDCJobs,
-    create_zip,
+    create_zip_from_entries,
 )
 
 GENIE_JOB_TIMEOUT = 21600  # 6 hours
@@ -43,22 +43,24 @@ DEFAULT_EVAL_PROMPTS_PATH = os.path.normpath(
 )
 
 
-def _prepare_eval_prompts_in_bundle(
-    genie_bundle_path: str,
+def _write_eval_prompts_to_dir(
+    prompts_dir: str,
     prompts: list[str],
+    tokenizer_fallback_source: str,
     model_id: str | None = None,
 ) -> None:
-    """Write individual prompt files into the genie bundle's prompts/ directory.
+    """Write chat-templated prompt files into ``prompts_dir``.
 
-    Loads the tokenizer from the model's HF repo (HF_REPO_NAME) to apply the
-    correct chat template. Falls back to the tokenizer bundled next to the
-    Genie weights only when model_id is not provided or lacks HF_REPO_NAME.
+    Loads the tokenizer from the model's HF repo (HF_REPO_NAME) to apply
+    the correct chat template. Falls back to ``tokenizer_fallback_source``
+    (typically the Genie bundle path) only when ``model_id`` is not
+    provided or the model module lacks ``HF_REPO_NAME``.
 
-    Thinking mode is disabled for the eval prompts so the model returns a direct
-    answer within the on-device token budget instead of spending it on a
-    reasoning trace that may be truncated before any answer is produced. Passing
-    enable_thinking=False is safe for non-thinking models -- their chat templates
-    simply ignore the unused variable.
+    Thinking mode is disabled for the eval prompts so the model returns a
+    direct answer within the on-device token budget instead of spending it
+    on a reasoning trace that may be truncated before any answer is produced.
+    Passing enable_thinking=False is safe for non-thinking models -- their
+    chat templates simply ignore the unused variable.
     """
     hf_repo: str | None = None
     if model_id:
@@ -68,11 +70,11 @@ def _prepare_eval_prompts_in_bundle(
     # (list-of-dicts) that some transformers versions mishandle with
     # "'list' object has no attribute 'keys'". Prefer the HF repo tokenizer,
     # which is what apply_chat_template is exercised against upstream.
-    tokenizer = AutoTokenizer.from_pretrained(hf_repo if hf_repo else genie_bundle_path)
+    tokenizer = AutoTokenizer.from_pretrained(
+        hf_repo if hf_repo else tokenizer_fallback_source
+    )
 
-    prompts_dir = os.path.join(genie_bundle_path, "prompts")
     os.makedirs(prompts_dir, exist_ok=True)
-
     for idx, prompt in enumerate(prompts):
         messages = [
             {"role": "system", "content": DEFAULT_LLM_SYSTEM_PROMPT},
@@ -98,6 +100,23 @@ def _prepare_eval_prompts_in_bundle(
             f.write(formatted)  # type: ignore[arg-type, unused-ignore]
 
 
+def _walk_dir_entries(src_dir: str, arcname_prefix: str = "") -> list[tuple[str, str]]:
+    """List (abs_path, arcname) pairs for every file under ``src_dir``.
+
+    ``arcname_prefix`` (if non-empty) is prepended to each arcname so the
+    zip preserves a directory layout without needing a filesystem copy.
+    """
+    entries: list[tuple[str, str]] = []
+    src_dir = os.fspath(src_dir)
+    for root, _, files in os.walk(src_dir):
+        for fn in files:
+            abs_path = os.path.join(root, fn)
+            rel = os.path.relpath(abs_path, src_dir)
+            arcname = os.path.join(arcname_prefix, rel) if arcname_prefix else rel
+            entries.append((abs_path, arcname))
+    return entries
+
+
 class GenieArtifactHandler(ABC):
     """Abstract base class for Genie artifact handlers."""
 
@@ -110,8 +129,16 @@ class GenieArtifactHandler(ABC):
         hexagon_version: str,
         qairt_version: str,
         num_trials: int = 25,
+        eval_prompts_dir: str | None = None,
     ) -> str:
-        """Create artifact bundle and return path to the zip file."""
+        """Create artifact bundle and return path to the zip file.
+
+        ``eval_prompts_dir`` (if provided) points at a small tmpdir holding
+        the chat-templated ``prompt_NNN.txt`` files; the handler streams
+        those into the zip under the appropriate on-device path. Callers
+        avoid duplicating the multi-GB genie bundle by keeping the prompt
+        files in a separate directory from the bundle itself.
+        """
         raise NotImplementedError
 
     @property
@@ -136,20 +163,20 @@ class GenieAndroidArtifactHandler(GenieArtifactHandler):
         hexagon_version: str,
         qairt_version: str,
         num_trials: int = 25,
+        eval_prompts_dir: str | None = None,
     ) -> str:
-        # Copy the test script
+        # Write only the small placeholder-substituted files (test_appium.py,
+        # requirements.txt) to dest_dir. The multi-GB genie bundle stays put
+        # and is streamed into the zip directly via arcname prefix -- copying
+        # it here would triple /scratch usage during zip creation.
         test_folder = os.path.join(dest_dir, "tests")
         os.makedirs(test_folder, exist_ok=True)
 
-        # Copy 'run_android.py' and rename it to 'test_appium.py' since pytest looks for files starting with 'test_'.
-        shutil.copy(
-            os.path.join(curr_dirname, "device_scripts", self.test_script),
-            os.path.join(test_folder, "test_appium.py"),
-        )
-
-        # Replace the Hexagon and QAIRT version placeholders with actual values
         test_appium_path = os.path.join(test_folder, "test_appium.py")
-        with open(test_appium_path, encoding="utf-8") as f:
+        with open(
+            os.path.join(curr_dirname, "device_scripts", self.test_script),
+            encoding="utf-8",
+        ) as f:
             file_content = f.read()
         with open(test_appium_path, "w", encoding="utf-8") as f:
             f.write(
@@ -158,19 +185,35 @@ class GenieAndroidArtifactHandler(GenieArtifactHandler):
                 .replace("<<NUM_TRIALS>>", str(num_trials))
             )
 
-        # Requirements
+        requirements_dest = os.path.join(dest_dir, "requirements.txt")
         shutil.copy(
             os.path.join(curr_dirname, "device_scripts", "requirements.txt"),
-            dest_dir,
+            requirements_dest,
         )
 
-        # Bundle the Genie test content
-        genie_folder = os.path.join(dest_dir, "genie_bundle")
-        os.makedirs(genie_folder, exist_ok=True)
-        shutil.copytree(genie_bundle_path, genie_folder, dirs_exist_ok=True)
+        # Assemble the zip entry list without copying the bundle: reference
+        # every genie bundle file from its original path with a "genie_bundle/"
+        # arcname prefix, and append eval-prompt files (if any) under
+        # "genie_bundle/prompts/".
+        entries: list[tuple[str, str]] = [
+            (test_appium_path, os.path.join("tests", "test_appium.py")),
+            (requirements_dest, "requirements.txt"),
+        ]
+        entries.extend(
+            _walk_dir_entries(
+                os.fspath(genie_bundle_path), arcname_prefix="genie_bundle"
+            )
+        )
+        if eval_prompts_dir:
+            entries.extend(
+                _walk_dir_entries(
+                    eval_prompts_dir,
+                    arcname_prefix=os.path.join("genie_bundle", "prompts"),
+                )
+            )
 
         zip_path = os.path.join(dest_dir, "test.zip")
-        create_zip(zip_path, dest_dir)
+        create_zip_from_entries(zip_path, entries)
         return zip_path
 
 
@@ -207,6 +250,7 @@ class GenieAutoArtifactHandler(GenieAndroidArtifactHandler):
         hexagon_version: str,
         qairt_version: str,
         num_trials: int = 25,
+        eval_prompts_dir: str | None = None,
     ) -> str:
         # Build the standard Android artifact first
         zip_path = super().create_artifact(
@@ -216,6 +260,7 @@ class GenieAutoArtifactHandler(GenieAndroidArtifactHandler):
             hexagon_version,
             qairt_version,
             num_trials,
+            eval_prompts_dir=eval_prompts_dir,
         )
 
         # Append the QAIRT SDK into the artifact zip under genie_bundle/
@@ -252,17 +297,17 @@ class GenieLinuxArtifactHandler(GenieArtifactHandler):
         hexagon_version: str,
         qairt_version: str,
         num_trials: int = 25,
+        eval_prompts_dir: str | None = None,
     ) -> str:
+        # Write the version-substituted run_linux.sh into dest_dir; stream
+        # the multi-GB genie bundle into the zip via arcname prefix rather
+        # than copying it -- see GenieAndroidArtifactHandler for context.
         script_name = "run_linux.sh"
-        # Copy the bash script directly into dest_dir
         script_dest = os.path.join(dest_dir, script_name)
-        shutil.copy(
+        with open(
             os.path.join(curr_dirname, "device_scripts", script_name),
-            script_dest,
-        )
-
-        # Replace the Hexagon and QAIRT version placeholders with actual values
-        with open(script_dest, encoding="utf-8") as f:
+            encoding="utf-8",
+        ) as f:
             file_content = f.read()
         with open(script_dest, "w", encoding="utf-8") as f:
             f.write(
@@ -271,13 +316,22 @@ class GenieLinuxArtifactHandler(GenieArtifactHandler):
                 .replace("{NUM_TRIALS}", str(num_trials))
             )
 
-        # Bundle the Genie test content
-        genie_folder = os.path.join(dest_dir, "genie_bundle")
-        os.makedirs(genie_folder, exist_ok=True)
-        shutil.copytree(genie_bundle_path, genie_folder, dirs_exist_ok=True)
+        entries: list[tuple[str, str]] = [(script_dest, script_name)]
+        entries.extend(
+            _walk_dir_entries(
+                os.fspath(genie_bundle_path), arcname_prefix="genie_bundle"
+            )
+        )
+        if eval_prompts_dir:
+            entries.extend(
+                _walk_dir_entries(
+                    eval_prompts_dir,
+                    arcname_prefix=os.path.join("genie_bundle", "prompts"),
+                )
+            )
 
         zip_path = os.path.join(dest_dir, "test.zip")
-        create_zip(zip_path, dest_dir)
+        create_zip_from_entries(zip_path, entries)
         return zip_path
 
 
@@ -294,15 +348,17 @@ class GenieWindowsArtifactHandler(GenieArtifactHandler):
         hexagon_version: str,
         qairt_version: str,
         num_trials: int = 25,
+        eval_prompts_dir: str | None = None,
     ) -> str:
+        # Windows layout: run_windows.ps1 + bundle contents live at the top
+        # of the zip (no genie_bundle/ prefix). Substitute placeholders in
+        # the script; stream the bundle via arcnames without copying it.
         script_name = "run_windows.ps1"
-        shutil.copy(
-            os.path.join(curr_dirname, "device_scripts", script_name),
-            dest_dir,
-        )
         dest_script = os.path.join(dest_dir, script_name)
-        shutil.copytree(genie_bundle_path, dest_dir, dirs_exist_ok=True)
-        with open(dest_script, encoding="utf-8") as f:
+        with open(
+            os.path.join(curr_dirname, "device_scripts", script_name),
+            encoding="utf-8",
+        ) as f:
             file_content = f.read()
         with open(dest_script, "w", encoding="utf-8") as f:
             f.write(
@@ -311,8 +367,15 @@ class GenieWindowsArtifactHandler(GenieArtifactHandler):
                 .replace("{NUM_TRIALS}", str(num_trials))
             )
 
+        entries: list[tuple[str, str]] = [(dest_script, script_name)]
+        entries.extend(_walk_dir_entries(os.fspath(genie_bundle_path)))
+        if eval_prompts_dir:
+            entries.extend(
+                _walk_dir_entries(eval_prompts_dir, arcname_prefix="prompts")
+            )
+
         zip_path = os.path.join(dest_dir, "test.zip")
-        create_zip(zip_path, dest_dir)
+        create_zip_from_entries(zip_path, entries)
         return zip_path
 
 
@@ -401,28 +464,32 @@ class GenieQDCJobs(QDCJobs):
         curr_dirname = os.path.dirname(os.path.abspath(__file__))
         artifact_handler = self._get_artifact_handler(qdc_device, qairt_sdk_path)
 
-        bundle_path_to_use = genie_bundle_path
-        temp_bundle_dir = None
+        # Write chat-templated eval prompts into a small tmpdir (~100 KB
+        # of .txt files) rather than cloning the multi-GB genie bundle just
+        # to add a prompts/ subdir. The handler streams these into the zip
+        # alongside references to the original bundle files.
+        eval_prompts_dir: str | None = None
         if eval_prompts:
-            temp_bundle_dir = tempfile.mkdtemp(prefix="genie_eval_bundle_")
-            shutil.copytree(genie_bundle_path, temp_bundle_dir, dirs_exist_ok=True)
-            _prepare_eval_prompts_in_bundle(temp_bundle_dir, eval_prompts, model_id)
-            bundle_path_to_use = temp_bundle_dir
+            eval_prompts_dir = tempfile.mkdtemp(prefix="genie_eval_prompts_")
+            _write_eval_prompts_to_dir(
+                eval_prompts_dir, eval_prompts, genie_bundle_path, model_id
+            )
 
         try:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 zip_path = artifact_handler.create_artifact(
                     curr_dirname,
-                    bundle_path_to_use,
+                    genie_bundle_path,
                     tmpdirname,
                     qdc_device.hexagon_version,
                     qairt_version,
                     num_trials,
+                    eval_prompts_dir=eval_prompts_dir,
                 )
                 upload_response = self.upload_file(zip_path, ArtifactType.TESTSCRIPT)
         finally:
-            if temp_bundle_dir:
-                shutil.rmtree(temp_bundle_dir, ignore_errors=True)
+            if eval_prompts_dir:
+                shutil.rmtree(eval_prompts_dir, ignore_errors=True)
 
         return [upload_response], artifact_handler.entry_script
 
