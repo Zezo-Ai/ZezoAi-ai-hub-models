@@ -41,7 +41,7 @@ on:
           - dev
 
       run_eval:
-        description: 'Run on-device evaluation with default prompts. To use custom prompts, run locally via CLI: python -m qai_hub_models.models.templates.llm.qdc.genie_jobs --eval-prompts <path-to-jsonl>'
+        description: 'Run on-device evaluation with default prompts. Eval runs on exactly one device: cs_x_elite when `device` covers it (including "all"/"default"), or the single device named in `device`. Naming several devices without cs_x_elite runs no eval. To use custom prompts, run locally via CLI: python -m qai_hub_models.models.templates.llm.qdc.genie_jobs --eval-prompts <path-to-jsonl>'
         default: true
         type: boolean
 
@@ -78,7 +78,7 @@ on:
         default: prod
 
       run_eval:
-        description: 'Run on-device evaluation'
+        description: 'Run on-device evaluation. Runs on cs_x_elite, or on the single device named in `device` when exactly one is named.'
         type: boolean
         default: true
 
@@ -188,6 +188,9 @@ jobs:
       env:
         QAIHM_LLM_MODELS: ${{ inputs.model || 'all' }}
         QAIHM_TEST_DEVICES: ${{ matrix.devices }}
+        # Whole device request, not this leg's slice: the accuracy device is
+        # picked from what the user asked for, before the QDC pool split.
+        QAIHM_LLM_EVAL_DEVICE_SCOPE: ${{ env.QAIHM_TEST_DEVICES_RESOLVED }}
         QAIHM_LLM_PERF_PRECISIONS: ${{ inputs.precision }}
         QAIHM_RUN_EVAL: ${{ inputs.run_eval }}
         QAIHM_LLM_PERF_RELEASE_ASSETS: ${{ inputs.release_assets_action_id != '' && format('{0}/llm-release-assets/release-assets.yaml', github.workspace) || '' }}
@@ -205,6 +208,7 @@ jobs:
       env:
         QAIHM_LLM_MODELS: ${{ inputs.model || 'all' }}
         QAIHM_TEST_DEVICES: ${{ matrix.devices }}
+        QAIHM_LLM_EVAL_DEVICE_SCOPE: ${{ env.QAIHM_TEST_DEVICES_RESOLVED }}
         QAIHM_LLM_PERF_PRECISIONS: ${{ inputs.precision }}
         QAIHM_RUN_EVAL: ${{ inputs.run_eval }}
         QAIHM_LLM_PERF_UPDATES: ${{ github.workspace }}/genie_perf_updates_${{ matrix.pool }}.jsonl

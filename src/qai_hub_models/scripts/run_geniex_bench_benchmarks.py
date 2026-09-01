@@ -33,6 +33,7 @@ from qai_hub_models.models.templates.llm.grader.grace import (
 from qai_hub_models.models.templates.llm.perf_collection import (
     load_release_assets_for_model,
     record_perf_scope,
+    resolve_llm_eval_device,
     update_perf_yaml,
 )
 from qai_hub_models.models.templates.llm.qdc.geniex_jobs import (
@@ -44,7 +45,6 @@ from qai_hub_models.models.templates.llm.qdc.geniex_jobs import (
 )
 from qai_hub_models.scorecard import ScorecardProfilePath
 from qai_hub_models.scorecard.device import (
-    DEFAULT_QDC_DEVICE,
     ScorecardDevice,
     get_canonical_chipset_name,
 )
@@ -811,16 +811,15 @@ def _resolve_eval_prompts(run_eval: bool) -> list[str] | None:
 
 
 def _eval_prompts_for_device(
-    eval_prompts: list[str] | None, sd: ScorecardDevice
+    eval_prompts: list[str] | None, sd: ScorecardDevice, devices_setting: str
 ) -> list[str] | None:
-    """Restrict the accuracy eval to the default LLM scorecard device.
+    """Restrict the accuracy eval to the run's single accuracy device.
 
-    Mirrors the genie path (see ``templates/llm/test.py``): eval is expensive
-    (~100 prompts x per-prompt DSP attach), so run it only on
-    ``DEFAULT_QDC_DEVICE`` (cs_x_elite) and leave the other devices
-    doing perf only.
+    Shares ``resolve_llm_eval_device`` with the genie path, so both honor the
+    same rule: cs_x_elite normally, or the one device the caller named when
+    they named exactly one.
     """
-    return eval_prompts if sd == DEFAULT_QDC_DEVICE else None
+    return eval_prompts if sd == resolve_llm_eval_device(devices_setting) else None
 
 
 def _save_eval_results(
@@ -894,7 +893,7 @@ def _cmd_submit(args: argparse.Namespace) -> int:
                 args.jobs_file,
                 llamacpp_quant=llamacpp_quant,
                 eval_prompts=_eval_prompts_for_device(
-                    eval_prompts, _scorecard_device(device_token)
+                    eval_prompts, _scorecard_device(device_token), args.devices
                 ),
                 run_perf=args.run_perf,
             )
@@ -979,7 +978,7 @@ def _cmd_collect(args: argparse.Namespace) -> int:
                 save_dir_root=args.results_dir,
                 geniex_version=args.geniex_version,
                 llamacpp_urls=llamacpp_urls,
-                eval_prompts=_eval_prompts_for_device(eval_prompts, sd),
+                eval_prompts=_eval_prompts_for_device(eval_prompts, sd, args.devices),
                 run_perf=args.run_perf,
             )
         except Exception as e:
@@ -1047,7 +1046,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         args.geniex_version,
     ):
         sd = _scorecard_device(device_token)
-        device_eval_prompts = _eval_prompts_for_device(eval_prompts, sd)
+        device_eval_prompts = _eval_prompts_for_device(eval_prompts, sd, args.devices)
         try:
             metrics, eval_results = run_geniex_bench_job(
                 model_id,

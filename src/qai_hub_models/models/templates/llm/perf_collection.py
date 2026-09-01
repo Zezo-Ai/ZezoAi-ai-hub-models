@@ -8,6 +8,7 @@ Shared utilities for LLM performance collection.
 Provides:
 - LLMPerfConfig: env-var driven configuration dataclass
 - get_llm_perf_parametrization: generates (precision, device) pytest params
+- resolve_llm_eval_device: picks the single device on-device accuracy runs on
 - update_perf_yaml: writes TPS/TTFT metrics into a model's perf.yaml
 
 The compile/QDC test logic lives in templates/llm/test.py (run_llm_perf_test).
@@ -25,6 +26,7 @@ from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.scorecard import ScorecardDevice
 from qai_hub_models.scorecard.device import (
+    DEFAULT_QDC_DEVICE,
     LLM_COMPILE_DEVICES,
     LLM_W4FP16_COMPILE_DEVICES,
     get_canonical_chipset_name,
@@ -119,6 +121,45 @@ def _get_devices_for_precision(
 
     compile_set = set(compile_devices)
     return [d for d in override_devices if d in compile_set]
+
+
+def resolve_llm_eval_device(
+    devices_setting: str | None = None,
+) -> ScorecardDevice | None:
+    """The one device on-device LLM accuracy runs on, or None if it should not run.
+
+    Mirrors ``get_evaluation_parameterized_pytest_config`` (the non-LLM accuracy
+    rule): eval runs on DEFAULT_QDC_DEVICE when that device is part of the
+    request, on the sole requested device when exactly one was named, and nowhere
+    when several were named without the default among them -- there is no
+    non-arbitrary way to pick one, and eval is too expensive to run on all.
+
+    QAIHM_LLM_EVAL_DEVICE_SCOPE overrides ``devices_setting``: CI splits a run's
+    devices across QDC pools, and a per-leg slice would make one two-device
+    request look like two one-device requests and eval on both.
+    """
+    setting = (
+        os.environ.get("QAIHM_LLM_EVAL_DEVICE_SCOPE")
+        or devices_setting
+        or os.environ.get("QAIHM_TEST_DEVICES", "")
+    )
+    names = [d.strip() for d in setting.split(",") if d.strip()]
+    if not names or any(n.lower() in ("all", "default") for n in names):
+        return DEFAULT_QDC_DEVICE
+
+    devices = [
+        ScorecardDevice._registry[n] for n in names if n in ScorecardDevice._registry
+    ]
+    if DEFAULT_QDC_DEVICE in devices:
+        return DEFAULT_QDC_DEVICE
+    return devices[0] if len(devices) == 1 else None
+
+
+def get_llm_eval_device() -> ScorecardDevice | None:
+    """``resolve_llm_eval_device`` over the environment, gated on QAIHM_RUN_EVAL."""
+    if os.environ.get("QAIHM_RUN_EVAL", "true").strip().lower() != "true":
+        return None
+    return resolve_llm_eval_device()
 
 
 def get_llm_perf_parametrization(

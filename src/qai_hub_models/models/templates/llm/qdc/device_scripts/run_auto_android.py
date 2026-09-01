@@ -85,10 +85,16 @@ trap cleanup_device EXIT
 # before letting the failure (and set -e) abort the whole job. Redirect stderr
 # to a log file: QDC flags jobs Unsuccessful on any stderr output (PR #3641).
 genie_retry() {{
-    "$@" || {{
-        echo "genie_retry: command failed, retrying once: $*" >&2
-        "$@"
-    }}
+    tmp_out=$(mktemp)
+    if ! "$@" | tee "$tmp_out"; then
+        if grep -q "Context Size was exhausted" "$tmp_out"; then
+            echo "genie_retry: context size exhausted, skipping retry: $*" >&2
+        else
+            echo "genie_retry: command failed, retrying once: $*" >&2
+            "$@"
+        fi
+    fi
+    rm -f "$tmp_out"
 }}
 cd /data/local/tmp/genie_bundle
 unzip_qairt() {{
@@ -125,6 +131,21 @@ rm -rf /data/local/tmp/QDC_logs
 mkdir -p /data/local/tmp/QDC_logs
 genie_retry genie-t2t-run -c genie_config.json --prompt_file sample_prompt.txt 2>>/data/local/tmp/QDC_logs/genie_stderr.log | tee /data/local/tmp/QDC_logs/genie.log
 {full_genie_command}
+
+PROMPT_DIR=/data/local/tmp/genie_bundle/prompts
+EVAL_OUTPUT_FILE=/data/local/tmp/QDC_logs/eval_outputs.txt
+if [ -d "$PROMPT_DIR" ]; then
+    # Switch to power_saver perf_profile: sustained burst thermal-throttles and kills the eval loop on QDC SM8750.
+    sed -i 's/"perf_profile": "[^"]*"/"perf_profile": "power_saver"/' htp_backend_ext_config.json
+    > "$EVAL_OUTPUT_FILE"
+    for prompt_file in $PROMPT_DIR/prompt_*.txt; do
+        idx=$(basename "$prompt_file" | sed 's/prompt_\\([0-9]*\\)\\.txt/\\1/')
+        echo "===EVAL_IDX_${{idx}}===" | tee -a "$EVAL_OUTPUT_FILE"
+        genie_retry genie-t2t-run -c genie_config.json --prompt_file "$prompt_file" 2>&1 | tee -a "$EVAL_OUTPUT_FILE"
+        # Short inter-prompt cooldown to keep the HTP from thermal-throttling.
+        sleep 3
+    done
+fi
 """
         # Push the genie_bundle directory to the device
         subprocess.run(

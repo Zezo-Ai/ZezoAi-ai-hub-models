@@ -201,6 +201,9 @@ jobs:
       env:
         QAIHM_MODELS: ${{ inputs.model || 'all' }}
         QAIHM_TEST_DEVICES: ${{ matrix.devices }}
+        # Whole device request, not this leg's slice: the accuracy device is
+        # picked from what the user asked for, before the QDC pool split.
+        QAIHM_LLM_EVAL_DEVICE_SCOPE: ${{ env.QAIHM_TEST_DEVICES_RESOLVED }}
         GENIEX_BENCH_PLUGIN: ${{ inputs.geniex_bench_plugin || 'all' }}
         GENIEX_BENCH_PRECISIONS: ${{ inputs.precision || 'default' }}
         GENIEX_VERSION: ${{ inputs.geniex_version || '' }}
@@ -235,6 +238,7 @@ jobs:
       env:
         QAIHM_MODELS: ${{ inputs.model || 'all' }}
         QAIHM_TEST_DEVICES: ${{ matrix.devices }}
+        QAIHM_LLM_EVAL_DEVICE_SCOPE: ${{ env.QAIHM_TEST_DEVICES_RESOLVED }}
         GENIEX_BENCH_PLUGIN: ${{ inputs.geniex_bench_plugin || 'all' }}
         GENIEX_BENCH_PRECISIONS: ${{ inputs.precision || 'default' }}
         GENIEX_VERSION: ${{ inputs.geniex_version || '' }}

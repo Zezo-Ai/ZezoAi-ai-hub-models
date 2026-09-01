@@ -1060,12 +1060,17 @@ def _cmd_submit(args: argparse.Namespace) -> int:
     import sys
 
     from qai_hub_models.models.templates.llm import test as llm_test
-    from qai_hub_models.models.templates.llm.perf_collection import LLMPerfConfig
+    from qai_hub_models.models.templates.llm.perf_collection import (
+        LLMPerfConfig,
+        get_llm_eval_device,
+    )
     from qai_hub_models.scorecard.test.test_llm_perf import _build_params
 
     if os.path.exists(args.jobs_file):
         os.unlink(args.jobs_file)
     cfg = LLMPerfConfig.from_environment()
+    eval_device = get_llm_eval_device()
+    print(f"On-device accuracy: {eval_device.name if eval_device else 'off'}")
     submitted = 0
     for model_id, precision, device in _build_params():
         try:

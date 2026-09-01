@@ -46,6 +46,7 @@ from qai_hub_models.models.templates.llm.model import (
     LLMDynamic_AIMETOnnx,
 )
 from qai_hub_models.models.templates.llm.perf_collection import (
+    get_llm_eval_device,
     load_release_assets_for_model,
     record_perf_scope,
     update_perf_yaml,
@@ -70,7 +71,6 @@ from qai_hub_models.models.templates.lm_schema import (
     WikitextSpec,
 )
 from qai_hub_models.scorecard import ScorecardDevice, ScorecardProfilePath
-from qai_hub_models.scorecard.device import DEFAULT_QDC_DEVICE
 from qai_hub_models.scorecard.utils.fetch_prerelease_assets import (
     download_prerelease_asset,
 )
@@ -1045,12 +1045,7 @@ def submit_llm_perf_job(
 
     api_token = get_qdc_api_token(device)
 
-    # Eval is expensive; only run on the default scorecard device.
-    run_eval = (
-        os.environ.get("QAIHM_RUN_EVAL", "true").lower() == "true"
-        and device == DEFAULT_QDC_DEVICE
-    )
-    eval_prompts = _USE_DEFAULT_PROMPTS if run_eval else None
+    eval_prompts = _USE_DEFAULT_PROMPTS if device == get_llm_eval_device() else None
     job_name = f"Genie {model_id} {precision}"
 
     job_id = submit_genie_bundle_only(
@@ -1105,11 +1100,7 @@ def collect_llm_perf_job(
         )
 
     api_token = get_qdc_api_token(device)
-    run_eval = (
-        os.environ.get("QAIHM_RUN_EVAL", "true").lower() == "true"
-        and device == DEFAULT_QDC_DEVICE
-    )
-    eval_prompts = _USE_DEFAULT_PROMPTS if run_eval else None
+    eval_prompts = _USE_DEFAULT_PROMPTS if device == get_llm_eval_device() else None
     job_name = f"Genie {model_id} {precision}"
     key = make_key(model_id, str(precision), "GENIE", device.name)
     hub_device_name = device.reference_device.name
