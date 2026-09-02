@@ -25,7 +25,9 @@ lm_quantization_details:
       visual: {}
     recipe:
       backbone:
-      - enable_r3: true
+      - enable_r1: true
+        enable_r2: false
+        enable_r3: true
         name: SpinQuant
       - dataset:
           name: Wikitext
@@ -43,7 +45,9 @@ lm_quantization_details:
         name: Calibration
         num_iterations: 20
       visual:
-      - enable_r3: true
+      - enable_r1: true
+        enable_r2: false
+        enable_r3: true
         name: SpinQuant
       - dataset:
           name: AOKVQA
@@ -63,7 +67,9 @@ orchestrator_runtimes:
 - geniex_qairt
 - genie
 post_pip_install_commands:
-- command: pip install onnxruntime-gpu==1.23.2 https://github.com/qualcomm/aimet/releases/download/2.33.0/aimet_onnx-2.33.0+cu126-cp310-abi3-manylinux_2_34_x86_64.whl -f https://download.pytorch.org/whl/torch_stable.html
+- command: pip uninstall -y onnxruntime
+  machine: gpu
+- command: pip install --force-reinstall --no-deps onnxruntime-gpu==1.23.2
   machine: gpu
 related_models:
 - qwen3_vl_4b_instruct
@@ -81,8 +87,7 @@ runtime_technical_details:
     model_infer_id: ai-hub-models/InternVL3_5-2B
 separate_quantize_script: true
 source_repo: https://huggingface.co/OpenGVLab/InternVL3_5-2B
-status: unpublished
-status_reason: Newly onboarded.
+status: published
 supported_precisions:
 - w4a16
 tags:

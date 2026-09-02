@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [Intern3-5-VL-2B: Multimodal 2B vision-language model for text and image understanding](https://aihub.qualcomm.com/models/intern3_5_vl_2b)
 
 InternVL3.5 is a vision-language model from OpenGVLab capable of understanding both text and images for multimodal reasoning tasks such as visual question answering and image captioning.
