@@ -258,16 +258,6 @@ class GenieXBenchLinuxArtifactHandler(GenieXBenchArtifactHandler):
     def entry_script(self) -> str:
         return f"/bin/bash {self.DEVICE_ROOT}/run_geniex_bench_linux.sh"
 
-    def _bench_size_flags(
-        self, plugin: str, qairt_bundles: dict[str, str] | None
-    ) -> str:
-        if plugin == "qairt":
-            assert qairt_bundles and len(qairt_bundles) == 1
-            (name,) = qairt_bundles
-            prompt_path = f"{self.DEVICE_ROOT}/qairt_bundles/{name}/sample_prompt.txt"
-            return f'-c "$ctx" -n {_N_GEN} --prompt-file "{prompt_path}"'
-        return f'-c "$((ctx + {_N_GEN}))" -p "$ctx" -n {_N_GEN}'
-
     def create_artifact(
         self,
         curr_dirname: os.PathLike | str,
@@ -300,7 +290,7 @@ class GenieXBenchLinuxArtifactHandler(GenieXBenchArtifactHandler):
             .replace("{MODELS}", "\n".join(matrix_rows))
             .replace(
                 "{BENCH_SIZE_FLAGS}",
-                self._bench_size_flags(plugin, qairt_bundles),
+                f'-c "$((ctx + {_N_GEN}))" -p "$((ctx - {_N_GEN}))" -n {_N_GEN}',
             ),
             context_lengths,
             run_perf,
@@ -328,16 +318,6 @@ class GenieXBenchWindowsArtifactHandler(GenieXBenchArtifactHandler):
     @property
     def entry_script(self) -> str:
         return f"{self.DEVICE_ROOT}\\run_geniex_bench_windows.ps1"
-
-    def _bench_size_flags_args(
-        self, plugin: str, qairt_bundles: dict[str, str] | None
-    ) -> str:
-        if plugin == "qairt":
-            assert qairt_bundles and len(qairt_bundles) == 1
-            (name,) = qairt_bundles
-            path = f"{self.DEVICE_ROOT}\\qairt_bundles\\{name}\\sample_prompt.txt"
-            return f'"-c", "$ctx", "-n", "{_N_GEN}", "--prompt-file", "{path}",'
-        return f'"-c", "$($ctx + {_N_GEN})", "-p", "$ctx", "-n", "{_N_GEN}",'
 
     def create_artifact(
         self,
@@ -371,7 +351,7 @@ class GenieXBenchWindowsArtifactHandler(GenieXBenchArtifactHandler):
             .replace("{MODELS}", "\n".join(matrix_rows))
             .replace(
                 "{BENCH_SIZE_FLAGS_ARGS}",
-                self._bench_size_flags_args(plugin, qairt_bundles),
+                f'"-c", "$($ctx + {_N_GEN})", "-p", "$($ctx - {_N_GEN})", "-n", "{_N_GEN}",',
             ),
             context_lengths,
             run_perf,

@@ -142,17 +142,8 @@ def push_bundle() -> None:
     adb(f"cp {DEVICE_BUNDLE}/lib/llama_cpp/*.so {DEVICE_BUNDLE}/lib/")
 
 
-def _run_bench(
-    ctx: int, env: str, tsv_path: str, chipset: str, bundle_name: str | None
-) -> int:
-    if PLUGIN == "qairt":
-        assert bundle_name is not None
-        size_flags = (
-            f"-c {ctx} -n {N_GEN} "
-            f"--prompt-file {DEVICE_QAIRT_BUNDLES}/{bundle_name}/sample_prompt.txt"
-        )
-    else:
-        size_flags = f"-c {ctx + N_GEN} -p {ctx} -n {N_GEN}"
+def _run_bench(ctx: int, env: str, tsv_path: str, chipset: str) -> int:
+    size_flags = f"-c {ctx + N_GEN} -p {ctx - N_GEN} -n {N_GEN}"
     cmd = (
         f"cd {DEVICE_BUNDLE} && {env} ./bin/geniex-bench "
         f"--matrix-file {tsv_path} --output-json-dir {DEVICE_RESULTS} -r 3 "
@@ -326,7 +317,7 @@ def test_scorecard() -> None:
                     + " ".join(f"'{ln}'" for ln in tsv_by_ctx[ctx])
                     + f" > {tsv_path}"
                 )
-                if _run_bench(ctx, env, tsv_path, chipset, bundle_name) != 0:
+                if _run_bench(ctx, env, tsv_path, chipset) != 0:
                     failures.append(ctx)
             # Confirm cell JSONs exist; adb hides on-device exit codes.
             results_listing = adb(f"ls -l {DEVICE_RESULTS}", check=False).stdout

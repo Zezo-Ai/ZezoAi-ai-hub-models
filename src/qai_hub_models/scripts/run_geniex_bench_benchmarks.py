@@ -72,6 +72,10 @@ ALL_GENIEX_DEVICES = (
 LLAMACPP_DEVICE_ALIASES = ("cpu", "gpu", "npu")
 LLAMACPP_CONTEXT_LENGTHS = [512, 4096]
 
+# Prompt length the TTFT range's lower bound refers to: one QAIRT prefill chunk.
+# Unrelated to the bench's generation-token count, which happens to also be 128.
+_TTFT_BASELINE_PROMPT_TOKENS = 128
+
 # Number of accuracy-eval prompts to run (of the built-in 100-prompt set). A
 # smaller number is sampled evenly across the 10 categories, not sliced.
 _EVAL_NUM_PROMPTS = 100
@@ -483,8 +487,6 @@ def _collect_one(
             bundle_dir, ctx_list = fetch_geniex_qairt_bundle(
                 model_id, precision, sd.chipset, Path(save_dir_root) / "qairt_bundles"
             )
-            if ctx_list:
-                ctx_list = [max(ctx_list)]
             model_ref: str = str(bundle_dir)
             llamacpp_quant: str | None = None
         else:
@@ -596,8 +598,8 @@ def _rows_and_updates_from_metrics(
                 f"prompt_tokens must be > 0 for TTFT range scaling, "
                 f"got {m.prompt_tokens}"
             )
-            ttft_min = m.ttft_ms
-            ttft_max = m.ttft_ms * (m.context_length / 128)
+            ttft_min = m.ttft_ms * (_TTFT_BASELINE_PROMPT_TOKENS / m.prompt_tokens)
+            ttft_max = m.ttft_ms * (m.context_length / m.prompt_tokens)
             update_kwargs = dict(
                 model_id=model_id,
                 device_name=sd.reference_device_name,
@@ -697,9 +699,6 @@ def _iter_work(
                                 f"Skipping {model_id} [{precision}] @ {device_token}: {e}"
                             )
                             continue
-                        # Only bench max(ctx); perf.yaml stores only that.
-                        if ctx_list:
-                            ctx_list = [max(ctx_list)]
                         yield (
                             plugin,
                             model_id,
