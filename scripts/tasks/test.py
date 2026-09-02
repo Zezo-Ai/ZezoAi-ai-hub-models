@@ -449,6 +449,18 @@ class PyTestModelTask(CompositeTask):
                     )
                 )
 
+            if run_llm_export and use_shared_cache:
+                # LLM export jobs chain several multi-GB VLM checkpoints in one job against
+                # the shared QAIHM cache; clean up each model's assets once its test finishes
+                # so disk/RAM usage doesn't accumulate across models in the same run.
+                model_cache_dir = f'"${{{STORE_ROOT_ENV_VAR}:-$HOME}}/.qaihm/qai-hub-models/models/{model_name}"'
+                tasks.append(
+                    RunCommandsTask(
+                        f"Clean up downloaded assets for {model_name}",
+                        f"rm -rf {model_cache_dir}",
+                    )
+                )
+
         super().__init__(
             # If a group name is used here, you get two groups per model
             # printed to console when running these tasks, one of which is empty.
