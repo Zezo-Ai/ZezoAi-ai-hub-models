@@ -396,7 +396,7 @@ jobs:
         sub_category: "nightly-analysis"
 
     post_breeze_comment:
-        if: ${{ needs.breeze-nightly-analysis.result == 'success' && needs.notify_failure.result == 'success' && github.event_name == 'schedule' }}
+        if: ${{ always() && needs.breeze-nightly-analysis.result == 'success' && needs.notify_failure.result == 'success' && github.event_name == 'schedule' }}
         name: Post Breeze Comment to Tetracode
         needs: [notify_failure, breeze-nightly-analysis]
         runs-on: [tetra-ubuntu-2204, self-hosted]
