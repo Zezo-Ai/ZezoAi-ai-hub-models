@@ -200,6 +200,18 @@ class MultiGraphCollectionModel(ABC, FromPretrainedProtocol):
             return transpose_channel_first_to_last(channel_last, inputs)
         return inputs
 
+    def remap_metadata_input_spec(
+        self,
+        component_name: str,
+        graph_input_spec: InputSpec,
+        compiled_input_names: set[str],
+    ) -> InputSpec:
+        """Allow model-specific remapping before metadata input merge.
+
+        By default, return the graph input spec unchanged.
+        """
+        return graph_input_spec
+
     def write_supplementary_files(
         self,
         output_dir: str | os.PathLike,

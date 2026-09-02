@@ -14,6 +14,8 @@ from transformers import PreTrainedTokenizerBase
 
 from qai_hub_models.utils.base_dataset import BaseDataset, DatasetMetadata, DatasetSplit
 
+DEFAULT_IMAGE_PLACEHOLDER = "<|vision_start|><|image_pad|><|vision_end|>"
+
 
 class MMMU(BaseDataset):
     """Multimodal Multitask Understanding (MMMU) dataset.
@@ -34,12 +36,18 @@ class MMMU(BaseDataset):
         seed: int = 42,
         processor: Any = None,
         image_size: tuple[int, int] | None = None,
+        image_placeholder: str | None = None,
     ) -> None:
         self.context_length = context_length
         self.tokenizer = tokenizer
         self.num_samples = num_samples
         self.processor = processor
         self.image_size = image_size
+        self.image_placeholder = (
+            image_placeholder
+            if image_placeholder is not None
+            else DEFAULT_IMAGE_PLACEHOLDER
+        )
 
         if split in (DatasetSplit.VAL, DatasetSplit.TEST):
             # MMMU test split has no answers; always use validation for eval
@@ -120,7 +128,7 @@ class MMMU(BaseDataset):
         (<|vision_start|>/<|vision_end|>) are inserted manually for images.
         """
         valid_images = [img for img in image_slots.values() if img is not None]
-        IMAGE_PLACEHOLDER = "<|vision_start|><|image_pad|><|vision_end|>"
+        image_placeholder = self.image_placeholder
 
         # Build prompt text, replacing <image N> placeholders with vision tokens
         ordered_images: list[Any] = []
@@ -132,7 +140,7 @@ class MMMU(BaseDataset):
                 img_idx = int(m.group(1))
                 img = image_slots.get(img_idx)
                 if img is not None:
-                    text_parts.append(IMAGE_PLACEHOLDER)
+                    text_parts.append(image_placeholder)
                     ordered_images.append(img)
                 else:
                     text_parts.append(part)
@@ -142,7 +150,7 @@ class MMMU(BaseDataset):
         # If no placeholders but images exist, prepend them
         if not ordered_images and valid_images:
             for _img in valid_images:
-                text_parts.insert(0, IMAGE_PLACEHOLDER)
+                text_parts.insert(0, image_placeholder)
             ordered_images = list(valid_images)
 
         prompt = "".join(text_parts).strip()
@@ -150,6 +158,12 @@ class MMMU(BaseDataset):
 
         if self.image_size is not None:
             ordered_images = [image.resize(self.image_size) for image in ordered_images]
+
+        placeholder_count = prompt.count(image_placeholder)
+        assert not ordered_images or placeholder_count == len(ordered_images), (
+            "Placeholder/image mismatch before processor call: "
+            f"placeholders={placeholder_count}, images={len(ordered_images)}"
+        )
 
         inputs = self.processor(
             text=[prompt],

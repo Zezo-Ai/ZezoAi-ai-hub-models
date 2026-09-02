@@ -2399,6 +2399,9 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
     # QAIRT 2.49's "precision_compensation" should remove the need for these
     # lists; see https://github.com/qcom-ai-hub/tetracode/issues/20616.
     int8_param_names: tuple[str, ...] = ()
+    # Parameter tensors held at fp16 while the rest of the model stays at the
+    # precision default (currently used with w4a16).
+    fp16_param_names: tuple[str, ...] = ()
 
     @classmethod
     def get_chat_template(cls) -> dict[str, str]:
@@ -2932,6 +2935,7 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             cls._apply_precision_activations(quant_sim, precision)
 
         cls._hold_params_at_int8(quant_sim)
+        cls._hold_params_at_fp16(quant_sim, precision)
 
         return quant_sim
 
@@ -2953,6 +2957,29 @@ class LLM_AIMETOnnx(AIMETOnnxQuantizableMixin, LLMConfigEditor, BaseModel, ABC):
             quantizer.use_symmetric_encodings = True
             quantizer.enable_per_channel_quantization()
             logger.info("Holding %s at int8 (per-channel, symmetric).", name)
+
+    @classmethod
+    def _hold_params_at_fp16(
+        cls,
+        quant_sim: QuantizationSimModel,
+        precision: Precision,
+    ) -> None:
+        """Set ``fp16_param_names`` quantizers to fp16."""
+        if precision != Precision.w4a16:
+            return
+
+        for name in cls.fp16_param_names:
+            quantizer = quant_sim.qc_quantize_op_dict.get(name)
+            if quantizer is None:
+                raise KeyError(
+                    f"No quantizer for {name}; {cls.__name__}.fp16_param_names "
+                    "is out of date with the exported graph."
+                )
+            quantizer.quant_info.usePerChannelMode = False
+            quantizer.reset_encoding_stats()
+            quantizer.data_type = QuantizationDataType.float
+            quantizer.bitwidth = 16
+            logger.info("Holding %s at fp16.", name)
 
     def save_calibrated_checkpoint(  # type: ignore[override]
         self,

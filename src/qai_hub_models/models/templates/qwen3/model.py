@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 
 import qai_hub as hub
 from packaging.version import Version
-from transformers import PretrainedConfig, PreTrainedTokenizer
+from transformers import PretrainedConfig, PreTrainedTokenizerBase
 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 from transformers.models.qwen3 import modeling_qwen3
 from typing_extensions import Self
@@ -86,6 +86,9 @@ ASSISTANT_ID = "assistant"
 USER_ID = "user"
 END_TOKENS = {"<|im_end|>", "<|endoftext|>"}
 
+# Preserve pristine HF Qwen3 symbols before any monkey-patching.
+ORIG_QWEN3_ATTENTION = modeling_qwen3.Qwen3Attention
+
 
 class Qwen3_Optimizations(str, Enum):  # Inherit from str and Enum
     SHA_ATTENTION = "sha_attention"
@@ -122,6 +125,7 @@ class Qwen3Base(LLMBase):
             and Qwen3_Optimizations.SHA_ATTENTION in skip_optimizations
         ):
             print("Skip sha_attention optimization")
+            modeling_qwen3.Qwen3Attention = ORIG_QWEN3_ATTENTION  # type: ignore[misc, unused-ignore]
         else:
             # In transformers 4.51.0+, Qwen3 directly instantiates Qwen3Attention
             # instead of using an ATTENTION_CLASSES dict
@@ -209,7 +213,7 @@ class Qwen3Base_AIMETOnnx(LLM_AIMETOnnx):
         quant_sim: QuantizationSimModel,
         host_device: torch.device,
         checkpoint: str | os.PathLike | Path | None = None,
-        tokenizer: PreTrainedTokenizer | None = None,
+        tokenizer: PreTrainedTokenizerBase | None = None,
         llm_config: PretrainedConfig | None = None,
         sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
         context_length: int = DEFAULT_CONTEXT_LENGTH,

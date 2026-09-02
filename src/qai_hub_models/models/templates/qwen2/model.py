@@ -75,7 +75,8 @@ class Qwen2_Optimizations(str, Enum):  # Inherit from str and Enum
 
 
 class Qwen2Base(LLMBase):
-    LMClass = modeling_qwen2.Qwen2ForCausalLM
+    # Keep LMClass polymorphic for Qwen2 derivatives (e.g., Qwen2.5-VL).
+    LMClass: Any | None = modeling_qwen2.Qwen2ForCausalLM
     EmbeddingClass = RopeEmbedding
 
     # Default prompts for demos

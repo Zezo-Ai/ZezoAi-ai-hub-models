@@ -16,13 +16,14 @@ import os
 import shutil
 from collections.abc import Collection
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, cast
 
 import numpy as np
 import onnx
 import onnxruntime
 import torch
 from transformers import AutoProcessor, PretrainedConfig, PreTrainedTokenizer
+from transformers.models.llama import LlamaConfig
 from transformers.models.qwen3_vl import modeling_qwen3_vl
 
 # isort: off
@@ -70,6 +71,7 @@ from qai_hub_models.models.templates.llm.model import (
 from qai_hub_models.models.templates.lm_driver.generator import (
     PrecomputedCosSinGeneratorMixin,
     TransposedKVGeneratorMixin,
+    VLM_Generator,
 )
 from qai_hub_models.models.templates.lm_driver.qwen3_vl import (
     Qwen3VL_Generator,
@@ -87,8 +89,10 @@ from qai_hub_models.models.templates.qwen3_vl.vision_encoder import (
 )
 from qai_hub_models.models.templates.vlm.model import (
     DEFAULT_IMAGE_SIZE,
+    VLMBase,
     VLMDynamic_AIMETOnnx,
 )
+from qai_hub_models.models.templates.vlm.processor_factory import VLMProcessorLike
 from qai_hub_models.utils.asset_loaders import load_image
 from qai_hub_models.utils.base_multi_graph_collection_model import (
     MultiGraphWorkbenchModelCollection,
@@ -196,7 +200,7 @@ def get_vlm_config(model_ckpt: str | os.PathLike | Path | None) -> PretrainedCon
     return llm_config
 
 
-class Qwen3VLTextBase(Qwen3Base):
+class Qwen3VLTextBase(VLMBase, Qwen3Base):
     """
     Base class for Qwen3-VL text model.
 
@@ -209,12 +213,12 @@ class Qwen3VLTextBase(Qwen3Base):
 
     llm_io_type: LLMIOType = LLMIOType.genie_input_embeds
 
-    GeneratorClass = HubCompatibleQwen3VLGenerator
+    GeneratorClass: type[VLM_Generator] = HubCompatibleQwen3VLGenerator
 
     # We use the full VLM class for loading, then extract text model
     LMClass = modeling_qwen3_vl.Qwen3VLForConditionalGeneration  # type: ignore[assignment, unused-ignore]
 
-    VisionModelWrapper = Qwen3VLVisionWrapper
+    VisionModelWrapper: type[torch.nn.Module] = Qwen3VLVisionWrapper
 
     # Store reference to full VLM for embedding extraction
     _full_vlm: torch.nn.Module | None = None
@@ -337,6 +341,40 @@ class Qwen3VLTextBase(Qwen3Base):
 
         return input_spec
 
+    def _apply_monkey_patch(self) -> None:
+        self.monkey_patch(skip_optimizations=self.skip_optimizations)
+
+    def _load_tokenizer(self, checkpoint: str | os.PathLike | Path) -> Any:
+        return get_tokenizer(checkpoint)
+
+    def _load_image_processor(self, checkpoint: str | os.PathLike | Path) -> Any:
+        # Cache HF image processor config for vision preprocessing metadata
+        # (patch_size, merge_size, mean/std). A split/quantized checkpoint may
+        # only contain tokenizer files (no preprocessor_config.json), in which
+        # case AutoProcessor returns a bare tokenizer with no .image_processor;
+        # fall back to the base HF repo, which carries the same static metadata.
+        processor = AutoProcessor.from_pretrained(checkpoint, trust_remote_code=True)
+        image_processor = getattr(processor, "image_processor", None)
+        if image_processor is None:
+            hf_repo = getattr(self, "_hf_repo_name", None)
+            assert hf_repo is not None, (
+                "Checkpoint has no image processor and no _hf_repo_name fallback."
+            )
+            image_processor = AutoProcessor.from_pretrained(
+                hf_repo, trust_remote_code=True
+            ).image_processor
+        return image_processor
+
+    def _extract_embedding_weights(
+        self, full_vlm: torch.nn.Module | None
+    ) -> torch.Tensor | None:
+        if full_vlm is None:
+            return None
+        return full_vlm.get_input_embeddings().weight.data.clone()  # type: ignore[operator]
+
+    def _post_configure_tokenizer_and_config(self) -> None:
+        return None
+
     def __init__(
         self,
         checkpoint: str | os.PathLike | Path,
@@ -354,8 +392,6 @@ class Qwen3VLTextBase(Qwen3Base):
 
         Overrides parent to load from full VLM checkpoint and extract text model.
         """
-        from qai_hub_models.models.templates.llm.model import get_tokenizer
-
         # Initialize nn.Module first to set up 'training' attribute
         torch.nn.Module.__init__(self)
 
@@ -367,31 +403,15 @@ class Qwen3VLTextBase(Qwen3Base):
 
         has_recommended_memory(self.min_memory_recommended)
 
-        self.monkey_patch(skip_optimizations=self.skip_optimizations)
+        self._apply_monkey_patch()
         llm_config = get_vlm_config(self.checkpoint)
         # Keep original config for full VLM operations
         self._original_llm_config = llm_config
         self.llm_config = self.edit_llm_config(llm_config)
         self._verify_ckpt()
-        self.tokenizer = get_tokenizer(checkpoint)
-
-        # Cache HF image processor config for vision preprocessing metadata
-        # (patch_size, merge_size, mean/std). A split/quantized checkpoint may
-        # only contain tokenizer files (no preprocessor_config.json), in which
-        # case AutoProcessor returns a bare tokenizer with no .image_processor;
-        # fall back to the base HF repo, which carries the same static metadata.
-        from transformers import AutoProcessor
-
-        processor = AutoProcessor.from_pretrained(checkpoint, trust_remote_code=True)
-        self._image_processor = getattr(processor, "image_processor", None)
-        if self._image_processor is None:
-            hf_repo = getattr(self, "_hf_repo_name", None)
-            assert hf_repo is not None, (
-                "Checkpoint has no image processor and no _hf_repo_name fallback."
-            )
-            self._image_processor = AutoProcessor.from_pretrained(
-                hf_repo, trust_remote_code=True
-            ).image_processor
+        self.tokenizer = self._load_tokenizer(checkpoint)
+        self._post_configure_tokenizer_and_config()
+        self._image_processor = self._load_image_processor(checkpoint)
 
         # Load model using our custom loader
         model, full_vlm, lm_head = self.load_llm_from_checkpoint(
@@ -402,18 +422,13 @@ class Qwen3VLTextBase(Qwen3Base):
         model.eval()
 
         # Extract and store embedding weights before discarding full VLM
-        if full_vlm is not None:
-            self._embedding_weights = (
-                full_vlm.get_input_embeddings().weight.data.clone()  # type: ignore[operator]
-            )
-        else:
-            self._embedding_weights = None
+        self._embedding_weights = self._extract_embedding_weights(full_vlm)
 
         # Create embedding (use original config for vocab_size)
         assert self.EmbeddingClass is not None
         self.embedding = self.EmbeddingClass(
             max_length=context_length,
-            config=llm_config.text_config,
+            config=cast(LlamaConfig, self.llm_config),
         )
 
         os.environ["TOKENIZERS_PARALLELISM"] = "0"
@@ -686,6 +701,12 @@ class Qwen3VLTextBase(Qwen3Base):
         assert isinstance(prompt, str)
         return prompt
 
+    @classmethod
+    def get_image_placeholder_for_processor(
+        cls, processor: VLMProcessorLike | None = None
+    ) -> str:
+        return "<|vision_start|><|image_pad|><|vision_end|>"
+
     def _verify_ckpt(self) -> None:
         """Verify checkpoint is compatible with Qwen3-VL."""
         valid_model_types = {"qwen3_vl", "qwen3", "qwen3_vl_text"}
@@ -917,6 +938,11 @@ class Qwen3VLTextBase_AIMETOnnx(Qwen3Base_AIMETOnnx):
                 self._embedding_weights = torch.from_numpy(
                     embed_np.reshape(vocab_size, hidden_size)
                 )
+        self._post_init_vlm_aimet()
+
+    def _post_init_vlm_aimet(self) -> None:
+        """Family-specific AIMET init hook. Default no-op."""
+        return
 
     def get_embedding_weights(self) -> torch.Tensor:
         """Get embedding weights from checkpoint (not from LM head)."""
@@ -1041,7 +1067,7 @@ class Qwen3VLPreSplitBase(
     Concrete subclasses set the architecture constants below.
     """
 
-    GeneratorClass = HubCompatibleQwen3VLGenerator
+    GeneratorClass: type[VLM_Generator] = HubCompatibleQwen3VLGenerator
 
     # --- per-model configuration (override in subclass) ---
     model_id: str = ""
@@ -1223,6 +1249,65 @@ class Qwen3VLPreSplitBase(
 Qwen3VLPreSplitT = TypeVar("Qwen3VLPreSplitT", bound=Qwen3VLPreSplitBase)
 
 
+class VisionEncoderExportProtocol(Protocol):
+    default_image_height: int
+    default_image_width: int
+    _pos_emb_cos: torch.Tensor
+    _pos_emb_sin: torch.Tensor
+    _window_attention_mask: torch.Tensor
+    _full_attention_mask: torch.Tensor
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        checkpoint: str | os.PathLike | Path = "DEFAULT",
+        device: torch.device | None = None,
+        image_height: int | None = None,
+        image_width: int | None = None,
+        precision: Precision = Precision.float,
+        **kwargs: Any,
+    ) -> VisionEncoderExportProtocol: ...
+
+    @classmethod
+    def export_to_onnx(
+        cls,
+        veg_model: Any,
+        host_device: torch.device,
+    ) -> onnx.ModelProto: ...
+
+    @classmethod
+    def save_onnx(
+        cls,
+        onnx_model: onnx.ModelProto,
+        output_dir: str | os.PathLike | Path,
+        filename: str = "vision_encoder.onnx",
+    ) -> Path: ...
+
+    def eval(self) -> VisionEncoderExportProtocol: ...
+
+
+class VisionEncoderCollectionProtocol(Protocol):
+    default_image_height: int
+    default_image_width: int
+    _pos_emb_cos: torch.Tensor
+    _pos_emb_sin: torch.Tensor
+    _window_attention_mask: torch.Tensor
+    _full_attention_mask: torch.Tensor
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        checkpoint: str | os.PathLike | Path = "DEFAULT",
+        device: torch.device | None = None,
+        image_height: int | None = None,
+        image_width: int | None = None,
+        precision: Precision = Precision.float,
+        **kwargs: Any,
+    ) -> VisionEncoderCollectionProtocol: ...
+
+    def eval(self) -> VisionEncoderCollectionProtocol: ...
+
+
 # ---------------------------------------------------------------------------
 # Qwen3VLQuantizablePreSplitBase - Quantizable PreSplit with class-level cache
 # ---------------------------------------------------------------------------
@@ -1265,7 +1350,7 @@ class Qwen3VLQuantizablePreSplitBase(  # type: ignore[misc]
     ada_scale_num_rmsnorm_per_blk: int | None = None
 
     # VLM: vision encoder class (set by leaf classes)
-    vision_encoder_cls: type[Qwen3VLVisionEncoderBase] | None = None
+    vision_encoder_cls: type[VisionEncoderExportProtocol] | None = None
 
     @classmethod
     def attention_mask_min_clip_and_multiplier(
@@ -2040,8 +2125,8 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
     _hf_repo_name: str = ""
     fp_presplit_cls: type[Qwen3VLPreSplitBase]
     quant_presplit_cls: type[Qwen3VLQuantizablePreSplitBase]
-    part_base_cls: type[Qwen3VLPartBase]
-    vision_encoder_cls: type[Qwen3VLVisionEncoderBase]
+    part_base_cls: type[LLMPartBase]
+    vision_encoder_cls: type[VisionEncoderCollectionProtocol]
     num_deepstack_layers: int = 0
     vision_patch_size: int = 0
     default_image_height: int = 0
@@ -2049,6 +2134,81 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
     default_precision: Precision = Precision.w4a16
     sample_image: Any = None
     parts: dict[str, type] = {}
+
+    def _get_collection_processor(self) -> Any:
+        # Keep callsites polymorphic via hook while still using cached loading.
+        return _cached_processor(self._hf_repo_name)
+
+    def _get_text_config_from_llm_config(self, llm_config: Any) -> Any:
+        if hasattr(llm_config, "text_config"):
+            return llm_config.text_config
+        return llm_config
+
+    def _build_vlm_rope_config(
+        self, text_config: Any, image_processor: Any
+    ) -> dict[str, Any] | None:
+        # Build VLM MRoPE config from the HF config. transformers 5.x nests
+        # rope settings (incl. mrope_section) under rope_parameters; get_rope_scaling
+        # reads either layout.
+        rope_scaling = get_rope_scaling(text_config)
+        # Qwen3-VL uses *interleaved* MRoPE (mrope_interleaved=True), which Genie
+        # implements only under "qwen3vl-mrope" (nsp-model.cpp). "qwen2vl-mrope"
+        # applies a different, contiguous sectioning and would corrupt positions.
+        vlm_rope_config: dict[str, Any] = {
+            "rope-type": "qwen3vl-mrope",
+            "time-step": 50,
+        }
+        vlm_rope_config["spatial-merge-size"] = image_processor.merge_size
+        if rope_scaling is not None and "mrope_section" in rope_scaling:
+            vlm_rope_config["mrope-section"] = rope_scaling["mrope_section"]
+        return vlm_rope_config
+
+    def _get_chat_template_spec(self) -> dict[str, str]:
+        return Qwen3VLTextBase.get_chat_template()
+
+    def _resolve_vision_patch_size(self, image_processor: Any, llm_config: Any) -> int:
+        return image_processor.patch_size
+
+    def _build_vision_preprocessing(
+        self, image_processor: Any, llm_config: Any
+    ) -> GenieVisionPreprocessing:
+        return GenieVisionPreprocessing(
+            image_width=self.default_image_width,
+            image_height=self.default_image_height,
+            patch_size=image_processor.patch_size,
+            temporal_patch_size=image_processor.temporal_patch_size,
+            spatial_merge_size=image_processor.merge_size,
+            normalize_mean=image_processor.image_mean,
+            normalize_std=image_processor.image_std,
+        )
+
+    def _get_veg_prompt_tokenizer(
+        self, processor: VLMProcessorLike, tokenizer: Any
+    ) -> Any:
+        return tokenizer
+
+    def _adapt_dummy_veg_prompt(
+        self,
+        formatted_text: str,
+        processor: VLMProcessorLike,
+        num_images: int,
+    ) -> str:
+        return formatted_text
+
+    def _build_sample_veg_prompt_files(
+        self,
+        _processor: VLMProcessorLike,
+    ) -> tuple[str, str]:
+        prompt_prefix = (
+            "<|im_start|>system\n"
+            "You are a helpful assistant.<|im_end|>\n"
+            "<|im_start|>user\n"
+            "<|vision_start|>"
+        )
+        prompt_suffix = (
+            "<|vision_end|>Describe the image.<|im_end|>\n<|im_start|>assistant\n"
+        )
+        return prompt_prefix, prompt_suffix
 
     def __init__(
         self,
@@ -2079,7 +2239,9 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
             checkpoint=checkpoint,
             host_device=host_device,
         )
-        parts: list[BaseModel | MultiGraphWorkbenchModel] = []
+        parts: list[
+            VisionEncoderCollectionProtocol | BaseModel | MultiGraphWorkbenchModel
+        ] = []
         for part_cls in [cls.vision_encoder_cls, *cls.parts.values()]:
             if issubclass(part_cls, cls.vision_encoder_cls):
                 parts.append(
@@ -2136,9 +2298,9 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
 
         # --- Sample prompt (text-only; vision prompt is assembled at runtime) ---
         tokenizer = get_tokenizer(self._hf_repo_name)
-        sample_prompt = Qwen3VLTextBase.get_input_prompt_with_tags(
+        sample_prompt = self.fp_presplit_cls.get_input_prompt_with_tags(
             include_image=False,
-            tokenizer=tokenizer,  # type: ignore[arg-type]
+            tokenizer=cast(PreTrainedTokenizer, tokenizer),
         )
         with open(output_dir / "sample_prompt.txt", "w") as f:
             f.write(sample_prompt)
@@ -2178,12 +2340,13 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
                 break
 
         if image_processor is None:
-            image_processor = _cached_processor(self._hf_repo_name).image_processor
-
-        assert image_processor.patch_size == self.vision_patch_size, (
-            f"HF image_processor.patch_size ({image_processor.patch_size}) "
+            image_processor = self._get_collection_processor().image_processor
+        vision_patch_size = self._resolve_vision_patch_size(image_processor, llm_config)
+        assert vision_patch_size == self.vision_patch_size, (
+            f"HF vision patch_size ({vision_patch_size}) "
             f"!= vision_patch_size ({self.vision_patch_size})"
         )
+        assert vision_patch_size > 0, "Resolved vision patch_size must be > 0."
 
         # Build model_list from downloaded text part .bin files (exclude vision encoder)
         model_list = sorted(
@@ -2194,24 +2357,8 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
 
         # Get text_config from the full VLM config
         assert llm_config is not None, "Could not retrieve llm_config from presplit"
-        text_config = llm_config
-        if hasattr(llm_config, "text_config"):
-            text_config = llm_config.text_config
-
-        # Build VLM MRoPE config from the HF config. transformers 5.x nests
-        # rope settings (incl. mrope_section) under rope_parameters; get_rope_scaling
-        # reads either layout.
-        rope_scaling = get_rope_scaling(text_config)
-        # Qwen3-VL uses *interleaved* MRoPE (mrope_interleaved=True), which Genie
-        # implements only under "qwen3vl-mrope" (nsp-model.cpp). "qwen2vl-mrope"
-        # applies a different, contiguous sectioning and would corrupt positions.
-        vlm_rope_config: dict[str, Any] = {
-            "rope-type": "qwen3vl-mrope",
-            "time-step": 50,
-        }
-        vlm_rope_config["spatial-merge-size"] = image_processor.merge_size
-        if rope_scaling is not None and "mrope_section" in rope_scaling:
-            vlm_rope_config["mrope-section"] = rope_scaling["mrope_section"]
+        text_config = self._get_text_config_from_llm_config(llm_config)
+        vlm_rope_config = self._build_vlm_rope_config(text_config, image_processor)
 
         # text-generator.json: used by genie-app-script.txt (genie-app VLM pipeline)
         genie_config = create_genie_config(
@@ -2278,10 +2425,8 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
                             "ctx-bins": veg_bins,
                         },
                         "vision-param": {
-                            "height": self.default_image_height
-                            // image_processor.patch_size,
-                            "width": self.default_image_width
-                            // image_processor.patch_size,
+                            "height": self.default_image_height // vision_patch_size,
+                            "width": self.default_image_width // vision_patch_size,
                         },
                     },
                 },
@@ -2314,7 +2459,7 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
         )
 
         # --- Genie metadata & genie-app-script.txt ---
-        chat_spec = Qwen3VLTextBase.get_chat_template()
+        chat_spec = self._get_chat_template_spec()
 
         pipeline_nodes = {
             "imageEncoder": "img-enc-htp.json",
@@ -2405,14 +2550,8 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
                 connections=pipeline_connections,
             ),
             sample_inputs=sample_inputs,
-            vision_preprocessing=GenieVisionPreprocessing(
-                image_width=self.default_image_width,
-                image_height=self.default_image_height,
-                patch_size=image_processor.patch_size,
-                temporal_patch_size=image_processor.temporal_patch_size,
-                spatial_merge_size=image_processor.merge_size,
-                normalize_mean=image_processor.image_mean,
-                normalize_std=image_processor.image_std,
+            vision_preprocessing=self._build_vision_preprocessing(
+                image_processor, llm_config
             ),
         )
 
@@ -2438,13 +2577,17 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
         img_resized = img.resize((self.default_image_width, self.default_image_height))
 
         # Patchify + normalize via HF processor
-        proc = _cached_processor(self._hf_repo_name)
-        tokenizer = get_tokenizer(self._hf_repo_name)
-        dummy_text = Qwen3VLTextBase.get_input_prompt_with_tags(
+        proc = self._get_collection_processor()
+        processor_tokenizer = getattr(proc, "tokenizer", None)
+        if processor_tokenizer is None:
+            processor_tokenizer = get_tokenizer(self._hf_repo_name)
+        prompt_tokenizer = self._get_veg_prompt_tokenizer(proc, processor_tokenizer)
+        dummy_text = self.fp_presplit_cls.get_input_prompt_with_tags(
             user_input_prompt="",
             include_image=True,
-            tokenizer=tokenizer,  # type: ignore[arg-type]
+            tokenizer=prompt_tokenizer,
         )
+        dummy_text = self._adapt_dummy_veg_prompt(dummy_text, proc, 1)
         processed = proc(text=[dummy_text], images=[img_resized], return_tensors="pt")
 
         # Instantiate VEG to get pre-computed position/attention buffers
@@ -2463,15 +2606,7 @@ class Qwen3VLCollectionBase(MultiGraphWorkbenchModelCollection):
         del veg
 
         # Prompt text files
-        prompt_prefix = (
-            "<|im_start|>system\n"
-            "You are a helpful assistant.<|im_end|>\n"
-            "<|im_start|>user\n"
-            "<|vision_start|>"
-        )
-        prompt_suffix = (
-            "<|vision_end|>Describe the image.<|im_end|>\n<|im_start|>assistant\n"
-        )
+        prompt_prefix, prompt_suffix = self._build_sample_veg_prompt_files(proc)
         (inputs_dir / "prompt_prefix.txt").write_text(prompt_prefix)
         (inputs_dir / "prompt_suffix.txt").write_text(prompt_suffix)
 

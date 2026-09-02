@@ -247,7 +247,15 @@ def download_multi_graph_collection_model_bundle(
 
             file_metadata = ModelFileMetadata.from_hub_model(target_model)
             for graph_spec in all_input_specs.by_component(component_name).values():
-                merge_input_metadata(file_metadata, graph_spec, runtime)
+                if hasattr(model, "remap_metadata_input_spec"):
+                    remapped_spec = model.remap_metadata_input_spec(
+                        component_name=component_name,
+                        graph_input_spec=graph_spec,
+                        compiled_input_names=set(file_metadata.inputs.keys()),
+                    )
+                else:
+                    remapped_spec = graph_spec
+                merge_input_metadata(file_metadata, remapped_spec, runtime)
             file_metadata_by_name[model_file_name] = file_metadata
 
         model_metadata = ModelMetadata(

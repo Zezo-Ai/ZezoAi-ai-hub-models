@@ -20,8 +20,9 @@ import copy
 import json
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import onnx
 import torch
@@ -31,7 +32,11 @@ from transformers import (
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
 )
+from transformers.models.llama import LlamaConfig
 from transformers.models.qwen2_5_vl import modeling_qwen2_5_vl
+from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import (
+    Qwen2_5_VLTextConfig,
+)
 
 from qai_hub_models.models.templates.llm.common import LLMIOType
 from qai_hub_models.models.templates.llm.model import (
@@ -151,10 +156,12 @@ class Qwen2VLTextBase(Qwen2Base):
     llm_io_type: LLMIOType = LLMIOType.genie_input_embeds
 
     # We use the full VLM class for loading, then extract text model
-    LMClass = modeling_qwen2_5_vl.Qwen2_5_VLForConditionalGeneration  # type: ignore[assignment]
+    LMClass = modeling_qwen2_5_vl.Qwen2_5_VLForConditionalGeneration
 
     # Store reference to full VLM for embedding extraction
     _full_vlm: torch.nn.Module | None = None
+    _text_forward_original: ClassVar[Callable[..., Any] | None] = None
+    _text_forward_patched: ClassVar[bool] = False
 
     @classmethod
     def get_chat_template(cls) -> dict[str, str]:
@@ -323,7 +330,7 @@ class Qwen2VLTextBase(Qwen2Base):
         assert self.EmbeddingClass is not None
         self.embedding = self.EmbeddingClass(
             max_length=context_length,
-            config=llm_config,  # type: ignore[arg-type]
+            config=cast(LlamaConfig, self.llm_config),
         )
 
         os.environ["TOKENIZERS_PARALLELISM"] = "0"
@@ -385,7 +392,9 @@ class Qwen2VLTextBase(Qwen2Base):
             lm_head = full_vlm.lm_head
             return text_model, full_vlm, lm_head
         # Create uninitialized text model
-        text_model = modeling_qwen2_5_vl.Qwen2_5_VLTextModel(llm_config)  # type: ignore[arg-type]
+        text_model = modeling_qwen2_5_vl.Qwen2_5_VLTextModel(
+            cast(Qwen2_5_VLTextConfig, llm_config)
+        )
         lm_head = torch.nn.Linear(
             llm_config.hidden_size, llm_config.vocab_size, bias=False
         )
@@ -652,7 +661,9 @@ class Qwen2VLTextBase(Qwen2Base):
                     attentions=all_self_attns,
                 )
 
-            return _original_text_forward(
+            orig = Qwen2VLTextBase._text_forward_original
+            assert orig is not None
+            return orig(
                 self,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -667,11 +678,10 @@ class Qwen2VLTextBase(Qwen2Base):
                 **kwargs,
             )
 
-        if not hasattr(modeling_qwen2_5_vl.Qwen2_5_VLTextModel, "_original_forward"):
-            modeling_qwen2_5_vl.Qwen2_5_VLTextModel._original_forward = (  # type: ignore[attr-defined]
-                _original_text_forward
-            )
+        if not Qwen2VLTextBase._text_forward_patched:
+            Qwen2VLTextBase._text_forward_original = _original_text_forward
             modeling_qwen2_5_vl.Qwen2_5_VLTextModel.forward = _patched_text_forward
+            Qwen2VLTextBase._text_forward_patched = True
 
         # MLP Conv2d adaptation (Qwen2MLP is used by decoder layers)
         modeling_qwen2_5_vl.Qwen2MLP = QCQwen2_5_VLMLP  # type: ignore[misc, unused-ignore]

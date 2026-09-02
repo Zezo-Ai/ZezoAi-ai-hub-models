@@ -343,7 +343,12 @@ def llm_chat_demo(
 
     # For VLMs with images, resize to VEG dimensions and preprocess
     if vision_model is not None and image_path:
-        processor = AutoProcessor.from_pretrained(hf_repo_name)
+        if hasattr(fp_model_cls, "get_processor"):
+            processor = fp_model_cls.get_processor(hf_repo_name)
+        else:
+            processor = AutoProcessor.from_pretrained(
+                hf_repo_name, trust_remote_code=True
+            )
 
         if hasattr(vision_model, "veg"):
             veg = vision_model.veg
@@ -369,11 +374,20 @@ def llm_chat_demo(
             for p in image_path
         ]
 
+        if hasattr(processor, "tokenizer"):
+            tokenizer = processor.tokenizer
+
         formatted_text = fp_model_cls.get_input_prompt_with_tags(
             user_input_prompt=prompt,
             include_image=True,
             tokenizer=tokenizer,
         )
+        if hasattr(fp_model_cls, "adapt_prompt_for_processor"):
+            formatted_text = fp_model_cls.adapt_prompt_for_processor(
+                formatted_text=formatted_text,
+                processor=processor,
+                num_images=len(images),
+            )
         processed = processor(
             text=[formatted_text],
             images=images,

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 from qai_hub_models import Precision
 
@@ -26,6 +27,8 @@ from qai_hub_models.models.templates.qwen3_vl.model import (
     Qwen3VLQuantizablePreSplitBase,
     Qwen3VLSplitForwardMixin,
     Qwen3VLVisionEncoderBase,
+    VisionEncoderCollectionProtocol,
+    VisionEncoderExportProtocol,
 )
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
 
@@ -161,7 +164,9 @@ class Qwen3_VL_8B_VisionEncoder(Qwen3VLVisionEncoderBase):
 
 # Circular dependency: QuantizablePreSplit.vision_encoder_cls -> VisionEncoder and
 # VisionEncoder.quant_presplit_cls -> QuantizablePreSplit. One must be post-hoc.
-Qwen3_VL_8B_QuantizablePreSplit.vision_encoder_cls = Qwen3_VL_8B_VisionEncoder
+Qwen3_VL_8B_QuantizablePreSplit.vision_encoder_cls = cast(
+    type[VisionEncoderExportProtocol], Qwen3_VL_8B_VisionEncoder
+)
 
 
 class Qwen3_VL_8B_PartBase(Qwen3VLPartBase):
@@ -241,7 +246,9 @@ class Qwen3_VL_8B_Collection(Qwen3VLCollectionBase):
     fp_presplit_cls = Qwen3_VL_8B_PreSplit
     quant_presplit_cls = Qwen3_VL_8B_QuantizablePreSplit
     part_base_cls = Qwen3_VL_8B_PartBase
-    vision_encoder_cls = Qwen3_VL_8B_VisionEncoder
+    vision_encoder_cls = cast(
+        type[VisionEncoderCollectionProtocol], Qwen3_VL_8B_VisionEncoder
+    )
     num_deepstack_layers = NUM_DEEPSTACK_LAYERS
     vision_patch_size = VISION_PATCH_SIZE
     default_image_height = DEFAULT_IMAGE_HEIGHT

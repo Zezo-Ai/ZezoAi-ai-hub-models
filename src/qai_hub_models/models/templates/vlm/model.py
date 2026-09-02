@@ -14,14 +14,15 @@ import torch
 from qai_hub_models.models.templates.llm.model import (
     DEFAULT_CALIBRATION_SEQ_LEN,
     DEFAULT_CONTEXT_LENGTH,
+    LLMBase,
     LLMDynamic_AIMETOnnx,
 )
+from qai_hub_models.models.templates.vlm.processor_factory import VLMProcessorHooksMixin
 
 if TYPE_CHECKING:
     from qai_hub.public_rest_api import DatasetEntries
 
     from qai_hub_models.models.templates.lm_schema import DatasetSpec
-
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,10 @@ logger = logging.getLogger(__name__)
 # models author their own default image dimensions and pass them down; this is
 # the generic default for callers that don't.
 DEFAULT_IMAGE_SIZE: tuple[int, int] = (512, 512)
+
+
+class VLMBase(VLMProcessorHooksMixin, LLMBase):
+    """FP base class for vision-language models (processor/prompt hooks)."""
 
 
 class VLMDynamic_AIMETOnnx(LLMDynamic_AIMETOnnx):
@@ -108,9 +113,13 @@ class VLMDynamic_AIMETOnnx(LLMDynamic_AIMETOnnx):
                 hf_repo = self.checkpoint
             if hf_repo is None:
                 hf_repo = self.llm_config._name_or_path
-            dataset_kwargs["processor"] = AutoProcessor.from_pretrained(
-                hf_repo, trust_remote_code=True
-            )
+            fp_model_cls = getattr(self, "FPModel", None)
+            if fp_model_cls is not None and hasattr(fp_model_cls, "get_processor"):
+                dataset_kwargs["processor"] = fp_model_cls.get_processor(hf_repo)
+            else:
+                dataset_kwargs["processor"] = AutoProcessor.from_pretrained(
+                    hf_repo, trust_remote_code=True
+                )
             dataset_kwargs["image_size"] = image_size
 
         dataset = instantiate_dataset(

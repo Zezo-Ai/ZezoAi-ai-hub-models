@@ -117,6 +117,11 @@ def make_generator(
             freeze=True,
         ).to(device)
         config = model._original_llm_config
+        configure_generator_config = getattr(
+            model_cls, "configure_generator_config", None
+        )
+        if callable(configure_generator_config):
+            config = configure_generator_config(model, config)
         if vision_model is not None:
             VisionWrapper = model_cls.VisionModelWrapper  # type: ignore[attr-defined]
             vision_model = VisionWrapper(vision_model).to(device).float()

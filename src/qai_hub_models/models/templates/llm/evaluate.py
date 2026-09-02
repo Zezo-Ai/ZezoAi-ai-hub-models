@@ -55,12 +55,15 @@ def get_dataset(
     context_length: int = DEFAULT_CONTEXT_LENGTH,
     processor: Any = None,
     image_size: tuple[int, int] | None = None,
+    image_placeholder: str | None = None,
 ) -> DataLoader:
     extra_kwargs: dict[str, Any] = {}
     if processor is not None:
         extra_kwargs["processor"] = processor
     if image_size is not None:
         extra_kwargs["image_size"] = image_size
+    if image_placeholder is not None:
+        extra_kwargs["image_placeholder"] = image_placeholder
     dataset = instantiate_dataset(
         dataset_cls,
         DatasetSplit.TEST,
@@ -134,10 +137,21 @@ def evaluate(
 
     # For VLM models, load processor so multimodal datasets include images.
     vlm_processor = None
+    image_placeholder = None
     if vision_encoder_cls is not None and hf_repo_name is not None:
-        vlm_processor = AutoProcessor.from_pretrained(
-            hf_repo_name, trust_remote_code=True
-        )
+        if hasattr(fp_model_cls, "get_processor"):
+            vlm_processor = fp_model_cls.get_processor(hf_repo_name)
+        else:
+            vlm_processor = AutoProcessor.from_pretrained(
+                hf_repo_name,
+                trust_remote_code=True,
+            )
+        if hasattr(fp_model_cls, "get_image_placeholder_for_processor"):
+            image_placeholder = fp_model_cls.get_image_placeholder_for_processor(
+                vlm_processor
+            )
+        else:
+            image_placeholder = "<image>"
         if vlm_image_size is None:
             raise ValueError(
                 "vlm_image_size must be provided when vision_encoder_cls is set."
@@ -153,6 +167,7 @@ def evaluate(
         context_length=context_length,
         processor=vlm_processor,
         image_size=vlm_image_size,
+        image_placeholder=image_placeholder,
     )
     evaluator = fp_model.get_evaluator(
         dataset_cls.dataset_name(),
