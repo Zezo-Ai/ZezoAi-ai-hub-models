@@ -148,6 +148,9 @@ jobs:
       QDC_API_TOKEN: ${{ secrets.QDC_API_KEY }}
       QDC_PRIVATE_API_KEY: ${{ secrets.QDC_PRIVATE_API_KEY }}
       JOBS_FILE: ${{ github.workspace }}/src/qai_hub_models/scorecard/intermediates/geniex_jobs_${{ matrix.pool }}_pool.yaml
+      # Distinguishes the QAIRT and llama.cpp legs, which run side by side in the
+      # same workflow run and would otherwise collide on artifact name.
+      PLUGIN_LABEL: ${{ inputs.geniex_bench_plugin == 'qairt' && 'GenieX-QAIRT' || (inputs.geniex_bench_plugin == 'llama_cpp' && 'GenieX-llama.cpp' || 'GenieX') }}
     outputs:
       results_url: ${{ steps.upload-results.outputs.artifact-url }}
       perf_updates_url: ${{ steps.upload-perf-updates.outputs.artifact-url }}
@@ -266,24 +269,25 @@ jobs:
           --perf-updates-json "$GITHUB_WORKSPACE/geniex_perf_updates_${{ matrix.pool }}.jsonl" \
           "${extra[@]}"
 
-    - name: Upload geniex jobs yaml
-      if: ${{ always() }}
-      uses: actions/upload-artifact@v7
-      with:
-        name: geniex-jobs-${{ matrix.pool }}
-        path: ${{ env.JOBS_FILE }}
-        if-no-files-found: ignore
-
     - name: Upload geniex-bench results
       id: upload-results
       if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v7
       with:
-        name: geniex-bench-results-${{ matrix.pool }}
+        name: "${{ env.PLUGIN_LABEL }} Results (${{ matrix.pool == 'dedicated' && 'Dedicated' || 'Shared' }} Pool QDC)"
         path: |
           ${{ github.workspace }}/geniex_bench_results.csv
           ${{ github.workspace }}/geniex_bench_results/**/*.json
-          ${{ github.workspace }}/geniex_bench_results/qdc_logs/**/*.zip
+        retention-days: 14
+
+    - name: Upload QDC logs
+      id: upload-qdc-logs
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: "${{ env.PLUGIN_LABEL }} QDC Logs (${{ matrix.pool == 'dedicated' && 'Dedicated' || 'Shared' }} Pool)"
+        path: ${{ github.workspace }}/geniex_bench_results/qdc_logs/**/*.zip
+        if-no-files-found: ignore
         # Raw device log zips can incidentally capture device identifiers /
         # paths; keep them short-lived rather than the org default (90 days).
         retention-days: 14

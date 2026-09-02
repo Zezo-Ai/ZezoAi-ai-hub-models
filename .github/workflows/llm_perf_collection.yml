@@ -224,21 +224,13 @@ jobs:
           --jobs-file "$JOBS_FILE" \
           --junit-xml "$GITHUB_WORKSPACE/test-results/models-junit-llm_perf.xml"
 
-    - name: Upload genie jobs yaml
-      if: ${{ always() }}
-      uses: actions/upload-artifact@v7
-      with:
-        name: genie-jobs-${{ matrix.pool }}
-        path: ${{ env.JOBS_FILE }}
-        if-no-files-found: ignore
-
     # One archive per QDC job, kept for successful and failed jobs alike -- a
     # failed job's device-side reason is otherwise unrecoverable without a pool token.
     - name: Upload QDC device logs
       if: ${{ always() }}
       uses: actions/upload-artifact@v7
       with:
-        name: qdc-logs-genie-${{ matrix.pool }}
+        name: "Genie QDC Logs (${{ matrix.pool == 'dedicated' && 'Dedicated' || 'Shared' }} Pool)"
         path: ${{ github.workspace }}/**/qdc_logs/**/*.zip
         if-no-files-found: ignore
 
