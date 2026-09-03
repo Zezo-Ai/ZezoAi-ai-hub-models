@@ -4,7 +4,6 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import re
@@ -15,7 +14,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from qualcomm_device_cloud_sdk.models import ArtifactType
-from transformers import AutoTokenizer
 
 from qai_hub_models.models.templates.llm.common import (
     JobOutcome,
@@ -107,10 +105,11 @@ class GenieXBenchArtifactHandler(ABC):
     def _stage_eval_prompts(
         dest_dir: os.PathLike | str, eval_prompts: list[str]
     ) -> None:
-        """Write chat-templated prompts to prompts/prompt_NNN.txt in the artifact.
+        """Write raw prompts to prompts/prompt_NNN.txt in the artifact.
 
         The device script feeds each file to its own `geniex-bench --accuracy
-        --prompt-file` process; presence of the directory is what turns eval on.
+        --prompt-file` process, which now applies the bundle's own chat
+        template on-device; presence of the directory is what turns eval on.
         """
         prompts_dir = os.path.join(dest_dir, "prompts")
         os.makedirs(prompts_dir, exist_ok=True)
@@ -121,6 +120,16 @@ class GenieXBenchArtifactHandler(ABC):
                 encoding="utf-8",
             ) as f:
                 f.write(prompt)
+
+    @staticmethod
+    def _stage_system_prompt(dest_dir: os.PathLike | str, system_prompt: str) -> None:
+        """Write the eval system prompt to prompts/system_prompt.txt in the artifact."""
+        prompts_dir = os.path.join(dest_dir, "prompts")
+        os.makedirs(prompts_dir, exist_ok=True)
+        with open(
+            os.path.join(prompts_dir, "system_prompt.txt"), "w", encoding="utf-8"
+        ) as f:
+            f.write(system_prompt.rstrip("\n"))
 
     @staticmethod
     def _apply_common_replacements(
@@ -245,6 +254,7 @@ class GenieXBenchAndroidArtifactHandler(GenieXBenchArtifactHandler):
 
         if eval_prompts:
             self._stage_eval_prompts(dest_dir, eval_prompts)
+            self._stage_system_prompt(dest_dir, DEFAULT_LLM_SYSTEM_PROMPT)
 
         zip_path = os.path.join(os.path.dirname(dest_dir), "geniex_bench_test.zip")
         create_zip(zip_path, dest_dir)
@@ -306,6 +316,7 @@ class GenieXBenchLinuxArtifactHandler(GenieXBenchArtifactHandler):
 
         if eval_prompts:
             self._stage_eval_prompts(dest_dir, eval_prompts)
+            self._stage_system_prompt(dest_dir, DEFAULT_LLM_SYSTEM_PROMPT)
 
         zip_path = os.path.join(os.path.dirname(dest_dir), "geniex_bench_test.zip")
         create_zip(zip_path, dest_dir)
@@ -369,6 +380,7 @@ class GenieXBenchWindowsArtifactHandler(GenieXBenchArtifactHandler):
 
         if eval_prompts:
             self._stage_eval_prompts(dest_dir, eval_prompts)
+            self._stage_system_prompt(dest_dir, DEFAULT_LLM_SYSTEM_PROMPT)
 
         zip_path = os.path.join(os.path.dirname(dest_dir), "geniex_bench_test.zip")
         create_zip(zip_path, dest_dir)
@@ -703,65 +715,6 @@ def save_eval_metadata_json(
     print(f"Eval metadata saved to: {output_path}")
 
 
-def _apply_chat_template(prompts: list[str], tokenizer_source: str) -> list[str]:
-    """Wrap each prompt in the model's chat template so --prompt-file gets a real turn.
-
-    geniex-bench feeds --prompt-file verbatim (no template), so the turn is
-    applied host-side. Thinking is disabled to match the genie side.
-    """
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_source)
-    templated: list[str] = []
-    for prompt in prompts:
-        messages = [
-            {"role": "system", "content": DEFAULT_LLM_SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ]
-        # Templates fail many ways on a system role (Gemma's raise_exception(),
-        # ValueError on unsupported roles); fall back to a user-only turn.
-        try:
-            formatted = tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True,
-                enable_thinking=False,
-            )
-        except Exception:
-            messages = [{"role": "user", "content": prompt}]
-            formatted = tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True,
-                enable_thinking=False,
-            )
-        templated.append(formatted)
-    return templated
-
-
-def _resolve_tokenizer_source(
-    plugin: str, model_rows: list[tuple[str, str]], model_id: str | None
-) -> str:
-    """Where to load the chat template from.
-
-    For qairt, uses the local genie/geniex bundle: its tokenizer matches
-    what ships on-device, avoids gated-HF auth, and (with a current
-    transformers) parses the newer list-of-dicts chat_template format
-    correctly. For llama_cpp (gguf refs have no local tokenizer directory),
-    uses ``HF_REPO_NAME`` from the model module.
-    """
-    if plugin == "qairt":
-        return model_rows[0][1]
-    hf_repo: str | None = None
-    if model_id:
-        module = importlib.import_module(f"qai_hub_models.models.{model_id}")
-        hf_repo = getattr(module, "HF_REPO_NAME", None)
-    if hf_repo:
-        return hf_repo
-    raise ValueError(
-        f"{model_id or '<unknown>'} has no HF_REPO_NAME; cannot resolve a "
-        "chat template for llama_cpp eval prompts."
-    )
-
-
 def _hf_repo(model_url: str) -> str:
     if "huggingface.co/" not in model_url:
         raise ValueError(f"Only HuggingFace URLs are supported: {model_url}")
@@ -803,7 +756,6 @@ def submit_geniex_bench_only(
     geniex_version: str | None = None,
     llamacpp_quant: str | None = None,
     eval_prompts: list[str] | None = None,
-    model_id: str | None = None,
     run_perf: bool = True,
 ) -> tuple[str, list[str], dict[str, str]]:
     """Upload artifacts and submit a geniex-bench job, returning the id.
@@ -812,10 +764,10 @@ def submit_geniex_bench_only(
     computed ``matrix_rows`` and ``qairt_bundles`` so the caller can
     persist them for a later resubmit.
 
-    eval_prompts set => accuracy collection: chat-templated host-side and
-    staged into the bundle for one ``geniex-bench --accuracy`` pass. model_id
-    resolves the llama_cpp chat template. run_perf=False submits an eval-only
-    job (no TPS/TTFT sweep).
+    eval_prompts set => accuracy collection: staged raw into the bundle for
+    one ``geniex-bench --accuracy`` pass, which applies the bundle's own chat
+    template on-device. run_perf=False submits an eval-only job (no TPS/TTFT
+    sweep).
     """
     if plugin == "llama_cpp" and not llamacpp_quant:
         raise ValueError("llamacpp_quant is required when plugin='llama_cpp'.")
@@ -824,19 +776,6 @@ def submit_geniex_bench_only(
     matrix_rows, qairt_bundles = _build_matrix_rows(
         model_rows, plugin, device_alias, llamacpp_quant
     )
-
-    # Eval prep is additive to perf: on failure, drop eval to save the perf
-    # data, but let an eval-only run (run_perf=False) raise.
-    templated_prompts: list[str] | None = None
-    if eval_prompts:
-        try:
-            templated_prompts = _apply_chat_template(
-                eval_prompts, _resolve_tokenizer_source(plugin, model_rows, model_id)
-            )
-        except Exception as e:
-            if not run_perf:
-                raise
-            print(f"WARNING: eval prep failed ({e}); running perf only.")
 
     geniex_job = GenieXBenchQDCJobs(
         api_key=api_token,
@@ -852,7 +791,7 @@ def submit_geniex_bench_only(
         context_lengths=context_lengths,
         qairt_bundles=qairt_bundles or None,
         geniex_version=geniex_version,
-        eval_prompts=templated_prompts,
+        eval_prompts=eval_prompts,
         run_perf=run_perf,
     )
 

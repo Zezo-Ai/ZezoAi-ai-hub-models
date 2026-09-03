@@ -123,6 +123,13 @@ if ($RUN_EVAL) {
     if (-not (Test-Path $PROMPT_DIR)) {
         throw "eval requested but $PROMPT_DIR missing"
     }
+    $systemPromptFile = "$PROMPT_DIR\system_prompt.txt"
+    if (-not (Test-Path $systemPromptFile)) {
+        throw "eval requested but $systemPromptFile missing"
+    }
+    $SYSTEM_PROMPT = Get-Content $systemPromptFile -Raw -Encoding UTF8
+    # -ArgumentList doesn't quote elements itself; escape so this survives as one arg.
+    $SYSTEM_PROMPT_ARG = '"' + ($SYSTEM_PROMPT -replace '"', '\"') + '"'
     Write-Output "=== accuracy eval ==="
     # Eval model/plugin/device come from the first matrix row (single-model job).
     # @($rows) forces array semantics: with a single MODELS line the pipeline
@@ -155,6 +162,7 @@ if ($RUN_EVAL) {
                 $proc = Start-Process -FilePath "$BUNDLE\bin\geniex-bench.exe" -ArgumentList @(
                     "--plugin", $e_plugin, "--device", $e_dev, "-m", $e_model,
                     "--accuracy", "--prompt-file", $pf.FullName,
+                    "--system-prompt", $SYSTEM_PROMPT_ARG, "--no-think",
                     "-c", "{EVAL_CTX}", "-n", "{EVAL_N_GEN}",
                     "--mm-data-dir", $MM_CACHE, "--chipset", "{CHIPSET}"
                 ) -NoNewWindow -PassThru -RedirectStandardOutput $tmpOut `

@@ -124,6 +124,11 @@ if [ "$RUN_EVAL" = "1" ]; then
     echo "FATAL: eval requested but $PROMPT_DIR missing"
     exit 1
   fi
+  if [ ! -f "$PROMPT_DIR/system_prompt.txt" ]; then
+    echo "FATAL: eval requested but $PROMPT_DIR/system_prompt.txt missing"
+    exit 1
+  fi
+  SYSTEM_PROMPT=$(cat "$PROMPT_DIR/system_prompt.txt")
   echo "=== accuracy eval ==="
   # The eval model/plugin/device come from the first matrix row (single-model
   # geniex-bench jobs submit one row). col4 is the -m model ref (a device-side
@@ -164,6 +169,7 @@ if [ "$RUN_EVAL" = "1" ]; then
     if geniex_eval_retry "$pout" "$perr" \
       timeout {EVAL_TIMEOUT_S} ./bin/geniex-bench --plugin "$e_plugin" --device "$e_dev" \
         -m "$e_model" --accuracy --prompt-file "$prompt_file" \
+        --system-prompt "$SYSTEM_PROMPT" --no-think \
         -c {EVAL_CTX} -n {EVAL_N_GEN} --mm-data-dir "$MM_CACHE" \
         --chipset "{CHIPSET}"; then
       eval_ran=$((eval_ran + 1))

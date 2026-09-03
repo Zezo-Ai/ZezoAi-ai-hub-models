@@ -165,9 +165,8 @@ jobs:
       with:
         python-version: USE_EXISTING_INSTALL
         venv-path: ${{ env.VENV_PATH }}
-        # geniex_jobs imports transformers (host-side chat templating for the
-        # accuracy eval), which only ships in global_requirements. Mirrors genie's
-        # collection job so the two runtimes install the same deps.
+        # The grader imports transformers, which only ships in global_requirements.
+        # Mirrors genie's collection job so the two runtimes install the same deps.
         bnt-venv-install-cmd: install_global_requirements
         aws-role-arn: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
 

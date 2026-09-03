@@ -334,7 +334,6 @@ def run_geniex_bench_job(
             geniex_version=geniex_version,
             llamacpp_quant=llamacpp_quant,
             eval_prompts=eval_prompts,
-            model_id=model_id,
             run_perf=run_perf,
         )
         return job_id
@@ -433,7 +432,6 @@ def _submit_one(
         geniex_version=geniex_version,
         llamacpp_quant=llamacpp_quant,
         eval_prompts=eval_prompts,
-        model_id=model_id,
         run_perf=run_perf,
     )
     runtime = "GENIEX_QAIRT" if plugin == "qairt" else "GENIEX_LLAMACPP"
@@ -506,7 +504,6 @@ def _collect_one(
             geniex_version=geniex_version,
             llamacpp_quant=llamacpp_quant,
             eval_prompts=eval_prompts,
-            model_id=model_id,
             run_perf=run_perf,
         )
         return new_job_id

@@ -201,6 +201,9 @@ def _run_eval(
       against the set this loop iterated rather than re-globbing.
     """
     assert os.path.isdir(HOST_PROMPTS), f"eval requested but {HOST_PROMPTS} missing"
+    assert os.path.isfile(os.path.join(HOST_PROMPTS, "system_prompt.txt")), (
+        f"eval requested but {HOST_PROMPTS}/system_prompt.txt missing"
+    )
     prompt_files = sorted(
         f for f in os.listdir(HOST_PROMPTS) if f.startswith("prompt_")
     )
@@ -233,6 +236,7 @@ def _run_eval(
             f"rm -f {pout} {perr} && "
             f"{env} timeout {EVAL_TIMEOUT_S} ./bin/geniex-bench --plugin {PLUGIN} "
             f"--device {device_alias} -m {model_ref} --accuracy --prompt-file {pf} "
+            f'--system-prompt "$(cat {DEVICE_PROMPTS}/system_prompt.txt)" --no-think '
             f"-c {EVAL_CTX} -n {EVAL_N_GEN} --mm-data-dir {DEVICE_MM_CACHE} "
             f"--chipset '{chipset}' >{pout} 2>{perr}; "
             f"rc=$?; grep -q 'Context length exceeded' {perr} && rc=0; exit $rc"
