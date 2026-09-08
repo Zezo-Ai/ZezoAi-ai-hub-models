@@ -25,6 +25,7 @@ from qai_hub_models.utils.export.result import (
     CollectionExportResult,
     ExportResult,
     LegacyCollectionExportResult,
+    MultiGraphCollectionExportResult,
 )
 from qai_hub_models.utils.path_helpers import MODEL_IDS, QAIHM_MODELS_ROOT
 
@@ -223,6 +224,18 @@ def main() -> None:
                             details[str(precision)][component_name] = (
                                 get_model_size_and_parameters(er.compile_job)
                             )
+                    elif isinstance(results, MultiGraphCollectionExportResult):
+                        if results.compile_jobs:
+                            seen_components: set[str] = set()
+                            for (
+                                component_name,
+                                _graph_name,
+                            ), compile_job in results.compile_jobs.items():
+                                if component_name not in seen_components:
+                                    details[str(precision)][component_name] = (
+                                        get_model_size_and_parameters(compile_job)
+                                    )
+                                    seen_components.add(component_name)
                     elif isinstance(results, CollectionExportResult):
                         if results.compile_jobs:
                             for (
