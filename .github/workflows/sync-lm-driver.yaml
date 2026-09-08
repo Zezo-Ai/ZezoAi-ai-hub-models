@@ -10,7 +10,7 @@ concurrency:
   group: sync-lm-driver
 
 env:
-  SOURCE_REPO: https://github.com/qualcomm/aimet.git
+  SOURCE_REPO: https://github.com/qcom-ai-hub/aimet.git
   SOURCE_BRANCH: develop
   SOURCE_DIR: GenAILab/qai_hub_lm/models
   TARGET_DIR: src/qai_hub_models/models/templates/lm_driver
@@ -27,12 +27,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Mint AIMET reader token
+        id: aimet-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.READER_APP_ID }}
+          private-key: ${{ secrets.READER_APP_PRIVATE_KEY }}
+          owner: qcom-ai-hub
+          repositories: aimet
+
       - name: Configure git
         run: |
           git config user.name "qaihm-bot_QCOM"
           git config user.email "qaihm_bot@qti.qualcomm.com"
 
       - name: Fetch AIMET source and sync lm_driver
+        env:
+          GH_TOKEN: ${{ steps.aimet-token.outputs.token }}
         run: |
           set -euo pipefail
 
@@ -44,8 +55,9 @@ jobs:
           TMPDIR=$(mktemp -d)
           trap 'rm -rf "$TMPDIR"' EXIT
 
+          AUTHED_SOURCE_REPO="https://x-access-token:${GH_TOKEN}@${SOURCE_REPO#https://}"
           git clone --depth=1 --filter=blob:none --sparse \
-            --branch "$SOURCE_BRANCH" "$SOURCE_REPO" "$TMPDIR/aimet"
+            --branch "$SOURCE_BRANCH" "$AUTHED_SOURCE_REPO" "$TMPDIR/aimet"
           cd "$TMPDIR/aimet"
           git sparse-checkout set "$SOURCE_DIR"
           cd -
