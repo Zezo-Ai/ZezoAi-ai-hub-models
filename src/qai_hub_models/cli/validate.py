@@ -363,7 +363,10 @@ def _check_manifest(source_dir: Path, report: Report) -> QAIHMModelManifest | No
         return None
 
     try:
-        QAIHMModelManifest.model_validate(raw_manifest.model_dump())
+        # mode="json" so nested mappings keyed by Precision/TargetRuntime dump to
+        # strings; ModelDisableReasonsMapping.__init__ takes **kwargs and pydantic
+        # splats these keys, which TypeErrors on non-str keys.
+        QAIHMModelManifest.model_validate(raw_manifest.model_dump(mode="json"))
         report.add(Result("manifest.yaml validates", "Manifest", Status.PASS))
     except Exception as exc:
         report.add(Result("manifest.yaml validates", "Manifest", Status.FAIL, str(exc)))

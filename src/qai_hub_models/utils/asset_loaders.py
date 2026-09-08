@@ -124,6 +124,41 @@ def check_unpublished_model_warning() -> bool:
     return query_yes_no("Continue?")
 
 
+DISABLED_PATH_WARNING = (
+    "This precision + runtime pair is recorded as failing in the model's manifest, "
+    "so it is expected not to work. It stays selectable because the record reflects "
+    "the last time the pair was run — the model may have been fixed since — but "
+    "nothing has re-verified it."
+)
+
+
+def check_disabled_path_warning(path_label: str, reason: str) -> bool:
+    """
+    Check if user wants to continue with a (precision, runtime) pair the manifest
+    records as failing.
+
+    Same environment escapes as :func:`check_unpublished_model_warning`: dev mode
+    (QAIHM_DEV_MODE=1), CI (QAIHM_CI=1), and pytest silently return True.
+
+    Parameters
+    ----------
+    path_label
+        Human-readable pair, e.g. ``"float + tflite"``.
+    reason
+        The manifest's recorded failure reason.
+
+    Returns
+    -------
+    bool
+        True if user wants to continue, False otherwise.
+    """
+    if DevModeEnvvar.get() or IsOnCIEnvvar.get() or os.environ.get("PYTEST_VERSION"):
+        return True
+    print(f"WARNING: {path_label} — {DISABLED_PATH_WARNING}")
+    print(f"  Recorded reason: {reason}")
+    return query_yes_no("Continue?")
+
+
 @contextmanager
 def repo_in_sys_path(repo_dir: str) -> Generator[None, None, None]:
     """Temporarily add a directory to sys.path for pickle unpickling, with guaranteed cleanup.

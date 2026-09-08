@@ -14,6 +14,7 @@ from unittest.mock import patch
 import pytest
 from packaging.specifiers import SpecifierSet
 
+from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.cli import validate as validate_mod
 from qai_hub_models.cli.dispatch import run_model_script
 from qai_hub_models.cli.install import InstallAborted
@@ -30,6 +31,7 @@ from qai_hub_models.cli.validate import (
     _check_id_matches_folder,
     _check_in_tree_status,
     _check_install,
+    _check_manifest,
     _check_name_style,
     _check_no_self_referential_imports,
     _check_related_not_self,
@@ -437,6 +439,69 @@ class TestRender:
         assert payload["counts"]["FAIL"] == 1
         assert payload["failed"] is True
         assert len(payload["rows"]) == 3
+
+
+class TestCheckManifest:
+    MANIFEST = """\
+id: my_recipe
+name: My Recipe
+headline: A model for testing.
+description: A model for testing manifest validation.
+domain: Computer Vision
+use_case: Image Classification
+license_type: apache-2.0
+license: https://example.com/license
+source_repo: https://example.com/repo
+research_paper: https://arxiv.org/abs/1234.5678
+research_paper_title: A Paper
+form_factors:
+- Phone
+applicable_scenarios:
+- Inventory Management
+supported_precisions:
+- float
+"""
+
+    def _write(self, tmp_path: Path, extra: str = "") -> Path:
+        source_dir = tmp_path / "my_recipe"
+        source_dir.mkdir()
+        (source_dir / "manifest.yaml").write_text(self.MANIFEST + extra)
+        return source_dir
+
+    def _validates_row(self, report: Report) -> Result:
+        rows = [r for r in report.rows if r.name == "manifest.yaml validates"]
+        assert len(rows) == 1
+        return rows[0]
+
+    def test_plain_manifest_validates(self, tmp_path: Path) -> None:
+        report = Report()
+        assert _check_manifest(self._write(tmp_path), report) is not None
+        assert self._validates_row(report).status is Status.PASS
+
+    def test_disabled_paths_validates(self, tmp_path: Path) -> None:
+        """
+        disabled_paths is keyed by Precision/TargetRuntime, and
+        ModelDisableReasonsMapping.__init__ takes **kwargs, so a python-mode
+        model_dump round-trip raised "TypeError: keywords must be strings" and
+        every recipe recording a failed path failed validation.
+        """
+        extra = """\
+disabled_paths:
+  float:
+    tflite:
+      scorecard_accuracy_failure: "On-device 58.7 vs 92.6 torch — not investigated"
+"""
+        report = Report()
+        manifest = _check_manifest(self._write(tmp_path, extra), report)
+        assert manifest is not None
+        row = self._validates_row(report)
+        assert row.status is Status.PASS, row.detail
+        assert manifest.disabled_paths is not None
+        reasons = manifest.disabled_paths.peek_disable_reasons(
+            Precision.float, TargetRuntime.TFLITE
+        )
+        assert reasons is not None
+        assert reasons.has_failure
 
 
 class TestDispatchValidate:

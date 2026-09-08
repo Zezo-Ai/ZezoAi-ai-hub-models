@@ -17,6 +17,7 @@ import pytest
 
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.cli.dispatch import (
+    _confirm_run_ok,
     build_evaluate_parser_for,
     build_export_parser_for,
     run_model_script,
@@ -286,6 +287,96 @@ def test_evaluate_parser_uses_export_paths() -> None:
         kwargs = mock_evaluate_parser.call_args.kwargs
         assert kwargs["supported_precision_runtimes"] is export_paths
         assert kwargs["supported_precision_runtimes"] is not testing_paths
+
+
+class TestDisabledPathHandling:
+    """A path with a manifest failure is still selectable, but not the default,
+    and not runnable without confirming.
+    """
+
+    @staticmethod
+    def _manifest(failing: set[tuple[Precision, TargetRuntime]]) -> Mock:
+        manifest = Mock()
+        paths = {Precision.float: [TargetRuntime.TFLITE, TargetRuntime.QNN_DLC]}
+        manifest.get_supported_paths_for_export.return_value = paths
+        manifest.failure_reason.side_effect = (
+            lambda p, r: "recorded failure" if (p, r) in failing else None
+        )
+        manifest.default_device = None
+        manifest.separate_quantize_script = False
+        manifest.status = MODEL_STATUS.UNSET
+        return manifest
+
+    def _build(self, manifest: Mock) -> Mock:
+        with (
+            patch(
+                "qai_hub_models.cli.dispatch.resolve_manifest", return_value=manifest
+            ),
+            patch("qai_hub_models.cli.dispatch.resolve_model_cls", return_value=Mock()),
+            patch("qai_hub_models.cli.dispatch.select_pipeline"),
+            patch("qai_hub_models.cli.dispatch.export_parser") as mock_parser,
+        ):
+            build_export_parser_for(Path("/tmp/fake_model"))
+        return mock_parser
+
+    def test_default_skips_the_failing_runtime(self) -> None:
+        """Tflite is first in TargetRuntime order, so without this the default
+        would be a runtime the manifest records as broken.
+        """
+        manifest = self._manifest({(Precision.float, TargetRuntime.TFLITE)})
+        mock_parser = self._build(manifest)
+        preferred = mock_parser.return_value.set_preferred_precision_runtimes
+        preferred.assert_called_once_with({Precision.float: [TargetRuntime.QNN_DLC]})
+
+    def test_all_runtimes_stay_selectable(self) -> None:
+        manifest = self._manifest({(Precision.float, TargetRuntime.TFLITE)})
+        mock_parser = self._build(manifest)
+        kwargs = mock_parser.call_args.kwargs
+        assert kwargs["supported_precision_runtimes"][Precision.float] == [
+            TargetRuntime.TFLITE,
+            TargetRuntime.QNN_DLC,
+        ]
+
+    def test_no_failures_prefers_everything(self) -> None:
+        mock_parser = self._build(self._manifest(set()))
+        preferred = mock_parser.return_value.set_preferred_precision_runtimes
+        preferred.assert_called_once_with(
+            {Precision.float: [TargetRuntime.TFLITE, TargetRuntime.QNN_DLC]}
+        )
+
+    def test_running_a_failing_path_prompts_and_can_decline(self) -> None:
+        manifest = self._manifest({(Precision.float, TargetRuntime.TFLITE)})
+        args = argparse.Namespace(
+            precision=Precision.float, target_runtime=TargetRuntime.TFLITE
+        )
+        with (
+            patch(
+                "qai_hub_models.cli.dispatch.resolve_manifest", return_value=manifest
+            ),
+            patch(
+                "qai_hub_models.cli.dispatch.check_disabled_path_warning",
+                return_value=False,
+            ) as mock_check,
+        ):
+            assert _confirm_run_ok(Path("/tmp/fake_model"), args) is False
+        mock_check.assert_called_once()
+        assert "recorded failure" in mock_check.call_args.args[1]
+
+    def test_running_a_passing_path_does_not_prompt(self) -> None:
+        manifest = self._manifest({(Precision.float, TargetRuntime.TFLITE)})
+        args = argparse.Namespace(
+            precision=Precision.float, target_runtime=TargetRuntime.QNN_DLC
+        )
+        with (
+            patch(
+                "qai_hub_models.cli.dispatch.resolve_manifest", return_value=manifest
+            ),
+            patch(
+                "qai_hub_models.cli.dispatch.check_disabled_path_warning"
+            ) as mock_check,
+        ):
+            assert _confirm_run_ok(Path("/tmp/fake_model"), args) is True
+        mock_check.assert_not_called()
 
 
 class TestRecipeCommandHelp:

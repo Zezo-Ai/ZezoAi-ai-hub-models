@@ -183,10 +183,29 @@ Standalone folder contains everything the CLI needs. No generated files ship in 
 
 3. **`demo.py`** — parses args (`model_from_cli_args()` from `args.py`), loads sample input (`load_image()` from `asset_loaders.py`), runs the app, displays / saves output (`display_or_save_image()`).
 
+   **Try hard to ship a demo that actually works.** Not a stub, not a shape-printer. `qai-hub-models demo <target>` must load a real sample input, run the full app (pre → forward → post), and emit output a human can judge — an annotated image, a class label with confidence, a transcript, a saved file. Run it yourself and look at the output before you call the recipe done: a classifier naming a plausible class for the photo, boxes landing on the objects, a mask following the subject, an upscaled image that is visibly sharper. Shapes-and-no-crash is what `validate` already covers; the demo's job is the qualitative check nothing else does.
+
+   Only fall back to a minimal demo if the model genuinely has no inspectable output, and say so in the closing summary. Never delete `demo.py` to dodge a broken demo — a wrong-looking demo is a real finding about the recipe, usually preprocessing.
+
+   **On-target support.** Wire the demo to run on device too, unless something blocks it. Three helpers from `utils/args.py`, in this order:
+
+   ```python
+   parser = get_on_device_demo_parser(parser, add_output_dir=True)
+   args = parser.parse_args([] if is_test else None)
+   validate_on_device_demo_args(args, MODEL_ID)
+   inference_model = demo_model_from_cli_args(Model, MODEL_ID, args)
+   ```
+
+   `demo_model_from_cli_args` returns a torch model under the default `--eval-mode fp` and an on-device wrapper under `--eval-mode on-device`, so the App code below it is identical either way — which is the whole point: `App` takes a `Callable`. Most templates' demo helpers (`templates/super_resolution/demo.py`, the classifier and detector equivalents) already do this; inherit rather than reimplement.
+
+   Then set `has_on_target_demo: true` in `manifest.yaml`. That flag is what makes `export` print the ready-to-run `qai-hub-models demo <target> --eval-mode on-device --hub-model-id <id>` line at the end of a compile. **No later skill verifies it**, so setting it optimistically ships a command that fails in a user's hands — set it only from the wiring you can see in `demo.py`. Leave it `false` (or omit it) when the demo can't work on device: postprocessing that needs the torch graph, an App that calls model internals rather than a plain `Callable`, or a CollectionModel whose components the demo drives in a loop that only makes sense in torch. Say which reason applies in the closing summary.
+
 4. **`test.py`** — `test_task` (PyTorch accuracy on a sample input), `test_demo` (demo runs without error).
 
 5. **`manifest.yaml`** — metadata + build/export options + dependency graph, one unified schema.
    - Website metadata (`name`, `id`, `headline`, `description`, `use_case`, `domain`, `license_type`, `research_paper`, `source_repo`, …) alongside build/export (`supported_precisions`, `is_collection_model`, `use_pt2`, `has_on_target_demo`, …).
+   - **`has_on_target_demo`** — set `true` when `demo.py` supports `--eval-mode on-device` (see `demo.py` below). Ship `false`/omitted otherwise.
+   - **Never author `disabled_paths` by hand here.** Nothing in this skill has run a device job, so there is nothing to disable yet. `validate-on-device` and `add-quantization` write it from real failures.
    - **Never author `technical_details` by hand.** Populated by `python qai_hub_models/scripts/autofill_manifest_yaml.py -m <model_id>` after the first successful compile. Omit the key entirely at onboarding time — even partial values drift.
    - **Never set `status:`** for standalone / external recipes. The field is reserved for in-tree (see `onboard-internal`). Omit it — not `status: unset`, not `status: draft`, no key at all.
    - `use_case`, `tags`, `domain`, `license_type` are validated enums — see `qai_hub_models/configs/_info_yaml_enums.py`.
@@ -265,6 +284,7 @@ Browse before writing preprocessing from scratch. The fastest way to find the ri
 4. Declare deps in `manifest.yaml`: `templates:`, `datasets:`, `external_repos:`, pre/post pip commands.
 5. `qai-hub-models generate-files <model_id>` — writes `README.md` and `external_repos/__init__.py`.
 6. `qai-hub-models install <model_id>`, then run `validate` (see below).
+7. `qai-hub-models demo <model_id>` — run it and look at the output. Fix the recipe until the result is qualitatively right.
 
 ## CLI
 
@@ -307,6 +327,8 @@ Before your first `validate` run, verify:
 6. **No `technical_details:` in manifest.yaml?** `grep '^technical_details:' manifest.yaml` returns nothing.
 7. **Dataset `__init__` takes `input_spec`?** Never raw `input_height` / `input_width` / `image_size` / `resolution`.
 8. **Dataset + evaluator wired?** Unless the user declined or the model has no accuracy notion: `model.py` implements `get_evaluator()` / `get_eval_dataset_classes()` / `get_calibration_dataset_cls()`. If not, wire it now — do NOT defer to `add-quantization`, which only flips the precision list.
+9. **Demo runs and its output looks right?** `qai-hub-models demo <target>` — you ran it and inspected the output, not just checked the exit code.
+10. **`has_on_target_demo` matches reality?** `true` only if `demo.py` goes through `get_on_device_demo_parser` + `validate_on_device_demo_args` + `demo_model_from_cli_args`. Never set it on a demo you haven't wired for on-device.
 
 ### Iterate-until-green
 
@@ -320,7 +342,8 @@ Read each FAIL row's `detail`, apply a targeted fix, rerun with `--no-install`. 
 
 - **Numerical parity with the reference.** Forward pass confirms shapes and no-crash, not correctness. Run the reference on a fixed input and compare against your `model.py`.
 - **License classification.** The validator confirms `license_type` matches its `license` URL. Any license is accepted — document it under `license_type` / `license` and warn the user in the final summary if it's non-commercial or copyleft. Do not hard-block. Same treatment applies to dataset licenses.
-- **Qualitative demo correctness.** Classifier picks the right class, detector boxes align, mask matches the scene, restored image is visibly cleaner.
+- **Qualitative demo correctness.** Classifier picks the right class, detector boxes align, mask matches the scene, restored image is visibly cleaner. `validate` WARNs on a *missing* `demo.py` and confirms a present one imports; it never looks at what the demo prints. Run `qai-hub-models demo <target>` yourself.
+- **That `has_on_target_demo: true` is true.** Nothing here submits a Hub job, and no later skill checks it either — the flag is only ever as good as the wiring you put in `demo.py`.
 - **`technical_details`.** Autofilled post-compile — do not hand-write.
 
 Operational validation of a written recipe (`install` cold+warm, `pytest`, `pre-commit`, `export`, on-device `evaluate`) is out of scope for this skill — this skill teaches *authoring*, not *operating*. See `/ai-hub-models:validate-on-device`.

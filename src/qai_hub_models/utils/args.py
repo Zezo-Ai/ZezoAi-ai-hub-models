@@ -167,6 +167,7 @@ class QAIHMArgumentParser(argparse.ArgumentParser):
         **kwargs: Any,
     ) -> None:
         self.supported_precision_runtimes = supported_precision_runtimes or {}
+        self.preferred_precision_runtimes: dict[Precision, list[TargetRuntime]] = {}
         self.default_device = default_device
         self.default_chipset = default_chipset
         self.model_cls = model_cls
@@ -179,6 +180,16 @@ class QAIHMArgumentParser(argparse.ArgumentParser):
         self._dataset_name_to_cls = {
             ds_cls.dataset_name(): ds_cls for ds_cls in dataset_classes
         }
+
+    def set_preferred_precision_runtimes(
+        self, precision_runtimes: dict[Precision, list[TargetRuntime]]
+    ) -> None:
+        """Narrow which runtimes `--target-runtime` *defaults* to, per precision.
+
+        Every runtime in ``supported_precision_runtimes`` stays selectable; this
+        only steers the default away from paths the manifest records as failing.
+        """
+        self.preferred_precision_runtimes = precision_runtimes
 
     @staticmethod
     def get_hub_device(
@@ -232,8 +243,11 @@ class QAIHMArgumentParser(argparse.ArgumentParser):
             if precision is None and self.supported_precision_runtimes:
                 precision = next(iter(self.supported_precision_runtimes))
             if precision is not None and precision in self.supported_precision_runtimes:
+                # Prefer a path with no recorded failure; fall back to the full list
+                # so a model with every path disabled still resolves to something.
                 parsed.target_runtime = _get_default_runtime(
-                    self.supported_precision_runtimes[precision]
+                    self.preferred_precision_runtimes.get(precision)
+                    or self.supported_precision_runtimes[precision]
                 )
             else:
                 # No precision arg -- fall back to first eligible across all precisions.
