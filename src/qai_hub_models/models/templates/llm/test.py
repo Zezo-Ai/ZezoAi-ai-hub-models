@@ -1275,7 +1275,7 @@ class TestResolveQuantizeRecipe:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         recipe = Recipe.model_validate([{"name": "Calibration"}])
-        schema = PrecisionSchema()
+        schema = PrecisionSchema.model_validate({})
         self._patch_manifest(
             monkeypatch,
             {Precision.w4a16: SimpleNamespace(recipe=recipe, precision=schema)},

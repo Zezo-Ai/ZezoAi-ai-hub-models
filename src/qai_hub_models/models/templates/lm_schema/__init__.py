@@ -31,7 +31,7 @@ from .precision import (
     WeightPrecisionSchema,
 )
 from .recipe import (
-    FP_WEIGHT_TARGET_ALLOWED_TECHNIQUES,
+    FP_WEIGHT_ALLOWED_TECHNIQUES,
     ON_SIM_TECHNIQUES,
     PRE_SIM_TECHNIQUES,
     TERMINAL_TECHNIQUES,
@@ -99,7 +99,7 @@ __all__ = [
     "PRE_SIM_TECHNIQUES",
     "ON_SIM_TECHNIQUES",
     "TERMINAL_TECHNIQUES",
-    "FP_WEIGHT_TARGET_ALLOWED_TECHNIQUES",
+    "FP_WEIGHT_ALLOWED_TECHNIQUES",
     # recipe
     "Recipe",
     # pre-sim split / cache identity

@@ -257,8 +257,18 @@ class LMQuantizationDetails(BaseQAIHMConfig):
     ``lm_quantization_details`` field on :class:`QAIHMModelManifest`.
     """
 
-    precision: PrecisionSchema = Field(default_factory=PrecisionSchema)
+    # No default: a field that merely equals its default is stripped by
+    # exclude_defaults, and an omitted `precision:` means the W4A16 contract, not
+    # "nothing". _fill_precision supplies it so existing manifests still validate.
+    precision: PrecisionSchema
     recipe: Recipe
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fill_precision(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "precision" not in data:
+            return {**data, "precision": {}}
+        return data
 
 
 class QAIHMModelManifest(BaseQAIHMConfig):

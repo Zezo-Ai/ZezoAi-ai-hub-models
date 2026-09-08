@@ -4,16 +4,17 @@
 """Declarative schema for the ``recipe`` section of a quant config.
 
 One spec class per technique, carrying its wire ``name`` (a ``Literal``), its
-kwargs (fields), and its metadata (``phase``/``terminal``/``fp_weight_target_allowed``
+kwargs (fields), and its metadata (``phase``/``terminal``/``fp_weight_allowed``
 ClassVars). The specs form a discriminated union (``TechniqueSpec``) which IS the
 vocabulary -- no separate name enum; the phase/terminal/fp sets are derived from
 it. Parallels the dataset specs in ``dataset.py``.
 
-On-sim kwarg fields have no defaults: the backend ``apply()`` signature owns
-defaults (torch/onnx differ), and lowering forwards only set fields via
-``model_dump(exclude_unset=True)``. Pre-sim flags (e.g. SpinQuant's rotations)
-DO carry defaults and are lowered in full -- they are the identity of which
-transforms ran, so an unset-but-defaulted flag must survive lowering.
+Kwarg fields have no defaults: the backend ``apply()`` signature owns defaults
+(torch/onnx differ), and the lowering forwards only set fields via
+``model_dump(exclude_unset=True)``. Pre-sim flags (e.g. SpinQuant's rotations) are
+instead REQUIRED: they are the identity of which transforms ran, and a defaulted flag
+is both invisible in the config and deletable by an ``exclude_defaults`` dump, so a
+bare ``- name: SpinQuant`` is a validation error rather than an implicit R1.
 """
 
 from __future__ import annotations
@@ -22,9 +23,9 @@ import inspect
 import typing
 from collections.abc import Callable, Container
 from enum import Enum
-from typing import Annotated, ClassVar, Literal, Union
+from typing import Annotated, Any, ClassVar, Literal, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_serializer, model_validator
 
 from .dataset import DatasetSpec, WikitextSpec
 
@@ -37,18 +38,13 @@ class Phase(str, Enum):
 
 
 class _TechniqueSpecBase(BaseModel, extra="forbid"):
-    # pre_sim (float model, e.g. SpinQuant) vs on_sim (quantsim, the classic chain).
+    # phase: pre_sim (float model) vs on_sim (quantsim). terminal: produces
+    # encodings (a chain lacking one gets an auto-inserted Calibration).
+    # fp_weight_allowed: valid when block weights are floating point.
     phase: ClassVar[Phase]
-    # Produces encodings and ends a chain; a chain lacking one gets an
-    # auto-inserted Calibration (e.g. Calibration/Skip/RemoveQuantization).
     terminal: ClassVar[bool] = False
-    # Applicable when the target output's block weights are floating point
-    # (e.g. SpinQuant/Calibration), vs techniques that need integer weights.
-    fp_weight_target_allowed: ClassVar[bool] = False
+    fp_weight_allowed: ClassVar[bool] = False
 
-    # The calibration/optimization dataset this step runs on (on-sim steps that
-    # consume data require it; pre-sim steps carry None). e.g.
-    # ``dataset: {name: Wikitext, split: train}``.
     dataset: DatasetSpec | None = None
 
     def __init_subclass__(cls, **kwargs):
@@ -60,9 +56,9 @@ class _TechniqueSpecBase(BaseModel, extra="forbid"):
 class SpinQuantSpec(_TechniqueSpecBase):
     name: Literal["SpinQuant"]
     phase = Phase.pre_sim
-    fp_weight_target_allowed = True
+    fp_weight_allowed = True
 
-    enable_r1: bool = True
+    enable_r1: bool = False
     enable_r2: bool = False
     enable_r3: bool = False
 
@@ -79,14 +75,14 @@ class RemoveQuantizationSpec(_TechniqueSpecBase):
     name: Literal["RemoveQuantization"]
     phase = Phase.on_sim
     terminal = True
-    fp_weight_target_allowed = True
+    fp_weight_allowed = True
 
 
 class SkipSpec(_TechniqueSpecBase):
     name: Literal["Skip"]
     phase = Phase.on_sim
     terminal = True
-    fp_weight_target_allowed = True
+    fp_weight_allowed = True
 
 
 class ClipSpec(_TechniqueSpecBase):
@@ -99,7 +95,7 @@ class CalibrationSpec(_TechniqueSpecBase):
     name: Literal["Calibration"]
     phase = Phase.on_sim
     terminal = True
-    fp_weight_target_allowed = True
+    fp_weight_allowed = True
     num_iterations: int | None = None
 
 
@@ -112,10 +108,7 @@ class SeqMSESpec(_TechniqueSpecBase):
 class AdaScaleSpec(_TechniqueSpecBase):
     name: Literal["AdaScale"]
     phase = Phase.on_sim
-    # Sizes the calibration sample pool prefilled for this step (name follows
-    # GenAI Lab; the consumer prefills this many samples, then uses them all).
     num_batches: int | None = None
-    # AdaScale optimizer step count -- a separate axis from num_batches.
     num_iterations: int | None = None
 
 
@@ -169,8 +162,8 @@ ON_SIM_TECHNIQUES = {
     technique_name_of(s) for s in _technique_specs() if s.phase == Phase.on_sim
 }
 TERMINAL_TECHNIQUES = {technique_name_of(s) for s in _technique_specs() if s.terminal}
-FP_WEIGHT_TARGET_ALLOWED_TECHNIQUES = {
-    technique_name_of(s) for s in _technique_specs() if s.fp_weight_target_allowed
+FP_WEIGHT_ALLOWED_TECHNIQUES = {
+    technique_name_of(s) for s in _technique_specs() if s.fp_weight_allowed
 }
 
 
@@ -239,6 +232,15 @@ class Recipe(BaseModel, extra="forbid"):
                 return {"backbone": [data]}
         return data
 
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: Any) -> Any:
+        # Re-narrow to the bare-list form `_normalize` widens: the `backbone:` key
+        # only carries information when there is a second component to name.
+        data = handler(self)
+        if self.visual is None:
+            return data["backbone"]
+        return data
+
     @model_validator(mode="after")
     def _semantic_rules(self) -> "Recipe":
         # Rule 1: auto-insert Calibration when a chain has no terminal step
@@ -299,14 +301,9 @@ class Recipe(BaseModel, extra="forbid"):
         return pre, on_sim
 
     def to_components(self) -> dict[str, list[dict]]:
-        """Lower to ``{component: [step_dict, ...]}`` (name + kwargs + dataset).
+        """Lower to ``{component: [step_dict, ...]}`` (name + set kwargs + dataset).
 
-        On-sim steps use exclude_unset so backend apply() defaults win for omitted
-        kwargs (an unset count draws the applier's default pool). Pre-sim steps
-        dump fully: their flags are the *identity* of which transforms ran (e.g.
-        SpinQuant's enable_r1/r2/r3), so a defaulted-but-unset flag must survive
-        lowering -- otherwise a bare ``- name: SpinQuant`` lowers to ``{}`` and the
-        backend skips rotation entirely.
+        Uses exclude_unset so backend apply() defaults win for omitted kwargs.
         Round-trips: ``Recipe.model_validate(r.to_components()) == r``.
         """
         out: dict[str, list[dict]] = {}
@@ -314,12 +311,7 @@ class Recipe(BaseModel, extra="forbid"):
             lowered: list[dict] = []
             for s in steps:
                 d: dict = {"name": s.name}
-                d.update(
-                    s.model_dump(
-                        exclude_unset=s.phase != Phase.pre_sim,
-                        exclude={"name", "dataset"},
-                    )
-                )
+                d.update(s.model_dump(exclude_unset=True, exclude={"name", "dataset"}))
                 if s.dataset is not None:
                     ds: dict = {"name": s.dataset.name}
                     ds.update(
