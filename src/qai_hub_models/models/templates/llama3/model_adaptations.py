@@ -47,6 +47,8 @@ def QcLlama_apply_rotary_pos_emb(
 class SHALlamaAttention(LlamaAttention):
     """Split-Head Attention version of LlamaAttention (with Convs)"""
 
+    use_native_kv: bool = False
+
     @property
     def hidden_size_(self) -> int:
         if hasattr(self, "hidden_size"):
@@ -218,15 +220,6 @@ class SHALlamaAttention(LlamaAttention):
             v_proj(hidden_states).permute(0, 2, 3, 1) for v_proj in self.v_proj_sha
         ]
 
-        kv_seq_len = value_states[0].shape[-2]
-        if past_key_value is not None:
-            if hasattr(past_key_value, "value_cache"):
-                kv_seq_len += past_key_value.value_cache[self.layer_idx][0].shape[-2]
-            elif hasattr(past_key_value.layers[self.layer_idx], "values"):  # type: ignore[attr-defined, unused-ignore]
-                kv_seq_len += past_key_value.layers[self.layer_idx].values[0].shape[-2]  # type: ignore[attr-defined, index, union-attr, unused-ignore]
-            else:
-                kv_seq_len += past_key_value.layers[self.layer_idx][1][0].shape[-2]  # type: ignore[attr-defined, index, unused-ignore]
-
         assert position_embeddings is not None
         query_states = [
             _apply_rope_single(q, position_embeddings) for q in query_states
@@ -237,6 +230,9 @@ class SHALlamaAttention(LlamaAttention):
             cos, sin = self.rotary_emb(value_states, position_ids)
         else:
             cos, sin = position_embeddings
+
+        # Compute kv_seq_len for shape validation
+        kv_seq_len = value_states[0].shape[-2]
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -250,28 +246,65 @@ class SHALlamaAttention(LlamaAttention):
                 past_key = past_key_value.layers[self.layer_idx][0]  # type: ignore[attr-defined, index, unused-ignore]
                 past_value = past_key_value.layers[self.layer_idx][1]  # type: ignore[attr-defined, index, unused-ignore]
 
+            buffer_size = past_key[0].shape[-1]
+            if torch.compiler.is_compiling():
+                use_scatter = self.use_native_kv and cache_position is not None
+            else:
+                use_scatter = (
+                    self.use_native_kv
+                    and cache_position is not None
+                    and int(cache_position.max().item()) < buffer_size
+                )
+
+            if use_scatter:
+                kv_seq_len = buffer_size
+            else:
+                kv_seq_len += past_value[0].shape[-2]
+
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             transposed_key_states = [
                 key_state.transpose(2, 3) for key_state in key_states
             ]
-            # Technically, this isn't what Cache expects. It stores tensors, not lists
-            # of tensors.
-            past_key_value.update(
-                transposed_key_states,
-                value_states,
-                self.layer_idx,
-                cache_kwargs,
-            )
 
-            # Now concate the key/value states
-            key_states = [
-                torch.cat([pk, k.transpose(2, 3)], dim=3)
-                for pk, k in zip(past_key, key_states, strict=False)
-            ]
-            value_states = [
-                torch.cat([pv, v], dim=2)
-                for pv, v in zip(past_value, value_states, strict=False)
-            ]
+            if use_scatter:
+                assert cache_position is not None
+                k_shape = transposed_key_states[0].shape
+                k_indices = cache_position * torch.ones(
+                    k_shape, dtype=cache_position.dtype, device=cache_position.device
+                )
+                new_value_states = value_states
+                key_states = [
+                    pk.scatter(dim=3, index=k_indices, src=new_k)
+                    for pk, new_k in zip(past_key, transposed_key_states, strict=False)
+                ]
+                v_indices = k_indices.transpose(2, 3)
+                value_states = [
+                    pv.scatter(dim=2, index=v_indices, src=new_v)
+                    for pv, new_v in zip(past_value, new_value_states, strict=False)
+                ]
+                # HTP's native-KV pattern requires the graph's KV outputs to
+                # branch off the scatter's updates, not read back its result.
+                past_key_value.update(
+                    transposed_key_states, new_value_states, self.layer_idx, {}
+                )
+            else:
+                # Technically, this isn't what Cache expects. It stores tensors, not lists
+                # of tensors.
+                past_key_value.update(
+                    transposed_key_states,
+                    value_states,
+                    self.layer_idx,
+                    cache_kwargs,
+                )
+                # Now concate the key/value states
+                key_states = [
+                    torch.cat([pk, k.transpose(2, 3)], dim=3)
+                    for pk, k in zip(past_key, key_states, strict=False)
+                ]
+                value_states = [
+                    torch.cat([pv, v], dim=2)
+                    for pv, v in zip(past_value, value_states, strict=False)
+                ]
 
         key_states = cast(
             list[torch.Tensor], repeat_kv(key_states, self.num_key_value_groups)

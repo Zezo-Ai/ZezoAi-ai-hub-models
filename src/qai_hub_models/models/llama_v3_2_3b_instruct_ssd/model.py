@@ -4,6 +4,7 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
+import itertools
 import logging
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 
 from qai_hub_models import Precision
 from qai_hub_models.configs.model_metadata import ModelMetadata
+from qai_hub_models.configs.tensor_spec import TensorSpec
 
 # LLMIOType is re-exported from this module so the CLI input-spec parser can
 # resolve the inherited get_input_spec's "llm_io_type" annotation, which it
@@ -21,27 +23,34 @@ from qai_hub_models.models.templates.llama3.model import (
     LlamaPreSplitCollectionBase,
     LlamaQuantizablePreSplitBase,
 )
-from qai_hub_models.models.templates.llm.common import LLMIOType  # noqa: F401
+from qai_hub_models.models.templates.llm.common import LLMIOType
 from qai_hub_models.models.templates.llm.model import (
     DEFAULT_EXPORT_CONTEXT_LENGTHS as GLOBAL_DEFAULT_EXPORT_CONTEXT_LENGTHS,
 )
 from qai_hub_models.models.templates.llm.model import SplitForwardMixin
+from qai_hub_models.models.templates.llm.native_kv_generator import (
+    HubCompatibleNativeKVGenerator,
+)
 from qai_hub_models.models.templates.llm_ssd.model import (
     LLMDynamic_SSD_AIMETOnnx,
     append_ssd_forecast_embeddings,
     apply_ssd_genie_assets,
 )
-from qai_hub_models.models.templates.lm_driver.generator import (
-    HubCompatibleGenerator,
-)
+from qai_hub_models.models.templates.lm_driver.generator import Generator
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset
+from qai_hub_models.utils.input_spec import OutputSpec
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_EXPORT_CONTEXT_LENGTHS = GLOBAL_DEFAULT_EXPORT_CONTEXT_LENGTHS
 # SSD uses a smaller "token" sequence length (32) than the standard models so
 # the speculative-decoding forecast tokens fit in one prompt-processor graph.
-DEFAULT_EXPORT_SEQUENCE_LENGTHS = [128, 32]
+# Native KV supports AR32 and AR128 only, so AR1 is not compiled; on device SSD
+# runs AR-32 for both prefill and decode and never dispatches an AR-1 graph.
+DEFAULT_EXPORT_SEQUENCE_LENGTHS = [32, 128]
+# The local demo runs the torch/AIMET model one token at a time, so it still
+# needs an AR-1 bucket alongside the two exported ones.
+DEFAULT_DEMO_SEQUENCE_LENGTHS = [1, 32, 128]
 
 # Model identification
 MODEL_ID = __name__.split(".")[-2]
@@ -73,11 +82,21 @@ DEFAULT_CHECKPOINT = {
 SPLIT_MODEL_NAME = "Llama3_2_3B_SSD"
 
 
+def _native_kv_output_spec(num_hidden_layers: int) -> OutputSpec:
+    """Output spec with per-layer native KV cache names (ScatterElements)."""
+    output_spec: OutputSpec = {"logits": TensorSpec()}
+    for layer in range(num_hidden_layers):
+        output_spec[f"past_nativekvcache__key_{layer}_out"] = TensorSpec()
+        output_spec[f"past_nativekvcache__value_{layer}_out"] = TensorSpec()
+    return output_spec
+
+
 class Llama3_2_3B_SSD_PreSplit(LlamaPreSplitBase):
     """FP PreSplit for Llama 3.2 3B with SSD forecast embeddings."""
 
     model_id = MODEL_ID
-    GeneratorClass = HubCompatibleGenerator
+    llm_io_type = LLMIOType.genie_input_ids_native_kv
+    GeneratorClass: type[Generator] = HubCompatibleNativeKVGenerator
     model_asset_version = MODEL_ASSET_VERSION
     num_layers = NUM_LAYERS
     hidden_size = HIDDEN_SIZE
@@ -91,6 +110,13 @@ class Llama3_2_3B_SSD_PreSplit(LlamaPreSplitBase):
     min_memory_recommended = MIN_MEMORY_RECOMMENDED
     default_checkpoint = DEFAULT_CHECKPOINT
     default_precision = DEFAULT_PRECISION
+
+    @staticmethod
+    def _get_output_spec(num_hidden_layers: int) -> OutputSpec:
+        return _native_kv_output_spec(num_hidden_layers)
+
+    def get_output_spec(self) -> OutputSpec:
+        return _native_kv_output_spec(self.num_layers)
 
     @classmethod
     def _ssd_forecast_ckpt(cls) -> Path | None:
@@ -122,7 +148,8 @@ class Llama3_2_3B_SSD_QuantizablePreSplit(  # type: ignore[misc]
     """Quantizable PreSplit for Llama 3.2 3B with SSD genie-asset support."""
 
     FPModel = Llama3_2_3B_SSD_PreSplit
-    GeneratorClass = HubCompatibleGenerator
+    GeneratorClass: type[Generator] = HubCompatibleNativeKVGenerator
+    llm_io_type = LLMIOType.genie_input_ids_native_kv
 
     model_id = MODEL_ID
     model_asset_version = MODEL_ASSET_VERSION
@@ -135,6 +162,13 @@ class Llama3_2_3B_SSD_QuantizablePreSplit(  # type: ignore[misc]
     default_checkpoint = DEFAULT_CHECKPOINT
     default_precision = DEFAULT_PRECISION
 
+    def get_qnn_context_graph_name(self, split_index: int, num_splits: int) -> str:
+        """Native KV graphs use no prompt_/token_ prefix."""
+        return f"ar{self.sequence_length}_cl{self.context_length}_{split_index + 1}_of_{num_splits}"
+
+    def get_output_spec(self) -> OutputSpec:
+        return _native_kv_output_spec(self.num_layers)
+
 
 class Llama3_2_3B_SSD_PartBase(LlamaPartBase):
     """Unified Part base for Llama 3.2 3B SSD."""
@@ -146,6 +180,22 @@ class Llama3_2_3B_SSD_PartBase(LlamaPartBase):
     fp_presplit_cls = Llama3_2_3B_SSD_PreSplit
     quant_presplit_cls = Llama3_2_3B_SSD_QuantizablePreSplit
     default_precision = DEFAULT_PRECISION
+
+    def _build_graph_names(
+        self, sequence_lengths: list[int], context_lengths: list[int]
+    ) -> dict[str, tuple[int, int]]:
+        """Native KV graphs use no prompt_/token_ prefix."""
+        return {
+            f"ar{seq_len}_cl{ctx_len}_{self.part_id}_of_{self.num_splits}": (
+                seq_len,
+                ctx_len,
+            )
+            for seq_len, ctx_len in itertools.product(sequence_lengths, context_lengths)
+        }
+
+    def get_qnn_context_graph_name(self, split_index: int, num_splits: int) -> str:
+        """Native KV graphs use no prompt_/token_ prefix."""
+        return f"ar{self.sequence_length}_cl{self.context_length}_{split_index + 1}_of_{num_splits}"
 
 
 class Llama3_2_3B_SSD_Part1_Of_4(Llama3_2_3B_SSD_PartBase):

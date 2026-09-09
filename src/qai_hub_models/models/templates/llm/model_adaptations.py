@@ -43,7 +43,7 @@ def _apply_rope_single(
     x_prod_im = x_real * rope_im + x_im * rope_real
 
     # TODO: HF need to uses different interleaving
-    return torch.cat((x_prod_real, x_prod_im), dim=3).view(*x.shape)
+    return torch.cat((x_prod_real, x_prod_im), dim=3)
 
 
 class ConvInplaceLinear(torch.nn.Conv2d):

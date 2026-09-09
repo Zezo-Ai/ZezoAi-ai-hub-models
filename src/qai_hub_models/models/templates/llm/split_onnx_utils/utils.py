@@ -498,8 +498,10 @@ def split_onnx(
     """
 
     def _is_cache(layer: int, name: str) -> bool:
-        # Match both past_ (full attention) and swa_ (sliding window) KV names.
-        return re.search(f"(?:past|swa)_(key|value)_{layer}_", name) is not None
+        return (
+            re.search(f"(?:past|swa)_(nativekvcache__)?(key|value)_{layer}_", name)
+            is not None
+        )
 
     num_splits = int(num_splits)
 

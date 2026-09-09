@@ -93,6 +93,9 @@ from qai_hub_models.models.templates.llm.common import (
     TORCH_DYNAMIC_SHAPE_MIN_VERSION,
     LLMIOType,
     cleanup,
+    is_kv_key_name,
+    is_kv_value_name,
+    is_native_kv,
 )
 from qai_hub_models.models.templates.llm.grace_tasks import PROMPT_TASKS
 from qai_hub_models.models.templates.llm.llm_helpers import (
@@ -213,24 +216,44 @@ def sample_input(
             sequence_length,
         )
     )
-    input_ids = input_tokens["input_ids"].type(torch.int32)[:, -sequence_length:]
+    use_native_kv = "cache_index" in input_spec
+
+    tokenized_input_ids = input_tokens["input_ids"].type(torch.int32)
+    if use_native_kv:
+        input_ids = torch.full(
+            (tokenized_input_ids.shape[0], sequence_length),
+            tokenizer.pad_token_id,
+            dtype=torch.int32,
+        )
+        if num_tokens > 0:
+            input_ids[:, :num_tokens] = tokenized_input_ids[:, -num_tokens:]
+    else:
+        input_ids = tokenized_input_ids[:, -sequence_length:]
 
     padding_size = sequence_length - num_tokens
-    position_ids_list = [0] * (padding_size) + list(
-        range(sequence_length - padding_size)
-    )
+    if use_native_kv:
+        position_ids_list = list(range(num_tokens)) + [0] * padding_size
+    else:
+        position_ids_list = [0] * padding_size + list(range(num_tokens))
     position_ids = (
         torch.Tensor(position_ids_list).type(torch.long).reshape(1, sequence_length)
     )
     position_ids_cos, position_ids_sin = embedding.get_embedding(position_ids)
-    attention_mask = torch.zeros((1, context_length))
-    attention_mask[:, -num_tokens:] = 1.0
+
+    attention_mask_shape = input_spec["attention_mask"][0]
+    key_value_length = attention_mask_shape[3]
+
+    attention_mask = torch.zeros((1, key_value_length))
+    if use_native_kv:
+        attention_mask[:, :num_tokens] = 1.0
+    else:
+        attention_mask[:, -num_tokens:] = 1.0
 
     attention_mask_converter = AttentionMaskConverter(True)
     cm_attention_mask = attention_mask_converter.to_4d(
         attention_mask,
         query_length=sequence_length,
-        key_value_length=context_length,
+        key_value_length=key_value_length,
         dtype=torch.float32,
     )
     cm_attention_masks = cm_attention_mask.clip(-50, 0)
@@ -255,6 +278,9 @@ def sample_input(
     for k, (shape, _) in input_spec.items():
         if k.startswith("past_"):
             input_dict[k] = [np.zeros(shape, dtype=np.float32)]
+
+    if "cache_index" in input_spec:
+        input_dict["cache_index"] = [np.array([0], dtype=np.int32)]
 
     return input_dict
 
@@ -398,12 +424,15 @@ def get_onnx_model(
         elif name in ("position_ids_cos", "position_ids_sin"):
             # Shape: (1, 1, seq_len, embed_dim)
             per_input_dynamic_shapes.append({2: seq_len})
-        elif name.startswith("past_key_"):
+        elif is_kv_key_name(name):
             # past_key shape: (num_kv_heads, 1, embed_dim*2, kv_seq_len)
             per_input_dynamic_shapes.append({3: kv_seq_len})
-        elif name.startswith("past_value_"):
+        elif is_kv_value_name(name):
             # past_value shape: (num_kv_heads, 1, kv_seq_len, embed_dim*2)
             per_input_dynamic_shapes.append({2: kv_seq_len})
+        elif name == "cache_index":
+            # No dynamic dims for cache_index (shape [1])
+            per_input_dynamic_shapes.append(None)
         else:
             # No dynamic dims for other inputs
             per_input_dynamic_shapes.append(None)
@@ -442,7 +471,9 @@ def get_onnx_model(
                 path,
                 input_names=list(input_specs.keys()),
                 output_names=list(
-                    fp_model._get_output_spec(fp_model.llm_config.num_hidden_layers)
+                    fp_model._get_output_spec(
+                        fp_model.llm_config.num_hidden_layers,
+                    )
                 ),
                 **extra,
             )
@@ -1064,6 +1095,16 @@ class SplitForwardMixin:
                     sources.append(name_to_idx[n])
                 elif n in emitted:
                     sources.append(("emitted", n))
+                elif is_kv_key_name(n) or is_kv_value_name(n):
+                    # A KV input must resolve to a full-model input or an
+                    # earlier Part's output; "prev" would silently bind the
+                    # rank-3 hidden state to a rank-4 cache.
+                    raise ValueError(
+                        f"Part {len(input_names_for_parts)} KV input {n!r} matches no "
+                        f"full-model input and no earlier Part output. "
+                        f"Full-model KV inputs: "
+                        f"{[m for m in full_input_names if is_kv_key_name(m) or is_kv_value_name(m)]}"
+                    )
                 else:
                     sources.append("prev")
             input_names_for_parts.append(sources)
@@ -1131,6 +1172,7 @@ class SplitForwardMixin:
             self.get_input_spec(  # type: ignore[attr-defined]
                 sequence_length=self.sequence_length,  # type: ignore[attr-defined]
                 context_length=self.context_length,  # type: ignore[attr-defined]
+                llm_io_type=self.llm_io_type,  # type: ignore[attr-defined]
             ).keys()
         )
         (
@@ -1279,23 +1321,40 @@ class LLMPartBase:
 
         head_dim = self.head_dim or (self.hidden_size // self.num_attention_heads)
         embed_dim = head_dim // 2
-        kv_seq_len = context_length - sequence_length
 
         # Read actual input names from the split ONNX model.
         onnx_input_names = self._get_onnx_input_names()
+        use_native_kv = any("nativekvcache" in n for n in onnx_input_names)
+        kv_seq_len = (
+            context_length if use_native_kv else context_length - sequence_length
+        )
 
         spec: InputSpec = {}
         for name in onnx_input_names:
-            if "past_key" in name:
+            if is_kv_key_name(name):
                 spec[name] = TensorSpec(
-                    shape=(self.num_key_value_heads, 1, head_dim, kv_seq_len),
+                    shape=(
+                        self.num_key_value_heads,
+                        1,
+                        head_dim,
+                        kv_seq_len,
+                    ),
                     dtype="float32",
                 )
-            elif "past_value" in name:
+            elif is_kv_value_name(name):
                 spec[name] = TensorSpec(
-                    shape=(self.num_key_value_heads, 1, kv_seq_len, head_dim),
+                    shape=(
+                        self.num_key_value_heads,
+                        1,
+                        kv_seq_len,
+                        head_dim,
+                    ),
                     dtype="float32",
                 )
+            elif name == "cache_index":
+                spec[name] = TensorSpec(shape=(1,), dtype="int32")
+            elif name == "input_ids":
+                spec[name] = TensorSpec(shape=(1, sequence_length), dtype="int32")
             elif name == "attention_mask":
                 spec[name] = TensorSpec(
                     shape=(1, 1, sequence_length, context_length),
@@ -1484,16 +1543,22 @@ class DynamicSplitPartBase(LLMPartBase, torch.nn.Module, MultiGraphWorkbenchMode
             # Embedding split: only input_ids
             return {"input_ids": [np.zeros((1, seq_len), dtype=np.int32)]}
 
-        # Parts 2+: read actual input names from ONNX and match them
+        # Parts 2+: read actual input names from ONNX and match them.
+        # Use the graph input spec to generate correctly-shaped samples for
+        # inputs not found in full_inputs (e.g. native KV with local layer
+        # indices that differ from the full model's global indices).
+        graph_spec = self.get_graph_input_spec(graph_name)
         result: SampleInputsType = {}
         onnx_input_names = self._get_onnx_input_names()
 
         for name in onnx_input_names:
             if name in full_inputs:
                 result[name] = full_inputs[name]
+            elif name in graph_spec:
+                spec = graph_spec[name]
+                dtype = np.dtype(spec.dtype) if spec.dtype else np.float32
+                result[name] = [np.zeros(spec.shape, dtype=dtype)]
             else:
-                # Intermediate hidden state (not in full model inputs)
-                # found by process of elimination
                 result[name] = [
                     np.zeros((1, seq_len, self.hidden_size), dtype=np.float32)
                 ]
@@ -2053,6 +2118,8 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
                 module.prepare_conv()
             if hasattr(module, "prepare_sha"):
                 module.prepare_sha()
+            if hasattr(module, "use_native_kv"):
+                module.use_native_kv = is_native_kv(self.llm_io_type)
 
         model.to(host_device)
 
@@ -2138,43 +2205,67 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
             position_ids = args[:2]  # type: ignore[assignment, unused-ignore]
             past_key_values = args[2:]
 
+        # Native KV: cache_index is the last element after all KV pairs
+        cache_index: torch.Tensor | None = None
+        if is_native_kv(self.llm_io_type):
+            cache_index = past_key_values[-1]
+            past_key_values = past_key_values[:-1]
+
         assert isinstance(self.llm_config.num_key_value_heads, int)
+        num_kv_heads = self.llm_config.num_key_value_heads
         if self.skip_optimizations and "sha_attention" in self.skip_optimizations:
             kv_cache = DynamicCache()
             for layer_idx, (k, v) in enumerate(
                 zip(past_key_values[::2], past_key_values[1::2], strict=False)
             ):
-                k_split = [
-                    k[i : i + 1] for i in range(self.llm_config.num_key_value_heads)
-                ]
-                v_split = [
-                    v[i : i + 1] for i in range(self.llm_config.num_key_value_heads)
-                ]
+                k_split = [k[i : i + 1] for i in range(num_kv_heads)]
+                v_split = [v[i : i + 1] for i in range(num_kv_heads)]
                 k = torch.cat(k_split, dim=1).permute(0, 1, 3, 2)
                 v = torch.cat(v_split, dim=1)
 
                 kv_cache.update(k, v, layer_idx, {})
+        elif is_native_kv(self.llm_io_type):
+            kv_cache = SHADynamicCacheNewValueOnly()
+            for layer_idx, (k, v) in enumerate(
+                zip(past_key_values[::2], past_key_values[1::2], strict=False)
+            ):
+                k_heads = list(k.chunk(num_kv_heads, dim=0))
+                v_heads = list(v.chunk(num_kv_heads, dim=0))
+                kv_cache.update(k_heads, v_heads, layer_idx, {})
         else:
             kv_cache = SHADynamicCacheNewValueOnly()
             for layer_idx, (k, v) in enumerate(
                 zip(past_key_values[::2], past_key_values[1::2], strict=False)
             ):
-                k_split = [
-                    k[i : i + 1] for i in range(self.llm_config.num_key_value_heads)
-                ]
-                v_split = [
-                    v[i : i + 1] for i in range(self.llm_config.num_key_value_heads)
-                ]
+                k_split = [k[i : i + 1] for i in range(num_kv_heads)]
+                v_split = [v[i : i + 1] for i in range(num_kv_heads)]
 
                 # kv_cache doesn't report supporting lists of tensors, but it seems to work
                 kv_cache.update(k_split, v_split, layer_idx, {})
 
-        model_kwargs = {
+        if (
+            cache_index is not None
+            and hasattr(kv_cache, "set_valid_length")
+            and not torch.compiler.is_compiling()
+        ):
+            kv_cache.set_valid_length(int(cache_index.item()))
+
+        model_kwargs: dict[str, Any] = {
             self.main_input_name: input_tokens,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
             "past_key_values": kv_cache,
         }
+
+        # Compute cache_position from cache_index via tensor ops so the
+        # ONNX optimizer keeps cache_index as a dynamic input.
+        if cache_index is not None:
+            seq_len = input_tokens.shape[1]
+            cache_position = cache_index + torch.arange(
+                seq_len, device=cache_index.device, dtype=torch.int32
+            )
+            model_kwargs["cache_position"] = cache_position
+
         out = self.model(**model_kwargs)
 
         out_cache = out["past_key_values"]
@@ -2195,6 +2286,21 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
                 k = keys[:, :, -seq_len:, :].permute(1, 0, 3, 2)
                 v = values[:, :, -seq_len:, :].permute(1, 0, 2, 3)
 
+            elif is_native_kv(self.llm_io_type):
+                if hasattr(out_cache, "key_cache"):
+                    k_heads = out_cache.key_cache[layer]
+                    v_heads = out_cache.value_cache[layer]
+                elif hasattr(out_cache.layers[layer], "keys"):
+                    k_heads = out_cache.layers[layer].keys
+                    v_heads = out_cache.layers[layer].values
+                else:
+                    k_heads = out_cache.layers[layer][0]
+                    v_heads = out_cache.layers[layer][1]
+                # The cache holds only the new slices; gathering them back out of
+                # the scattered buffer would break HTP's native-KV pattern.
+                k = torch.cat(k_heads, dim=0)
+                v = torch.cat(v_heads, dim=0)
+
             elif hasattr(out_cache, "key_cache"):
                 k = torch.cat(out_cache.key_cache[layer], dim=0)
                 v = torch.cat(out_cache.value_cache[layer], dim=0)
@@ -2204,6 +2310,7 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
             else:
                 k = torch.cat(out_cache.layers[layer][0], dim=0)
                 v = torch.cat(out_cache.layers[layer][1], dim=0)
+
             flat_output_past_key_values += [k, v]
 
         return [out["logits"], *flat_output_past_key_values]
@@ -2274,28 +2381,25 @@ class LLMBase(BaseModel, LLMConfigEditor, ABC):
             "It is currently not supported to set input sequence length to the same as or longer than context length. There should be no KV cache input at all in such case."
         )
 
+        use_native_kv = is_native_kv(llm_io_type)
+        prefix = "past_nativekvcache_" if use_native_kv else "past"
+        kv_seq_len = (
+            context_length if use_native_kv else context_length - sequence_length
+        )
+
         for layer in range(num_hidden_layers):
-            past_k_name = f"past_key_{layer}_in"
-            input_spec[past_k_name] = TensorSpec(
-                shape=(
-                    num_key_value_heads,
-                    1,
-                    head_dim,
-                    context_length - sequence_length,
-                ),
+            input_spec[f"{prefix}_key_{layer}_in"] = TensorSpec(
+                shape=(num_key_value_heads, 1, head_dim, kv_seq_len),
+                dtype="float32",
+            )
+            input_spec[f"{prefix}_value_{layer}_in"] = TensorSpec(
+                shape=(num_key_value_heads, 1, kv_seq_len, head_dim),
                 dtype="float32",
             )
 
-            past_v_name = f"past_value_{layer}_in"
-            input_spec[past_v_name] = TensorSpec(
-                shape=(
-                    num_key_value_heads,
-                    1,
-                    context_length - sequence_length,
-                    head_dim,
-                ),
-                dtype="float32",
-            )
+        if use_native_kv:
+            input_spec["cache_index"] = TensorSpec(shape=(1,), dtype="int32")
+
         return input_spec
 
     def get_calibration_data(

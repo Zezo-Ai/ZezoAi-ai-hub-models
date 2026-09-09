@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from qai_hub_models.models.llama_v3_2_3b_instruct_ssd.model import (
+    DEFAULT_DEMO_SEQUENCE_LENGTHS,
     HF_REPO_NAME,
     HF_REPO_URL,
     MODEL_ID,
@@ -39,6 +40,7 @@ def llama_3_2_3b_chat_demo(
         hf_repo_url=hf_repo_url,
         default_prompt=default_prompt,
         test_checkpoint=test_checkpoint,
+        default_sequence_length=DEFAULT_DEMO_SEQUENCE_LENGTHS,
     )
 
 

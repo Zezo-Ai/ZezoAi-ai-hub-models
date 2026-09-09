@@ -91,12 +91,37 @@ class LLMIOType(Enum):
     # - position_ids_sin (half size)
     genie_input_embeds = "genie_inputs_embeds"
 
+    # Genie-compatible input with native KV cache (right-padding with cache_index)
+    # Inputs:
+    # - input_ids (integer token ids)
+    # - attention_mask
+    # - position_ids_cos (half size)
+    # - position_ids_sin (half size)
+    # - past_nativekvcache__key/value per layer
+    # - cache_index (int32, shape [1])
+    genie_input_ids_native_kv = "genie_input_ids_native_kv"
+
     # Hugging Face original input
     # Inputs:
     # - input_ids (integer token ids)
     # - attention_mask
     # - position_ids (integer position ids)
     huggingface_input_ids = "huggingface_input_ids"
+
+
+def is_native_kv(llm_io_type: LLMIOType) -> bool:
+    """Check if the IO type uses native KV cache (right-padding with cache_index)."""
+    return llm_io_type == LLMIOType.genie_input_ids_native_kv
+
+
+def is_kv_key_name(name: str) -> bool:
+    # Covers past_ and nativekvcache_ only; swa_ (sliding window) handled by callers.
+    return "past_key" in name or "nativekvcache__key" in name
+
+
+def is_kv_value_name(name: str) -> bool:
+    # Covers past_ and nativekvcache_ only; swa_ (sliding window) handled by callers.
+    return "past_value" in name or "nativekvcache__value" in name
 
 
 # --- Persistent QDC job records for LLM perf collection ----------------------

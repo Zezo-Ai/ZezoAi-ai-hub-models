@@ -374,6 +374,7 @@ class Llama3Base_AIMETOnnx(LLM_AIMETOnnx):
 
         if self.llm_io_type in {
             LLMIOType.genie_input_ids,
+            LLMIOType.genie_input_ids_native_kv,
             LLMIOType.huggingface_input_ids,
         }:
             # See templates/llama3/model.py for why this is needed.
@@ -391,6 +392,7 @@ class Llama3Base_AIMETOnnx(LLM_AIMETOnnx):
 
         if uses_lists and self.llm_io_type in {
             LLMIOType.genie_input_ids,
+            LLMIOType.genie_input_ids_native_kv,
             LLMIOType.huggingface_input_ids,
         }:
             encodings["activation_encodings"][embed_a_name]["name"] = embed_a_name

@@ -96,8 +96,9 @@ def apply_ssd_genie_assets(
         The genie bundle directory containing ``genie_config.json``.
     encodings_path
         Path to the full (unsplit) model AIMET encodings JSON. Its
-        ``past_key_*_in`` / ``past_value_*_in`` activation encodings supply the
-        quantization scales for the forecast-prefix KV-cache.
+        KV activation encodings (``past_key_*_in`` / ``past_value_*_in`` for
+        legacy, or ``past_nativekvcache__key_*_in`` for native KV)
+        supply the quantization scales for the forecast-prefix KV-cache.
     ssd_forecast_ckpt
         Path to the SSD forecast checkpoint (``forecast_module_state_dict.pt``).
     """
@@ -122,11 +123,22 @@ def apply_ssd_genie_assets(
             v["name"]: v for v in encodings["activation_encodings"]
         }
     actv_encodings = encodings["activation_encodings"]
-    num_layers = sum(
-        1
-        for ae_key in actv_encodings
-        if ae_key.startswith("past_value_") and ae_key.endswith("_in")
-    )
+
+    # Detect native KV (per-head) vs legacy (per-layer) encoding names.
+    is_native_kv = any("nativekvcache__key" in k for k in actv_encodings)
+    if is_native_kv:
+        num_layers = sum(
+            1
+            for ae_key in actv_encodings
+            if ae_key.startswith("past_nativekvcache__value_")
+            and ae_key.endswith("_in")
+        )
+    else:
+        num_layers = sum(
+            1
+            for ae_key in actv_encodings
+            if ae_key.startswith("past_value_") and ae_key.endswith("_in")
+        )
 
     # Create 'forecast-prefix' folder and save kvcache prefix
     ssd_prefix_des_dir = output_path / "forecast-prefix"
@@ -137,6 +149,7 @@ def apply_ssd_genie_assets(
         actv_encodings,
         str(ssd_prefix_des_dir / "kv-cache.primary.qnn-htp"),
         num_layers,
+        is_native_kv=is_native_kv,
     )
 
     # Update genie config with SSD params
@@ -205,12 +218,25 @@ def _quantize_kv_cache(f: Any, encoding: Any, bw: int = 8) -> Any:
 
 
 def _save_kv_cache(
-    kvcache: Any, encodings: Any, filename: str, num_layers: int = 10000
+    kvcache: Any,
+    encodings: Any,
+    filename: str,
+    num_layers: int = 10000,
+    is_native_kv: bool = False,
 ) -> None:
-    key_value_encodings = [
-        [encodings[f"past_key_{layer_n}_in"], encodings[f"past_value_{layer_n}_in"]]
-        for layer_n in range(num_layers)
-    ]
+    if is_native_kv:
+        key_value_encodings = [
+            [
+                encodings[f"past_nativekvcache__key_{layer_n}_in"],
+                encodings[f"past_nativekvcache__value_{layer_n}_in"],
+            ]
+            for layer_n in range(num_layers)
+        ]
+    else:
+        key_value_encodings = [
+            [encodings[f"past_key_{layer_n}_in"], encodings[f"past_value_{layer_n}_in"]]
+            for layer_n in range(num_layers)
+        ]
     key_q = [
         _quantize_kv_cache(cache[0], encoding[0])
         for cache, encoding in zip(kvcache, key_value_encodings, strict=False)
@@ -220,8 +246,12 @@ def _save_kv_cache(
         for cache, encoding in zip(kvcache, key_value_encodings, strict=False)
     ]
 
-    key_cache = np.concatenate(key_q)
-    value_cache = np.concatenate(value_q)
+    key_cache = np.stack(key_q).reshape(
+        len(key_q), -1, key_q[0].shape[-2], key_q[0].shape[-1]
+    )
+    value_cache = np.stack(value_q).reshape(
+        len(value_q), -1, value_q[0].shape[-2], value_q[0].shape[-1]
+    )
 
     CACHE_FILE_SPEC = "IIBxHHH"
     CACHE_FILE_SPEC_SIZE = struct.calcsize(CACHE_FILE_SPEC)
