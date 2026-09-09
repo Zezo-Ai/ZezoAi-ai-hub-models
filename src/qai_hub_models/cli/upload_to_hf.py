@@ -68,9 +68,6 @@ from qai_hub_models.cli.hf_common import (
 )
 from qai_hub_models.configs._info_yaml_enums import MODEL_LICENSE, MODEL_STATUS
 from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
-from qai_hub_models.scripts.utils.huggingface_push_helpers import (
-    _timeout_retry,  # in-repo reuse: retries HF 429s with backoff
-)
 from qai_hub_models.utils.export.context import resolve_manifest
 
 # Files that are build output or local state, never published.
@@ -175,6 +172,9 @@ def _assert_token_can_write(token: str) -> None:
     ValueError
         If the token's role is read-only.
     """
+    # scripts isn't in the release wheel, so import here rather than at module load.
+    from qai_hub_models.scripts.utils.huggingface_push_helpers import _timeout_retry
+
     try:
         info = _timeout_retry(lambda: whoami(token=token), 5)
         role = info["auth"]["accessToken"]["role"]
@@ -348,6 +348,8 @@ def _stale_remote_files(
     list[str]
         Sorted remote paths to delete.
     """
+    from qai_hub_models.scripts.utils.huggingface_push_helpers import _timeout_retry
+
     staged = {str(p.relative_to(staging)) for p in staging.rglob("*") if p.is_file()}
     remote = _timeout_retry(lambda: list_repo_files(repo_id, token=token), 5)
 
@@ -361,6 +363,8 @@ def _stale_remote_files(
 
 def _hf_username(token: str | None) -> str | None:
     """Return the token's HuggingFace username, or None if it can't be read."""
+    from qai_hub_models.scripts.utils.huggingface_push_helpers import _timeout_retry
+
     try:
         return str(_timeout_retry(lambda: whoami(token=token), 5)["name"])
     except Exception:
@@ -430,6 +434,8 @@ def _repo_creator(repo_id: str, token: str | None) -> str | None:
     ``list_repo_commits`` returns newest-first, so its last entry is the initial
     commit and its author is the person who created the repo.
     """
+    from qai_hub_models.scripts.utils.huggingface_push_helpers import _timeout_retry
+
     try:
         commits = _timeout_retry(lambda: list_repo_commits(repo_id, token=token), 5)
     except Exception:
@@ -487,6 +493,8 @@ def _assert_may_overwrite(repo_id: str, token: str | None) -> None:
 
 def _repo_tags(repo_id: str, token: str | None) -> list[Any]:
     """Return the repo's existing tag refs."""
+    from qai_hub_models.scripts.utils.huggingface_push_helpers import _timeout_retry
+
     refs = _timeout_retry(lambda: list_repo_refs(repo_id, token=token), 5)
     return list(refs.tags)
 
@@ -612,6 +620,8 @@ def upload_to_hf(
         the recipe is in-tree rather than external, no token is available, or
         the destination repo already exists and was created by someone else.
     """
+    from qai_hub_models.scripts.utils.huggingface_push_helpers import _timeout_retry
+
     source_dir = _resolve_upload_dir(target)
     manifest = resolve_manifest(source_dir)
 
