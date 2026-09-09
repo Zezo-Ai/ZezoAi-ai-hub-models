@@ -183,7 +183,11 @@ def get_performance_table_rows(
             # LLM metrics - one row per (context_length, desired_compute_unit).
             is_llm = True
             for ctx in profile_perf_details.llm_metrics:
-                assert ctx.tokens_per_second
+                if not ctx.tokens_per_second:
+                    # Decode produced 0 tokens/sec (e.g. ran out of memory
+                    # mid-generation at this context length); not a
+                    # measurement worth publishing.
+                    continue
                 assert ctx.time_to_first_token_range_milliseconds
                 ttft = ctx.time_to_first_token_range_milliseconds
                 row = base_row.copy()

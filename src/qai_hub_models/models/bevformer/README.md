@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [BEVFormer: Transform temporal multi-view images into a unified bird's eye scene](https://aihub.qualcomm.com/models/bevformer)
 
 Bevformer is a SOTA model of interest to the Auto BU.

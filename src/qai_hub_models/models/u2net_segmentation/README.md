@@ -25,7 +25,7 @@ qai-hub-models perf U2Net-Segmentation
 qai-hub-models numerics U2Net-Segmentation
 
 # Download a ready-to-deploy asset
-qai-hub-models fetch U2Net-Segmentation --runtime tflite --precision float
+qai-hub-models fetch U2Net-Segmentation --runtime qnn_context_binary --precision float
 ```
 See the [CLI README](../../../../cli/README.md)
 for the full list of commands and filters.

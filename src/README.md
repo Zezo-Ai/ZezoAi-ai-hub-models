@@ -241,6 +241,7 @@ and many more.
 | [MobileSam](https://aihub.qualcomm.com/models/mobilesam) | `qai_hub_models.models.mobilesam` |
 | [PSPNet](https://aihub.qualcomm.com/models/pspnet) | `qai_hub_models.models.pspnet` |
 | [PidNet](https://aihub.qualcomm.com/models/pidnet) | `qai_hub_models.models.pidnet` |
+| [PointNet](https://aihub.qualcomm.com/models/pointnet) | `qai_hub_models.models.pointnet` |
 | [SINet](https://aihub.qualcomm.com/models/sinet) | `qai_hub_models.models.sinet` |
 | [SalsaNext](https://aihub.qualcomm.com/models/salsanext) | `qai_hub_models.models.salsanext` |
 | [Segformer-Base](https://aihub.qualcomm.com/models/segformer_base) | `qai_hub_models.models.segformer_base` |
@@ -303,6 +304,7 @@ and many more.
 | [Yolo-v5](https://aihub.qualcomm.com/models/yolov5) | `qai_hub_models.models.yolov5` |
 | [Yolo-v6](https://aihub.qualcomm.com/models/yolov6) | `qai_hub_models.models.yolov6` |
 | [Yolo-v7](https://aihub.qualcomm.com/models/yolov7) | `qai_hub_models.models.yolov7` |
+| [YoloV5-Face](https://aihub.qualcomm.com/models/yolov5_face) | `qai_hub_models.models.yolov5_face` |
 | | |
 | **Pose Estimation**
 | [CenterNet-Pose](https://aihub.qualcomm.com/models/centernet_pose) | `qai_hub_models.models.centernet_pose` |
@@ -330,6 +332,7 @@ and many more.
 | | |
 | **Driver Assistance**
 | [BEVDet](https://aihub.qualcomm.com/models/bevdet) | `qai_hub_models.models.bevdet` |
+| [BEVFormer](https://aihub.qualcomm.com/models/bevformer) | `qai_hub_models.models.bevformer` |
 | [BEVFusion](https://aihub.qualcomm.com/models/bevfusion_det) | `qai_hub_models.models.bevfusion_det` |
 | [CVT](https://aihub.qualcomm.com/models/cvt) | `qai_hub_models.models.cvt` |
 | [CenterNet-3D](https://aihub.qualcomm.com/models/centernet_3d) | `qai_hub_models.models.centernet_3d` |

@@ -1,6 +1,3 @@
-> [!WARNING]
-> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
-
 # [YoloV5-Face: Real-time face detection with 5-point facial landmark estimation on mobile and edge devices](https://aihub.qualcomm.com/models/yolov5_face)
 
 YoloV5-Face-Nano is a lightweight single-class face detector based on the YoloV5 backbone (StemBlock + ShuffleV2Block). Each detected face is accompanied by 5 facial landmark predictions (left eye, right eye, nose, left mouth corner, right mouth corner). Trained on the WiderFace dataset.

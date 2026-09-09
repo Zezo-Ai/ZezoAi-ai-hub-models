@@ -241,6 +241,7 @@ and many more.
 | [MobileSam](https://aihub.qualcomm.com/models/mobilesam) | [qai_hub_models.models.mobilesam](src/qai_hub_models/models/mobilesam/README.md) |
 | [PSPNet](https://aihub.qualcomm.com/models/pspnet) | [qai_hub_models.models.pspnet](src/qai_hub_models/models/pspnet/README.md) |
 | [PidNet](https://aihub.qualcomm.com/models/pidnet) | [qai_hub_models.models.pidnet](src/qai_hub_models/models/pidnet/README.md) |
+| [PointNet](https://aihub.qualcomm.com/models/pointnet) | [qai_hub_models.models.pointnet](src/qai_hub_models/models/pointnet/README.md) |
 | [SINet](https://aihub.qualcomm.com/models/sinet) | [qai_hub_models.models.sinet](src/qai_hub_models/models/sinet/README.md) |
 | [SalsaNext](https://aihub.qualcomm.com/models/salsanext) | [qai_hub_models.models.salsanext](src/qai_hub_models/models/salsanext/README.md) |
 | [Segformer-Base](https://aihub.qualcomm.com/models/segformer_base) | [qai_hub_models.models.segformer_base](src/qai_hub_models/models/segformer_base/README.md) |
@@ -303,6 +304,7 @@ and many more.
 | [Yolo-v5](https://aihub.qualcomm.com/models/yolov5) | [qai_hub_models.models.yolov5](src/qai_hub_models/models/yolov5/README.md) |
 | [Yolo-v6](https://aihub.qualcomm.com/models/yolov6) | [qai_hub_models.models.yolov6](src/qai_hub_models/models/yolov6/README.md) |
 | [Yolo-v7](https://aihub.qualcomm.com/models/yolov7) | [qai_hub_models.models.yolov7](src/qai_hub_models/models/yolov7/README.md) |
+| [YoloV5-Face](https://aihub.qualcomm.com/models/yolov5_face) | [qai_hub_models.models.yolov5_face](src/qai_hub_models/models/yolov5_face/README.md) |
 | | |
 | **Pose Estimation**
 | [CenterNet-Pose](https://aihub.qualcomm.com/models/centernet_pose) | [qai_hub_models.models.centernet_pose](src/qai_hub_models/models/centernet_pose/README.md) |
@@ -330,6 +332,7 @@ and many more.
 | | |
 | **Driver Assistance**
 | [BEVDet](https://aihub.qualcomm.com/models/bevdet) | [qai_hub_models.models.bevdet](src/qai_hub_models/models/bevdet/README.md) |
+| [BEVFormer](https://aihub.qualcomm.com/models/bevformer) | [qai_hub_models.models.bevformer](src/qai_hub_models/models/bevformer/README.md) |
 | [BEVFusion](https://aihub.qualcomm.com/models/bevfusion_det) | [qai_hub_models.models.bevfusion_det](src/qai_hub_models/models/bevfusion_det/README.md) |
 | [CVT](https://aihub.qualcomm.com/models/cvt) | [qai_hub_models.models.cvt](src/qai_hub_models/models/cvt/README.md) |
 | [CenterNet-3D](https://aihub.qualcomm.com/models/centernet_3d) | [qai_hub_models.models.centernet_3d](src/qai_hub_models/models/centernet_3d/README.md) |
