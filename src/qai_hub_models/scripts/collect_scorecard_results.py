@@ -1027,6 +1027,11 @@ if __name__ == "__main__":
         )
         global_numerics_diff.dump_regressions_json(numerics_regressions_path)
 
+        newly_disabled_path = os.path.join(
+            args.artifacts_dir, f"newly-disabled-{now_str}.json"
+        )
+        global_numerics_diff.dump_newly_disabled_json(newly_disabled_path)
+
         # Write accuracy to intermediates folder, scoped-merged onto the committed CSV.
         if args.sync_code_gen and using_prod_hub:
             assert accuracy_df is not None

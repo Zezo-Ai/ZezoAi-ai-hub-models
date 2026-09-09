@@ -860,3 +860,75 @@ class NumericsDiff:
         with open(json_path, "w") as f:
             json.dump(data, f, indent=2)
         print(f"Numerics regressions JSON written to {json_path} ({len(data)} entries)")
+
+    # Column names for the JSON export of newly-disabled rows. Kept clean here
+    # (dump_summary has legacy typos we don't want in downstream tooling).
+    _DISABLED_CONFIG_COLUMNS = [
+        "Model ID",
+        "Dataset Name",
+        "Metric Name",
+        "Device",
+        "Precision",
+        "Runtime",
+        "FP Accuracy",
+        "Device Accuracy",
+        "Difference",
+        "Difference Threshold",
+        "Newly Disabled",
+    ]
+    _BENCHMARK_FAILURE_COLUMNS = [
+        "Model ID",
+        "Dataset Name",
+        "Metric Name",
+        "Accuracy Type",
+        "Precision",
+        "Runtime",
+        "Actual Value",
+        "Benchmark Value",
+        "Difference",
+        "Threshold",
+        "Newly Disabled",
+    ]
+
+    def dump_newly_disabled_json(self, json_path: str) -> None:
+        """Write newly-disabled accuracy rows from both buckets to one JSON file.
+
+        Powers the "Newly Disabled Configurations" and "Newly Failing Benchmarks"
+        sections of the scorecard auto-issue. Each row carries a `kind` key so
+        the issue builder can split the flat list back into its source bucket.
+        Stale (already-disabled) rows are left in the downloadable diff only.
+        """
+        rows: list[dict[str, str]] = []
+        for disabled_row in self.device_vs_float_greater_than_enablement_threshold:
+            if disabled_row[-1]:
+                entry: dict[str, str] = {"kind": "disabled_configuration"}
+                entry.update(
+                    {
+                        k: str(v)
+                        for k, v in zip(
+                            self._DISABLED_CONFIG_COLUMNS,
+                            disabled_row,
+                            strict=False,
+                        )
+                    }
+                )
+                rows.append(entry)
+        for benchmark_row in self.benchmark_failures:
+            if benchmark_row[-1]:
+                entry = {"kind": "benchmark_failure"}
+                entry.update(
+                    {
+                        k: str(v)
+                        for k, v in zip(
+                            self._BENCHMARK_FAILURE_COLUMNS,
+                            benchmark_row,
+                            strict=False,
+                        )
+                    }
+                )
+                rows.append(entry)
+        with open(json_path, "w") as f:
+            json.dump(rows, f, indent=2)
+        print(
+            f"Newly-disabled accuracy JSON written to {json_path} ({len(rows)} entries)"
+        )

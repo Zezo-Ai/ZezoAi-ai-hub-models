@@ -4,16 +4,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
 """
-Generate a GitHub issue body for 2x+ scorecard regressions.
+Generate a GitHub issue body for scorecard regressions (perf 2x+ and accuracy).
 
-Reads the JSON files produced by PerformanceDiff.dump_severe_regressions_json()
-and NumericsDiff.dump_regressions_json(), then renders a Jinja template.
+Reads the JSON files produced by PerformanceDiff.dump_severe_regressions_json(),
+NumericsDiff.dump_regressions_json(), and NumericsDiff.dump_newly_disabled_json(),
+then renders a Jinja template.
 
 The actual issue creation is done by the GitHub Action that calls this script.
 
 Usage (from GitHub Actions):
     python3 -m qai_hub_models.scripts.file_scorecard_regression_issue \
         --perf-regressions-json path/to/perf-regressions-2x-*.json \
+        --newly-disabled-json path/to/newly-disabled-*.json \
         --output regression-issue.json \
         --run-url "https://github.com/..." \
         --perf-diff-url "https://..." \
@@ -365,24 +367,30 @@ def _render(
     today: str,
     perf_regressions: list[dict],
     numerics_regressions: list[dict],
+    newly_disabled_configs: list[dict],
+    newly_failing_benchmarks: list[dict],
     run_url: str,
     perf_diff_url: str,
     numerics_diff_url: str,
     context: ScorecardContext | None = None,
     perf_dropped: int = 0,
     numerics_dropped: int = 0,
+    accuracy_dropped: int = 0,
 ) -> str:
     template = _env.get_template("scorecard_regression_issue_template.j2")
     return template.render(
         today=today,
         perf_regressions=perf_regressions,
         numerics_regressions=numerics_regressions,
+        newly_disabled_configs=newly_disabled_configs,
+        newly_failing_benchmarks=newly_failing_benchmarks,
         run_url=run_url,
         perf_diff_url=perf_diff_url,
         numerics_diff_url=numerics_diff_url,
         context=context,
         perf_dropped=perf_dropped,
         numerics_dropped=numerics_dropped,
+        accuracy_dropped=accuracy_dropped,
     )
 
 
@@ -392,6 +400,8 @@ def build_issue_body(
     run_url: str,
     perf_diff_url: str,
     numerics_diff_url: str,
+    newly_disabled_configs: list[dict] | None = None,
+    newly_failing_benchmarks: list[dict] | None = None,
     deployment: str = "workbench",
     previous_deployment: str | None = None,
     context: ScorecardContext | None = None,
@@ -405,6 +415,10 @@ def build_issue_body(
     """
     if previous_deployment is None:
         previous_deployment = deployment
+    if newly_disabled_configs is None:
+        newly_disabled_configs = []
+    if newly_failing_benchmarks is None:
+        newly_failing_benchmarks = []
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     perf_tagged = _retag_columns(perf_regressions, deployment, previous_deployment)
     numerics_tagged = _retag_columns(
@@ -412,42 +426,59 @@ def build_issue_body(
     )
     perf = _linkify_job_ids(perf_tagged, deployment, previous_deployment)
     numerics = _linkify_job_ids(numerics_tagged, deployment, previous_deployment)
+    # Accuracy rows don't carry job IDs, so no re-tagging / linkifying needed.
+    disabled = list(newly_disabled_configs)
+    benchmarks = list(newly_failing_benchmarks)
 
     body = _render(
         today,
         perf,
         numerics,
+        disabled,
+        benchmarks,
         run_url,
         perf_diff_url,
         numerics_diff_url,
         context=context,
     )
-    perf_dropped = numerics_dropped = 0
-    while len(body) > MAX_ISSUE_BODY_LEN and (perf or numerics):
+    perf_dropped = numerics_dropped = accuracy_dropped = 0
+    while len(body) > MAX_ISSUE_BODY_LEN and (
+        perf or numerics or disabled or benchmarks
+    ):
         # Bulk-drop based on current overage so we don't re-render once per row.
-        total_rows = len(perf) + len(numerics)
+        total_rows = len(perf) + len(numerics) + len(disabled) + len(benchmarks)
         chars_per_row = max(1, len(body) // max(total_rows, 1))
         rows_to_drop = max(1, (len(body) - MAX_ISSUE_BODY_LEN) // chars_per_row)
         for _ in range(rows_to_drop):
-            if not perf and not numerics:
+            if not (perf or numerics or disabled or benchmarks):
                 break
-            # Drop from whichever table currently has more rows; ties go to perf.
-            if len(perf) >= len(numerics) and perf:
+            # Drop from whichever table currently has the most rows.
+            max_size = max(len(perf), len(numerics), len(disabled), len(benchmarks))
+            if len(perf) == max_size and perf:
                 perf.pop()
                 perf_dropped += 1
-            elif numerics:
+            elif len(numerics) == max_size and numerics:
                 numerics.pop()
                 numerics_dropped += 1
+            elif len(disabled) == max_size and disabled:
+                disabled.pop()
+                accuracy_dropped += 1
+            elif benchmarks:
+                benchmarks.pop()
+                accuracy_dropped += 1
         body = _render(
             today,
             perf,
             numerics,
+            disabled,
+            benchmarks,
             run_url,
             perf_diff_url,
             numerics_diff_url,
             context=context,
             perf_dropped=perf_dropped,
             numerics_dropped=numerics_dropped,
+            accuracy_dropped=accuracy_dropped,
         )
     # Defensive hard cap: if the template's fixed overhead alone (headers,
     # URLs, footers) exceeds the limit, GitHub would still 422 us. Truncate.
@@ -484,6 +515,15 @@ def main() -> None:
         "--numerics-regressions-json",
         default="",
         help="Path (or glob) to numerics-regressions-*.json",
+    )
+    parser.add_argument(
+        "--newly-disabled-json",
+        default="",
+        help=(
+            "Path (or glob) to newly-disabled-*.json. Contains a flat list of "
+            "rows tagged with `kind` (disabled_configuration or benchmark_failure) "
+            "used to render the accuracy sections of the issue body."
+        ),
     )
     parser.add_argument(
         "--run-url",
@@ -563,13 +603,35 @@ def main() -> None:
     )
     numerics_regressions = _load_json(numerics_path)
 
-    if not perf_regressions and not numerics_regressions:
+    newly_disabled_path = (
+        _resolve_glob(args.newly_disabled_json) if args.newly_disabled_json else None
+    )
+    newly_disabled_rows = _load_json(newly_disabled_path)
+    disabled_configs = [
+        {k: v for k, v in r.items() if k != "kind"}
+        for r in newly_disabled_rows
+        if r.get("kind") == "disabled_configuration"
+    ]
+    newly_failing_benchmarks = [
+        {k: v for k, v in r.items() if k != "kind"}
+        for r in newly_disabled_rows
+        if r.get("kind") == "benchmark_failure"
+    ]
+    has_accuracy = bool(disabled_configs or newly_failing_benchmarks)
+
+    if not perf_regressions and not numerics_regressions and not has_accuracy:
         print("No 2x+ regressions found — skipping issue creation.")
         return
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     env_label = _env_label(args.deployment).capitalize()
-    title = f"[Scorecard - {env_label}] 2x+ Regressions Detected - {today}"
+    if has_accuracy:
+        title = (
+            f"[Scorecard - {env_label}] Regressions Detected "
+            f"(perf 2x+, accuracy) - {today}"
+        )
+    else:
+        title = f"[Scorecard - {env_label}] 2x+ Regressions Detected - {today}"
 
     context: ScorecardContext | None = None
     if args.current_run_id and args.tool_versions_path:
@@ -600,6 +662,8 @@ def main() -> None:
         args.run_url,
         args.perf_diff_url,
         args.numerics_diff_url,
+        newly_disabled_configs=disabled_configs,
+        newly_failing_benchmarks=newly_failing_benchmarks,
         deployment=args.deployment,
         previous_deployment=args.previous_deployment,
         context=context,
@@ -608,8 +672,10 @@ def main() -> None:
     perf_count = len(perf_regressions)
     numerics_count = len(numerics_regressions)
     print(
-        f"Found {perf_count} perf regression(s) and "
-        f"{numerics_count} numerics regression(s)."
+        f"Found {perf_count} perf regression(s), "
+        f"{numerics_count} numerics regression(s), "
+        f"{len(disabled_configs)} newly-disabled configuration(s), "
+        f"{len(newly_failing_benchmarks)} newly-failing benchmark(s)."
     )
 
     title = f"{args.title_prefix}{title}"
