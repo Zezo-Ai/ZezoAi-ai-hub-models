@@ -19,7 +19,7 @@ from qai_hub_models.models.templates.detection.detection_evaluator import (
 from qai_hub_models.utils.asset_loaders import CachedWebModelAsset, load_image
 from qai_hub_models.utils.base_dataset import BaseDataset
 from qai_hub_models.utils.base_evaluator import BaseEvaluator
-from qai_hub_models.utils.base_model import BaseModel, SerializationSettings
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.bounding_box_processing import box_xywh_to_xyxy
 from qai_hub_models.utils.image_processing import app_to_net_image_inputs
 from qai_hub_models.utils.input_spec import (
@@ -68,10 +68,7 @@ class DFine(BaseModel):
     """D-FINE real-time object detection model."""
 
     def __init__(self, model: torch.nn.Module) -> None:
-        super().__init__(
-            model,
-            serialization_settings=SerializationSettings(use_pt2=False),
-        )
+        super().__init__(model)
 
     @classmethod
     def from_pretrained(cls, variant: str = DEFAULT_VARIANT) -> Self:

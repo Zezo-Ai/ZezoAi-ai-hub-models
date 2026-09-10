@@ -25,7 +25,7 @@ from qai_hub_models.models.templates.wedetect.constants import (
     INPUT_IMAGE_SIZE,
     TEXT_EMBEDDING_DIM,
 )
-from qai_hub_models.utils.base_model import BaseModel, SerializationSettings
+from qai_hub_models.utils.base_model import BaseModel
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
     ImageMetadata,
@@ -57,7 +57,7 @@ class BaseTextEncoder(BaseModel):
         num_classes: int = DEFAULT_NUM_CLASSES,
         max_seq_len: int = DEFAULT_MAX_SEQ_LEN,
     ) -> None:
-        super().__init__(serialization_settings=SerializationSettings(use_pt2=True))
+        super().__init__()
         mm_base: Any = base_model
         lang_backbone = mm_base.backbone.text_model
         self.model = lang_backbone.model

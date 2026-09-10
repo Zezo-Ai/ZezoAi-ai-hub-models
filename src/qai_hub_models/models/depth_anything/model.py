@@ -11,7 +11,6 @@ from typing_extensions import Self
 
 from qai_hub_models import Precision
 from qai_hub_models.models.templates.depth_estimation.model import DepthEstimationModel
-from qai_hub_models.utils.base_model import SerializationSettings
 from qai_hub_models.utils.image_processing import normalize_image_torchvision
 from qai_hub_models.utils.input_spec import (
     ColorFormat,
@@ -30,9 +29,7 @@ class DepthAnything(DepthEstimationModel):
     """Exportable DepthAnything Depth Estimation, end-to-end."""
 
     def __init__(self, model: torch.nn.Module | None = None) -> None:
-        super().__init__(
-            model=model, serialization_settings=SerializationSettings(use_pt2=True)
-        )
+        super().__init__(model=model)
 
     @classmethod
     def from_pretrained(cls, ckpt: str = DEFAULT_WEIGHTS) -> Self:
