@@ -1,11 +1,19 @@
 ---
 name: onboard
-description: Onboard a new model to Qualcomm AI Hub Models. Guides authoring a standalone folder (model.py, app.py, demo.py, test.py, manifest.yaml) that the qai-hub-models CLI can install, export, and evaluate. Ships `supported_precisions: [float]`; quantization is a separate later skill. Use when adding a new model recipe.
+description: Onboard a new model to Qualcomm AI Hub Models. Guides authoring a standalone folder (model.py, app.py, demo.py, test.py, manifest.yaml) that the qai-hub-models CLI can install, export, and evaluate. Ships `supported_precisions: [float]`; quantization is a separate later skill. Use when adding a new model recipe. Does not support LLMs (causal/chat text-generation models) — those need a separate path.
 ---
 
 # Model Onboarding
 
 Target: a self-contained recipe folder driven by the `qai-hub-models` CLI via `manifest.yaml` + `model.py`. There are no generated `export.py` / `evaluate.py` scripts. Ship `[float]` only — `add-quantization` handles quantized precisions later.
+
+## Not yet supported: LLMs
+
+If the model is an LLM — causal / chat text-generation (Llama, Qwen, Mistral, Phi, Gemma, …) or a VLM with one of those as its decoder — tell the user AI-assisted onboarding doesn't support LLMs yet (KV-cache splitting, graph partitioning, and calibration aren't covered here; the AI Hub Models team handles LLM recipes), offer a non-LLM model instead, and stop there. If they still want to try after that, go ahead — just flag what's likely to break.
+
+BERT-style encoders, embedding models, encoder-decoder task models (Whisper, translation), and diffusion models are all in scope as normal.
+
+Recognizing one: `AutoModelForCausalLM` / `LlamaForCausalLM`-style classes in the model card, `architectures: [*ForCausalLM]` in `config.json`, `text-generation` as the HF pipeline tag, or a card that talks about context length, chat templates, or tokens/sec.
 
 ## Intake
 
@@ -21,7 +29,7 @@ Do NOT ask about license, task type, input shape, precisions, or multi-component
 ### Derive before asking
 
 - **License** — HF: `https://huggingface.co/api/models/<owner>/<repo>` (`cardData.license`, `tags`). GitHub: `gh api repos/<owner>/<repo>` (`license.spdx_id`). Record the license in `manifest.yaml` (`license_type`, `license`) and proceed. Never hard-block on license for a standalone / external recipe. When the license is non-commercial (CC-BY-NC, RAIL, "research only") or copyleft (AGPL, GPL), **warn the user in the final summary** so they can make the call — but keep authoring. Dataset licenses get the same treatment: record and warn, never block.
-- **Task type** — model card / config / tags. Match against classification, detection, segmentation, depth, pose, super-res, ASR, TTS, LLM, VLM.
+- **Task type** — model card / config / tags. Match against classification, detection, segmentation, depth, pose, super-res, ASR, TTS. An LLM (or LLM-backed VLM) is out of scope — see above.
 - **Reference forward-pass snippet** — from the model card / README / PyPI docs. Use for numerical verification against `test_task`.
 - **Input spec** — `preprocessor_config.json` / `config.json` / `weights.transforms()`.
 - **Sample input** — from the card, or a generic one for the task.
