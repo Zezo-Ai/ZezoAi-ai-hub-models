@@ -423,13 +423,51 @@ precisions:
           Dragonwing Q-8750:
             geniex_qairt:
               llm_metrics:
+              - context_length: 1024
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 7502.993661
+                time_to_first_token_range_milliseconds:
+                  max: 136.47885714285712
+                  min: 17.05985714285714
+                tokens_per_second: 111.752524
               - context_length: 4096
                 desired_compute_unit: npu
-                prefill_tokens_per_second: 7574.412687
+                prefill_tokens_per_second: 3545.78875
                 time_to_first_token_range_milliseconds:
-                  max: 540.768
-                  min: 16.899
-                tokens_per_second: 115.076901
+                  max: 1155.1731612903227
+                  min: 36.099161290322584
+                tokens_per_second: 57.561564
+              - context_length: 512
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 8207.057214
+                time_to_first_token_range_milliseconds:
+                  max: 62.385333333333335
+                  min: 15.596333333333334
+                tokens_per_second: 120.748452
+          Samsung Galaxy S25:
+            geniex_qairt:
+              llm_metrics:
+              - context_length: 1024
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 7502.993661
+                time_to_first_token_range_milliseconds:
+                  max: 136.47885714285712
+                  min: 17.05985714285714
+                tokens_per_second: 111.752524
+              - context_length: 4096
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 3545.78875
+                time_to_first_token_range_milliseconds:
+                  max: 1155.1731612903227
+                  min: 36.099161290322584
+                tokens_per_second: 57.561564
+              - context_length: 512
+                desired_compute_unit: npu
+                prefill_tokens_per_second: 8207.057214
+                time_to_first_token_range_milliseconds:
+                  max: 62.385333333333335
+                  min: 15.596333333333334
+                tokens_per_second: 120.748452
           Snapdragon 8 Elite Gen 5 QRD:
             geniex_qairt:
               llm_metrics:
@@ -529,3 +567,4 @@ supported_devices:
 - Arduino VENTUNO Q
 - Snapdragon X Plus 8-Core CRD
 - Dragonwing IQ-X5121
+- Samsung Galaxy S25

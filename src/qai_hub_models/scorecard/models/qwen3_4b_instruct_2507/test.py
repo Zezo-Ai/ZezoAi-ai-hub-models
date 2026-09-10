@@ -24,7 +24,7 @@ from qai_hub_models.models.qwen3_4b_instruct_2507.model import (
     Qwen3_4B_Instruct_2507_QuantizablePreSplit,
 )
 from qai_hub_models.models.templates.llm import test
-from qai_hub_models.models.templates.llm.common import cleanup, get_qdc_api_token
+from qai_hub_models.models.templates.llm.common import cleanup
 from qai_hub_models.models.templates.llm.llm_helpers import (
     log_perf_on_device_result,
 )
@@ -210,14 +210,16 @@ def test_qdc(
     )
     if not (genie_bundle_path / "genie_config.json").exists():
         pytest.fail("The genie bundle does not exist.")
-    from qai_hub_models.models.templates.llm.qdc.genie_jobs import (
+    from qai_hub_models.utils.devicefarm.devicefarm import get_device_farm
+    from qai_hub_models.utils.llm.genie.jobs import (
         _USE_DEFAULT_PROMPTS,
-        submit_genie_bundle_to_qdc_device,
+        submit_and_collect_genie_bundle,
     )
 
+    backend = get_device_farm(device)
     qdc_job_name = f"Genie {MODEL_ID} {precision}"
-    tps, prefill_tps, min_ttft_ms, _ = submit_genie_bundle_to_qdc_device(
-        get_qdc_api_token(device),
+    tps, prefill_tps, min_ttft_ms, _ = submit_and_collect_genie_bundle(
+        backend,
         device.reference_device.name,
         str(genie_bundle_path),
         job_name=qdc_job_name,

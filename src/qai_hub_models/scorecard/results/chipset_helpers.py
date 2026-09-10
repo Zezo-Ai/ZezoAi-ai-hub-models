@@ -59,7 +59,7 @@ def sorted_devices(devices: set[ScorecardDevice]) -> list[ScorecardDevice]:
     """
     device_chipset_map: dict[str, set[ScorecardDevice]] = {}
     for device in devices:
-        canonical_name = get_canonical_chipset_name(device.chipset)
+        canonical_name = device.canonical_chipset
         if canonical_name not in device_chipset_map:
             device_chipset_map[canonical_name] = set()
         device_chipset_map[canonical_name].add(device)

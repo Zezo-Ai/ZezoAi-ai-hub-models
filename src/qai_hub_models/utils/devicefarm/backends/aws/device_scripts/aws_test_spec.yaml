@@ -1,0 +1,45 @@
+version: 0.1
+
+# Shared by Genie and GenieX (qairt + llama_cpp): both test packages are plain
+# pytest suites that drive the device over adb directly, with no dependency on
+# an actual Appium session (QDC only required Appium as a framework formality).
+# Skipping it here avoids a whole class of Appium-server flakiness we don't need.
+android_test_host: amazon_linux_2
+
+phases:
+  install:
+    commands:
+      - devicefarm-cli use python 3.10
+      - python3 --version
+
+  pre_test:
+    commands:
+      # Bare `adb` (no `-s`) then targets this job's device automatically.
+      - export ANDROID_SERIAL=$DEVICEFARM_DEVICE_UDID
+      # run_android.py reads this for an Appium display-name capability that
+      # is otherwise unused; harmless if imprecise.
+      - export ANDROID_DEVICE_VERSION=$DEVICEFARM_DEVICE_OS_VERSION
+      - export QAIHM_SKIP_APPIUM=1
+      # run_android.py / test_geniex_bench_android.py stage extra files
+      # (genie_bundle/, matrix_rows.txt, qairt_bundles/, ...) alongside
+      # tests/ at the root of the extracted test package -- QDC's own
+      # equivalent host path is /qdc/appium (the device scripts' default).
+      - export QAIHM_HOST_ARTIFACT_ROOT=$DEVICEFARM_TEST_PACKAGE_PATH
+      - adb wait-for-device
+
+  test:
+    commands:
+      - cd $DEVICEFARM_TEST_PACKAGE_PATH
+      - pip3 install -r requirements.txt
+      - python3 -m pytest -s tests/ --junitxml=$DEVICEFARM_LOG_DIR/results.xml
+
+  post_test:
+    commands:
+      # AWS has no QDC-style automatic device-log harvesting: pull the
+      # on-device output directory into the host log dir ourselves so it
+      # ends up in the Customer Artifacts zip. Best-effort: a failed test
+      # phase may leave nothing to pull.
+      - adb -s $DEVICEFARM_DEVICE_UDID pull /data/local/tmp/device_logs $DEVICEFARM_LOG_DIR/device_logs || true
+
+artifacts:
+  - $DEVICEFARM_LOG_DIR

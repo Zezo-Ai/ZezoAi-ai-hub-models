@@ -17,7 +17,7 @@ import pytest
 from appium import webdriver
 from appium.options.common import AppiumOptions
 
-DEVICE_QDC_LOGS = "/data/local/tmp/QDC_logs"
+DEVICE_LOGS_DIR = "/data/local/tmp/device_logs"
 
 
 def _make_options() -> AppiumOptions:
@@ -44,6 +44,12 @@ def _set_package_verifier(enabled: bool) -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def driver() -> Any:
+    # AWS Device Farm's custom test environment has no Appium session to
+    # satisfy (that's a QDC framework formality test_scorecard() never
+    # actually uses `driver` for); skip starting one there.
+    if os.environ.get("QAIHM_SKIP_APPIUM"):
+        yield None
+        return
     _set_package_verifier(False)
     session = webdriver.Remote(
         command_executor="http://127.0.0.1:4723/wd/hub",
@@ -61,11 +67,11 @@ def _push_results_xml(xml_path: str) -> None:
     if not os.path.exists(xml_path):
         return
     subprocess.run(
-        ["adb", "shell", f"mkdir -p {DEVICE_QDC_LOGS}"],
+        ["adb", "shell", f"mkdir -p {DEVICE_LOGS_DIR}"],
         check=False,
     )
     subprocess.run(
-        ["adb", "push", xml_path, f"{DEVICE_QDC_LOGS}/results.xml"],
+        ["adb", "push", xml_path, f"{DEVICE_LOGS_DIR}/results.xml"],
         check=False,
     )
 

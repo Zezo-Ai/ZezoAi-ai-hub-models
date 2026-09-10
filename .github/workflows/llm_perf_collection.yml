@@ -41,7 +41,7 @@ on:
           - dev
 
       run_eval:
-        description: 'Run on-device evaluation with default prompts. Eval runs on exactly one device: cs_x_elite when `device` covers it (including "all"/"default"), or the single device named in `device`. Naming several devices without cs_x_elite runs no eval. To use custom prompts, run locally via CLI: python -m qai_hub_models.models.templates.llm.qdc.genie_jobs --eval-prompts <path-to-jsonl>'
+        description: 'Run on-device evaluation with default prompts. Eval runs on exactly one device: cs_x_elite when `device` covers it (including "all"/"default"), or the single device named in `device`. Naming several devices without cs_x_elite runs no eval.'
         default: true
         type: boolean
 
@@ -152,6 +152,15 @@ jobs:
         hub-user-token-dev: ${{ secrets.HUB_USER_TOKEN_DEV }}
         hub-user-token-sandbox: ${{ secrets.HUB_USER_TOKEN_SANDBOX }}
 
+    - name: Setup AWS Device Farm Credentials
+      if: ${{ matrix.pool == 'aws' }}
+      uses: ./.github/actions/configure-multiple-aws-roles
+      with:
+        role-to-assume: ${{ secrets.QAIHM_CI_AWS_DEVICEFARM_ROLE_ARN }}
+        role-duration-seconds: 3600
+        profile: qaihm-devicefarm
+        aws-region: us-west-2
+
     - name: Download QDC tools
       env:
         QAIRT_SDK_PATH: ${{ github.workspace }}/qairt_auto_sdk.zip
@@ -197,10 +206,13 @@ jobs:
         AWS_ROLE_ARN: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
         AWS_REGION: us-west-2
         AWS_PROFILE_NAME: qaihm
+        AWS_DEVICEFARM_PROJECT_ARN: ${{ secrets.QAIHM_AWS_DEVICEFARM_PROJECT_ARN }}
+        AWS_DEVICEFARM_PROFILE: qaihm-devicefarm
+        AWS_DEVICEFARM_REGION: us-west-2
       run: |
         source ${{ env.VENV_PATH }}/bin/activate
         cd $GITHUB_WORKSPACE
-        python -m qai_hub_models.models.templates.llm.qdc.genie_jobs submit --jobs-file "$JOBS_FILE"
+        python -m qai_hub_models.scripts.run_genie_benchmarks submit --jobs-file "$JOBS_FILE"
 
     - name: Collect LLM Performance Results
       id: run_tests
@@ -216,22 +228,25 @@ jobs:
         AWS_ROLE_ARN: ${{ secrets.QAIHM_CI_AWS_ROLE_ARN }}
         AWS_REGION: us-west-2
         AWS_PROFILE_NAME: qaihm
+        AWS_DEVICEFARM_PROJECT_ARN: ${{ secrets.QAIHM_AWS_DEVICEFARM_PROJECT_ARN }}
+        AWS_DEVICEFARM_PROFILE: qaihm-devicefarm
+        AWS_DEVICEFARM_REGION: us-west-2
       run: |
         source ${{ env.VENV_PATH }}/bin/activate
         cd $GITHUB_WORKSPACE
         mkdir -p "$GITHUB_WORKSPACE/test-results"
-        python -m qai_hub_models.models.templates.llm.qdc.genie_jobs collect \
+        python -m qai_hub_models.scripts.run_genie_benchmarks collect \
           --jobs-file "$JOBS_FILE" \
           --junit-xml "$GITHUB_WORKSPACE/test-results/models-junit-llm_perf.xml"
 
-    # One archive per QDC job, kept for successful and failed jobs alike -- a
-    # failed job's device-side reason is otherwise unrecoverable without a pool token.
-    - name: Upload QDC device logs
+    # One archive per device-farm job, kept for successful and failed jobs alike --
+    # a failed job's device-side reason is otherwise unrecoverable without a pool token.
+    - name: Upload Genie device logs
       if: ${{ always() }}
       uses: actions/upload-artifact@v7
       with:
-        name: "Genie QDC Logs (${{ matrix.pool == 'dedicated' && 'Dedicated' || 'Shared' }} Pool)"
-        path: ${{ github.workspace }}/**/qdc_logs/**/*.zip
+        name: "Genie Device Logs (${{ matrix.pool == 'dedicated' && 'Dedicated' || 'Shared' }} Pool)"
+        path: ${{ github.workspace }}/**/device_logs/**/*.zip
         if-no-files-found: ignore
 
     - name: Upload perf.yaml updates

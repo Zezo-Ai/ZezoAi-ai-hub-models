@@ -4,11 +4,8 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
-import contextlib
 import os
-import shutil
 import sys
-import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from inspect import signature
@@ -22,17 +19,8 @@ import pytest
 import qai_hub as hub
 
 from qai_hub_models import Precision, QAIRTVersion, TargetRuntime
-from qai_hub_models.configs.model_metadata import ModelMetadata
 from qai_hub_models.configs.tool_versions import ToolVersions
-from qai_hub_models.models.templates.llm.common import (
-    DEFAULT_RETRIES,
-    JobOutcome,
-    JobRecord,
-    cleanup,
-    get_qdc_api_token,
-    make_key,
-    save_job,
-)
+from qai_hub_models.models.templates.llm.common import cleanup
 from qai_hub_models.models.templates.llm.evaluate import evaluate
 from qai_hub_models.models.templates.llm.grace_tasks import (
     PROMPT_TASKS,
@@ -44,12 +32,6 @@ from qai_hub_models.models.templates.llm.model import (
     LLM_AIMETOnnx,
     LLMBase,
     LLMDynamic_AIMETOnnx,
-)
-from qai_hub_models.models.templates.llm.perf_collection import (
-    get_llm_eval_device,
-    load_release_assets_for_model,
-    record_perf_scope,
-    update_perf_yaml,
 )
 from qai_hub_models.models.templates.llm.quantize import (
     assert_realizable_precision,
@@ -70,16 +52,27 @@ from qai_hub_models.models.templates.lm_schema import (
     SeqMSESpec,
     WikitextSpec,
 )
-from qai_hub_models.scorecard import ScorecardDevice, ScorecardProfilePath
-from qai_hub_models.scorecard.utils.fetch_prerelease_assets import (
-    download_prerelease_asset,
-)
 from qai_hub_models.scorecard.utils.testing import patch_qai_hub
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
+from qai_hub_models.utils.llm.genie.jobs import (
+    GENIE_BUNDLES_ROOT,
+    collect_llm_perf_job,
+    fetch_genie_bundle_for_perf,
+    run_llm_perf_test,
+    submit_llm_perf_job,
+)
 from qai_hub_models.utils.model_cache import CacheMode
 from qai_hub_models.utils.onnx.helpers import ONNXBundle
 
-GENIE_BUNDLES_ROOT = "genie_bundles"
+# Generated per-model test.py files do `from ... import test` and reference
+# these by attribute (e.g. ``test.GENIE_BUNDLES_ROOT``); __all__ marks them
+# as a real re-export rather than an unused import.
+__all__ = [
+    "GENIE_BUNDLES_ROOT",
+    "collect_llm_perf_job",
+    "fetch_genie_bundle_for_perf",
+    "run_llm_perf_test",
+    "submit_llm_perf_job",
+]
 
 
 @contextmanager
@@ -955,270 +948,6 @@ def run_llm_evaluate_test(
     else:
         np.testing.assert_allclose(actual_metric, expected_metric, rtol=rtol, atol=0)
     return actual_metric
-
-
-# ---------------------------------------------------------------------------
-# LLM performance collection helpers
-# ---------------------------------------------------------------------------
-
-
-def fetch_genie_bundle_for_perf(
-    model_id: str,
-    precision: Precision,
-    chipset: str,
-    output_dir: Path,
-) -> Path:
-    """Download and extract the pre-compiled genie bundle for this model.
-
-    Looks up release-assets.yaml for (precision, chipset, GENIE), downloads
-    the zip from S3, and extracts it into output_dir. Returns the extracted
-    bundle directory.
-
-    Raises a clear error if no matching asset exists.
-    """
-    assets = load_release_assets_for_model(model_id)
-    asset = assets.get_asset(precision, chipset, ScorecardProfilePath.GENIE)
-    if asset is None:
-        available_chipsets: list[str] = []
-        prec_details = assets.precisions.get(precision)
-        if prec_details is not None:
-            available_chipsets = sorted(prec_details.chipset_assets.keys())
-        raise RuntimeError(
-            f"No genie release asset found in release-assets.yaml for "
-            f"model_id={model_id!r}, precision={precision!s}, chipset={chipset!r}. "
-            f"Available chipsets for this precision: {available_chipsets or '<none>'}. "
-            "Build and update release-assets.yaml before running LLM perf collection."
-        )
-
-    bundle_dir = output_dir / ASSET_CONFIG.get_release_asset_name(
-        model_id, TargetRuntime.GENIE, precision, chipset
-    )
-    if bundle_dir.exists():
-        # Already fetched on a previous test in this session.
-        return bundle_dir
-
-    zip_path = download_prerelease_asset(
-        asset,
-        model_id=model_id,
-        runtime=TargetRuntime.GENIE,
-        precision=precision,
-        chipset=chipset,
-        output_folder=output_dir,
-        verbose=True,
-    )
-    shutil.unpack_archive(str(zip_path), extract_dir=str(output_dir))
-    if not bundle_dir.exists():
-        raise RuntimeError(
-            f"Extracted genie bundle missing expected directory {bundle_dir}; "
-            f"contents of {output_dir}: {sorted(p.name for p in output_dir.iterdir())}"
-        )
-    return bundle_dir
-
-
-def submit_llm_perf_job(
-    model_id: str,
-    device: ScorecardDevice,
-    precision: Precision,
-    output_dir: Path | str,
-    jobs_file: str,
-    qairt_sdk_path: str | None = None,
-    skip_perf_update: bool = False,
-) -> str:
-    """Fetch the genie bundle, submit one QDC job, upsert its record.
-
-    Does not wait. Returns the QDC job id. The collect side re-derives
-    the bundle from (model_id, precision, chipset) via
-    ``fetch_genie_bundle_for_perf`` -- nothing about local paths is
-    persisted.
-    """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    genie_bundle_path = fetch_genie_bundle_for_perf(
-        model_id, precision, device.chipset, output_dir
-    )
-
-    from qai_hub_models.models.templates.llm.qdc.genie_jobs import (
-        _USE_DEFAULT_PROMPTS,
-        submit_genie_bundle_only,
-    )
-
-    api_token = get_qdc_api_token(device)
-
-    eval_prompts = _USE_DEFAULT_PROMPTS if device == get_llm_eval_device() else None
-    job_name = f"Genie {model_id} {precision}"
-
-    job_id = submit_genie_bundle_only(
-        api_token,
-        device.reference_device.name,
-        str(genie_bundle_path),
-        job_name=job_name,
-        qairt_sdk_path=qairt_sdk_path,
-        eval_prompts=eval_prompts,
-        model_id=model_id,
-    )
-
-    key = make_key(model_id, str(precision), "GENIE", device.name)
-    save_job(jobs_file, key, job_id, attempts_left=DEFAULT_RETRIES)
-    return job_id
-
-
-def collect_llm_perf_job(
-    model_id: str,
-    device: ScorecardDevice,
-    precision: Precision,
-    record: JobRecord,
-    jobs_file: str,
-    output_dir: Path | str,
-    qairt_sdk_path: str | None = None,
-    skip_perf_update: bool = False,
-) -> tuple[float | None, float | None, float | None]:
-    """Poll a submitted Genie job. On retryable failure, re-fetch the
-    bundle from release-assets.yaml and resubmit; the jobs_file row is
-    rewritten with the new job id and one fewer attempt.
-
-    ``record`` is the current entry read from jobs_file (job_id +
-    attempts_left). Everything else is re-derived from (model_id,
-    precision, device) so the collect runner is independent of whatever
-    filesystem state the submit runner had.
-    """
-    from qai_hub_models.models.templates.llm.common import poll_and_retry
-    from qai_hub_models.models.templates.llm.qdc.genie_jobs import (
-        _USE_DEFAULT_PROMPTS,
-        collect_genie_bundle_result,
-        save_eval_metadata_json,
-        save_eval_results_json,
-        submit_genie_bundle_only,
-    )
-
-    if not skip_perf_update:
-        record_perf_scope(
-            model_id=model_id,
-            profile_path=ScorecardProfilePath.GENIE,
-            device_name=device.reference_device_name,
-            precision=precision,
-        )
-
-    api_token = get_qdc_api_token(device)
-    eval_prompts = _USE_DEFAULT_PROMPTS if device == get_llm_eval_device() else None
-    job_name = f"Genie {model_id} {precision}"
-    key = make_key(model_id, str(precision), "GENIE", device.name)
-    hub_device_name = device.reference_device.name
-
-    def _resubmit() -> str:
-        bundle_path = fetch_genie_bundle_for_perf(
-            model_id, precision, device.chipset, Path(output_dir)
-        )
-        return submit_genie_bundle_only(
-            api_token,
-            hub_device_name,
-            str(bundle_path),
-            job_name=job_name,
-            qairt_sdk_path=qairt_sdk_path,
-            eval_prompts=eval_prompts,
-            model_id=model_id,
-        )
-
-    def _collect(job_id: str) -> tuple[tuple, JobOutcome, str | None]:
-        tps, prefill_tps, ttft, eval_results, outcome, reason = (
-            collect_genie_bundle_result(
-                api_token,
-                hub_device_name,
-                job_id,
-                eval_prompts=eval_prompts,
-                save_logs_dir=os.path.join(output_dir, "qdc_logs"),
-                log_label=f"{key}_{job_id}",
-            )
-        )
-        return (tps, prefill_tps, ttft, eval_results), outcome, reason
-
-    tps, prefill_tps, ttft, eval_results = poll_and_retry(
-        initial_job_id=record.job_id,
-        attempts_left=record.attempts_left,
-        collect_fn=_collect,
-        resubmit_fn=_resubmit,
-        on_new_job_id=lambda new_id, left: save_job(
-            jobs_file, key, new_id, attempts_left=left
-        ),
-    )
-
-    metadata = ModelMetadata.from_json(
-        fetch_genie_bundle_for_perf(
-            model_id, precision, device.chipset, Path(output_dir)
-        )
-        / "metadata.json"
-    )
-    assert metadata is not None and metadata.genie is not None
-    context_lengths = metadata.genie.context_lengths
-
-    if not skip_perf_update and tps is not None and ttft is not None:
-        update_perf_yaml(
-            model_id,
-            device.reference_device_name,
-            precision,
-            max(context_lengths),
-            tps,
-            ttft,
-            prefill_tps,
-        )
-
-    if eval_results:
-        base = f"{model_id}_{device.chipset}_{precision}_eval"
-        save_eval_results_json(eval_results, f"{base}.json")
-        save_eval_metadata_json(
-            model_id,
-            device.chipset,
-            str(precision),
-            f"{base}.meta.json",
-            path=ScorecardProfilePath.GENIE,
-        )
-
-    return tps, ttft, prefill_tps
-
-
-def run_llm_perf_test(
-    model_id: str,
-    device: ScorecardDevice,
-    precision: Precision,
-    output_dir: Path | str,
-    qairt_sdk_path: str | None = None,
-    skip_perf_update: bool = False,
-) -> tuple[float | None, float | None, float | None]:
-    """Compose submit + collect over an ephemeral jobs_file.
-
-    Returns (tokens_per_second, time_to_first_token_ms, prefill_tokens_per_second).
-    """
-    with tempfile.NamedTemporaryFile(
-        prefix="genie_jobs_", suffix=".yaml", delete=False
-    ) as tmp:
-        jobs_file = tmp.name
-    try:
-        submit_llm_perf_job(
-            model_id=model_id,
-            device=device,
-            precision=precision,
-            output_dir=output_dir,
-            jobs_file=jobs_file,
-            qairt_sdk_path=qairt_sdk_path,
-            skip_perf_update=skip_perf_update,
-        )
-        from qai_hub_models.models.templates.llm.common import load_jobs
-
-        key = make_key(model_id, str(precision), "GENIE", device.name)
-        record = load_jobs(jobs_file)[key]
-        return collect_llm_perf_job(
-            model_id=model_id,
-            device=device,
-            precision=precision,
-            record=record,
-            jobs_file=jobs_file,
-            output_dir=output_dir,
-            qairt_sdk_path=qairt_sdk_path,
-            skip_perf_update=skip_perf_update,
-        )
-    finally:
-        with contextlib.suppress(FileNotFoundError):
-            os.unlink(jobs_file)
 
 
 # =============================================================================

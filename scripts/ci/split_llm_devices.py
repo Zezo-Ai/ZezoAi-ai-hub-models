@@ -7,7 +7,9 @@
 
 Emits a single GITHUB_OUTPUT line `matrix_include=<json-array>` for the
 matrix `include:` field. The dedicated QDC pool covers devices that use
-QDC_PRIVATE_API_KEY; everything else uses the shared pool.
+QDC_PRIVATE_API_KEY; the aws pool covers devices that run through AWS
+Device Farm instead of QDC (see ScorecardDevice.devicefarm_backend); everything
+else uses the shared QDC pool.
 """
 
 from __future__ import annotations
@@ -19,6 +21,11 @@ import sys
 
 DEDICATED_DEVICES = {"cs_8_elite_qrd", "cs_x_elite", "cs_ventuno_q"}
 
+# Keep in sync with ScorecardDevice instances whose devicefarm_backend="aws"
+# (src/qai_hub_models/scorecard/device.py). This script runs before the venv
+# is set up, so it can't import qai_hub_models to read that flag directly.
+AWS_DEVICES = {"cs_8_elite", "cs_8_elite_gen_5"}
+
 # Keep in sync with ALL_GENIEX_DEVICES in
 # src/qai_hub_models/scripts/run_geniex_bench_benchmarks.py.
 ALL_GENIEX_DEVICES = (
@@ -27,6 +34,8 @@ ALL_GENIEX_DEVICES = (
     "cs_9075",
     "cs_8_elite_qrd",
     "cs_8_elite_gen_5_qrd",
+    "cs_8_elite",
+    "cs_8_elite_gen_5",
 )
 
 # The LLM default device (DEFAULT_QDC_DEVICE in scorecard/device.py). The
@@ -37,22 +46,36 @@ ALL_GENIEX_DEVICES = (
 DEFAULT_LLM_DEVICE = "cs_x_elite"
 
 
-def split(device_input: str) -> tuple[str, str]:
+def split(device_input: str) -> tuple[str, str, str]:
     device_input = (device_input or "all").strip()
     if device_input.lower() == "all":
-        shared = ",".join(d for d in ALL_GENIEX_DEVICES if d not in DEDICATED_DEVICES)
-        return shared, ",".join(sorted(DEDICATED_DEVICES))
+        shared = ",".join(
+            d
+            for d in ALL_GENIEX_DEVICES
+            if d not in DEDICATED_DEVICES and d not in AWS_DEVICES
+        )
+        return (
+            shared,
+            ",".join(sorted(DEDICATED_DEVICES)),
+            ",".join(sorted(AWS_DEVICES)),
+        )
 
     shared: list[str] = []
     dedicated: list[str] = []
+    aws: list[str] = []
     for raw in device_input.split(","):
         d = raw.strip()
         if not d:
             continue
         if d.lower() == "default":
             d = DEFAULT_LLM_DEVICE
-        (dedicated if d in DEDICATED_DEVICES else shared).append(d)
-    return ",".join(shared), ",".join(dedicated)
+        if d in AWS_DEVICES:
+            aws.append(d)
+        elif d in DEDICATED_DEVICES:
+            dedicated.append(d)
+        else:
+            shared.append(d)
+    return ",".join(shared), ",".join(dedicated), ",".join(aws)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -60,15 +83,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", default=os.environ.get("DEVICE_INPUT", "all"))
     args = parser.parse_args(argv)
 
-    shared, dedicated = split(args.device)
+    shared, dedicated, aws = split(args.device)
     entries = []
     if shared:
         entries.append({"pool": "shared", "devices": shared})
     if dedicated:
         entries.append({"pool": "dedicated", "devices": dedicated})
+    if aws:
+        entries.append({"pool": "aws", "devices": aws})
 
     matrix_include = json.dumps(entries)
-    print(f"shared={shared}   dedicated={dedicated}", file=sys.stderr)
+    print(f"shared={shared}   dedicated={dedicated}   aws={aws}", file=sys.stderr)
     print(f"matrix include: {matrix_include}", file=sys.stderr)
 
     output = os.environ.get("GITHUB_OUTPUT")

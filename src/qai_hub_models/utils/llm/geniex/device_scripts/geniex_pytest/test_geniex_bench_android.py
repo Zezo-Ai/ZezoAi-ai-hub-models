@@ -20,7 +20,11 @@ from pathlib import Path
 
 import pytest
 
-HOST_ARTIFACT_ROOT = "/qdc/appium"
+# QDC stages the extracted test package under /qdc/appium; AWS Device
+# Farm's custom test environment extracts it under
+# $DEVICEFARM_TEST_PACKAGE_PATH instead (see aws_test_spec.yaml, which sets
+# the override).
+HOST_ARTIFACT_ROOT = os.environ.get("QAIHM_HOST_ARTIFACT_ROOT", "/qdc/appium")
 HOST_QAIRT_BUNDLES = f"{HOST_ARTIFACT_ROOT}/qairt_bundles"
 HOST_ROWS = f"{HOST_ARTIFACT_ROOT}/matrix_rows.txt"
 HOST_CHIPSET = f"{HOST_ARTIFACT_ROOT}/chipset.txt"
@@ -31,11 +35,11 @@ HOST_BUNDLE = f"{HOST_STAGE}/bundle"
 DEVICE_BUNDLE = "/data/local/tmp/pkg-geniex"
 DEVICE_QAIRT_BUNDLES = f"{DEVICE_BUNDLE}/qairt_bundles"
 DEVICE_MM_CACHE = "/data/local/tmp/geniex-cache"
-DEVICE_QDC_LOGS = "/data/local/tmp/QDC_logs"
-DEVICE_RESULTS = f"{DEVICE_QDC_LOGS}/results"
+DEVICE_LOGS_DIR = "/data/local/tmp/device_logs"
+DEVICE_RESULTS = f"{DEVICE_LOGS_DIR}/results"
 DEVICE_PROMPTS = "/data/local/tmp/eval_prompts"
-DEVICE_EVAL_OUT = f"{DEVICE_QDC_LOGS}/geniex_eval_outputs.txt"
-DEVICE_EVAL_ERR = f"{DEVICE_QDC_LOGS}/geniex_eval_stderr.txt"
+DEVICE_EVAL_OUT = f"{DEVICE_LOGS_DIR}/geniex_eval_outputs.txt"
+DEVICE_EVAL_ERR = f"{DEVICE_LOGS_DIR}/geniex_eval_stderr.txt"
 
 CTXS = tuple(int(c) for c in "{CTX_LIST}".split(","))
 ANDROID_BENCH_URL = "{ANDROID_BENCH_URL}"
@@ -149,7 +153,7 @@ def _run_bench(ctx: int, env: str, tsv_path: str, chipset: str) -> int:
         f"--matrix-file {tsv_path} --output-json-dir {DEVICE_RESULTS} -r 3 "
         f"{size_flags} "
         f"--mm-data-dir {DEVICE_MM_CACHE} --chipset '{chipset}' "
-        f"2>>{DEVICE_QDC_LOGS}/geniex_bench_stderr.log"
+        f"2>>{DEVICE_LOGS_DIR}/geniex_bench_stderr.log"
     )
     res = adb(cmd, check=False)
     if res.returncode == 0:
@@ -161,7 +165,7 @@ def _run_bench(ctx: int, env: str, tsv_path: str, chipset: str) -> int:
 def _cleanup_device() -> None:
     # Drop per-job state (dedicated-pool devices are reused across jobs; leftover
     # bundles / caches / matrix TSVs would leak into the next tenant's run).
-    # QDC_logs is left alone so retrieval still sees results/logs.
+    # device_logs is left alone so retrieval still sees results/logs.
     adb(f"rm -rf {DEVICE_BUNDLE} {DEVICE_MM_CACHE}", check=False)
     adb("rm -f /data/local/tmp/matrix-*.tsv", check=False)
 
@@ -211,7 +215,7 @@ def _run_eval(
     subprocess.run(["adb", "push", f"{HOST_PROMPTS}/.", DEVICE_PROMPTS], check=True)
     # check=False so an unreachable device is reported by the eval loop below
     # rather than by an assert on cleanup. Verify the post-state instead: on a
-    # reused cell (_cleanup_device spares QDC_logs) a surviving marker would
+    # reused cell (_cleanup_device spares device_logs) a surviving marker would
     # inflate the completeness count and mask an incomplete harvest.
     adb(f"rm -f {DEVICE_EVAL_OUT} {DEVICE_EVAL_ERR}", check=False)
     stale = _count_eval_markers()
@@ -223,8 +227,8 @@ def _run_eval(
     for fn in prompt_files:
         idx = fn[len("prompt_") : -len(".txt")]
         pf = f"{DEVICE_PROMPTS}/{fn}"
-        perr = f"{DEVICE_QDC_LOGS}/geniex_eval_prompt_stderr.txt"
-        pout = f"{DEVICE_QDC_LOGS}/geniex_eval_prompt_stdout.txt"
+        perr = f"{DEVICE_LOGS_DIR}/geniex_eval_prompt_stderr.txt"
+        pout = f"{DEVICE_LOGS_DIR}/geniex_eval_prompt_stdout.txt"
         # Each attempt writes to fresh per-prompt temp files on device; the
         # accepted attempt's stdout is concatenated under the ===EVAL_IDX===
         # marker exactly once so retries do not concatenate two generations at
@@ -361,7 +365,7 @@ def test_scorecard() -> None:
         if RUN_EVAL and eval_ran == 0:
             pytest.fail("accuracy eval produced no output (all prompts failed)")
         # Prompts can all run and still leave nothing to fetch: a late adb drop
-        # means QDC_logs is never harvested, yet the job reports "Successful", so
+        # means device_logs is never harvested, yet the job reports "Successful", so
         # the host burns the run on eval_incomplete (0/N) with no retry. Fail so
         # poll_and_retry resubmits.
         if RUN_EVAL and eval_collected < eval_expected:

@@ -1,43 +1,60 @@
 # ---------------------------------------------------------------------
-# Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+# Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
+"""QDC (Qualcomm Device Cloud) implementation of the DeviceFarm contract."""
+
 from __future__ import annotations
 
-import contextlib
 import json
 import os
-import pathlib
 import random
-import shutil
-import sys
 import tempfile
 import time
-import uuid
-import zipfile
 from collections.abc import Callable, Iterator
 from typing import TypeVar
 
 import httpx
-import qai_hub as hub
-import requests
 from qualcomm_device_cloud_sdk.api import qdc_api
 from qualcomm_device_cloud_sdk.models import (
     ArtifactType,
     JobMode,
+    JobResult,
     JobState,
     JobSubmissionParameter,
     JobType,
+    LogUploadStatus,
     TestFramework,
 )
-from qualcomm_device_cloud_sdk.models.job_type_0 import JobType0 as Job
+from qualcomm_device_cloud_sdk.models import (
+    JobType0 as Job,
+)
+
+from qai_hub_models.scorecard.device import (
+    ScorecardDevice,
+    cs_8_elite_qrd,
+    cs_ventuno_q,
+    cs_x_elite,
+)
+from qai_hub_models.utils.devicefarm.devicefarm import (
+    DeviceFarm,
+    HubDevicePlatform,
+    JobOutcome,
+    create_zip_from_entries,
+)
 
 # States in which a job is still in progress (not yet terminal)
 _RUNNING_STATES = {
-    JobState.DISPATCHED.value,
-    JobState.RUNNING.value,
-    JobState.SETUP.value,
-    JobState.SUBMITTED.value,
+    JobState.DISPATCHED,
+    JobState.RUNNING,
+    JobState.SETUP,
+    JobState.SUBMITTED,
+}
+# Log-upload states that are terminal (no further polling will change them)
+_TERMINAL_LOG_UPLOAD_STATES = {
+    LogUploadStatus.COMPLETED,
+    LogUploadStatus.FAILED,
+    LogUploadStatus.NOLOGS,
 }
 
 # Map from hub device names to QDC target device names
@@ -56,16 +73,13 @@ HUB_DEVICE_TO_QDC_DEVICE_MAP = {
     "Arduino VENTUNO Q": "QCS8275_Arduino",
 }
 
-QDC_REST_BASE_URL = "https://api.qualcomm.com/deviceloud/v1"
 # The SDK builds its httpx client with timeout=None, i.e. wait forever; a stalled
 # download would then block until the job timeout. read/write are per-chunk and
 # generous because log archives reach ~90MB (screen recordings).
 QDC_HTTP_TIMEOUT = httpx.Timeout(connect=30.0, read=300.0, write=300.0, pool=60.0)
-# Ceiling for the REST calls made through ``requests`` rather than the SDK.
-QDC_REST_TIMEOUT = 120
 # Default client-side cap on concurrent QDC jobs. The shared QDC pool
-# enforces 3 server-side; dedicated pools allow more (see get_qdc_job_limit
-# in llm/common.py) and pass an override via QDCJobs(job_limit=...).
+# enforces 3 server-side; dedicated pools allow more (see get_qdc_job_limit)
+# and pass an override via QDCDeviceFarm(job_limit=...).
 QDC_JOB_LIMIT = 3
 # Default timeout for job status polling (in seconds)
 DEFAULT_JOB_TIMEOUT = 21600  # 6 hours
@@ -121,8 +135,40 @@ LOG_LISTING_MAX_RETRIES = 5
 # ``extra_retryable_codes``.
 _RETRYABLE_STATUS_CODES = (401, 403, 429, 500, 502, 503, 504)
 
+# Devices with a dedicated (non-shared) QDC pool, which allow more concurrent
+# jobs and require a separate API key (QDC_PRIVATE_API_KEY).
+DEDICATED_POOL_DEVICES: frozenset[ScorecardDevice] = frozenset(
+    {cs_8_elite_qrd, cs_x_elite, cs_ventuno_q}
+)
+
+SHARED_POOL_JOB_LIMIT = 3
+DEDICATED_POOL_JOB_LIMIT = 4
+
 # Return type for the generic retry wrapper.
 CallableRetT = TypeVar("CallableRetT")
+
+
+def get_qdc_api_token(device: ScorecardDevice) -> str:
+    """QDC_PRIVATE_API_KEY for the dedicated pool, QDC_API_TOKEN otherwise."""
+    if device in DEDICATED_POOL_DEVICES:
+        token = os.environ.get("QDC_PRIVATE_API_KEY")
+        if not token:
+            raise ValueError(
+                f"QDC_PRIVATE_API_KEY is not set; required for {device.name} "
+                "(dedicated QDC pool)."
+            )
+        return token
+    token = os.environ.get("QDC_API_TOKEN")
+    if not token:
+        raise ValueError("QDC_API_TOKEN is not set.")
+    return token
+
+
+def get_qdc_job_limit(device: ScorecardDevice) -> int:
+    """Max concurrent QDC jobs allowed under the device's pool."""
+    if device in DEDICATED_POOL_DEVICES:
+        return DEDICATED_POOL_JOB_LIMIT
+    return SHARED_POOL_JOB_LIMIT
 
 
 def _matched_retryable_status_code(
@@ -146,7 +192,8 @@ def _matched_retryable_status_code(
 
 
 # Note: We only have to do this hack because the QDC API re-throws as bare
-# exceptions. We have asked them not to do this (so revisit after 0.2.3)
+# exceptions (still true as of SDK 0.4.1 -- ``qdc_api.try_call`` does
+# ``raise Exception(msg) from e``). We have asked them not to do this.
 # https://jira-dc.qualcomm.com/jira/browse/QDC-5475
 def _unwrap_causes(err: BaseException) -> Iterator[BaseException]:
     """Yield ``err`` and every exception in its __cause__/__context__ chain."""
@@ -285,68 +332,8 @@ def _call_with_retry(
     raise AssertionError("unreachable")  # loop either returns or raises
 
 
-class QDCDevice:
-    """Wraps a QAI Hub device and exposes QDC-specific properties."""
-
-    def __init__(self, device: str) -> None:
-        """
-        Parameters
-        ----------
-        device
-            QAI Hub device name. The latest matching device is selected.
-        """
-        self.device = hub.get_devices(device)[-1]
-        self.device_attributes = getattr(self.device, "attributes", [])
-
-    @property
-    def hexagon_version(self) -> str:
-        """Hexagon version string parsed from the device's hub attributes."""
-        htp_version = None
-        for attr in self.device_attributes:
-            if "hexagon" in attr:
-                htp_version = attr.split(":")[-1]
-        assert htp_version is not None, (
-            f"Hexagon/HTP version not found in device attributes. "
-            f"Device: {getattr(self.device, 'name', 'unknown')!r}. "
-            f"Attributes: {self.device_attributes!r}"
-        )
-        return htp_version
-
-    @property
-    def windows_platform(self) -> bool:
-        """True if the device runs Windows, based on hub attributes."""
-        for attr in self.device_attributes:
-            if "os" in attr and attr.endswith("windows"):
-                return True
-        return False
-
-    @property
-    def mobile_platform(self) -> bool:
-        """True if the device is a phone form factor, based on hub attributes."""
-        for attr in self.device_attributes:
-            if "format" in attr and attr.endswith("phone"):
-                return True
-        return False
-
-    @property
-    def auto_platform(self) -> bool:
-        """Return True if the device is an automotive (auto) platform.
-
-        Determined by the presence of a device attribute that contains
-        ``'format'`` and ends with ``'auto'`` (e.g., ``'chipset:format:auto'``).
-        """
-        for attr in self.device_attributes:
-            if "format" in attr and attr.endswith("auto"):
-                return True
-        return False
-
-    @property
-    def iot_platform(self) -> bool:
-        """True if the device is an IoT form factor, based on hub attributes."""
-        for attr in self.device_attributes:
-            if "format" in attr and attr.endswith("iot"):
-                return True
-        return False
+class QDCDevice(HubDevicePlatform):
+    """Extends :class:`HubDevicePlatform` with QDC-specific device properties."""
 
     @property
     def qdc_name(self) -> str:
@@ -356,27 +343,21 @@ class QDCDevice:
     @property
     def test_framework(self) -> TestFramework:
         """QDC test framework appropriate for this device's platform."""
-        if self.windows_platform:
+        if self.is_windows_platform:
             return TestFramework.POWERSHELL
-        if self.iot_platform:
+        if self.is_iot_platform:
             return TestFramework.BASH
         return TestFramework.APPIUM
 
 
-class QDCJobs:
-    """
-    Base class for QDC job handlers.
-
-    Provides shared functionality for submitting jobs, polling status,
-    and retrieving logs. Subclasses implement their own artifact creation
-    and metrics computation methods specific to their workload type.
-    """
+class QDCDeviceFarm(DeviceFarm):
+    """QDC (Qualcomm Device Cloud) implementation of :class:`DeviceFarm`."""
 
     def __init__(
         self,
         *,
         api_key: str,
-        app_name_header: str,
+        app_name_header: str = "QDCDeviceFarmJobApp",
         job_limit: int = QDC_JOB_LIMIT,
     ) -> None:
         """
@@ -397,22 +378,10 @@ class QDCJobs:
             on_behalf_of_header="ai_hub_models",
             client_type_header="Python",
         ).with_timeout(QDC_HTTP_TIMEOUT)
-        self._api_key = api_key
-        self._app_name_header = app_name_header
         self.job_limit = job_limit
-        self._session = requests.Session()
-        self._session.headers.update(
-            {
-                "accept": "application/json",
-                "Authorization": api_key,
-                "X-QCOM-TokenType": "apikey",
-                "X-QCOM-AppName": app_name_header,
-                "X-QCOM-ClientType": "appName",
-            }
-        )
 
     def get_job(self, job_id: str) -> Job:
-        """Fetch job details from the QDC REST API.
+        """Fetch full job details from QDC, retrying transient errors.
 
         Parameters
         ----------
@@ -422,23 +391,20 @@ class QDCJobs:
         Returns
         -------
         job : Job
-            Job object constructed from the ``GET /jobs/{job_id}`` response.
+            Job object returned by ``get_job_by_id``.
 
         Raises
         ------
-        requests.HTTPError
-            If the API returns a non-2xx status code.
+        ValueError
+            If QDC returns no job for ``job_id``.
         """
-        # Currently there is no support for get_job in the QDC Python API
-        # This is an interim solution until QDC-5417 is resolved
-        # https://jira-dc.qualcomm.com/jira/browse/QDC-5417
-        response = self._session.get(
-            f"{QDC_REST_BASE_URL}/jobs/{job_id}",
-            headers={"X-QCOM-TracingId": str(uuid.uuid4())},
-            timeout=QDC_REST_TIMEOUT,
+        job = _call_with_retry(
+            lambda: qdc_api.get_job_by_id(self.client, job_id),
+            f"get_job_by_id({job_id})",
         )
-        response.raise_for_status()
-        return Job.from_dict(response.json())
+        if job is None:
+            raise ValueError(f"Failure in `get_job_by_id`. No job found for {job_id}.")
+        return job
 
     def status(self, job_id: str, timeout: int = DEFAULT_JOB_TIMEOUT) -> str:
         """
@@ -462,7 +428,7 @@ class QDCJobs:
         TimeoutError
             If job does not complete within the timeout period.
         """
-        job_status = None
+        job_status: JobState | None = None
         elapsed = 0
         while elapsed < timeout:
             job_status = _call_with_retry(
@@ -471,7 +437,7 @@ class QDCJobs:
             )
             if job_status not in _RUNNING_STATES:
                 time.sleep(POLL_INTERVAL)
-                return job_status
+                return job_status.value
             time.sleep(POLL_INTERVAL)
             elapsed += POLL_INTERVAL
 
@@ -479,8 +445,8 @@ class QDCJobs:
             lambda: qdc_api.get_job_status(self.client, job_id),
             f"get_job_status({job_id})",
         )
-        if job_status in {"Completed", "Canceled", "Failed", "Error", "Aborted"}:
-            return job_status
+        if job_status not in _RUNNING_STATES:
+            return job_status.value
         qdc_api.abort_job(self.client, job_id)
         raise TimeoutError(
             f"Job {job_id} did not complete within {timeout} seconds. "
@@ -505,11 +471,20 @@ class QDCJobs:
             The job's terminal result (e.g. "Successful"/"Unsuccessful"), or None
             if the field is absent.
         """
-        job = _call_with_retry(
-            lambda: self.get_job(job_id),
-            f"get_job({job_id})",
+        result = getattr(self.get_job(job_id), "result", None)
+        return result.value if isinstance(result, JobResult) else None
+
+    def is_successful(self, result: str | None) -> bool:
+        # A QDC job can report no ``result`` field at all and still have
+        # succeeded on-device; only an explicit non-"Successful" value fails it.
+        return result is None or result == JobResult.SUCCESSFUL.value
+
+    def classify_failure(self, result: str | None) -> JobOutcome:
+        return (
+            JobOutcome.RETRYABLE_ERROR
+            if result == JobResult.ERROR.value
+            else JobOutcome.RETRYABLE_UNSUCCESSFUL
         )
-        return getattr(job, "result", None)
 
     def get_active_jobs(self) -> list[Job]:
         """Return all currently active (non-terminal) jobs for this user.
@@ -527,9 +502,69 @@ class QDCJobs:
                 "Failure in `get_jobs_list`. Could not get job lists for user"
             )
 
-        return [job for job in jobs.data if job.state in _RUNNING_STATES]
+        return [
+            job
+            for job in (jobs.data or [])
+            if job is not None and job.state in _RUNNING_STATES
+        ]
 
-    def submit_automated_job(
+    def submit_bundle(
+        self,
+        hub_device_name: str,
+        entries: list[tuple[str, str]],
+        entry_script: str | None,
+        job_name: str,
+        timeout: int = DEFAULT_JOB_TIMEOUT,
+    ) -> str:
+        """
+        Zip ``entries``, upload the bundle to QDC, and submit an automated job for it.
+
+        See :meth:`DeviceFarm.submit_bundle` for the shared contract. QDC
+        specifics: ``hub_device_name`` is mapped to a QDC target device via
+        :data:`HUB_DEVICE_TO_QDC_DEVICE_MAP`; the zipped bundle is uploaded as
+        a single ``ArtifactType.TESTSCRIPT`` artifact; and, unlike the AWS
+        backend, ``entry_script`` is supported and forwarded to QDC verbatim
+        (QDC runs it directly rather than requiring a fixed platform test spec).
+        Submission blocks (see :meth:`_submit_automated_job`) until a job slot
+        is available under ``self.job_limit`` or ``timeout`` elapses.
+
+        Parameters
+        ----------
+        hub_device_name
+            QAI Hub device name; looked up in ``HUB_DEVICE_TO_QDC_DEVICE_MAP``
+            to determine the QDC target device and test framework.
+        entries
+            ``(source_path, arcname)`` pairs zipped into the uploaded test
+            bundle.
+        entry_script
+            Path (relative to the bundle root) QDC should execute as the
+            job's entry point.
+        job_name
+            Job name shown in QDC; truncated to ``QDC_JOB_NAME_LIMIT``.
+        timeout
+            Maximum seconds to wait for a free job slot (``self.job_limit``)
+            before raising.
+
+        Returns
+        -------
+        job_id : str
+            The QDC job id returned by ``qdc_api.submit_job``.
+
+        Raises
+        ------
+        TimeoutError
+            If no job slot frees up within ``timeout`` seconds.
+        """
+        qdc_device = QDCDevice(hub_device_name)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = os.path.join(tmpdir, "test.zip")
+            create_zip_from_entries(zip_path, entries)
+            artifact_id = self._upload_file(zip_path, ArtifactType.TESTSCRIPT)
+        return self._submit_automated_job(
+            qdc_device, [artifact_id], entry_script, job_name=job_name, timeout=timeout
+        )
+
+    def _submit_automated_job(
         self,
         qdc_device: QDCDevice,
         job_artifacts: list[str],
@@ -618,14 +653,14 @@ class QDCJobs:
         TimeoutError
             If logs are not uploaded within the timeout period.
         """
-        status = None
+        status: LogUploadStatus | None = None
         elapsed = 0
         while elapsed <= timeout:
             status = _call_with_retry(
                 lambda: qdc_api.get_job_log_upload_status(self.client, job_id),
                 f"get_job_log_upload_status({job_id})",
-            ).lower()
-            if status not in {"completed", "failed"}:
+            )
+            if status not in _TERMINAL_LOG_UPLOAD_STATES:
                 print(
                     f"Job is completed and the server is uploading logs, "
                     f"waiting for {POLL_INTERVAL} seconds."
@@ -667,7 +702,8 @@ class QDCJobs:
                 lambda: [
                     f
                     for f in qdc_api.get_job_log_files(self.client, job_id)
-                    if not f.filename.endswith(_UNPARSED_LOG_SUFFIXES)
+                    if getattr(f, "filename", None)
+                    and not f.filename.endswith(_UNPARSED_LOG_SUFFIXES)
                 ],
                 f"get_job_log_files({job_id})",
             )
@@ -702,108 +738,7 @@ class QDCJobs:
             f"download_job_log_files({filename})",
         )
 
-    def try_download_job_log_files(self, filename: str, target_path: str) -> bool:
-        """Best-effort ``download_job_log_files``; return False if it never landed.
-
-        One unreadable log file shouldn't discard a whole collection: a run was
-        lost on ``test_dbg.stdout``, which no metric parser reads, after its
-        device job had already succeeded. Callers skip the file and parse what
-        did arrive; a missing results file still shows up as absent metrics.
-        """
-        try:
-            self.download_job_log_files(filename, target_path)
-            return True
-        except Exception as err:
-            # Type only, never the message (see _matched_retryable_status_code).
-            print(
-                f"[QDC] giving up on log file {filename} after retries "
-                f"({type(err).__name__}); continuing with the rest.",
-                file=sys.stderr,
-            )
-            return False
-
-    def save_job_logs(
-        self,
-        job_id: str,
-        save_logs_dir: str | None,
-        job_log_files: list | None = None,
-        label: str | None = None,
-    ) -> int:
-        """Best-effort: archive one QDC job's logs into a single zip; return the count.
-
-        Kept for successful and failed jobs alike. A green job's logs are the
-        baseline a red one is read against, and the collectors used to return on a
-        non-Successful result before reaching the download path -- so the one case
-        that needs logs kept none, leaving the device-side reason (a rejected genie
-        config key, an exhausted context window) reachable only by re-pulling the
-        job by hand with a pool token.
-
-        Everything for a job lands in one ``<label or job_id>.zip`` holding the log
-        files themselves, rather than a directory of individually-zipped files that
-        each need unwrapping. Never raises: a log-fetch problem must not replace a
-        real failure reason. When ``job_log_files`` is not supplied the listing is
-        fetched here, polling log upload only briefly so a failed job cannot stall
-        the collector for hours.
-
-        Parameters
-        ----------
-        job_id
-            ID of the job whose logs to archive.
-        save_logs_dir
-            Directory to write the zip into. No-op when None.
-        job_log_files
-            Already-fetched listing to reuse; fetched here when None.
-        label
-            Base name for the zip. Defaults to the job id.
-
-        Returns
-        -------
-        int
-            Number of log files successfully archived.
-        """
-        if not save_logs_dir:
-            return 0
-        saved = 0
-        try:
-            os.makedirs(save_logs_dir, exist_ok=True)
-            if job_log_files is None:
-                with contextlib.suppress(TimeoutError):
-                    self.log_upload_status(job_id, timeout=FAILED_JOB_LOG_TIMEOUT)
-                job_log_files = self.get_job_log_files(job_id)
-            if not job_log_files:
-                return 0
-            with tempfile.TemporaryDirectory() as tmpdir:
-                staged = os.path.join(tmpdir, "logs")
-                for job_log in job_log_files:
-                    target = os.path.join(tmpdir, f"{uuid.uuid4().hex}.zip")
-                    if not self.try_download_job_log_files(job_log.filename, target):
-                        continue
-                    dest = os.path.join(staged, job_log.filename)
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    # QDC serves each log as a zip; unwrap it so the archive holds
-                    # readable files. A non-zip payload is kept as-is.
-                    try:
-                        _safe_extract_zip(target, os.path.dirname(dest))
-                    except (zipfile.BadZipFile, ValueError):
-                        shutil.move(target, dest)
-                    saved += 1
-                if saved:
-                    create_zip(
-                        os.path.join(save_logs_dir, f"{label or job_id}.zip"), staged
-                    )
-        except Exception as err:
-            # Type only, never the message (see _matched_retryable_status_code).
-            print(
-                f"[QDC] could not save logs for job {job_id} "
-                f"({type(err).__name__}); any failure reason still stands.",
-                file=sys.stderr,
-            )
-            return 0
-        if saved:
-            print(f"[QDC] archived {saved} log file(s) for job {job_id}")
-        return saved
-
-    def upload_file(self, file_path: str, artifact_type: ArtifactType) -> str:
+    def _upload_file(self, file_path: str, artifact_type: ArtifactType) -> str:
         """Upload a file to QDC.
 
         Parameters
@@ -829,49 +764,3 @@ class QDCJobs:
             lambda: qdc_api.upload_file(self.client, file_path, artifact_type),
             f"upload_file({file_path})",
         )
-
-
-def _safe_extract_zip(zip_path: str, dest_dir: str) -> None:
-    """Extract a device log archive, rejecting zip-slip members."""
-    safe_root = pathlib.Path(dest_dir).resolve()
-    with zipfile.ZipFile(zip_path) as zf:
-        for member in zf.namelist():
-            dest = (safe_root / member).resolve()
-            if not str(dest).startswith(str(safe_root) + os.sep):
-                raise ValueError(f"Zip slip detected in log archive: {member}")
-        zf.extractall(safe_root)
-
-
-def create_zip(zip_path: str, source_dir: str | os.PathLike) -> None:
-    """Zip ``source_dir`` into ``zip_path`` with no compression.
-
-    ZIP_STORED (no compression) is used for speed; the bundled files are
-    already-compressed binaries.
-    """
-    source_dir = str(source_dir)
-    entries: list[tuple[str, str]] = []
-    for root, _, files in os.walk(source_dir):
-        for fn in files:
-            abs_path = os.path.join(root, fn)
-            entries.append((abs_path, os.path.relpath(abs_path, source_dir)))
-    create_zip_from_entries(zip_path, entries)
-
-
-def create_zip_from_entries(zip_path: str, entries: list[tuple[str, str]]) -> None:
-    """Zip an explicit list of (source_path, arcname) into ``zip_path``.
-
-    ZIP_STORED with force_zip64 so stored members over 2 GiB don't abort
-    mid-write. Streams each source through shutil.copyfileobj so peak RAM
-    is constant regardless of member size.
-
-    Prefer this over :func:`create_zip` when the bundle would otherwise
-    require a full-tree copytree to compose: pass paths from the original
-    locations directly so /scratch doesn't need to hold a duplicate copy.
-    """
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
-        for src_path, arcname in entries:
-            with (
-                open(src_path, "rb") as src,
-                zf.open(arcname, "w", force_zip64=True) as dest,
-            ):
-                shutil.copyfileobj(src, dest)

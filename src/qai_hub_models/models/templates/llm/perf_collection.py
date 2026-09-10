@@ -29,7 +29,6 @@ from qai_hub_models.scorecard.device import (
     DEFAULT_QDC_DEVICE,
     LLM_COMPILE_DEVICES,
     LLM_W4FP16_COMPILE_DEVICES,
-    get_canonical_chipset_name,
 )
 from qai_hub_models.scorecard.envvars import (
     LLMPerfPrecisionsEnvvar,
@@ -342,7 +341,7 @@ def _update_perf_yaml_locked(
     if device not in perf.supported_devices:
         perf.supported_devices.append(device)
 
-    chipset = get_canonical_chipset_name(device.chipset)
+    chipset = device.canonical_chipset
     if chipset not in perf.supported_chipsets:
         perf.supported_chipsets.append(chipset)
 

@@ -8,6 +8,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import shutil
 import sys
 from collections.abc import Iterator
@@ -16,16 +17,6 @@ from pathlib import Path
 from qai_hub_models import Precision, TargetRuntime
 from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.configs.model_metadata import ModelMetadata
-from qai_hub_models.models.templates.llm.common import (
-    DEFAULT_RETRIES,
-    JobOutcome,
-    JobRecord,
-    get_qdc_api_token,
-    load_jobs,
-    make_key,
-    poll_and_retry,
-    save_job,
-)
 from qai_hub_models.models.templates.llm.grader.grace import (
     load_eval_prompts,
     select_balanced,
@@ -36,17 +27,10 @@ from qai_hub_models.models.templates.llm.perf_collection import (
     resolve_llm_eval_device,
     update_perf_yaml,
 )
-from qai_hub_models.models.templates.llm.qdc.geniex_jobs import (
-    GenieXBenchMetrics,
-    collect_geniex_bench_result,
-    save_eval_metadata_json,
-    save_eval_results_json,
-    submit_geniex_bench_only,
-)
 from qai_hub_models.scorecard import ScorecardProfilePath
 from qai_hub_models.scorecard.device import (
     ScorecardDevice,
-    get_canonical_chipset_name,
+    get_chipset_workbench_variants,
 )
 from qai_hub_models.scorecard.envvars import (
     LLMPerfPrecisionsEnvvar,
@@ -57,17 +41,40 @@ from qai_hub_models.scorecard.utils.fetch_prerelease_assets import (
     download_prerelease_asset,
 )
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
+from qai_hub_models.utils.devicefarm.devicefarm import (
+    DEFAULT_RETRIES,
+    JobOutcome,
+    JobRecord,
+    get_device_farm,
+    load_jobs,
+    make_key,
+    poll_and_retry,
+    save_job,
+)
+from qai_hub_models.utils.llm.eval_io import (
+    save_eval_metadata_json,
+    save_eval_results_json,
+)
+from qai_hub_models.utils.llm.geniex.jobs import (
+    GenieXBenchMetrics,
+    collect_geniex_bench,
+    submit_geniex_bench,
+)
 from qai_hub_models.utils.path_helpers import MODEL_IDS
 
 DEFAULT_DEVICES = "cs_x2_elite,cs_x_elite"
 
-# One device per platform bucket in GenieXBenchQDCJobs.add_job_artifacts.
+# One device per platform bucket in geniex/jobs.py's artifact handlers.
+# cs_8_elite/cs_8_elite_gen_5 run the same Android path via AWS Device Farm
+# instead of QDC (see ScorecardDevice.devicefarm_backend).
 ALL_GENIEX_DEVICES = (
     "cs_x_elite",
     "cs_x2_elite",
     "cs_9075",
     "cs_8_elite_qrd",
     "cs_8_elite_gen_5_qrd",
+    "cs_8_elite",
+    "cs_8_elite_gen_5",
 )
 LLAMACPP_DEVICE_ALIASES = ("cpu", "gpu", "npu")
 LLAMACPP_CONTEXT_LENGTHS = [512, 4096]
@@ -153,12 +160,18 @@ def fetch_geniex_qairt_bundle(
     model_id: str, precision: Precision, chipset: str, output_dir: Path
 ) -> tuple[Path, list[int]]:
     """Download/extract the CI-built geniex_qairt bundle. Returns (bundle_dir, context_lengths)."""
-    # release-assets.yaml keys chipset_assets by canonical name, so canonicalize
-    # the variant-suffixed workbench chipset (e.g. "-for-galaxy") before lookup,
-    # matching the Genie perf path.
-    chipset = get_canonical_chipset_name(chipset)
+    # release-assets.yaml is keyed by whichever raw workbench chipset name the
+    # compiling device reported at build time, which differs between devices
+    # that share a canonical chipset (e.g. a QRD board reports the canonical
+    # name plainly, while a Samsung device reports a "-for-galaxy" variant).
+    # Try every workbench variant of this chipset rather than assuming one.
     assets = load_release_assets_for_model(model_id)
-    asset = assets.get_asset(precision, chipset, ScorecardProfilePath.GENIEX_QAIRT)
+    asset = None
+    for variant in get_chipset_workbench_variants(chipset):
+        asset = assets.get_asset(precision, variant, ScorecardProfilePath.GENIEX_QAIRT)
+        if asset is not None:
+            chipset = variant
+            break
     if asset is None:
         available: list[str] = []
         prec_details = assets.precisions.get(precision)
@@ -263,7 +276,7 @@ def write_summary(rows: list[dict]) -> None:
         f.write("\n")
 
 
-def _qdc_logs_dir(
+def _device_logs_dir(
     save_dir_root: str,
     model_id: str,
     precision: Precision,
@@ -271,93 +284,19 @@ def _qdc_logs_dir(
     runtime: str,
     job_id: str,
 ) -> str:
-    """Structured path for persisted QDC log zips.
+    """Structured path for persisted device log zips (QDC or AWS Device Farm).
 
     Keyed on job_id so a retried job's logs don't clobber the prior attempt.
+    QDC's job_id is a plain opaque string, but AWS Device Farm's is a full
+    ARN (``arn:aws:devicefarm:...:run:.../...``); sanitize it since
+    actions/upload-artifact rejects colons in artifact paths.
     """
+    safe_job_id = re.sub(r"[:/\\]", "_", job_id)
     return os.path.join(
         save_dir_root,
-        "qdc_logs",
+        "device_logs",
         model_id,
-        f"{precision}_{device_name}_{runtime}_{job_id}",
-    )
-
-
-def run_geniex_bench_job(
-    model_id: str,
-    model_ref: str,
-    device_token: str,
-    context_lengths: list[int],
-    save_dir_root: str,
-    plugin: str,
-    geniex_version: str | None,
-    precision: Precision,
-    llamacpp_quant: str | None = None,
-    eval_prompts: list[str] | None = None,
-    run_perf: bool = True,
-) -> tuple[list[GenieXBenchMetrics], list[dict]]:
-    """Submit-and-wait shortcut used by the ``run`` subcommand.
-
-    ``submit`` / ``collect`` subcommands drive
-    ``submit_geniex_bench_only`` / ``collect_geniex_bench_result``
-    directly instead.
-    """
-    sd = _scorecard_device(device_token)
-    api_token = get_qdc_api_token(sd)
-    device_alias = ",".join(LLAMACPP_DEVICE_ALIASES) if plugin == "llama_cpp" else "npu"
-    _print_job_banner(
-        model_id,
-        sd,
-        plugin,
-        device_alias,
-        model_ref,
-        context_lengths,
-        geniex_version,
-        run_perf,
-        eval_prompts,
-    )
-
-    save_dir = os.path.join(save_dir_root, model_id, sd.name)
-    job_name = f"geniex-bench {plugin} {model_id}"
-    runtime = "GENIEX_QAIRT" if plugin == "qairt" else "GENIEX_LLAMACPP"
-
-    def _submit() -> str:
-        job_id, _, _ = submit_geniex_bench_only(
-            api_token=api_token,
-            hub_device_name=sd.reference_device_name,
-            chipset=sd.chipset,
-            model_rows=[(model_id, model_ref)],
-            context_lengths=context_lengths,
-            plugin=plugin,
-            device_alias=device_alias,
-            job_name=job_name,
-            geniex_version=geniex_version,
-            llamacpp_quant=llamacpp_quant,
-            eval_prompts=eval_prompts,
-            run_perf=run_perf,
-        )
-        return job_id
-
-    def _collect(job_id: str) -> tuple[tuple, JobOutcome, str | None]:
-        logs_dir = _qdc_logs_dir(
-            save_dir_root, model_id, precision, sd.name, runtime, job_id
-        )
-        metrics, eval_results, outcome, reason = collect_geniex_bench_result(
-            api_token,
-            sd.reference_device_name,
-            job_id,
-            save_results_dir=save_dir,
-            eval_prompts=eval_prompts,
-            run_perf=run_perf,
-            save_logs_dir=logs_dir,
-        )
-        return (metrics, eval_results), outcome, reason
-
-    return poll_and_retry(
-        initial_job_id=_submit(),
-        attempts_left=DEFAULT_RETRIES,
-        collect_fn=_collect,
-        resubmit_fn=_submit,
+        f"{precision}_{device_name}_{runtime}_{safe_job_id}",
     )
 
 
@@ -405,7 +344,6 @@ def _submit_one(
     ``fetch_geniex_qairt_bundle`` -- nothing local-path is persisted.
     """
     sd = _scorecard_device(device_token)
-    api_token = get_qdc_api_token(sd)
     device_alias = ",".join(LLAMACPP_DEVICE_ALIASES) if plugin == "llama_cpp" else "npu"
     _print_job_banner(
         model_id,
@@ -420,8 +358,9 @@ def _submit_one(
     )
 
     job_name = f"geniex-bench {plugin} {model_id}"
-    job_id, _, _ = submit_geniex_bench_only(
-        api_token=api_token,
+    backend = get_device_farm(sd)
+    job_id, _, _ = submit_geniex_bench(
+        backend,
         hub_device_name=sd.reference_device_name,
         chipset=sd.chipset,
         model_rows=[(model_id, model_ref)],
@@ -463,7 +402,6 @@ def _collect_one(
     ``"no_metrics"``, or ``"failed"``.
     """
     sd = ScorecardDevice.get(device_name)
-    api_token = get_qdc_api_token(sd)
     device_alias = ",".join(LLAMACPP_DEVICE_ALIASES) if plugin == "llama_cpp" else "npu"
     job_name = f"geniex-bench {plugin} {model_id}"
     save_dir = os.path.join(save_dir_root, model_id, sd.name)
@@ -480,20 +418,21 @@ def _collect_one(
         )
         return [], [], "failed"
 
-    def _resubmit() -> str:
+    def _resolve_resubmit_args() -> tuple[str, list[int], str | None]:
         if plugin == "qairt":
             bundle_dir, ctx_list = fetch_geniex_qairt_bundle(
                 model_id, precision, sd.chipset, Path(save_dir_root) / "qairt_bundles"
             )
-            model_ref: str = str(bundle_dir)
-            llamacpp_quant: str | None = None
-        else:
-            assert llamacpp_urls is not None
-            model_ref = llamacpp_urls[precision]
-            ctx_list = LLAMACPP_CONTEXT_LENGTHS
-            llamacpp_quant = str(precision)
-        new_job_id, _, _ = submit_geniex_bench_only(
-            api_token=api_token,
+            return str(bundle_dir), ctx_list, None
+        assert llamacpp_urls is not None
+        return llamacpp_urls[precision], LLAMACPP_CONTEXT_LENGTHS, str(precision)
+
+    backend = get_device_farm(sd)
+
+    def _resubmit() -> str:
+        model_ref, ctx_list, llamacpp_quant = _resolve_resubmit_args()
+        new_job_id, _, _ = submit_geniex_bench(
+            backend,
             hub_device_name=sd.reference_device_name,
             chipset=sd.chipset,
             model_rows=[(model_id, model_ref)],
@@ -509,11 +448,11 @@ def _collect_one(
         return new_job_id
 
     def _collect(job_id: str) -> tuple[tuple, JobOutcome, str | None]:
-        logs_dir = _qdc_logs_dir(
+        logs_dir = _device_logs_dir(
             save_dir_root, model_id, precision, sd.name, runtime, job_id
         )
-        metrics, eval_results, outcome, reason = collect_geniex_bench_result(
-            api_token,
+        metrics, eval_results, outcome, reason = collect_geniex_bench(
+            backend,
             sd.reference_device_name,
             job_id,
             save_results_dir=save_dir,
@@ -1016,102 +955,9 @@ def _cmd_collect(args: argparse.Namespace) -> int:
     return _write_final_outputs(rows, perf_updates, args.csv, args.perf_updates_json)
 
 
-def _cmd_run(args: argparse.Namespace) -> int:
-    """Legacy behavior: submit-and-wait per job, no jobs_file artifact.
-
-    Preserved so local users and existing scripts keep working. CI drives
-    the submit/collect subcommands instead.
-    """
-    eval_prompts = _resolve_eval_prompts(args.run_eval)
-    rows: list[dict] = []
-    perf_updates: list[dict] = []
-    for (
-        plugin,
-        model_id,
-        precision,
-        device_token,
-        model_ref,
-        ctx_list,
-        llamacpp_quant,
-    ) in _iter_work(
-        args.models,
-        args.devices,
-        args.plugin,
-        args.precisions,
-        args.results_dir,
-        args.geniex_version,
-    ):
-        sd = _scorecard_device(device_token)
-        device_eval_prompts = _eval_prompts_for_device(eval_prompts, sd, args.devices)
-        try:
-            metrics, eval_results = run_geniex_bench_job(
-                model_id,
-                model_ref,
-                device_token,
-                ctx_list,
-                args.results_dir,
-                plugin,
-                args.geniex_version,
-                precision,
-                llamacpp_quant=llamacpp_quant,
-                eval_prompts=device_eval_prompts,
-                run_perf=args.run_perf,
-            )
-        except Exception as e:
-            print(
-                f"ERROR: geniex-bench job failed for {model_id} @ {sd.name} "
-                f"(plugin={plugin}, precision={precision}): {e}",
-                file=sys.stderr,
-            )
-            rows.append(
-                {
-                    "model": model_id,
-                    "plugin": plugin,
-                    "precision": str(precision),
-                    "device": sd.name,
-                    "status": "failed",
-                }
-            )
-            continue
-
-        _save_eval_results(eval_results, model_id, sd, precision, plugin)
-
-        if not metrics:
-            # With perf off the device runs eval only, so an empty metrics list
-            # is expected rather than a failure. But the eval must still return
-            # one result per prompt sent; a short count means the run crashed or
-            # was truncated.
-            if args.run_perf:
-                status = "no_metrics"
-            elif device_eval_prompts and len(eval_results) != len(device_eval_prompts):
-                status = (
-                    f"eval_incomplete ({len(eval_results)}/{len(device_eval_prompts)})"
-                )
-            else:
-                status = "eval_only"
-            rows.append(
-                {
-                    "model": model_id,
-                    "plugin": plugin,
-                    "precision": str(precision),
-                    "device": sd.name,
-                    "status": status,
-                }
-            )
-            continue
-
-        csv_rows, updates = _rows_and_updates_from_metrics(
-            model_id, sd, plugin, precision, metrics, args.skip_perf_update
-        )
-        rows.extend(csv_rows)
-        perf_updates.extend(updates)
-
-    return _write_final_outputs(rows, perf_updates, args.csv, args.perf_updates_json)
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run geniex-bench benchmarks on QDC.")
-    sub = ap.add_subparsers(dest="cmd")
+    sub = ap.add_subparsers(dest="cmd", required=True)
 
     p_submit = sub.add_parser(
         "submit", help="Submit jobs; append one row per submission to a jobs file."
@@ -1134,17 +980,7 @@ def main() -> int:
     )
     _add_output_args(p_collect)
 
-    p_run = sub.add_parser(
-        "run", help="Legacy submit-and-wait mode (default when no subcommand given)."
-    )
-    _add_shared_args(p_run)
-    _add_output_args(p_run)
-
-    # No subcommand -> ``run`` (backward-compat for flat-arg invocations).
-    argv = sys.argv[1:]
-    if argv and argv[0] not in {"submit", "collect", "run", "-h", "--help"}:
-        argv = ["run", *argv]
-    args = ap.parse_args(argv)
+    args = ap.parse_args()
 
     if not args.run_perf and not args.run_eval:
         print(
@@ -1156,9 +992,7 @@ def main() -> int:
 
     if args.cmd == "submit":
         return _cmd_submit(args)
-    if args.cmd == "collect":
-        return _cmd_collect(args)
-    return _cmd_run(args)
+    return _cmd_collect(args)
 
 
 if __name__ == "__main__":

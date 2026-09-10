@@ -2,19 +2,6 @@
 # Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
-"""
-Appium/PyTest test script for running Genie on automotive (auto) devices.
-
-This is a template file — the ``<<HEXAGON_VERSION>>`` placeholder is
-substituted at artifact-build time by ``GenieAutoArtifactHandler.create_artifact``.
-
-Requires:
-  - An Android device reachable over ADB.
-  - An Appium server running on localhost:4723.
-  - ANDROID_DEVICE_VERSION env var set to the target device name.
-  - The genie_bundle (including qairt_sdk.zip) already pushed to the device.
-"""
-
 import os
 import subprocess
 import sys
@@ -45,7 +32,12 @@ def _set_package_verifier(enabled: bool) -> None:
 
 class TestGenie:
     @pytest.fixture
-    def driver(self) -> webdriver.Remote:
+    def driver(self) -> webdriver.Remote | None:
+        # AWS Device Farm's custom test environment has no Appium session to
+        # satisfy (that's a QDC framework formality this test never actually
+        # uses `driver` for); skip starting one there.
+        if os.environ.get("QAIHM_SKIP_APPIUM"):
+            return None
         _set_package_verifier(False)
         try:
             return webdriver.Remote(
@@ -54,8 +46,8 @@ class TestGenie:
         finally:
             _set_package_verifier(True)
 
-    def test_genie(self) -> None:
-        # Use pre-uploaded QAIRT SDK for auto devices
+    def test_genie(self, driver: webdriver.Remote | None) -> None:
+        # download qairt sdk via curl on device
         # script to set environment variables
         # run genie-t2t-run on the device
         num_trials = int("<<NUM_TRIALS>>")
@@ -65,20 +57,21 @@ class TestGenie:
                 f'sed -i \'s/"seed": [0-9]*/"seed": {i}/\' genie_config.json'
             )
             trial_commands.append(
-                f"genie_retry genie-t2t-run -c genie_config.json --prompt_file sample_prompt.txt --profile /data/local/tmp/QDC_logs/profile{i}.json 2>>/data/local/tmp/QDC_logs/genie_stderr.log"
+                f"genie_retry genie-t2t-run -c genie_config.json --prompt_file sample_prompt.txt --profile /data/local/tmp/device_logs/profile{i}.json 2>>/data/local/tmp/device_logs/genie_stderr.log"
             )
         full_genie_command = " && ".join(trial_commands)
-        qairt_path = "/data/local/tmp/genie_bundle/qairt"
+        qairt_path = "/data/local/tmp/qairt/<<QAIRT_VERSION>>"
         genie_script = f"""set -e
 # We pipe genie output through `tee` (below) so it shows up on adb stdout
 # (and thus in the captured proc.stdout) even when a failed QDC job never
 # makes the on-device log files available. pipefail keeps the pipeline's
 # exit status tied to genie rather than to tee, which always succeeds.
 set -o pipefail
-# Drop per-job state on exit; keep QDC_logs.
+# Drop per-job state on exit (dedicated-pool devices are reused).
 cleanup_device() {{
     rm -rf /data/local/tmp/genie_bundle \\
-           /data/local/tmp/qxa.qa_adsplib 2>/dev/null || true
+           /data/local/tmp/qairt \\
+           /data/local/tmp/qairt.zip 2>/dev/null || true
 }}
 trap cleanup_device EXIT
 # genie-t2t-run fails randomly on QDC devices; give each invocation one retry
@@ -97,43 +90,34 @@ genie_retry() {{
     rm -f "$tmp_out"
 }}
 cd /data/local/tmp/genie_bundle
-unzip_qairt() {{
-    rm -rf {qairt_path}
-    unzip -q qairt_sdk.zip -d {qairt_path}
-}}
-unzip_qairt || {{
+# Always re-download: dedicated-pool devices are reused, so a partial extract
+# from a previous job would otherwise silently corrupt this run.
+rm -rf /data/local/tmp/qairt
+echo "=== Pre-download connectivity check ==="
+echo "Pinging google.com before QAIRT SDK download..."
+ping -c 1 google.com && echo "Pre-download ping: SUCCESS" || echo "Pre-download ping: FAILED"
+curl -L -J --fail --max-time 300 --retry 3 --retry-delay 5 --output /data/local/tmp/qairt.zip https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/<<QAIRT_VERSION>>/v<<QAIRT_VERSION>>.zip
+echo "=== Post-download connectivity check ==="
+echo "Pinging google.com after QAIRT SDK download..."
+ping -c 1 google.com && echo "Post-download ping: SUCCESS" || echo "Post-download ping: FAILED"
+unzip -q /data/local/tmp/qairt.zip -d /data/local/tmp || {{
     echo "unzip failed, retrying once" >&2
-    unzip_qairt
-}}
-# Some SDK zips nest the SDK under a single top-level dir (2.42's artifact/,
-# so lib is at artifact/lib); newer ones put lib/ at the zip root. Hoist the
-# nested case so {qairt_path}/lib is the SDK root either way.
-if [ ! -d {qairt_path}/lib ]; then
-    for d in {qairt_path}/*/; do
-        [ -d "$d/lib" ] || continue
-        mv "$d"* {qairt_path}/
-        rmdir "$d"
-        break
-    done
-fi
-[ -d {qairt_path}/lib ] || {{
-    echo "FATAL: no lib/ found in qairt_sdk.zip (unexpected SDK layout)" >&2
-    exit 1
+    rm -rf /data/local/tmp/qairt
+    unzip -q /data/local/tmp/qairt.zip -d /data/local/tmp
 }}
 export QAIRT_HOME={qairt_path}
 export PATH={qairt_path}/bin/aarch64-android:${{PATH}}
 export LD_LIBRARY_PATH={qairt_path}/lib/aarch64-android
 export ADSP_LIBRARY_PATH={qairt_path}/lib/hexagon-<<HEXAGON_VERSION>>/unsigned
-cp /data/local/tmp/qxa.qa_adsplib/libc++.so.1 ${{ADSP_LIBRARY_PATH}}/
-cp /data/local/tmp/qxa.qa_adsplib/libc++abi.so.1 ${{ADSP_LIBRARY_PATH}}/
+
 # Drop stale logs from a prior job on this shared device.
-rm -rf /data/local/tmp/QDC_logs
-mkdir -p /data/local/tmp/QDC_logs
-genie_retry genie-t2t-run -c genie_config.json --prompt_file sample_prompt.txt 2>>/data/local/tmp/QDC_logs/genie_stderr.log | tee /data/local/tmp/QDC_logs/genie.log
+rm -rf /data/local/tmp/device_logs
+mkdir -p /data/local/tmp/device_logs
+genie_retry genie-t2t-run -c genie_config.json --prompt_file sample_prompt.txt 2>>/data/local/tmp/device_logs/genie_stderr.log | tee /data/local/tmp/device_logs/genie.log
 {full_genie_command}
 
 PROMPT_DIR=/data/local/tmp/genie_bundle/prompts
-EVAL_OUTPUT_FILE=/data/local/tmp/QDC_logs/eval_outputs.txt
+EVAL_OUTPUT_FILE=/data/local/tmp/device_logs/eval_outputs.txt
 if [ -d "$PROMPT_DIR" ]; then
     # Switch to power_saver perf_profile: sustained burst thermal-throttles and kills the eval loop on QDC SM8750.
     sed -i 's/"perf_profile": "[^"]*"/"perf_profile": "power_saver"/' htp_backend_ext_config.json
@@ -147,13 +131,41 @@ if [ -d "$PROMPT_DIR" ]; then
     done
 fi
 """
-        # Push the genie_bundle directory to the device
+        # Push the genie_bundle directory to the device. QDC stages the
+        # extracted test package under /qdc/appium; AWS Device Farm's custom
+        # test environment extracts it under $DEVICEFARM_TEST_PACKAGE_PATH
+        # instead (see aws_test_spec.yaml, which sets the override).
+        host_artifact_root = os.environ.get("QAIHM_HOST_ARTIFACT_ROOT", "/qdc/appium")
         subprocess.run(
-            ["adb", "push", "/qdc/appium/genie_bundle/", "/data/local/tmp"],
+            ["adb", "push", f"{host_artifact_root}/genie_bundle/", "/data/local/tmp"],
             capture_output=True,
             text=True,
             check=True,
         )
+
+        # Preflight: bail fast if the device can't reach the QAIRT download
+        # host. We've seen QDC SM8750 QRD boot with wifi degraded (logcat
+        # shows WifiHAL fatal_event + ENETDOWN), in which case the curl below
+        # would hang for ~20 minutes and the test would silently "pass".
+        preflight = subprocess.run(
+            [
+                "adb",
+                "shell",
+                "curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "
+                "https://softwarecenter.qualcomm.com/",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        http_code = preflight.stdout.strip()
+        if preflight.returncode != 0 or not http_code.startswith(("2", "3")):
+            pytest.fail(
+                "Device cannot reach softwarecenter.qualcomm.com "
+                f"(rc={preflight.returncode}, http_code={http_code!r}, "
+                f"stderr={preflight.stderr!r}). Likely QDC device-side wifi "
+                "failure — file a QDC infra ticket and re-run."
+            )
 
         # Run the shell script on the device. adb shell does not propagate the
         # remote exit code, so on-device failures can't be detected here; the
@@ -168,8 +180,8 @@ fi
         # Since adb shell hides the on-device exit code, confirm the script
         # actually produced its outputs. A green pytest with no genie.log was
         # the failure mode on QDC job 613912.
-        expected = ["/data/local/tmp/QDC_logs/genie.log"] + [
-            f"/data/local/tmp/QDC_logs/profile{i}.json" for i in range(num_trials)
+        expected = ["/data/local/tmp/device_logs/genie.log"] + [
+            f"/data/local/tmp/device_logs/profile{i}.json" for i in range(num_trials)
         ]
         ls = subprocess.run(
             ["adb", "shell", "ls", "-l", *expected],

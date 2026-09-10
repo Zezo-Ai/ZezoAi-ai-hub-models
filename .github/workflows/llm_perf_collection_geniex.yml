@@ -180,6 +180,15 @@ jobs:
         source ${{ env.VENV_PATH }}/bin/activate
         pip install --upgrade transformers==5.7.0
 
+    - name: Setup AWS Device Farm Credentials
+      if: ${{ matrix.pool == 'aws' }}
+      uses: ./.github/actions/configure-multiple-aws-roles
+      with:
+        role-to-assume: ${{ secrets.QAIHM_CI_AWS_DEVICEFARM_ROLE_ARN }}
+        role-duration-seconds: 3600
+        profile: qaihm-devicefarm
+        aws-region: us-west-2
+
     - name: Download QDC wheel and install
       run: |
         python3 scripts/build_and_test.py \
@@ -211,6 +220,9 @@ jobs:
         GENIEX_VERSION: ${{ inputs.geniex_version || '' }}
         GENIEX_SCOPE: ${{ inputs.scope || 'perf' }}
         QAIHM_LLM_PERF_RELEASE_ASSETS: ${{ inputs.release_assets_action_id != '' && format('{0}/llm-release-assets/release-assets.yaml', github.workspace) || '' }}
+        AWS_DEVICEFARM_PROJECT_ARN: ${{ secrets.QAIHM_AWS_DEVICEFARM_PROJECT_ARN }}
+        AWS_DEVICEFARM_PROFILE: qaihm-devicefarm
+        AWS_DEVICEFARM_REGION: us-west-2
       run: |
         source ${{ env.VENV_PATH }}/bin/activate
         cd $GITHUB_WORKSPACE
@@ -246,6 +258,9 @@ jobs:
         GENIEX_VERSION: ${{ inputs.geniex_version || '' }}
         GENIEX_SCOPE: ${{ inputs.scope || 'perf' }}
         QAIHM_LLM_PERF_RELEASE_ASSETS: ${{ inputs.release_assets_action_id != '' && format('{0}/llm-release-assets/release-assets.yaml', github.workspace) || '' }}
+        AWS_DEVICEFARM_PROJECT_ARN: ${{ secrets.QAIHM_AWS_DEVICEFARM_PROJECT_ARN }}
+        AWS_DEVICEFARM_PROFILE: qaihm-devicefarm
+        AWS_DEVICEFARM_REGION: us-west-2
       run: |
         source ${{ env.VENV_PATH }}/bin/activate
         cd $GITHUB_WORKSPACE
@@ -279,13 +294,13 @@ jobs:
           ${{ github.workspace }}/geniex_bench_results/**/*.json
         retention-days: 14
 
-    - name: Upload QDC logs
-      id: upload-qdc-logs
+    - name: Upload device logs
+      id: upload-device-logs
       if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v7
       with:
-        name: "${{ env.PLUGIN_LABEL }} QDC Logs (${{ matrix.pool == 'dedicated' && 'Dedicated' || 'Shared' }} Pool)"
-        path: ${{ github.workspace }}/geniex_bench_results/qdc_logs/**/*.zip
+        name: "${{ env.PLUGIN_LABEL }} Device Logs (${{ matrix.pool == 'dedicated' && 'Dedicated' || 'Shared' }} Pool)"
+        path: ${{ github.workspace }}/geniex_bench_results/device_logs/**/*.zip
         if-no-files-found: ignore
         # Raw device log zips can incidentally capture device identifiers /
         # paths; keep them short-lived rather than the org default (90 days).

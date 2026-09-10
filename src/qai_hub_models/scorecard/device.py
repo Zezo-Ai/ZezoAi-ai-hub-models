@@ -39,6 +39,7 @@ from qai_hub_models.utils.device import (
     RegisteredDevice,
     _get_cached_device,
 )
+from qai_hub_models.utils.qai_hub_helpers import get_device_and_chipset_name
 
 # -----------------------------------------------------------------------------
 # Chipset helpers (scorecard-specific)
@@ -59,6 +60,12 @@ def get_canonical_chipset_name(name: str) -> str:
     return name
 
 
+def get_canonical_chipset_name_from_device(device: hub.Device) -> str | None:
+    """Canonical chipset name for a hub Device, or None if it has none."""
+    _, chipset = get_device_and_chipset_name(device)
+    return get_canonical_chipset_name(chipset) if chipset is not None else None
+
+
 @cache
 def get_all_chipset_workbench_variants() -> dict[str, list[str]]:
     """
@@ -69,7 +76,7 @@ def get_all_chipset_workbench_variants() -> dict[str, list[str]]:
     for device in ScorecardDevice._registry.values():
         chipset_variants = get_chipset_workbench_variants(device.chipset)
         if len(chipset_variants) > 1:
-            variants[get_canonical_chipset_name(device.chipset)] = chipset_variants
+            variants[device.canonical_chipset] = chipset_variants
     return variants
 
 
@@ -246,6 +253,7 @@ class ScorecardDevice(HubDeviceAttributes):
         register: bool = True,
         include_in_all: bool = True,
         qdc_enabled: bool = True,
+        devicefarm_backend: str = "qdc",
     ) -> None:
         """
         Parameters
@@ -279,10 +287,14 @@ class ScorecardDevice(HubDeviceAttributes):
             is selected. If False, the device only runs when its name is
             explicitly listed in ``EnabledDevicesEnvvar``.
         qdc_enabled
-            Whether LLM perf tests are allowed to submit QDC jobs against
-            this device. When False, the device still participates in LLM
-            compile parametrization but is filtered out of
-            ``get_llm_perf_parametrization``.
+            Whether LLM perf tests are allowed to submit jobs (QDC or AWS,
+            per ``devicefarm_backend``) against this device. When False, the
+            device still participates in LLM compile parametrization but is
+            filtered out of ``get_llm_perf_parametrization``.
+        devicefarm_backend
+            Which device-cloud backend runs Genie/GenieX LLM perf/accuracy
+            jobs for this device: ``"qdc"`` (default) or ``"aws"`` (AWS
+            Device Farm; Android only).
         """
         if register and name in ScorecardDevice._registry:
             raise ValueError(f"Device {name} already registered.")
@@ -297,6 +309,7 @@ class ScorecardDevice(HubDeviceAttributes):
         self._profile_paths = profile_paths
         self.include_in_all = include_in_all
         self.qdc_enabled = qdc_enabled
+        self.devicefarm_backend = devicefarm_backend
 
         if register:
             ScorecardDevice._registry[name] = self
@@ -313,6 +326,7 @@ class ScorecardDevice(HubDeviceAttributes):
         register: bool = True,
         include_in_all: bool = True,
         qdc_enabled: bool = True,
+        devicefarm_backend: str = "qdc",
     ) -> ScorecardDevice:
         """
         Build a ScorecardDevice from an existing ``RegisteredDevice``.
@@ -340,6 +354,7 @@ class ScorecardDevice(HubDeviceAttributes):
             register=register,
             include_in_all=include_in_all,
             qdc_enabled=qdc_enabled,
+            devicefarm_backend=devicefarm_backend,
         )
 
     def __str__(self) -> str:
@@ -552,6 +567,13 @@ class ScorecardDevice(HubDeviceAttributes):
         ]
 
     @cached_property
+    def canonical_chipset(self) -> str:
+        """Canonical (de-suffixed) chipset name, e.g. "qualcomm-snapdragon-8-elite"
+        from the "-for-galaxy" workbench variant.
+        """
+        return get_canonical_chipset_name(self.chipset)
+
+    @cached_property
     def extended_supported_chipsets(self) -> set[str]:
         """
         If this device can run a model, get a set of all chipsets that should also be supported.
@@ -560,7 +582,7 @@ class ScorecardDevice(HubDeviceAttributes):
         The device's own chipset is returned as its workbench name (e.g.
         ``qualcomm-snapdragon-8-elite-for-galaxy``) so that Hub API queries
         match the exact chipset ID. Consumers that need the canonical name
-        should call ``get_canonical_chipset_name`` explicitly.
+        should use ``canonical_chipset`` instead.
         """
         if self.form_factor in [
             FormFactor.PHONE,
@@ -576,7 +598,7 @@ class ScorecardDevice(HubDeviceAttributes):
             ]
             # Look up by canonical name, but return the workbench name for
             # the device's own chipset so Hub queries match the exact ID.
-            canonical_chipset = get_canonical_chipset_name(self.chipset)
+            canonical_chipset = self.canonical_chipset
             if canonical_chipset in mobile_chips:
                 idx = mobile_chips.index(canonical_chipset)
                 # Return this chipset and all older chipsets as proxies —
@@ -619,6 +641,7 @@ cs_8_elite = ScorecardDevice.from_registered(
     registered_device.cs_8_elite,
     name="cs_8_elite",
     reference_device_name="Samsung Galaxy S25",
+    devicefarm_backend="aws",
 )
 
 cs_8_elite_qrd = ScorecardDevice.from_registered(
@@ -643,6 +666,7 @@ cs_8_elite_gen_5 = ScorecardDevice.from_registered(
     registered_device.cs_8_elite_gen_5,
     name="cs_8_elite_gen_5",
     reference_device_name="Samsung Galaxy S26",
+    devicefarm_backend="aws",
 )
 
 cs_8_elite_gen_5_qrd = ScorecardDevice.from_registered(
@@ -747,6 +771,8 @@ LLM_COMPILE_DEVICES = [
     cs_auto_lemans_8775,
     cs_8_elite_gen_5_qrd,
     cs_x2_elite,
+    cs_8_elite,
+    cs_8_elite_gen_5,
 ]
 
 # Default device for LLM (QDC / Genie) tests and asset uploads.

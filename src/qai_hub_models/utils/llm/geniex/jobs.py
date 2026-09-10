@@ -1,7 +1,9 @@
 # ---------------------------------------------------------------------
-# Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+# Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 # ---------------------------------------------------------------------
+"""Backend-agnostic GenieX-bench job orchestration: bundle staging, metric/eval parsing, submit/collect."""
+
 from __future__ import annotations
 
 import json
@@ -13,24 +15,14 @@ import zipfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from qualcomm_device_cloud_sdk.models import ArtifactType
-
-from qai_hub_models.models.templates.llm.common import (
-    JobOutcome,
-    get_qdc_job_limit,
-)
-from qai_hub_models.models.templates.llm.grader.grace import GRACE_TASK_NAME
 from qai_hub_models.models.templates.llm.model import LLMBase
-from qai_hub_models.models.templates.llm.qdc.qdc_jobs import (
-    QDCDevice,
-    QDCJobs,
-    _safe_extract_zip,
-    create_zip,
+from qai_hub_models.utils.devicefarm.devicefarm import (
+    DeviceFarm,
+    HubDevicePlatform,
+    JobOutcome,
+    safe_extract_zip,
+    walk_dir_entries,
 )
-from qai_hub_models.scorecard import ScorecardProfilePath
-from qai_hub_models.scorecard.device import ScorecardDevice
-
-GENIEX_BENCH_JOB_TIMEOUT = 21600  # 6 hours
 
 DEFAULT_LLM_SYSTEM_PROMPT = LLMBase.default_system_prompt
 
@@ -93,7 +85,8 @@ class GenieXBenchArtifactHandler(ABC):
         geniex_version: str | None,
         eval_prompts: list[str] | None,
         run_perf: bool,
-    ) -> str:
+    ) -> list[tuple[str, str]]:
+        """Stage the on-device bundle into ``dest_dir`` and return its entries."""
         raise NotImplementedError
 
     @property
@@ -205,7 +198,7 @@ class GenieXBenchAndroidArtifactHandler(GenieXBenchArtifactHandler):
         geniex_version: str | None,
         eval_prompts: list[str] | None,
         run_perf: bool,
-    ) -> str:
+    ) -> list[tuple[str, str]]:
         ds_dir = os.path.join(curr_dirname, "device_scripts")
         pytest_dir = os.path.join(ds_dir, "geniex_pytest")
 
@@ -256,9 +249,7 @@ class GenieXBenchAndroidArtifactHandler(GenieXBenchArtifactHandler):
             self._stage_eval_prompts(dest_dir, eval_prompts)
             self._stage_system_prompt(dest_dir, DEFAULT_LLM_SYSTEM_PROMPT)
 
-        zip_path = os.path.join(os.path.dirname(dest_dir), "geniex_bench_test.zip")
-        create_zip(zip_path, dest_dir)
-        return zip_path
+        return walk_dir_entries(os.fspath(dest_dir))
 
 
 class GenieXBenchLinuxArtifactHandler(GenieXBenchArtifactHandler):
@@ -280,7 +271,7 @@ class GenieXBenchLinuxArtifactHandler(GenieXBenchArtifactHandler):
         geniex_version: str | None,
         eval_prompts: list[str] | None,
         run_perf: bool,
-    ) -> str:
+    ) -> list[tuple[str, str]]:
         ds_dir = os.path.join(curr_dirname, "device_scripts")
         sh_src = os.path.join(ds_dir, "run_geniex_bench_linux.sh")
 
@@ -318,9 +309,7 @@ class GenieXBenchLinuxArtifactHandler(GenieXBenchArtifactHandler):
             self._stage_eval_prompts(dest_dir, eval_prompts)
             self._stage_system_prompt(dest_dir, DEFAULT_LLM_SYSTEM_PROMPT)
 
-        zip_path = os.path.join(os.path.dirname(dest_dir), "geniex_bench_test.zip")
-        create_zip(zip_path, dest_dir)
-        return zip_path
+        return walk_dir_entries(os.fspath(dest_dir))
 
 
 class GenieXBenchWindowsArtifactHandler(GenieXBenchArtifactHandler):
@@ -342,7 +331,7 @@ class GenieXBenchWindowsArtifactHandler(GenieXBenchArtifactHandler):
         geniex_version: str | None,
         eval_prompts: list[str] | None,
         run_perf: bool,
-    ) -> str:
+    ) -> list[tuple[str, str]]:
         ds_dir = os.path.join(curr_dirname, "device_scripts")
         ps1_src = os.path.join(ds_dir, "run_geniex_bench_windows.ps1")
 
@@ -382,250 +371,249 @@ class GenieXBenchWindowsArtifactHandler(GenieXBenchArtifactHandler):
             self._stage_eval_prompts(dest_dir, eval_prompts)
             self._stage_system_prompt(dest_dir, DEFAULT_LLM_SYSTEM_PROMPT)
 
-        zip_path = os.path.join(os.path.dirname(dest_dir), "geniex_bench_test.zip")
-        create_zip(zip_path, dest_dir)
-        return zip_path
+        return walk_dir_entries(os.fspath(dest_dir))
 
 
-class GenieXBenchQDCJobs(QDCJobs):
-    def _get_artifact_handler(
-        self, qdc_device: QDCDevice
-    ) -> GenieXBenchArtifactHandler:
-        if qdc_device.windows_platform:
-            return GenieXBenchWindowsArtifactHandler()
-        if qdc_device.iot_platform:
-            return GenieXBenchLinuxArtifactHandler()
-        if qdc_device.mobile_platform:
-            return GenieXBenchAndroidArtifactHandler()
-        raise NotImplementedError(
-            "geniex-bench currently supports Windows (Snapdragon X / X2 "
-            "Elite), IoT Linux (Dragonwing IQ-9075 EVK), and Android "
-            "(Snapdragon 8 Elite QRD / Gen 5 QRD). "
-            f"Device {qdc_device.device.name!r} is none of these."
-        )
+def _get_artifact_handler(platform: HubDevicePlatform) -> GenieXBenchArtifactHandler:
+    if platform.is_windows_platform:
+        return GenieXBenchWindowsArtifactHandler()
+    if platform.is_iot_platform:
+        return GenieXBenchLinuxArtifactHandler()
+    if platform.is_mobile_platform:
+        return GenieXBenchAndroidArtifactHandler()
+    raise NotImplementedError(
+        "geniex-bench currently supports Windows (Snapdragon X / X2 "
+        "Elite), IoT Linux (Dragonwing IQ-9075 EVK), and Android "
+        "(Snapdragon 8 Elite QRD / Gen 5 QRD). "
+        f"Device {platform.device.name!r} is none of these."
+    )
 
-    def add_job_artifacts(
-        self,
-        qdc_device: QDCDevice,
-        chipset: str,
-        matrix_rows: list[str],
-        plugin: str,
-        context_lengths: list[int] = DEFAULT_CONTEXT_LENGTHS,
-        qairt_bundles: dict[str, str] | None = None,
-        geniex_version: str | None = None,
-        eval_prompts: list[str] | None = None,
-        run_perf: bool = True,
-    ) -> tuple[list[str], str | None]:
-        curr_dirname = os.path.dirname(os.path.abspath(__file__))
-        handler = self._get_artifact_handler(qdc_device)
-        with tempfile.TemporaryDirectory() as tmpdir:
-            zip_path = handler.create_artifact(
-                curr_dirname,
-                tmpdir,
-                chipset,
-                matrix_rows,
-                context_lengths,
-                plugin,
-                qairt_bundles,
-                geniex_version,
-                eval_prompts,
-                run_perf,
-            )
-            artifact = self.upload_file(zip_path, ArtifactType.TESTSCRIPT)
-        return [artifact], handler.entry_script
 
-    def compute_metrics(
-        self,
-        job_log_files: list,
-        save_results_dir: str | None = None,
-        save_logs_dir: str | None = None,
-    ) -> list[GenieXBenchMetrics]:
-        """Parse metrics from QDC logs; if ``save_logs_dir`` is set, keep the raw zips there too."""
-        metrics: list[GenieXBenchMetrics] = []
-        if save_logs_dir:
-            os.makedirs(save_logs_dir, exist_ok=True)
+def add_geniex_bundle_entries(
+    platform: HubDevicePlatform,
+    dest_dir: str,
+    chipset: str,
+    matrix_rows: list[str],
+    plugin: str,
+    context_lengths: list[int] = DEFAULT_CONTEXT_LENGTHS,
+    qairt_bundles: dict[str, str] | None = None,
+    geniex_version: str | None = None,
+    eval_prompts: list[str] | None = None,
+    run_perf: bool = True,
+) -> tuple[list[tuple[str, str]], str | None]:
+    """Stage a GenieX-bench bundle into backend-agnostic (path, arcname) entries.
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            for job_log in job_log_files:
-                target = os.path.join(tmpdir, "logs", f"{job_log.filename}.zip")
-                os.makedirs(os.path.dirname(target), exist_ok=True)
-                if not self.try_download_job_log_files(job_log.filename, target):
+    ``dest_dir`` must outlive the returned entries -- callers zip/upload them
+    before it is cleaned up.
+    """
+    curr_dirname = os.path.dirname(os.path.abspath(__file__))
+    handler = _get_artifact_handler(platform)
+    entries = handler.create_artifact(
+        curr_dirname,
+        dest_dir,
+        chipset,
+        matrix_rows,
+        context_lengths,
+        plugin,
+        qairt_bundles,
+        geniex_version,
+        eval_prompts,
+        run_perf,
+    )
+    return entries, handler.entry_script
+
+
+def _unreadable_cell_schema(path: str) -> str | None:
+    """Schema version of a bench cell this parser rejected, else None.
+
+    The log bundle also carries the model's own config/tokenizer JSON, so a
+    file only counts as a bench cell if it has cell_id and agg.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            cell = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(cell, dict) or "cell_id" not in cell or "agg" not in cell:
+        return None
+    version = str(cell.get("schema_version"))
+    return None if version in _SUPPORTED_BENCH_SCHEMAS else version
+
+
+def _parse_cell_metrics(path: str) -> GenieXBenchMetrics | None:
+    try:
+        with open(path, encoding="utf-8") as f:
+            cell = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(cell, dict):
+        return None
+    # geniex-bench bumps schema_version for additive changes; the fields we read
+    # below are stable, and missing ones are rejected by the None checks.
+    try:
+        if int(cell.get("schema_version", 0)) < _MIN_RESULT_SCHEMA_VERSION:
+            return None
+    except (TypeError, ValueError):
+        return None
+    agg = cell.get("agg") or {}
+    params = cell.get("params") or {}
+
+    def med(key: str) -> float | None:
+        entry = agg.get(key) or {}
+        return entry.get("median")
+
+    ttft = med("ttft_ms")
+    prefill = med("prefill_tps")
+    decode = med("decode_tps")
+    if ttft is None or prefill is None or decode is None:
+        return None
+
+    cell_id = cell.get("cell_id") or ""
+    _, sep, suffix = cell_id.rpartition("-c")
+    ctx = int(suffix) if sep and suffix.isdigit() else int(params.get("n_ctx") or 0)
+    if ctx == 0:
+        return None
+
+    return GenieXBenchMetrics(
+        cell_id=cell_id,
+        plugin=cell.get("plugin") or "",
+        device_alias=cell.get("device") or "",
+        context_length=ctx,
+        ttft_ms=float(ttft),
+        prefill_tps=float(prefill),
+        decode_tps=float(decode),
+        prompt_tokens=int((agg.get("prompt_tokens") or {}).get("median") or 0),
+        gen_tokens=int((agg.get("gen_tokens") or {}).get("median") or 0),
+    )
+
+
+def compute_geniex_metrics(
+    backend: DeviceFarm,
+    job_log_files: list,
+    save_results_dir: str | None = None,
+    save_logs_dir: str | None = None,
+) -> list[GenieXBenchMetrics]:
+    """Parse metrics from job logs; if ``save_logs_dir`` is set, keep the raw zips too."""
+    metrics: list[GenieXBenchMetrics] = []
+    if save_logs_dir:
+        os.makedirs(save_logs_dir, exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for job_log in job_log_files:
+            target = os.path.join(tmpdir, "logs", f"{job_log.filename}.zip")
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            if not backend.try_download_job_log_files(job_log.filename, target):
+                continue
+            if save_logs_dir:
+                safe_name = os.path.basename(job_log.filename)
+                shutil.copy(target, os.path.join(save_logs_dir, f"{safe_name}.zip"))
+            try:
+                safe_extract_zip(target, tmpdir)
+            except zipfile.BadZipFile:
+                continue
+
+        unreadable_schemas: dict[str, str] = {}
+        for root, _, files in os.walk(tmpdir):
+            for fn in sorted(files):
+                if not fn.endswith(".json"):
                     continue
-                if save_logs_dir:
-                    safe_name = os.path.basename(job_log.filename)
-                    shutil.copy(target, os.path.join(save_logs_dir, f"{safe_name}.zip"))
-                try:
-                    _safe_extract_zip(target, tmpdir)
-                except zipfile.BadZipFile:
+                path = os.path.join(root, fn)
+                parsed = _parse_cell_metrics(path)
+                if parsed is None:
+                    if version := _unreadable_cell_schema(path):
+                        unreadable_schemas[fn] = version
                     continue
+                metrics.append(parsed)
+                if save_results_dir:
+                    rel = os.path.relpath(path, tmpdir)
+                    dest = os.path.join(save_results_dir, rel)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    shutil.copy(path, dest)
 
-            unreadable_schemas: dict[str, str] = {}
-            for root, _, files in os.walk(tmpdir):
-                for fn in sorted(files):
-                    if not fn.endswith(".json"):
-                        continue
-                    path = os.path.join(root, fn)
-                    parsed = self._parse_cell_metrics(path)
-                    if parsed is None:
-                        if version := self._unreadable_cell_schema(path):
-                            unreadable_schemas[fn] = version
-                        continue
-                    metrics.append(parsed)
-                    if save_results_dir:
-                        rel = os.path.relpath(path, tmpdir)
-                        dest = os.path.join(save_results_dir, rel)
-                        os.makedirs(os.path.dirname(dest), exist_ok=True)
-                        shutil.copy(path, dest)
-
-        if metrics:
-            print(f"Parsed {len(metrics)} geniex-bench cells:")
-            for m in metrics:
-                print(
-                    f"  [{m.cell_id} ctx={m.context_length}] "
-                    f"decode={m.decode_tps:.2f} tok/s, prefill={m.prefill_tps:.2f} tok/s, "
-                    f"TTFT={m.ttft_ms:.1f} ms"
-                )
-        elif unreadable_schemas:
-            seen = sorted(set(unreadable_schemas.values()))
-            raise RuntimeError(
-                f"geniex-bench produced results this parser cannot read: schema "
-                f"version(s) {', '.join(seen)}, supported "
-                f"{', '.join(sorted(_SUPPORTED_BENCH_SCHEMAS))}. Add the version to "
-                "_SUPPORTED_BENCH_SCHEMAS once its fields are confirmed compatible. "
-                "Failing rather than reporting no metrics, so a schema bump can't be "
-                "replayed as a measurement that never happened.\n"
-                + "\n".join(
-                    f"  {fn}: schema_version={v}"
-                    for fn, v in sorted(unreadable_schemas.items())
-                )
-            )
-        else:
+    if metrics:
+        print(f"Parsed {len(metrics)} geniex-bench cells:")
+        for m in metrics:
             print(
-                "Warning: no geniex-bench results (schema_version >= "
-                f"{_MIN_RESULT_SCHEMA_VERSION}) found in logs."
+                f"  [{m.cell_id} ctx={m.context_length}] "
+                f"decode={m.decode_tps:.2f} tok/s, prefill={m.prefill_tps:.2f} tok/s, "
+                f"TTFT={m.ttft_ms:.1f} ms"
             )
-
-        return metrics
-
-    @staticmethod
-    def _unreadable_cell_schema(path: str) -> str | None:
-        """Schema version of a bench cell this parser rejected, else None.
-
-        The log bundle also carries the model's own config/tokenizer JSON, so a
-        file only counts as a bench cell if it has cell_id and agg.
-        """
-        try:
-            with open(path, encoding="utf-8") as f:
-                cell = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            return None
-        if not isinstance(cell, dict) or "cell_id" not in cell or "agg" not in cell:
-            return None
-        version = str(cell.get("schema_version"))
-        return None if version in _SUPPORTED_BENCH_SCHEMAS else version
-
-    @staticmethod
-    def _parse_cell_metrics(path: str) -> GenieXBenchMetrics | None:
-        try:
-            with open(path, encoding="utf-8") as f:
-                cell = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            return None
-        if not isinstance(cell, dict):
-            return None
-        # geniex-bench bumps schema_version for additive changes; the fields we read
-        # below are stable, and missing ones are rejected by the None checks.
-        try:
-            if int(cell.get("schema_version", 0)) < _MIN_RESULT_SCHEMA_VERSION:
-                return None
-        except (TypeError, ValueError):
-            return None
-        agg = cell.get("agg") or {}
-        params = cell.get("params") or {}
-
-        def med(key: str) -> float | None:
-            entry = agg.get(key) or {}
-            return entry.get("median")
-
-        ttft = med("ttft_ms")
-        prefill = med("prefill_tps")
-        decode = med("decode_tps")
-        if ttft is None or prefill is None or decode is None:
-            return None
-
-        cell_id = cell.get("cell_id") or ""
-        _, sep, suffix = cell_id.rpartition("-c")
-        ctx = int(suffix) if sep and suffix.isdigit() else int(params.get("n_ctx") or 0)
-        if ctx == 0:
-            return None
-
-        return GenieXBenchMetrics(
-            cell_id=cell_id,
-            plugin=cell.get("plugin") or "",
-            device_alias=cell.get("device") or "",
-            context_length=ctx,
-            ttft_ms=float(ttft),
-            prefill_tps=float(prefill),
-            decode_tps=float(decode),
-            prompt_tokens=int((agg.get("prompt_tokens") or {}).get("median") or 0),
-            gen_tokens=int((agg.get("gen_tokens") or {}).get("median") or 0),
+    elif unreadable_schemas:
+        seen = sorted(set(unreadable_schemas.values()))
+        raise RuntimeError(
+            f"geniex-bench produced results this parser cannot read: schema "
+            f"version(s) {', '.join(seen)}, supported "
+            f"{', '.join(sorted(_SUPPORTED_BENCH_SCHEMAS))}. Add the version to "
+            "_SUPPORTED_BENCH_SCHEMAS once its fields are confirmed compatible. "
+            "Failing rather than reporting no metrics, so a schema bump can't be "
+            "replayed as a measurement that never happened.\n"
+            + "\n".join(
+                f"  {fn}: schema_version={v}"
+                for fn, v in sorted(unreadable_schemas.items())
+            )
+        )
+    else:
+        print(
+            "Warning: no geniex-bench results (schema_version >= "
+            f"{_MIN_RESULT_SCHEMA_VERSION}) found in logs."
         )
 
-    def compute_eval_results(
-        self,
-        job_log_files: list,
-        prompts: list[str],
-        save_logs_dir: str | None = None,
-    ) -> list[dict]:
-        """Parse ``geniex_eval_outputs.txt`` into [{idx, prompt, output}].
+    return metrics
 
-        The device scripts run ``geniex-bench --accuracy`` once per prompt and
-        append each invocation's stdout to a single ``geniex_eval_outputs.txt``,
-        with ``===EVAL_IDX_NNN===`` markers separating prompts. If
-        ``save_logs_dir`` is set the raw eval log zip lands there too.
-        """
-        outputs: dict[int, str] = {}
-        if save_logs_dir:
-            os.makedirs(save_logs_dir, exist_ok=True)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            for job_log in job_log_files:
-                if "geniex_eval_outputs" not in job_log.filename:
+def compute_geniex_eval_results(
+    backend: DeviceFarm,
+    job_log_files: list,
+    prompts: list[str],
+    save_logs_dir: str | None = None,
+) -> list[dict]:
+    """Parse ``geniex_eval_outputs.txt`` into [{idx, prompt, output}].
+
+    The device scripts run ``geniex-bench --accuracy`` once per prompt and
+    append each invocation's stdout to a single ``geniex_eval_outputs.txt``,
+    with ``===EVAL_IDX_NNN===`` markers separating prompts. If
+    ``save_logs_dir`` is set the raw eval log zip lands there too.
+    """
+    outputs: dict[int, str] = {}
+    if save_logs_dir:
+        os.makedirs(save_logs_dir, exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for job_log in job_log_files:
+            if "geniex_eval_outputs" not in job_log.filename:
+                continue
+            target = os.path.join(tmpdir, "logs", f"{job_log.filename}.zip")
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            if not backend.try_download_job_log_files(job_log.filename, target):
+                continue
+            if save_logs_dir:
+                safe_name = os.path.basename(job_log.filename)
+                dest = os.path.join(save_logs_dir, f"{safe_name}.zip")
+                # Skip if compute_metrics already copied this zip in the
+                # same call -- avoids the redundant I/O when both perf
+                # and eval run.
+                if not os.path.exists(dest):
+                    shutil.copy(target, dest)
+            try:
+                safe_extract_zip(target, tmpdir)
+            except zipfile.BadZipFile:
+                continue
+
+        for root, _, files in os.walk(tmpdir):
+            for fn in files:
+                if "geniex_eval_outputs" not in fn or fn.endswith(".zip"):
                     continue
-                target = os.path.join(tmpdir, "logs", f"{job_log.filename}.zip")
-                os.makedirs(os.path.dirname(target), exist_ok=True)
-                if not self.try_download_job_log_files(job_log.filename, target):
-                    continue
-                if save_logs_dir:
-                    safe_name = os.path.basename(job_log.filename)
-                    dest = os.path.join(save_logs_dir, f"{safe_name}.zip")
-                    # Skip if compute_metrics already copied this zip in the
-                    # same call -- avoids the redundant I/O when both perf
-                    # and eval run.
-                    if not os.path.exists(dest):
-                        shutil.copy(target, dest)
-                try:
-                    _safe_extract_zip(target, tmpdir)
-                except zipfile.BadZipFile:
-                    continue
+                with open(os.path.join(root, fn), "rb") as f:
+                    outputs.update(_parse_eval_outputs(_decode_device_log(f.read())))
 
-            for root, _, files in os.walk(tmpdir):
-                for fn in files:
-                    if "geniex_eval_outputs" not in fn or fn.endswith(".zip"):
-                        continue
-                    with open(os.path.join(root, fn), "rb") as f:
-                        outputs.update(
-                            _parse_eval_outputs(_decode_device_log(f.read()))
-                        )
-
-        return [
-            {
-                "idx": idx,
-                "prompt": prompts[idx] if idx < len(prompts) else "",
-                "output": _extract_model_output(outputs.get(idx, "")),
-            }
-            for idx in sorted(outputs.keys())
-        ]
+    return [
+        {
+            "idx": idx,
+            "prompt": prompts[idx] if idx < len(prompts) else "",
+            "output": _extract_model_output(outputs.get(idx, "")),
+        }
+        for idx in sorted(outputs.keys())
+    ]
 
 
 def _decode_device_log(data: bytes) -> str:
@@ -672,49 +660,6 @@ def _extract_model_output(raw_output: str) -> str:
     return "\n".join(lines).strip()
 
 
-def save_eval_results_json(results: list[dict], output_path: str) -> None:
-    """Save evaluation results to a JSON file, sorted by idx."""
-    if not results:
-        print("No results to save.")
-        return
-
-    results.sort(key=lambda r: r.get("idx", 0))
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
-
-    print(f"Results saved to: {output_path}")
-
-
-def save_eval_metadata_json(
-    model_id: str,
-    chipset: str,
-    precision: str,
-    output_path: str,
-    path: ScorecardProfilePath,
-    dataset_name: str = GRACE_TASK_NAME,
-) -> None:
-    """Save a sidecar identifying which (model, chipset, precision, path, dataset) an eval JSON belongs to.
-
-    The grader output (``*_eval_grade.json``) carries no model/chipset/precision,
-    and the eval filename cannot be parsed unambiguously (model IDs and chipset
-    slugs both contain delimiters). collect_llm_accuracy_csv reads this sidecar
-    to recover the identity, and skips any grade file that lacks it. ``path`` is
-    the scorecard runtime the accuracy row is written under.
-    """
-    metadata = {
-        "model_id": model_id,
-        "chipset": chipset,
-        "precision": precision,
-        "path": path.value,
-        "dataset_name": dataset_name,
-    }
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2)
-
-    print(f"Eval metadata saved to: {output_path}")
-
-
 def _hf_repo(model_url: str) -> str:
     if "huggingface.co/" not in model_url:
         raise ValueError(f"Only HuggingFace URLs are supported: {model_url}")
@@ -744,8 +689,8 @@ def _build_matrix_rows(
     return matrix_rows, qairt_bundles
 
 
-def submit_geniex_bench_only(
-    api_token: str,
+def submit_geniex_bench(
+    backend: DeviceFarm,
     hub_device_name: str,
     chipset: str,
     model_rows: list[tuple[str, str]],
@@ -760,9 +705,9 @@ def submit_geniex_bench_only(
 ) -> tuple[str, list[str], dict[str, str]]:
     """Upload artifacts and submit a geniex-bench job, returning the id.
 
-    Companion to ``collect_geniex_bench_result``. Also returns the
-    computed ``matrix_rows`` and ``qairt_bundles`` so the caller can
-    persist them for a later resubmit.
+    Companion to :func:`collect_geniex_bench`. Also returns the computed
+    ``matrix_rows`` and ``qairt_bundles`` so the caller can persist them for
+    a later resubmit.
 
     eval_prompts set => accuracy collection: staged raw into the bundle for
     one ``geniex-bench --accuracy`` pass, which applies the bundle's own chat
@@ -772,44 +717,47 @@ def submit_geniex_bench_only(
     if plugin == "llama_cpp" and not llamacpp_quant:
         raise ValueError("llamacpp_quant is required when plugin='llama_cpp'.")
 
-    qdc_device = QDCDevice(hub_device_name)
+    platform = HubDevicePlatform(hub_device_name)
     matrix_rows, qairt_bundles = _build_matrix_rows(
         model_rows, plugin, device_alias, llamacpp_quant
     )
 
-    geniex_job = GenieXBenchQDCJobs(
-        api_key=api_token,
-        app_name_header="GenieXBenchQDCJobApp",
-        job_limit=get_qdc_job_limit(ScorecardDevice.get(hub_device_name)),
-    )
+    # Staging dir must outlive add_geniex_bundle_entries: the returned entries
+    # reference files inside it, and submit_bundle needs them to still exist
+    # when it zips/uploads. eval_prompts are staged raw -- geniex-bench applies
+    # the bundle's own chat template on-device (no host-side templating).
+    with tempfile.TemporaryDirectory(prefix="geniex_artifact_staging_") as dest_dir:
+        entries, entry_script = add_geniex_bundle_entries(
+            platform,
+            dest_dir,
+            chipset,
+            matrix_rows,
+            plugin,
+            context_lengths=context_lengths,
+            qairt_bundles=qairt_bundles or None,
+            geniex_version=geniex_version,
+            eval_prompts=eval_prompts,
+            run_perf=run_perf,
+        )
 
-    job_artifacts, entry_script = geniex_job.add_job_artifacts(
-        qdc_device,
-        chipset,
-        matrix_rows,
-        plugin,
-        context_lengths=context_lengths,
-        qairt_bundles=qairt_bundles or None,
-        geniex_version=geniex_version,
-        eval_prompts=eval_prompts,
-        run_perf=run_perf,
-    )
-
-    job_id = geniex_job.submit_automated_job(
-        qdc_device,
-        job_artifacts,
-        entry_script,
-        job_name=job_name,
-        timeout=GENIEX_BENCH_JOB_TIMEOUT,
-    )
+        # No explicit timeout: it means different things per backend (QDC:
+        # how long to wait for a job slot; AWS: the on-device execution cap,
+        # which AWS itself limits to 150 minutes) -- each backend's own
+        # submit_bundle default already reflects that.
+        job_id = backend.submit_bundle(
+            hub_device_name,
+            entries,
+            entry_script,
+            job_name=job_name,
+        )
     if job_id is None:
         raise RuntimeError("Job submission failed.")
-    print(f"Submitted QDC job with ID: {job_id}")
+    print(f"Submitted job with ID: {job_id}")
     return job_id, matrix_rows, qairt_bundles
 
 
-def collect_geniex_bench_result(
-    api_token: str,
+def collect_geniex_bench(
+    backend: DeviceFarm,
     hub_device_name: str,
     job_id: str,
     save_results_dir: str | None = None,
@@ -827,37 +775,28 @@ def collect_geniex_bench_result(
     to each parsed output (run_perf=False yields eval-only results).
     ``log_label`` names the per-job log archive written under ``save_logs_dir``.
     """
-    geniex_job = GenieXBenchQDCJobs(
-        api_key=api_token,
-        app_name_header="GenieXBenchQDCJobApp",
-    )
+    job_status = backend.status(job_id)
+    job_result = backend.result(job_id)
+    print(f"Job {job_id} completed with status: {job_status}, result: {job_result}")
 
-    job_status = geniex_job.status(job_id)
-    job_result = geniex_job.result(job_id)
-    print(f"QDC job {job_id} completed with status: {job_status}, result: {job_result}")
-
-    if job_result is not None and job_result != "Successful":
+    if not backend.is_successful(job_result):
         reason = (
-            f"QDC job {job_id} on device '{hub_device_name}' finished with "
+            f"Job {job_id} on device '{hub_device_name}' finished with "
             f"status='{job_status}', result='{job_result}'"
         )
-        outcome = (
-            JobOutcome.RETRYABLE_ERROR
-            if job_result == "Error"
-            else JobOutcome.RETRYABLE_UNSUCCESSFUL
-        )
+        outcome = backend.classify_failure(job_result)
         print(f"[result={job_result}] {reason}")
-        geniex_job.save_job_logs(job_id, save_logs_dir, label=log_label)
+        backend.save_job_logs(job_id, save_logs_dir, label=log_label)
         return [], [], outcome, reason
 
-    geniex_job.log_upload_status(job_id)
-    # The file listing lags log-upload-status on the QDC backend, so wait
+    backend.log_upload_status(job_id)
+    # The file listing can lag the log-upload signal on some backends, so wait
     # for it to populate -- otherwise a successful job yields no metrics.
-    job_log_files = geniex_job.get_job_log_files(job_id, wait_for_logs=True)
+    job_log_files = backend.get_job_log_files(job_id, wait_for_logs=True)
 
     if not job_log_files:
         reason = (
-            f"QDC job {job_id} on device '{hub_device_name}' reported result="
+            f"Job {job_id} on device '{hub_device_name}' reported result="
             f"'{job_result}' but produced no retrievable log files"
         )
         print(f"[empty logs] {reason}")
@@ -866,29 +805,31 @@ def collect_geniex_bench_result(
     # Archive the logs before parsing, so they survive whatever verdict follows:
     # a 'Successful' job can still be failed below (e.g. no eval output), and its
     # logs are what explains why.
-    geniex_job.save_job_logs(job_id, save_logs_dir, job_log_files, label=log_label)
+    backend.save_job_logs(job_id, save_logs_dir, job_log_files, label=log_label)
 
     metrics = (
-        geniex_job.compute_metrics(job_log_files, save_results_dir=save_results_dir)
+        compute_geniex_metrics(
+            backend, job_log_files, save_results_dir=save_results_dir
+        )
         if run_perf
         else []
     )
     # eval_prompts holds the raw questions so compute_eval_results labels each
     # output with the human-readable prompt (not the templated form).
     eval_results = (
-        geniex_job.compute_eval_results(job_log_files, eval_prompts)
+        compute_geniex_eval_results(backend, job_log_files, eval_prompts)
         if eval_prompts
         else []
     )
-    # A job can report result='Successful' and return log files while carrying
-    # no eval output at all: if the device drops off adb mid-run, QDC_logs is
+    # A job can report a successful result and return log files while carrying
+    # no eval output at all: if the device drops off adb mid-run, device_logs is
     # never harvested and only the infrastructure logs come back. Treating that
     # as SUCCESS makes it non-retryable, so the run ends as
     # eval_incomplete (0/N) with an attempt still unspent. Classify it as
     # retryable-empty-logs instead, matching the no-log-files case above.
     if eval_prompts and not eval_results:
         reason = (
-            f"QDC job {job_id} on device '{hub_device_name}' reported result="
+            f"Job {job_id} on device '{hub_device_name}' reported result="
             f"'{job_result}' but returned no eval output for "
             f"{len(eval_prompts)} prompt(s); the device logs were likely never "
             f"harvested"

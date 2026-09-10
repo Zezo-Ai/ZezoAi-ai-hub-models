@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  GitHub Actions OIDC role used by ai-hub-models-internal to run LLM
+  (Genie / GenieX) scorecard jobs on AWS Device Farm Android devices.
+  MUST be deployed in us-west-2: that is the only region with a Device Farm API.
+  Device Farm itself has no CloudFormation resource types, so the project is
+  created separately (console or `aws devicefarm create-project`), not here.
+
+Parameters:
+  CreateOidcProvider:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+    Description: >
+      Set to false if "token.actions.githubusercontent.com" already exists under
+      IAM > Identity providers in this account (CloudFormation cannot adopt an
+      existing provider, and creating a duplicate fails the stack).
+
+  GitHubRepo:
+    Type: String
+    Default: qcom-ai-hub/ai-hub-models-internal
+    Description: Only Actions runs from this repo may assume the role.
+
+Conditions:
+  MakeOidcProvider: !Equals [!Ref CreateOidcProvider, 'true']
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: MakeOidcProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      # AWS no longer validates these for well-known IdPs, but the property is
+      # still required. Both of GitHub's published thumbprints are listed.
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+
+  GitHubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref AWS::StackName
+      # ci-setup requests a 12h session; the role must permit at least that.
+      MaxSessionDuration: 43200
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              # Ref on an OIDCProvider yields its ARN, which also makes the role
+              # depend on the provider so ordering is correct on a fresh account.
+              Federated: !If
+                - MakeOidcProvider
+                - !Ref GitHubOidcProvider
+                - !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepo}:*
+      Path: /
+      Policies:
+        - PolicyName: DeviceFarmLLMScorecard
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - devicefarm:CreateProject
+                  - devicefarm:ListProjects
+                  - devicefarm:GetProject
+                  - devicefarm:ListDevices
+                  - devicefarm:CreateUpload
+                  - devicefarm:GetUpload
+                  - devicefarm:DeleteUpload
+                  - devicefarm:ScheduleRun
+                  - devicefarm:GetRun
+                  - devicefarm:StopRun
+                  - devicefarm:ListRuns
+                  - devicefarm:ListJobs
+                  - devicefarm:ListSuites
+                  - devicefarm:ListTests
+                  - devicefarm:ListArtifacts
+                Resource: '*'
+
+Outputs:
+  RoleArn:
+    Description: Add this as the repo secret QAIHM_CI_AWS_DEVICEFARM_ROLE_ARN.
+    Value: !GetAtt GitHubActionsRole.Arn
