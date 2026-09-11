@@ -1,33 +1,33 @@
-# [Intern3-5-VL-2B: Multimodal 2B vision-language model for text and image understanding](https://aihub.qualcomm.com/models/intern3_5_vl_2b)
+# [Intern3.5-VL-2B: Multimodal 2B vision-language model for text and image understanding](https://aihub.qualcomm.com/models/intern3_5_vl_2b)
 
 InternVL3.5 is a vision-language model from OpenGVLab capable of understanding both text and images for multimodal reasoning tasks such as visual question answering and image captioning.
 
-This is based on the implementation of Intern3-5-VL-2B found [here](https://huggingface.co/OpenGVLab/InternVL3_5-2B).
+This is based on the implementation of Intern3.5-VL-2B found [here](https://huggingface.co/OpenGVLab/InternVL3_5-2B).
 This repository contains scripts for optimized on-device export suitable to run on Qualcomm® devices. More details on model performance across various devices, can be found [here](https://aihub.qualcomm.com/models/intern3_5_vl_2b).
 
 Qualcomm AI Hub Models uses [Qualcomm AI Hub Workbench](https://workbench.aihub.qualcomm.com) to compile, profile, and evaluate this model. [Sign up](https://myaccount.qualcomm.com/signup) to run these models on a hosted Qualcomm® device.
 
 ## Quick Start
 
-Use our lightweight command-line interface to inspect and download Intern3-5-VL-2B:
+Use our lightweight command-line interface to inspect and download Intern3.5-VL-2B:
 
 ```bash
 pip install qai_hub_models_cli # (the CLI is also available with the qai-hub-models package)
 
 # Inspect the model and list the available download options
-qai-hub-models info Intern3-5-VL-2B
+qai-hub-models info Intern3.5-VL-2B
 
 # Print performance and accuracy metrics
-qai-hub-models perf Intern3-5-VL-2B
-qai-hub-models numerics Intern3-5-VL-2B
+qai-hub-models perf Intern3.5-VL-2B
+qai-hub-models numerics Intern3.5-VL-2B
 
 # Download a ready-to-deploy asset
-qai-hub-models fetch Intern3-5-VL-2B --runtime geniex_qairt --precision w4a16
+qai-hub-models fetch Intern3.5-VL-2B --runtime geniex_qairt --precision w4a16
 ```
 See the [CLI README](../../../../cli/README.md)
 for the full list of commands and filters.
 
-## Deploying Intern3-5-VL-2B on-device
+## Deploying Intern3.5-VL-2B on-device
 
 Follow the [GenieX quickstart](https://geniex.aihub.qualcomm.com/en/get-started/quickstart) to install GenieX and deploy the model on a target device.
 
@@ -96,7 +96,7 @@ qai-hub-models export intern3_5_vl_2b --checkpoint ./quantized_checkpoint
 Additional options are documented with the `--help` option.
 
 ## License
-* The license for the original implementation of Intern3-5-VL-2B can be found
+* The license for the original implementation of Intern3.5-VL-2B can be found
   [here](https://huggingface.co/datasets/choosealicense/licenses/blob/main/markdown/apache-2.0.md).
 
 ## References
