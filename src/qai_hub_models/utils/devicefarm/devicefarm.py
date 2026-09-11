@@ -541,13 +541,9 @@ def get_device_farm(device: ScorecardDevice) -> DeviceFarm:
         from qai_hub_models.utils.devicefarm.backends.qdc.qdc import (
             QDCDeviceFarm,
             get_qdc_api_token,
-            get_qdc_job_limit,
         )
 
-        return QDCDeviceFarm(
-            api_key=get_qdc_api_token(device),
-            job_limit=get_qdc_job_limit(device),
-        )
+        return QDCDeviceFarm(api_key=get_qdc_api_token(device))
 
     raise ValueError(
         f"Unknown devicefarm_backend {device.devicefarm_backend!r} for device "

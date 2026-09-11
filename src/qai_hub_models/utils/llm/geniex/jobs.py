@@ -26,6 +26,11 @@ from qai_hub_models.utils.devicefarm.devicefarm import (
 
 DEFAULT_LLM_SYSTEM_PROMPT = LLMBase.default_system_prompt
 
+# QDC submission no longer waits for a free device slot (it queues jobs
+# server-side), so this status-poll budget now has to cover the queue wait as
+# well as the on-device run, rather than just the run.
+GENIEX_BENCH_JOB_TIMEOUT = 43200  # 12 hours
+
 # Versioned URLs follow the geniex release workflow's flat S3 layout
 # (<stem>-<vX.Y.Z>.<ext>); the unversioned mirror is refreshed on every
 # stable tag and is used when no version is pinned.
@@ -740,10 +745,11 @@ def submit_geniex_bench(
             run_perf=run_perf,
         )
 
-        # No explicit timeout: it means different things per backend (QDC:
-        # how long to wait for a job slot; AWS: the on-device execution cap,
-        # which AWS itself limits to 150 minutes) -- each backend's own
-        # submit_bundle default already reflects that.
+        # No explicit timeout: submission itself doesn't block on either
+        # backend (QDC queues server-side; AWS's own submit_bundle default
+        # already reflects its execution cap, which AWS limits to 150
+        # minutes) -- the wait now lives entirely in collect_geniex_bench's
+        # status() poll (see GENIEX_BENCH_JOB_TIMEOUT).
         job_id = backend.submit_bundle(
             hub_device_name,
             entries,
@@ -775,7 +781,7 @@ def collect_geniex_bench(
     to each parsed output (run_perf=False yields eval-only results).
     ``log_label`` names the per-job log archive written under ``save_logs_dir``.
     """
-    job_status = backend.status(job_id)
+    job_status = backend.status(job_id, timeout=GENIEX_BENCH_JOB_TIMEOUT)
     job_result = backend.result(job_id)
     print(f"Job {job_id} completed with status: {job_status}, result: {job_result}")
 

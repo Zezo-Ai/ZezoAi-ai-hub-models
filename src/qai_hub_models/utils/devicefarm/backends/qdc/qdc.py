@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import tempfile
 import time
 from collections.abc import Callable, Iterator
@@ -77,10 +76,6 @@ HUB_DEVICE_TO_QDC_DEVICE_MAP = {
 # download would then block until the job timeout. read/write are per-chunk and
 # generous because log archives reach ~90MB (screen recordings).
 QDC_HTTP_TIMEOUT = httpx.Timeout(connect=30.0, read=300.0, write=300.0, pool=60.0)
-# Default client-side cap on concurrent QDC jobs. The shared QDC pool
-# enforces 3 server-side; dedicated pools allow more (see get_qdc_job_limit)
-# and pass an override via QDCDeviceFarm(job_limit=...).
-QDC_JOB_LIMIT = 3
 # Default timeout for job status polling (in seconds)
 DEFAULT_JOB_TIMEOUT = 21600  # 6 hours
 
@@ -107,6 +102,11 @@ STATUS_POLL_MAX_RETRIES = 10
 # Shorter than STATUS_POLL_MAX_RETRIES: a transient 502 is indistinguishable from
 # a permanent 404, so (5, 10, 20, 40) absorbs a blip without a 30-min burn.
 OPAQUE_ERROR_MAX_RETRIES = 5
+# Retry budget for submit_job. Larger than STATUS_POLL_MAX_RETRIES because a
+# whole batch is now submitted at once, so QDC's per-user pending-job cap (a
+# retryable 400) is the only thing throttling us, and draining it waits on real
+# device runs rather than an API blip. With MAX=300 this retries for ~4 hours.
+SUBMIT_MAX_RETRIES = 50
 # Log files dropped from every listing: QDC attaches a ~90MB screen recording to
 # each job, which no metric/eval parser reads but dominates a collection's bytes.
 _UNPARSED_LOG_SUFFIXES = (".mp4",)
@@ -141,9 +141,6 @@ DEDICATED_POOL_DEVICES: frozenset[ScorecardDevice] = frozenset(
     {cs_8_elite_qrd, cs_x_elite, cs_ventuno_q}
 )
 
-SHARED_POOL_JOB_LIMIT = 3
-DEDICATED_POOL_JOB_LIMIT = 4
-
 # Return type for the generic retry wrapper.
 CallableRetT = TypeVar("CallableRetT")
 
@@ -162,13 +159,6 @@ def get_qdc_api_token(device: ScorecardDevice) -> str:
     if not token:
         raise ValueError("QDC_API_TOKEN is not set.")
     return token
-
-
-def get_qdc_job_limit(device: ScorecardDevice) -> int:
-    """Max concurrent QDC jobs allowed under the device's pool."""
-    if device in DEDICATED_POOL_DEVICES:
-        return DEDICATED_POOL_JOB_LIMIT
-    return SHARED_POOL_JOB_LIMIT
 
 
 def _matched_retryable_status_code(
@@ -257,6 +247,7 @@ def _call_with_retry(
     func: Callable[[], CallableRetT],
     description: str,
     extra_retryable_codes: tuple[int, ...] = (),
+    max_retries: int = STATUS_POLL_MAX_RETRIES,
 ) -> CallableRetT:
     """Call ``func()``, retrying through transient QDC errors.
 
@@ -286,13 +277,17 @@ def _call_with_retry(
     extra_retryable_codes
         Additional HTTP status codes that are retryable for this callsite
         only (matched in addition to the global ``_RETRYABLE_STATUS_CODES``).
+    max_retries
+        Attempt budget for retryable failures. Defaults to
+        ``STATUS_POLL_MAX_RETRIES``; ``submit_job`` passes the longer
+        ``SUBMIT_MAX_RETRIES``.
 
     Returns
     -------
     CallableRetT
         The return value of ``func()`` on the first successful attempt.
     """
-    for attempt in range(STATUS_POLL_MAX_RETRIES):
+    for attempt in range(max_retries):
         try:
             return func()
         except Exception as err:  # noqa: PERF203
@@ -307,9 +302,9 @@ def _call_with_retry(
                 else None
             )
             budget = (
-                OPAQUE_ERROR_MAX_RETRIES
+                min(OPAQUE_ERROR_MAX_RETRIES, max_retries)
                 if parse_err is not None
-                else STATUS_POLL_MAX_RETRIES
+                else max_retries
             )
             if (net_err is None and code is None and parse_err is None) or (
                 attempt == budget - 1
@@ -358,7 +353,6 @@ class QDCDeviceFarm(DeviceFarm):
         *,
         api_key: str,
         app_name_header: str = "QDCDeviceFarmJobApp",
-        job_limit: int = QDC_JOB_LIMIT,
     ) -> None:
         """
         Parameters
@@ -367,10 +361,6 @@ class QDCDeviceFarm(DeviceFarm):
             API key for QDC authentication.
         app_name_header
             Application name header for QDC API client.
-        job_limit
-            Maximum concurrent QDC jobs to submit under this api_key. Defaults
-            to the shared-pool cap (``QDC_JOB_LIMIT``); dedicated-pool callers
-            pass a higher value.
         """
         self.client = qdc_api.get_public_api_client_using_api_key(
             api_key_header=api_key,
@@ -378,7 +368,6 @@ class QDCDeviceFarm(DeviceFarm):
             on_behalf_of_header="ai_hub_models",
             client_type_header="Python",
         ).with_timeout(QDC_HTTP_TIMEOUT)
-        self.job_limit = job_limit
 
     def get_job(self, job_id: str) -> Job:
         """Fetch full job details from QDC, retrying transient errors.
@@ -486,28 +475,6 @@ class QDCDeviceFarm(DeviceFarm):
             else JobOutcome.RETRYABLE_UNSUCCESSFUL
         )
 
-    def get_active_jobs(self) -> list[Job]:
-        """Return all currently active (non-terminal) jobs for this user.
-
-        Returns
-        -------
-        active_jobs : list[Job]
-            Jobs whose state is in ``_RUNNING_STATES``.
-        """
-        # get_jobs_list returns all submitted jobs (latest first). The service allows at most
-        # 3 concurrent jobs; we fetch 10 as a safety buffer to ensure we don't miss any active ones.
-        jobs = qdc_api.get_jobs_list(self.client, 0, 10)
-        if jobs is None:
-            raise ValueError(
-                "Failure in `get_jobs_list`. Could not get job lists for user"
-            )
-
-        return [
-            job
-            for job in (jobs.data or [])
-            if job is not None and job.state in _RUNNING_STATES
-        ]
-
     def submit_bundle(
         self,
         hub_device_name: str,
@@ -525,8 +492,9 @@ class QDCDeviceFarm(DeviceFarm):
         a single ``ArtifactType.TESTSCRIPT`` artifact; and, unlike the AWS
         backend, ``entry_script`` is supported and forwarded to QDC verbatim
         (QDC runs it directly rather than requiring a fixed platform test spec).
-        Submission blocks (see :meth:`_submit_automated_job`) until a job slot
-        is available under ``self.job_limit`` or ``timeout`` elapses.
+        QDC queues the job server-side, so submission does not block on a free
+        device slot; ``timeout`` is accepted for interface conformance with
+        :meth:`DeviceFarm.submit_bundle` but unused here.
 
         Parameters
         ----------
@@ -542,18 +510,12 @@ class QDCDeviceFarm(DeviceFarm):
         job_name
             Job name shown in QDC; truncated to ``QDC_JOB_NAME_LIMIT``.
         timeout
-            Maximum seconds to wait for a free job slot (``self.job_limit``)
-            before raising.
+            Unused by this backend; see above.
 
         Returns
         -------
         job_id : str
             The QDC job id returned by ``qdc_api.submit_job``.
-
-        Raises
-        ------
-        TimeoutError
-            If no job slot frees up within ``timeout`` seconds.
         """
         qdc_device = QDCDevice(hub_device_name)
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -561,7 +523,7 @@ class QDCDeviceFarm(DeviceFarm):
             create_zip_from_entries(zip_path, entries)
             artifact_id = self._upload_file(zip_path, ArtifactType.TESTSCRIPT)
         return self._submit_automated_job(
-            qdc_device, [artifact_id], entry_script, job_name=job_name, timeout=timeout
+            qdc_device, [artifact_id], entry_script, job_name=job_name
         )
 
     def _submit_automated_job(
@@ -570,10 +532,13 @@ class QDCDeviceFarm(DeviceFarm):
         job_artifacts: list[str],
         entry_script: str | None,
         job_name: str = "QDC Automated Job",
-        timeout: int = DEFAULT_JOB_TIMEOUT,
     ) -> str:
         """
         Submit an automated application job to QDC and return its job_id.
+
+        Submission does not wait for a free device: QDC queues the job
+        server-side and runs it when capacity frees up, so callers can submit
+        the whole batch at once and poll the returned ids later.
 
         Parameters
         ----------
@@ -585,34 +550,12 @@ class QDCDeviceFarm(DeviceFarm):
             Optional entry script path for the job.
         job_name
             Name of the job to submit.
-        timeout
-            Maximum time to wait for a job slot to become available in seconds.
-            Defaults to DEFAULT_JOB_TIMEOUT (6 hours).
 
         Returns
         -------
         job_id : str
             The submitted job's ID.
         """
-        elapsed = 0
-        while elapsed < timeout:
-            if len(self.get_active_jobs()) < self.job_limit:
-                # jitter: wait POLL_INTERNAL + random(0, 10) to avoid TOCTOU race condition
-                time.sleep(POLL_INTERVAL + random.randint(0, 10))
-                if len(self.get_active_jobs()) < self.job_limit:
-                    break
-            print(
-                f"Job is waiting as the service is at capacity, "
-                f"waiting for {POLL_INTERVAL} seconds."
-            )
-            time.sleep(POLL_INTERVAL)
-            elapsed += POLL_INTERVAL
-
-        if elapsed >= timeout:
-            raise TimeoutError(
-                f"Job {job_name} did not start within {timeout}s because the service is at capacity (>={self.job_limit} active jobs). "
-            )
-
         target_id = qdc_api.get_target_id(self.client, qdc_device.qdc_name)
         return _call_with_retry(
             lambda: qdc_api.submit_job(
@@ -632,6 +575,7 @@ class QDCDeviceFarm(DeviceFarm):
             ),
             f"submit_job({job_name})",
             extra_retryable_codes=(400,),
+            max_retries=SUBMIT_MAX_RETRIES,
         )
 
     def log_upload_status(

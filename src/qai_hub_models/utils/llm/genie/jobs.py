@@ -62,6 +62,11 @@ from qai_hub_models.utils.llm.eval_io import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# QDC submission no longer waits for a free device slot (it queues jobs
+# server-side), so this status-poll budget now has to cover the queue wait as
+# well as the on-device run, rather than just the run.
+GENIE_JOB_TIMEOUT = 43200  # 12 hours
+
 DEFAULT_LLM_SYSTEM_PROMPT = LLMBase.default_system_prompt
 
 
@@ -753,10 +758,11 @@ def submit_genie_bundle(
             model_id=model_id,
         )
 
-        # No explicit timeout: it means different things per backend (QDC:
-        # how long to wait for a job slot; AWS: the on-device execution cap,
-        # which AWS itself limits to 150 minutes) -- each backend's own
-        # submit_bundle default already reflects that.
+        # No explicit timeout: submission itself doesn't block on either
+        # backend (QDC queues server-side; AWS's own submit_bundle default
+        # already reflects its execution cap, which AWS limits to 150
+        # minutes) -- the wait now lives entirely in collect_genie_bundle's
+        # status() poll (see GENIE_JOB_TIMEOUT).
         job_id = backend.submit_bundle(
             hub_device_name,
             entries,
@@ -795,7 +801,7 @@ def collect_genie_bundle(
     """
     prompts_to_use = _resolve_eval_prompts(eval_prompts)
 
-    job_status = backend.status(job_id)
+    job_status = backend.status(job_id, timeout=GENIE_JOB_TIMEOUT)
     job_result = backend.result(job_id)
     logger.info(
         "Job %s completed with status: %s, result: %s",
