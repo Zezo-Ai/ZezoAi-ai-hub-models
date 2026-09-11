@@ -415,10 +415,14 @@ jobs:
               GH_TOKEN: ${{ github.token }}
           run: |
               mkdir -p /tmp/breeze
-              AGENT_JOB_ID=$(gh api \
+              AGENT_JOB_ID=$(gh api --paginate \
                   "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
                   --jq '.jobs[] | select(.name | contains("nightly-analyst")) | .id' \
                   | head -n1)
+              if [ -z "$AGENT_JOB_ID" ]; then
+                  echo "::error::Could not find nightly-analyst job in run ${{ github.run_id }}"
+                  exit 1
+              fi
               echo "Agent job id: $AGENT_JOB_ID"
               gh api --allow-escape-sequences \
                   "repos/${{ github.repository }}/actions/jobs/$AGENT_JOB_ID/logs" \
