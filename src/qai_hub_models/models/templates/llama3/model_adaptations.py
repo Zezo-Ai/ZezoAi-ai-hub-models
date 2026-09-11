@@ -221,10 +221,15 @@ class SHALlamaAttention(LlamaAttention):
         ]
 
         assert position_embeddings is not None
+        keep_shape = not self.use_native_kv
         query_states = [
-            _apply_rope_single(q, position_embeddings) for q in query_states
+            _apply_rope_single(q, position_embeddings, preserve_shape=keep_shape)
+            for q in query_states
         ]
-        key_states = [_apply_rope_single(k, position_embeddings) for k in key_states]
+        key_states = [
+            _apply_rope_single(k, position_embeddings, preserve_shape=keep_shape)
+            for k in key_states
+        ]
 
         if position_embeddings is None:
             cos, sin = self.rotary_emb(value_states, position_ids)

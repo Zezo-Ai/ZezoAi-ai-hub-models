@@ -29,7 +29,9 @@ def repeat_kv(
 
 
 def _apply_rope_single(
-    x: torch.Tensor, rope_vals: tuple[torch.Tensor, torch.Tensor]
+    x: torch.Tensor,
+    rope_vals: tuple[torch.Tensor, torch.Tensor],
+    preserve_shape: bool = True,
 ) -> torch.Tensor:
     """Based on FacebookResearch's llama, provided by Carl"""
     rope_real = rope_vals[0]  # shape should be 1, 1, seqlen, head_dim/2
@@ -43,7 +45,10 @@ def _apply_rope_single(
     x_prod_im = x_real * rope_im + x_im * rope_real
 
     # TODO: HF need to uses different interleaving
-    return torch.cat((x_prod_real, x_prod_im), dim=3)
+    out = torch.cat((x_prod_real, x_prod_im), dim=3)
+    # No-op on shape, but shipped encodings are keyed on torch.export node names;
+    # dropping it renumbers ~57% of them. Native KV was calibrated without it.
+    return out.view(*x.shape) if preserve_shape else out
 
 
 class ConvInplaceLinear(torch.nn.Conv2d):

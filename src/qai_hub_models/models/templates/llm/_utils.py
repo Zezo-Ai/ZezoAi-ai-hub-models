@@ -117,14 +117,17 @@ def _enable_scatter_output_quantizers(sim: QuantSimOnnx) -> None:
 def _tie_quantizers_for_kv_cache(
     quantsim_model: QuantSimOnnx, kv_io_map: dict[str, str]
 ) -> None:
-    """Tie every quantizer on the KV write path to that buffer's KV I/O encoding.
+    """Tie the KV cache input quantizer to its matching output quantizer.
 
-    HTP fuses ScatterElements into OutputSlice.K/.V and drops the requantize
-    steps along the write path, so the k/v_proj outputs, RoPE outputs, per-head
-    scatters and KV I/O must all share one scale. A mismatch is not a small
-    accuracy loss: the fused op writes bits that attention reads back at a
-    different scale, and the model emits garbage.
+    For native KV, extend the tie across the whole write path: HTP fuses
+    ScatterElements into OutputSlice.K/.V and drops the requantize steps along
+    it, so the k/v_proj outputs, RoPE outputs, per-head scatters and KV I/O must
+    all share one scale. A mismatch is not a small accuracy loss: the fused op
+    writes bits that attention reads back at a different scale, and the model
+    emits garbage. Legacy Concat-based caches are not fused and keep the narrow
+    input-to-output tie they were calibrated with.
     """
+    is_native = any("nativekvcache" in k for k in kv_io_map)
     quantizer_mapping: dict[str, QcQuantizeOp] = {}
 
     for input_name, output_name in kv_io_map.items():
@@ -134,6 +137,9 @@ def _tie_quantizers_for_kv_cache(
             continue
 
         quantizer_mapping[input_name] = quantizer
+        if not is_native:
+            continue
+
         for tensor_name in _kv_write_path_tensors(
             quantsim_model, [input_name, output_name]
         ):
