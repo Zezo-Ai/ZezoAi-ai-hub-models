@@ -5,18 +5,14 @@
 from __future__ import annotations
 
 import importlib
-import os
 from pathlib import Path
 
 import pytest
 import torch
 
-from qai_hub_models import Precision, TargetRuntime
+from qai_hub_models import Precision
 from qai_hub_models.models.qwen3_0_6b import Model
 from qai_hub_models.models.qwen3_0_6b.demo import qwen3_0_6b_chat_demo
-from qai_hub_models.models.qwen3_0_6b.export import (
-    export_model,
-)
 from qai_hub_models.models.qwen3_0_6b.model import (
     MODEL_ID,
     FPSplitModelWrapper,
@@ -28,23 +24,14 @@ from qai_hub_models.models.templates.llm import test
 from qai_hub_models.models.templates.llm.llm_helpers import (
     log_perf_on_device_result,
 )
-from qai_hub_models.models.templates.llm.model import (
-    DEFAULT_CONTEXT_LENGTH,
-    DEFAULT_SEQUENCE_LENGTH,
-)
+from qai_hub_models.models.templates.llm.model import DEFAULT_CONTEXT_LENGTH
 from qai_hub_models.models.templates.llm.perf_collection import (
     LLMPerfConfig,
     get_llm_perf_parametrization,
 )
-from qai_hub_models.scorecard import (
-    ScorecardCompilePath,
-    ScorecardDevice,
-)
+from qai_hub_models.scorecard import ScorecardDevice
 from qai_hub_models.scorecard.device import cs_x_elite
-from qai_hub_models.scorecard.utils.testing_export_eval import run_llm_compile
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
 from qai_hub_models.utils.checkpoint import CheckpointSpec
-from qai_hub_models.utils.export.result import MultiGraphCollectionExportResult
 
 # Multi-sequence-length eval (matches qwen3_4b/8b/1.7b): prefill in the 2048
 # bucket, decode in the 1 bucket.
@@ -139,69 +126,6 @@ def test_demo_default(
     )
     captured = capsys.readouterr()
     assert "Paris" in captured.out
-
-
-@pytest.mark.skip(
-    reason="On-device compile is covered by the scorecard; skipped in the test suite."
-)
-@pytest.mark.nightly
-@pytest.mark.skipif(
-    not torch.cuda.is_available(),
-    reason="This test can be run on GPU only.",
-)
-@pytest.mark.parametrize(
-    ("precision", "scorecard_path", "device", "checkpoint"),
-    [
-        (Precision.w4a16, ScorecardCompilePath.GENIE, cs_x_elite, "DEFAULT_W4A16"),
-    ],
-)
-@pytest.mark.compile_ram_intensive
-def test_compile(
-    precision: Precision,
-    scorecard_path: ScorecardCompilePath,
-    device: ScorecardDevice,
-    checkpoint: CheckpointSpec,
-) -> None:
-    Qwen3_0_6B_PreSplit.release()
-    Qwen3_0_6B_QuantizablePreSplit.release()
-    FPSplitModelWrapper.release()
-    QuantizedSplitModelWrapper.release()
-    # Pass both prompt (ar128) and token (ar1) sequence lengths so the
-    # genie bundle includes both model types. Without ar1, Genie must use
-    # the ar128 model for token generation, halving TPS on-device.
-    result = run_llm_compile(
-        export_model,
-        MODEL_ID,
-        precision,
-        scorecard_path,
-        device,
-        extra_model_arguments=dict(
-            checkpoint=checkpoint,
-            sequence_length=[DEFAULT_SEQUENCE_LENGTH, 1],
-            context_length=[DEFAULT_CONTEXT_LENGTH],
-            _skip_quantsim_creation=True,
-            output_dir=test.GENIE_BUNDLES_ROOT,
-        ),
-        skip_compile_options=True,
-        skip_downloading=False,
-    )
-    assert os.path.exists(test.GENIE_BUNDLES_ROOT)
-    genie_bundle_path = Path(
-        test.GENIE_BUNDLES_ROOT
-    ) / ASSET_CONFIG.get_release_asset_name(
-        MODEL_ID, TargetRuntime.GENIE, precision, device.chipset
-    )
-    assert (genie_bundle_path / "tokenizer.json").exists()
-    assert (genie_bundle_path / "genie_config.json").exists()
-    assert (genie_bundle_path / "htp_backend_ext_config.json").exists()
-    assert (genie_bundle_path / "sample_prompt.txt").exists()
-
-    assert isinstance(result, MultiGraphCollectionExportResult)
-    print(f"[provenance] precision={precision} bundle={genie_bundle_path}")
-    for compile_key, compile_job in (result.compile_jobs or {}).items():
-        print(f"[provenance] compile_job[{compile_key}]={compile_job.job_id}")
-    for link_key, link_job in (result.link_jobs or {}).items():
-        print(f"[provenance] link_job[{link_key}]={link_job.job_id}")
 
 
 def _get_llm_perf_params() -> list[tuple[Precision, ScorecardDevice]]:

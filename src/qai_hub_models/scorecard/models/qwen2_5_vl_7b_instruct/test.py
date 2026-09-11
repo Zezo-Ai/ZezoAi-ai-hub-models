@@ -55,7 +55,7 @@ def test_load_encodings_to_quantsim(checkpoint: str) -> None:
 @pytest.mark.parametrize(
     ("checkpoint", "task", "expected_metric", "num_samples"),
     [
-        pytest.param("DEFAULT", "wikitext", 10.38, 0, marks=pytest.mark.nightly),
+        ("DEFAULT", "wikitext", 10.38, 0),
         ("DEFAULT", "mmlu", 0.689, 1000),
         ("DEFAULT", "mmmu", 0.525, 200),
         # Image+prompt generation + LLM-grader smoke test (5 samples). Weekly
@@ -108,7 +108,6 @@ def test_evaluate(
     )
 
 
-@pytest.mark.nightly
 @pytest.mark.demo
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="This test can be run on GPU only."
@@ -162,7 +161,6 @@ def test_quantize_and_demo(
     Qwen2_5_VL_7B_QuantizablePreSplit.release()
 
 
-@pytest.mark.nightly
 @pytest.mark.demo
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="This test can be run on GPU only."

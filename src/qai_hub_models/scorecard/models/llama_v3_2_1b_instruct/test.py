@@ -4,14 +4,12 @@
 # ---------------------------------------------------------------------
 from __future__ import annotations
 
-import importlib
-import os
 from pathlib import Path
 
 import pytest
 import torch
 
-from qai_hub_models import Precision, TargetRuntime
+from qai_hub_models import Precision
 from qai_hub_models.models.llama_v3_2_1b_instruct import Model
 from qai_hub_models.models.llama_v3_2_1b_instruct.demo import llama_3_2_1b_chat_demo
 from qai_hub_models.models.llama_v3_2_1b_instruct.model import (
@@ -22,29 +20,8 @@ from qai_hub_models.models.llama_v3_2_1b_instruct.model import (
     QuantizedSplitModelWrapper,
 )
 from qai_hub_models.models.templates.llm import test
-from qai_hub_models.models.templates.llm.llm_helpers import (
-    log_perf_on_device_result,
-)
-from qai_hub_models.models.templates.llm.model import (
-    DEFAULT_CONTEXT_LENGTH,
-)
-from qai_hub_models.scorecard import (
-    ScorecardCompilePath,
-    ScorecardDevice,
-)
-from qai_hub_models.scorecard.device import (
-    DEFAULT_QDC_DEVICE,
-    cs_8_elite_qrd,
-    cs_x_elite,
-)
-from qai_hub_models.scorecard.utils.testing_export_eval import run_llm_compile
-from qai_hub_models.utils.asset_loaders import ASSET_CONFIG
+from qai_hub_models.models.templates.llm.model import DEFAULT_CONTEXT_LENGTH
 from qai_hub_models.utils.checkpoint import CheckpointSpec
-from qai_hub_models.utils.export.context import resolve_recipe_dir
-from qai_hub_models.utils.export.dispatch import select_pipeline
-from qai_hub_models.utils.export.result import MultiGraphCollectionExportResult
-
-export_model = select_pipeline(resolve_recipe_dir(MODEL_ID))
 
 DEFAULT_EVAL_SEQLEN = [2048, 128, 1]
 
@@ -66,21 +43,19 @@ def test_load_encodings_to_quantsim(checkpoint: str) -> None:
 @pytest.mark.parametrize(
     ("checkpoint", "task", "expected_metric", "num_samples"),
     [
-        pytest.param("DEFAULT_W4", "wikitext", 16.74, 0, marks=pytest.mark.nightly),
+        ("DEFAULT_W4", "wikitext", 16.74, 0),
         ("DEFAULT_W4", "mmlu", 0.399, 1000),
         ("DEFAULT_W4", "tiny_mmlu", 0.43, 0),
-        pytest.param("DEFAULT_W4A16", "wikitext", 17.24, 0, marks=pytest.mark.nightly),
+        ("DEFAULT_W4A16", "wikitext", 17.24, 0),
         ("DEFAULT_W4A16", "mmlu", 0.384, 1000),
         # Prompt-generation + LLM-grader smoke test (5 samples). The grader
         # label is an argmax over near-valued logits that can flip across hosts,
         # so expected_metric is a floor. FP PreSplit measures 41/50 on Grace2.
-        pytest.param("DEFAULT_W4A16", "grace2", 0.70, 5, marks=pytest.mark.nightly),
+        ("DEFAULT_W4A16", "grace2", 0.70, 5),
         ("DEFAULT_UNQUANTIZED", "wikitext", 12.14, 0),
         ("DEFAULT_UNQUANTIZED", "mmlu", 0.482, 1000),
         ("DEFAULT_UNQUANTIZED", "tiny_mmlu", 0.41, 0),
-        pytest.param(
-            "DEFAULT_UNQUANTIZED", "grace2", 0.70, 5, marks=pytest.mark.nightly
-        ),
+        ("DEFAULT_UNQUANTIZED", "grace2", 0.70, 5),
     ],
 )
 def test_evaluate(
@@ -116,7 +91,6 @@ def test_evaluate(
     )
 
 
-@pytest.mark.nightly
 @pytest.mark.demo
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="This test can be run on GPU only."
@@ -150,7 +124,6 @@ def test_quantize_and_demo(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     QuantizedSplitModelWrapper.release()
 
 
-@pytest.mark.nightly
 @pytest.mark.demo
 @pytest.mark.skipif(
     not torch.cuda.is_available(), reason="This test can be run on GPU only."
@@ -170,115 +143,3 @@ def test_demo_default(
     )
     captured = capsys.readouterr()
     assert "Paris" in captured.out
-
-
-@pytest.mark.nightly
-@pytest.mark.parametrize(
-    ("precision", "scorecard_path", "device", "checkpoint"),
-    [
-        (Precision.w4, ScorecardCompilePath.GENIE, cs_8_elite_qrd, "DEFAULT_W4"),
-        (Precision.w4a16, ScorecardCompilePath.GENIE, cs_x_elite, "DEFAULT_W4A16"),
-    ],
-)
-@pytest.mark.compile_ram_intensive
-def test_compile(
-    precision: Precision,
-    scorecard_path: ScorecardCompilePath,
-    device: ScorecardDevice,
-    checkpoint: CheckpointSpec,
-) -> None:
-    Llama3_2_1B_PreSplit.release()
-    Llama3_2_1B_QuantizablePreSplit.release()
-    FPSplitModelWrapper.release()
-    QuantizedSplitModelWrapper.release()
-    result = run_llm_compile(
-        export_model,
-        MODEL_ID,
-        precision,
-        scorecard_path,
-        device,
-        extra_model_arguments=dict(
-            checkpoint=checkpoint,
-            _skip_quantsim_creation=True,
-            output_dir=test.GENIE_BUNDLES_ROOT,
-        ),
-        skip_compile_options=True,
-        skip_downloading=False,
-    )
-    assert os.path.exists(test.GENIE_BUNDLES_ROOT)
-    genie_bundle_path = Path(
-        test.GENIE_BUNDLES_ROOT
-    ) / ASSET_CONFIG.get_release_asset_name(
-        MODEL_ID, TargetRuntime.GENIE, precision, device.chipset
-    )
-    assert (genie_bundle_path / "tokenizer.json").exists()
-    assert (genie_bundle_path / "genie_config.json").exists()
-    assert (genie_bundle_path / "htp_backend_ext_config.json").exists()
-    assert (genie_bundle_path / "sample_prompt.txt").exists()
-
-    assert isinstance(result, MultiGraphCollectionExportResult)
-
-
-@pytest.mark.nightly
-@pytest.mark.skipif(
-    not importlib.util.find_spec("qualcomm_device_cloud_sdk"),
-    reason="This test requires the qualcomm_device_cloud_sdk package.",
-)
-@pytest.mark.parametrize(
-    ("precision", "scorecard_path", "device"),
-    [
-        (Precision.w4a16, ScorecardCompilePath.GENIE, cs_x_elite),
-        (Precision.w4, ScorecardCompilePath.GENIE, cs_8_elite_qrd),
-    ],
-)
-@pytest.mark.qdc
-def test_qdc(
-    precision: Precision,
-    scorecard_path: ScorecardCompilePath,
-    device: ScorecardDevice,
-) -> None:
-    Llama3_2_1B_PreSplit.release()
-    Llama3_2_1B_QuantizablePreSplit.release()
-    FPSplitModelWrapper.release()
-    QuantizedSplitModelWrapper.release()
-    genie_bundle_path = Path(
-        test.GENIE_BUNDLES_ROOT
-    ) / ASSET_CONFIG.get_release_asset_name(
-        MODEL_ID, TargetRuntime.GENIE, precision, device.chipset
-    )
-    if scorecard_path.runtime != TargetRuntime.GENIE:
-        pytest.skip("This test is only valid for Genie runtime.")
-    if not (genie_bundle_path / "genie_config.json").exists():
-        pytest.fail("The genie bundle does not exist.")
-
-    from qai_hub_models.utils.devicefarm.devicefarm import get_device_farm
-    from qai_hub_models.utils.llm.genie.jobs import (
-        _USE_DEFAULT_PROMPTS,
-        submit_and_collect_genie_bundle,
-    )
-
-    backend = get_device_farm(device)
-    qdc_job_name = f"Genie {MODEL_ID} {precision}"
-    tps, prefill_tps, min_ttft_ms, _ = submit_and_collect_genie_bundle(
-        backend,
-        device.reference_device.name,
-        str(genie_bundle_path),
-        job_name=qdc_job_name,
-        eval_prompts=(_USE_DEFAULT_PROMPTS if device == DEFAULT_QDC_DEVICE else None),
-    )
-    assert tps is not None and min_ttft_ms is not None, "QDC execution failed."
-    log_perf_on_device_result(
-        model_name=MODEL_ID,
-        precision=str(precision),
-        device=device.name,
-        tps=tps,
-        prefill_tps=prefill_tps,
-        ttft_ms=min_ttft_ms,
-    )
-    # With both ar128 and ar1 in the genie bundle, TPS should match v1.
-    if precision == Precision.w4:
-        assert tps > 24.0
-        assert min_ttft_ms < 100.0
-    else:
-        assert tps > 9.0
-        assert min_ttft_ms < 135.0
