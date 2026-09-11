@@ -10,7 +10,7 @@ from collections import Counter
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, TypeGuard
 
 import numpy as np
 import qai_hub as hub
@@ -26,6 +26,36 @@ from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
 from qai_hub_models.utils.qai_hub_helpers import get_device_and_chipset_name
 
 _INFO_DASH = "-" * 60
+
+# Comparison metrics (PSNR, MSE, ...) and accuracy percentages are truncated to
+# a fixed number of significant figures wherever they are printed or written, so
+# export output and scorecard CSVs stay free of floating point noise.
+METRIC_SIG_FIGS = 4
+ACCURACY_SIG_FIGS = 3
+
+
+def format_sig_figs(value: float, sig_figs: int) -> str:
+    """Render ``value`` truncated to ``sig_figs`` significant figures."""
+    return f"{float(value):.{sig_figs}g}"
+
+
+def format_metric(value: float) -> str:
+    """Render a comparison metric (PSNR, MSE, MAE, ...)."""
+    return format_sig_figs(value, METRIC_SIG_FIGS)
+
+
+def format_accuracy(value: float) -> str:
+    """Render an accuracy percentage."""
+    return format_sig_figs(value, ACCURACY_SIG_FIGS)
+
+
+def is_float(value: object) -> TypeGuard[float]:
+    """True for Python and numpy floats.
+
+    numpy scalars are not ``float`` subclasses (except float64), so a bare
+    isinstance check silently skips them and leaks unrounded values.
+    """
+    return isinstance(value, (float, np.floating))
 
 
 def print_tool_versions(
@@ -95,8 +125,8 @@ def print_inference_metrics(
             df_eval = df_eval.drop(output_names[output_idx])
 
     def custom_float_format(x: object) -> str | object:
-        if isinstance(x, float):
-            return f"{x:.4g}"
+        if is_float(x):
+            return format_metric(x)
         return x
 
     formatted_df = df_eval.applymap(custom_float_format)  # pyright: ignore[reportCallIssue]

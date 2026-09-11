@@ -30,6 +30,7 @@ from qai_hub_models.utils.base_dataset import DatasetMetadata
 from qai_hub_models.utils.file_hash import file_hashes_are_identical
 from qai_hub_models.utils.metrics import MetricMetadata
 from qai_hub_models.utils.onnx.torch_wrapper import extract_onnx_zip
+from qai_hub_models.utils.printing import format_accuracy
 
 __all__ = [
     "CompileJobsAreIdenticalCache",
@@ -178,9 +179,9 @@ def write_accuracy(
         key[0],  # model_id
         key[2],  # precision
         key[3],  # runtime
-        f"{torch_accuracy:.3g}" if torch_accuracy is not None else "",
-        f"{sim_accuracy:.3g}" if sim_accuracy is not None else "",
-        f"{device_accuracy:.3g}" if device_accuracy is not None else "",
+        format_accuracy(torch_accuracy) if torch_accuracy is not None else "",
+        format_accuracy(sim_accuracy) if sim_accuracy is not None else "",
+        format_accuracy(device_accuracy) if device_accuracy is not None else "",
     ]
 
     psnr_fields = list(psnr_values[:MAX_PSNR_VALUES])

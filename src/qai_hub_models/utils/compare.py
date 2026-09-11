@@ -119,7 +119,9 @@ def compute_psnr(
 
     data_range_est = data_range if data_range is not None else np.abs(b).max()
 
-    return 20 * np.log10((data_range_est + eps) / (sumdeltasq + eps2))
+    # float() so callers get a real Python float, matching every other metric
+    # here; a leaked np.float32 bypasses isinstance(x, float) formatting.
+    return float(20 * np.log10((data_range_est + eps) / (sumdeltasq + eps2)))
 
 
 def compute_relative_error(expected: np.ndarray, actual: np.ndarray) -> np.ndarray:

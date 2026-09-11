@@ -31,6 +31,7 @@ from qai_hub_models.scorecard.utils.testing_async_utils import write_accuracy
 from qai_hub_models.utils.asset_loaders import qaihm_temp_dir
 from qai_hub_models.utils.compare import compute_psnr
 from qai_hub_models.utils.onnx.torch_wrapper import OnnxModelTorchWrapper
+from qai_hub_models.utils.printing import format_metric
 from qai_hub_models.utils.qai_hub_helpers import (
     download_model_in_memory,
     parse_compile_options,
@@ -99,7 +100,7 @@ def evaluate_model_accuracy(
             if len(psnrs) == 10:
                 break
             # Compute PSNR just on the first sample, even if dataset has multiple samples
-            psnrs.append(f"{compute_psnr(cpu_output, device_output[0]):.4g}")
+            psnrs.append(format_metric(compute_psnr(cpu_output, device_output[0])))
         write_accuracy(
             model_id,
             device.chipset,
