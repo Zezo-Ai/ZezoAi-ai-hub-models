@@ -38,6 +38,7 @@ from qai_hub_models.configs._info_yaml_llm_details import LLM_CALL_TO_ACTION
 from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, QAIHM_WEB_ASSET
 from qai_hub_models.utils.base_collection_model import CollectionModel
+from qai_hub_models.utils.base_multi_graph_model import MultiGraphWorkbenchModel
 from qai_hub_models.utils.device import CANARY_DEVICES
 from qai_hub_models.utils.export.context import (
     import_recipe_module,
@@ -864,6 +865,58 @@ def _check_collection_forward_pass(model: CollectionModel, report: Report) -> No
     )
 
 
+def _check_multi_graph_sample_inputs(
+    model: MultiGraphWorkbenchModel, report: Report
+) -> None:
+    """Check every graph's sample inputs against its declared input spec."""
+    name = "per-graph sample inputs match input spec"
+    errors: list[str] = []
+    try:
+        graph_names = model.graph_names
+        for graph_name in graph_names:
+            spec = model.get_graph_input_spec(graph_name)
+            # Compare in the spec's own layout: the spec is always channel-first,
+            # so the default channel-last transpose would fail every such input.
+            # Passing spec through also avoids recomputing it inside the getter.
+            sample = model.get_graph_sample_inputs(
+                graph_name, input_spec=spec, use_channel_last_format=False
+            )
+            missing = sorted(set(spec) - set(sample))
+            extra = sorted(set(sample) - set(spec))
+            if missing or extra:
+                errors.append(
+                    f"graph '{graph_name}' sample inputs do not match spec "
+                    f"(missing {missing}, unexpected {extra})"
+                )
+                continue
+            for input_name, tensor_spec in spec.items():
+                shape = tuple(sample[input_name][0].shape)
+                if shape != tuple(tensor_spec[0]):
+                    errors.append(
+                        f"graph '{graph_name}' input '{input_name}' has shape "
+                        f"{shape}, spec says {tuple(tensor_spec[0])}"
+                    )
+                dtype = str(sample[input_name][0].dtype)
+                if dtype != tensor_spec[1]:
+                    errors.append(
+                        f"graph '{graph_name}' input '{input_name}' has dtype "
+                        f"{dtype}, spec says {tensor_spec[1]}"
+                    )
+    except Exception as exc:
+        report.add(
+            Result(name, "Model code", Status.FAIL, f"{exc.__class__.__name__}: {exc}")
+        )
+        return
+
+    if errors:
+        report.add(Result(name, "Model code", Status.FAIL, "; ".join(errors)))
+        return
+
+    report.add(
+        Result(name, "Model code", Status.PASS, f"{len(graph_names)} graph(s) checked")
+    )
+
+
 def _check_forward_pass(model_cls: Any, report: Report) -> Any:
     try:
         model = model_cls.from_pretrained()
@@ -882,6 +935,10 @@ def _check_forward_pass(model_cls: Any, report: Report) -> Any:
     # an InputSpec, so it has to be walked per component rather than called once.
     if isinstance(model, CollectionModel):
         _check_collection_forward_pass(model, report)
+        return model
+
+    if isinstance(model, MultiGraphWorkbenchModel):
+        _check_multi_graph_sample_inputs(model, report)
         return model
 
     if not hasattr(model, "get_input_spec"):

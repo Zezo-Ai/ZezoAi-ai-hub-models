@@ -6,15 +6,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 from packaging.specifiers import SpecifierSet
+from typing_extensions import Self
 
-from qai_hub_models import Precision, TargetRuntime
+from qai_hub_models import Precision, SampleInputsType, TargetRuntime
 from qai_hub_models.cli import validate as validate_mod
 from qai_hub_models.cli.dispatch import run_model_script
 from qai_hub_models.cli.install import InstallAborted
@@ -32,6 +35,7 @@ from qai_hub_models.cli.validate import (
     _check_in_tree_status,
     _check_install,
     _check_manifest,
+    _check_multi_graph_sample_inputs,
     _check_name_style,
     _check_no_self_referential_imports,
     _check_related_not_self,
@@ -52,6 +56,9 @@ from qai_hub_models.cli.validate import (
 )
 from qai_hub_models.configs._info_yaml_enums import MODEL_STATUS
 from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
+from qai_hub_models.configs.tensor_spec import TensorSpec
+from qai_hub_models.utils.base_multi_graph_model import MultiGraphWorkbenchModel
+from qai_hub_models.utils.input_spec import InputSpec, OutputSpec
 
 
 def _make_manifest(**kwargs: Any) -> QAIHMModelManifest:
@@ -347,6 +354,144 @@ class TestExtractShape:
 
     def test_unknown_form(self) -> None:
         assert _extract_shape("weird") is None
+
+
+class _StubMultiGraph(MultiGraphWorkbenchModel):
+    """Multi-graph stub that keeps the base class's real sample-input generation."""
+
+    def __init__(
+        self,
+        specs: dict[str, InputSpec],
+        sample_override: Callable[[str], SampleInputsType] | None = None,
+        spec_error: Exception | None = None,
+    ) -> None:
+        self._specs = specs
+        self._sample_override = sample_override
+        self._spec_error = spec_error
+
+    @property
+    def graph_names(self) -> list[str]:
+        return list(self._specs)
+
+    def get_graph_input_spec(
+        self, graph_name: str, *args: Any, **kwargs: Any
+    ) -> InputSpec:
+        if self._spec_error is not None:
+            raise self._spec_error
+        return self._specs[graph_name]
+
+    def get_graph_output_spec(self, graph_name: str) -> OutputSpec:
+        return {"out": TensorSpec(shape=(1, 2), dtype="float32")}
+
+    def get_graph_sample_inputs(
+        self,
+        graph_name: str,
+        input_spec: InputSpec | None = None,
+        use_channel_last_format: bool = True,
+    ) -> SampleInputsType:
+        if self._sample_override is not None:
+            return self._sample_override(graph_name)
+        return super().get_graph_sample_inputs(
+            graph_name, input_spec, use_channel_last_format
+        )
+
+    def serialize_graph(
+        self, graph_name: str, output_dir: Any, input_spec: InputSpec | None = None
+    ) -> Path:
+        raise NotImplementedError
+
+    @classmethod
+    def from_pretrained(cls, *args: Any, **kwargs: Any) -> Self:
+        raise NotImplementedError
+
+
+def _one_graph(
+    sample_override: Callable[[str], SampleInputsType] | None = None,
+    spec_error: Exception | None = None,
+) -> _StubMultiGraph:
+    return _StubMultiGraph(
+        {"g0": {"x": TensorSpec(shape=(1, 4), dtype="float32")}},
+        sample_override=sample_override,
+        spec_error=spec_error,
+    )
+
+
+def _run_mg_check(model: MultiGraphWorkbenchModel) -> Result:
+    report = Report()
+    _check_multi_graph_sample_inputs(model, report)
+    assert len(report.rows) == 1
+    return report.rows[0]
+
+
+class TestMultiGraphSampleInputs:
+    def test_matching_spec_passes(self) -> None:
+        row = _run_mg_check(_one_graph())
+        assert row.status is Status.PASS
+        assert "1 graph(s)" in row.detail
+
+    def test_every_graph_counted(self) -> None:
+        spec: InputSpec = {"x": TensorSpec(shape=(1, 4), dtype="float32")}
+        row = _run_mg_check(_StubMultiGraph({"g0": spec, "g1": dict(spec)}))
+        assert row.status is Status.PASS
+        assert "2 graph(s)" in row.detail
+
+    def test_channel_last_input_passes(self) -> None:
+        # Regression: the spec is always channel-first, so sample inputs have to
+        # be generated in that layout or every channel-last input fails.
+        row = _run_mg_check(
+            _StubMultiGraph(
+                {
+                    "g0": {
+                        "image": TensorSpec(
+                            shape=(1, 3, 8, 8),
+                            dtype="float32",
+                            apply_runtime_channel_reordering=True,
+                        )
+                    }
+                }
+            )
+        )
+        assert row.status is Status.PASS
+
+    def test_missing_key_fails(self) -> None:
+        row = _run_mg_check(_one_graph(sample_override=lambda _: {}))
+        assert row.status is Status.FAIL
+        assert "missing ['x']" in row.detail
+
+    def test_extra_key_fails(self) -> None:
+        row = _run_mg_check(
+            _one_graph(
+                sample_override=lambda _: {
+                    "x": [np.zeros((1, 4), dtype=np.float32)],
+                    "y": [np.zeros((1, 4), dtype=np.float32)],
+                }
+            )
+        )
+        assert row.status is Status.FAIL
+        assert "unexpected ['y']" in row.detail
+
+    def test_shape_mismatch_fails(self) -> None:
+        row = _run_mg_check(
+            _one_graph(
+                sample_override=lambda _: {"x": [np.zeros((1, 8), dtype=np.float32)]}
+            )
+        )
+        assert row.status is Status.FAIL
+        assert "has shape (1, 8)" in row.detail
+
+    def test_dtype_mismatch_fails(self) -> None:
+        row = _run_mg_check(
+            _one_graph(
+                sample_override=lambda _: {"x": [np.zeros((1, 4), dtype=np.int32)]}
+            )
+        )
+        assert row.status is Status.FAIL
+        assert "has dtype int32" in row.detail
+
+    def test_spec_exception_reported(self) -> None:
+        row = _run_mg_check(_one_graph(spec_error=ValueError("boom")))
+        assert row.status is Status.FAIL
+        assert "ValueError: boom" in row.detail
 
 
 class TestUrlReachability:

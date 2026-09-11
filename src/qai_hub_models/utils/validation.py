@@ -19,6 +19,7 @@ from qai_hub_models.utils.base_multi_graph_collection_model import (
     MultiGraphCollectionModel,
     MultiGraphWorkbenchModelCollection,
 )
+from qai_hub_models.utils.base_multi_graph_model import MultiGraphWorkbenchModel
 
 
 def _is_valid_dataset_class(dataset_cls: type) -> bool:
@@ -89,6 +90,34 @@ def validate_io_names_collection(
             continue
         errors.extend(
             f"[component '{comp_name}'] {err}" for err in validate_io_names(component)
+        )
+    return errors
+
+
+def validate_io_names_multi_graph(model: MultiGraphWorkbenchModel) -> list[str]:
+    """
+    Run I/O name validation on each graph of a multi-graph model.
+
+    Parameters
+    ----------
+    model
+        The multi-graph model to validate.
+
+    Returns
+    -------
+    list[str]
+        Error messages for each failing check, prefixed with the graph name.
+    """
+    errors: list[str] = []
+    for graph_name in model.graph_names:
+        names = list(model.get_graph_input_spec(graph_name)) + list(
+            model.get_graph_output_spec(graph_name)
+        )
+        errors.extend(
+            f"[graph '{graph_name}'] Name '{name}' contains '-'. "
+            "QNN converts dashes to underscores, causing name mismatches."
+            for name in names
+            if "-" in name
         )
     return errors
 
@@ -247,7 +276,12 @@ def validate_component_precision(
 
 
 def perform_runtime_model_validation(
-    model_cls: type[WorkbenchModel | CollectionModel | MultiGraphCollectionModel],
+    model_cls: type[
+        WorkbenchModel
+        | CollectionModel
+        | MultiGraphCollectionModel
+        | MultiGraphWorkbenchModel
+    ],
     model_id: str,
     app_cls: type | None = None,
     manifest: QAIHMModelManifest | None = None,
@@ -293,10 +327,14 @@ def perform_runtime_model_validation(
         errors.extend(validate_io_names(model))
         errors.extend(validate_mixed_precision_litemp(model, manifest))
         errors.extend(validate_eval_datasets_have_evaluator(model))
+    elif isinstance(model, MultiGraphWorkbenchModel):
+        errors.extend(validate_io_names_multi_graph(model))
     else:
         raise NotImplementedError()
 
-    errors.extend(validate_eval_datasets(model))
+    # MultiGraphWorkbenchModel does not implement the evaluatable protocol.
+    if not isinstance(model, MultiGraphWorkbenchModel):
+        errors.extend(validate_eval_datasets(model))
 
     if errors:
         header = (
