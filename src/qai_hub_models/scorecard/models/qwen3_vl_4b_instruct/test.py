@@ -33,7 +33,7 @@ from qai_hub_models.models.templates.llm.perf_collection import (
     get_llm_perf_parametrization,
 )
 from qai_hub_models.scorecard import ScorecardDevice
-from qai_hub_models.scorecard.device import cs_8_elite_gen_5_qrd
+from qai_hub_models.scorecard.device import cs_8_elite_gen_5
 
 DEFAULT_EVAL_SEQLEN = [2048, 128, 1]
 
@@ -105,10 +105,10 @@ def test_evaluate(
 def _get_llm_perf_params() -> list[tuple[Precision, ScorecardDevice]]:
     params = get_llm_perf_parametrization(
         MODEL_ID,
-        default_devices=[cs_8_elite_gen_5_qrd],
+        default_devices=[cs_8_elite_gen_5],
         default_precisions=[Precision.w4a16],
     )
-    return params if params else [(Precision.w4a16, cs_8_elite_gen_5_qrd)]
+    return params if params else [(Precision.w4a16, cs_8_elite_gen_5)]
 
 
 @pytest.mark.llm_perf
