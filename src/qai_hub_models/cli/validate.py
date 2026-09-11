@@ -31,11 +31,13 @@ import torch
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
 
+from qai_hub_models import SampleInputsType
 from qai_hub_models.cli.install import InstallAborted, install_model
 from qai_hub_models.configs._info_yaml_enums import MODEL_STATUS
 from qai_hub_models.configs._info_yaml_llm_details import LLM_CALL_TO_ACTION
 from qai_hub_models.configs.manifest_yaml import QAIHMModelManifest
 from qai_hub_models.utils.asset_loaders import ASSET_CONFIG, QAIHM_WEB_ASSET
+from qai_hub_models.utils.base_collection_model import CollectionModel
 from qai_hub_models.utils.device import CANARY_DEVICES
 from qai_hub_models.utils.export.context import (
     import_recipe_module,
@@ -44,7 +46,7 @@ from qai_hub_models.utils.export.context import (
     resolve_model_cls,
     resolve_recipe_dir,
 )
-from qai_hub_models.utils.input_spec import make_torch_inputs
+from qai_hub_models.utils.input_spec import InputSpec, make_torch_inputs
 from qai_hub_models.utils.metrics import VALID_METRIC_PAIRS
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT, QAIHM_PACKAGE_ROOT
 from qai_hub_models.utils.url_check import head_check_urls
@@ -768,6 +770,100 @@ def _check_model_code(
     return _check_forward_pass(model_cls, report)
 
 
+def _flatten_tensors(outputs: Any) -> tuple[Any, ...]:
+    """Flatten nested tuples/lists of tensors, as KV-cache outputs are grouped."""
+    if isinstance(outputs, torch.Tensor):
+        return (outputs,)
+    if isinstance(outputs, (tuple, list)):
+        return tuple(t for o in outputs for t in _flatten_tensors(o))
+    return (outputs,)
+
+
+def _spec_mismatch(
+    component_name: str, spec: InputSpec, sample: SampleInputsType
+) -> list[str]:
+    """Report any way a component's sample inputs disagree with its input spec."""
+    errors = []
+    missing = sorted(set(spec) - set(sample))
+    extra = sorted(set(sample) - set(spec))
+    if missing or extra:
+        return [
+            f"component '{component_name}' sample inputs do not match spec "
+            f"(missing {missing}, unexpected {extra})"
+        ]
+    for input_name, tensor_spec in spec.items():
+        array = sample[input_name][0]
+        if tuple(array.shape) != tuple(tensor_spec[0]):
+            errors.append(
+                f"component '{component_name}' input '{input_name}' sample has shape "
+                f"{tuple(array.shape)}, spec says {tuple(tensor_spec[0])}"
+            )
+        if str(array.dtype) != tensor_spec[1]:
+            errors.append(
+                f"component '{component_name}' input '{input_name}' sample has dtype "
+                f"{array.dtype}, spec says {tensor_spec[1]}"
+            )
+    return errors
+
+
+def _check_collection_forward_pass(model: CollectionModel, report: Report) -> None:
+    """Run a forward pass through every component of a collection model."""
+    name = "from_pretrained + per-component forward pass"
+    errors: list[str] = []
+    components = getattr(model, "components", None)
+    try:
+        for component_name in model.component_names:
+            spec = model.get_component_input_spec(component_name)
+            if components is None or component_name not in components:
+                errors.append(f"component '{component_name}' is not reachable")
+                continue
+            component = components[component_name]
+            # The model's own sample inputs, not random tensors from the spec: real
+            # values in valid ranges, and the same data the scorecard compares against.
+            sample = model.get_component_sample_inputs(
+                component_name, use_channel_last_format=False
+            )
+            mismatch = _spec_mismatch(component_name, spec, sample)
+            if mismatch:
+                errors.extend(mismatch)
+                continue
+            inputs = [torch.from_numpy(sample[key][0]) for key in spec]
+            with torch.no_grad():
+                outputs = component(*inputs)
+            out_tuple = _flatten_tensors(outputs)
+            output_names = list(model.get_component_output_spec(component_name))
+            if len(out_tuple) != len(output_names):
+                errors.append(
+                    f"component '{component_name}' forward returned "
+                    f"{len(out_tuple)} tensors, output spec has {len(output_names)}"
+                )
+                continue
+            for i, out in enumerate(out_tuple):
+                if isinstance(out, torch.Tensor) and not torch.isfinite(out).all():
+                    errors.append(
+                        f"component '{component_name}' output {i} "
+                        "contains NaN or Inf values"
+                    )
+    except Exception as exc:
+        report.add(
+            Result(name, "Model code", Status.FAIL, f"{exc.__class__.__name__}: {exc}")
+        )
+        return
+
+    if errors:
+        report.add(Result(name, "Model code", Status.FAIL, "; ".join(errors)))
+        return
+
+    report.add(
+        Result(
+            name,
+            "Model code",
+            Status.PASS,
+            f"{len(model.component_names)} component(s)",
+        )
+    )
+
+
 def _check_forward_pass(model_cls: Any, report: Report) -> Any:
     try:
         model = model_cls.from_pretrained()
@@ -782,13 +878,19 @@ def _check_forward_pass(model_cls: Any, report: Report) -> Any:
         )
         return None
 
+    # A CollectionModel's get_input_spec returns a component-name-keyed group, not
+    # an InputSpec, so it has to be walked per component rather than called once.
+    if isinstance(model, CollectionModel):
+        _check_collection_forward_pass(model, report)
+        return model
+
     if not hasattr(model, "get_input_spec"):
         report.add(
             Result(
                 "from_pretrained + forward pass",
                 "Model code",
                 Status.SKIP,
-                "collection model has no top-level get_input_spec",
+                "model has no get_input_spec",
             )
         )
         return model
