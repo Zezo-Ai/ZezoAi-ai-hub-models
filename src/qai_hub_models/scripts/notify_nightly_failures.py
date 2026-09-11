@@ -41,6 +41,21 @@ _WORKBENCH_JOB_NAME_FRAGMENT = "Verify Model Tests"
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
+# GitHub caps issue bodies at 65,536 chars. On a bad night, summary.md (a
+# markdown table of every failing test) can exceed that alone, so clip it
+# before it goes into the template. Budget leaves ~5 KB of headroom for the
+# failures list, links, and triage-steps sections around it.
+_TEST_SUMMARY_MAX_CHARS = 60_000
+
+
+def clip_test_summary(
+    summary: str | None, budget: int = _TEST_SUMMARY_MAX_CHARS
+) -> str | None:
+    if summary is None or len(summary) <= budget:
+        return summary
+    footer = "\n\n_…summary truncated; see full details in the workflow run._"
+    return summary[: budget - len(footer)] + footer
+
 
 def load_failed_jobs_json(json_path: str | None) -> dict[str, str]:
     """Load failed workbench job URLs from structured JSON file.
@@ -126,7 +141,7 @@ def main() -> None:
     test_summary = None
     summary_path = Path("build/nightly-test-results/summary.md")
     if summary_path.exists():
-        test_summary = summary_path.read_text()
+        test_summary = clip_test_summary(summary_path.read_text())
 
     # Workbench issue — only file if there's actual evidence of workbench
     # job failures (not just the verify job crashing due to infra issues).
