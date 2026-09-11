@@ -83,22 +83,13 @@ for _name in _SUBMODULES:
 
 # Set __version__ on the stub so callers that do `flash_attn.__version__`
 # get the right answer without touching importlib.metadata globally.
-sys.modules["flash_attn"].__version__ = "2.7.1"  # type: ignore[attr-defined]
-
-# transformers internally calls importlib.metadata.distribution("flash_attn")
-# (not version()) to check availability. Stub that single entry so it doesn't
-# raise PackageNotFoundError — without replacing the global version() callable.
-_real_distribution = importlib.metadata.distribution
-
-
-def _patched_distribution(package_name: str) -> Any:
-    if package_name == "flash_attn":
-        _d = MagicMock()
-        _d.metadata = {"Name": "flash_attn", "Version": "2.7.1"}
-        _d.version = "2.7.1"
-        _d.name = "flash_attn"
-        return _d
-    return _real_distribution(package_name)
-
-
-importlib.metadata.distribution = _patched_distribution  # type: ignore[assignment]
+# We also attach metadata directly on the stub so that any call to
+# importlib.metadata.distribution("flash_attn") is satisfied via the
+# sys.modules entry
+_flash_attn_stub = sys.modules["flash_attn"]
+_flash_attn_stub.__version__ = "2.7.1"  # type: ignore[attr-defined]
+_dist_mock = MagicMock()
+_dist_mock.metadata = {"Name": "flash_attn", "Version": "2.7.1"}
+_dist_mock.version = "2.7.1"
+_dist_mock.name = "flash_attn"
+_flash_attn_stub.__dist__ = _dist_mock  # type: ignore[attr-defined]

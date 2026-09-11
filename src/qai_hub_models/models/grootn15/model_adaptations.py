@@ -18,7 +18,6 @@ from transformers import AutoConfig
 from transformers.models.qwen3.modeling_qwen3 import (
     Qwen3ForCausalLM,
     Qwen3RotaryEmbedding,
-    repeat_kv,
 )
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import (
@@ -61,8 +60,11 @@ class EagleBackboneOpt(EagleBackbone):
             DEFAULT_EAGLE_PATH, trust_remote_code=True, local_files_only=True
         )
         self.eagle_config._attn_implementation = "eager"  # not use flash attention
-
+        self.eagle_config.text_config.tie_word_embeddings = (
+            False  # downstream spinquant reqr.
+        )
         assert self.eagle_config.text_config.architectures[0] == "Qwen3ForCausalLM"
+
         self.eagle_model.language_model = Qwen3ForCausalLM(
             self.eagle_config.text_config
         )
@@ -272,7 +274,7 @@ class SiglipVisionEmbeddingsOpt(SiglipVisionEmbeddings):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
@@ -386,8 +388,12 @@ class AttnProcessorOpt(AttnProcessor2_0):
                 key = attn.norm_k(key)
 
         else:
-            key = encoder_hidden_states_key
-            value = encoder_hidden_states_value
+            assert encoder_hidden_states_key is not None
+            assert encoder_hidden_states_value is not None
+
+            # Chunk/split no-op for compatibility with AIMET SeqMSE
+            key = encoder_hidden_states_key.chunk(1, dim=0)[0]
+            value = encoder_hidden_states_value.chunk(1, dim=0)[0]
 
             head_dim = key.shape[-1]
 
@@ -442,7 +448,7 @@ class BasicTransformerBlockCrossAttnKV(BasicTransformerBlock):
         encoder_hidden_states_key: torch.Tensor | None = None,
         encoder_hidden_states_value: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        temb: torch.LongTensor | None = None,
+        temb: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # 0. Self-Attention
         if self.norm_type == "ada_norm":
@@ -491,7 +497,7 @@ class DiTCrossAttnKV(DiT):
         hidden_states: torch.Tensor,  # Shape: (B, T, D)
         encoder_hidden_states_keys: list[torch.Tensor],  # Shape: (N, B, S, D)
         encoder_hidden_states_values: list[torch.Tensor],  # Shape: (N, B, S, D)
-        timestep: torch.LongTensor | None = None,
+        timestep: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         return_all_hidden_states: bool = False,
     ) -> torch.Tensor | tuple[torch.Tensor, list[torch.Tensor]]:
@@ -610,6 +616,15 @@ def prepare_4d_causal_attention_mask_with_cache_position(
     return causal_mask
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """Replace expand -> repeat for downstream tooling reqr."""
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].repeat(1, 1, n_rep, 1, 1)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def eager_attention_forward_opt(
     module: nn.Module,
     query: torch.Tensor,
@@ -653,7 +668,7 @@ def prepare_4d_bidirectional_mask(
 ) -> torch.Tensor:
     """
     Convert [1, seq_len] mask to [1, 1, row_len, seq_len] additive mask.
-    Valid positions = 0, masked positions = -inf.
+    Valid positions = 0, masked positions = min_dtype.
     """
     B, _ = attention_mask.shape
     if target_len is None:

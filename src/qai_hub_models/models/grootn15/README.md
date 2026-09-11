@@ -1,3 +1,6 @@
+> [!WARNING]
+> This model is not published. Use with caution; it may not meet performance/accuracy standards and may not support some runtimes or chipsets/devices. We do not provide support for unpublished models. If this model was previously published, use earlier releases.
+
 # [GR00TN1.5: State-of-the-art vision-language-action model for dexterous robot manipulation, enabling zero-shot generalization across diverse embodiments via diffusion-based action generation](https://aihub.qualcomm.com/models/grootn15)
 
 GR00T N1.5 is a vision-language-action (VLA) model for generalist robot control. The model supports multiple robot embodiments and is designed for dexterous, long-horizon manipulation tasks.
@@ -23,7 +26,7 @@ qai-hub-models perf GR00TN1.5
 qai-hub-models numerics GR00TN1.5
 
 # Download a ready-to-deploy asset
-qai-hub-models fetch GR00TN1.5 --runtime qnn_context_binary --precision float
+qai-hub-models fetch GR00TN1.5 --runtime qnn_context_binary --precision mixed
 ```
 See the [CLI README](../../../../cli/README.md)
 for the full list of commands and filters.
@@ -37,6 +40,19 @@ recipe's dependencies:
 pip install qai-hub-models
 qai-hub-models install grootn15
 ```
+For grootn15, some additional functionality can be faster or is available
+only with a GPU on the host machine.
+
+- 🟢 Exporting the model for on-device deployment (GPU not required)
+- 🟡 Running the demo (GPU recommended for speed, but not required)
+- 🟡 Running evaluation (GPU recommended for speed, but not required)
+- 🔴 Quantizing the model (GPU required)
+
+If you are quantizing your own variant of grootn15, a dedicated CUDA enabled
+GPU (40 GB VRAM for 3B models to 80 GB VRAM for 8B models) is recommended. A GPU
+can also increase the speed of evaluation and demo of your quantized model
+significantly but is not strictly required. The CLI auto-detects CUDA and installs
+the GPU-flavored dependencies (e.g. the AIMET ONNX wheel) when available.
 
 ### 2. Configure Qualcomm® AI Hub Workbench
 Sign-in to [Qualcomm® AI Hub Workbench](https://workbench.aihub.qualcomm.com/) with your

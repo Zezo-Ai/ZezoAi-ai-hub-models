@@ -39,7 +39,7 @@ def _plot_action_chunks(
     total_dof = sum(action_dims)
     time_steps = np.arange(pred_concat.shape[0])  # action_horizon
 
-    # Build a flat label per DOF: e.g. "arm [0]", "arm [1]", "gripper [0]", ...
+    # Build a flat label per DOF: e.g. "arm [0]", "arm [1]", ...
     dof_labels: list[str] = []
     dof_labels.extend(
         f"{key} [{d}]"
@@ -114,7 +114,9 @@ def main() -> None:
     args = parser.parse_args()
     validate_on_device_demo_args(args, MODEL_ID)
 
-    output_dir = Path(args.output_dir) if args.output_dir else Path(".")
+    output_dir = (
+        Path(args.output_dir) if args.output_dir else Path(f"./build/{MODEL_ID}/demo")
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load policy
@@ -127,7 +129,11 @@ def main() -> None:
 
     # Build GrootApp
     app = build_app(
-        policy, args.eval_mode, args.device, args.hub_model_id, args.host_device
+        policy,
+        args.eval_mode,
+        device=args.device,
+        hub_model_id=args.hub_model_id,
+        host_device=args.host_device,
     )
 
     # Load dataset
@@ -141,37 +147,24 @@ def main() -> None:
     )
     step_data = dataset.get_step_data(trajectory_id=0, base_index=0)
 
-    # Run inference
-    pred_actions = app.predict_action_chunk(step_data)
+    # Run inference — returns (1, H, total_dof) tensor
+    pred_tensor = app.predict_action_chunk(step_data)
+    pred_concat = pred_tensor[0].cpu().numpy()  # (H, total_dof)
 
-    # Evaluate predictions
-    modality_keys = [
-        key.split(".")[-1] for key in policy.modality_config["action"].modality_keys
-    ]
-
-    pred_actions_squeezed = {k: np.asarray(v)[0] for k, v in pred_actions.items()}
-    pred_action_across_time: list[np.ndarray] = []
-    for j in range(app.config.action_horizon):
-        concat_pred = np.concatenate(
-            [pred_actions_squeezed[f"action.{key}"][j] for key in modality_keys],
-            axis=0,
-        )
-        pred_action_across_time.append(concat_pred)
-    pred_concat = np.stack(pred_action_across_time)
+    modality_keys = app.config.modality_keys
 
     # Ground-truth actions for comparison.
     gt_action_across_time: list[np.ndarray] = []
     for step in range(app.config.action_horizon):
-        data_point_step = dataset.get_step_data(trajectory_id=0, base_index=step)
+        dp = dataset.get_step_data(trajectory_id=0, base_index=step)
         concat_gt = np.concatenate(
-            [data_point_step[f"action.{key}"][0] for key in modality_keys], axis=0
+            [dp[f"action.{key}"][0] for key in modality_keys], axis=0
         )
         gt_action_across_time.append(concat_gt)
-    gt_concat = np.array(gt_action_across_time)  # (16, total_dof)
+    gt_concat = np.array(gt_action_across_time)  # (H, total_dof)
 
     action_dims = [
-        pred_actions_squeezed[f"action.{key}"].shape[-1]  # (H, dof) -> dof
-        for key in modality_keys
+        int(np.asarray(step_data[f"action.{key}"]).shape[-1]) for key in modality_keys
     ]
 
     rmse = np.sqrt(np.mean((gt_concat - pred_concat) ** 2))
