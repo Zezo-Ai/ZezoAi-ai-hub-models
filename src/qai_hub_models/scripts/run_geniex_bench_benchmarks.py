@@ -71,8 +71,6 @@ ALL_GENIEX_DEVICES = (
     "cs_x_elite",
     "cs_x2_elite",
     "cs_9075",
-    "cs_8_elite_qrd",
-    "cs_8_elite_gen_5_qrd",
     "cs_8_elite",
     "cs_8_elite_gen_5",
 )

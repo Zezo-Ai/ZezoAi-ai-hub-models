@@ -32,11 +32,13 @@ ALL_GENIEX_DEVICES = (
     "cs_x_elite",
     "cs_x2_elite",
     "cs_9075",
-    "cs_8_elite_qrd",
-    "cs_8_elite_gen_5_qrd",
     "cs_8_elite",
     "cs_8_elite_gen_5",
 )
+
+# Superseded by the Samsung Galaxy S25/S26 (AWS) devices above; no longer part
+# of the default "all" sweep, but still routable via explicit selection.--device for
+RETIRED_FROM_ALL = {"cs_8_elite_qrd", "cs_8_elite_gen_5_qrd"}
 
 # The LLM default device (DEFAULT_QDC_DEVICE in scorecard/device.py). The
 # scorecard-wide is_default=True flag lives on cs_8_elite (Samsung Galaxy
@@ -56,7 +58,7 @@ def split(device_input: str) -> tuple[str, str, str]:
         )
         return (
             shared,
-            ",".join(sorted(DEDICATED_DEVICES)),
+            ",".join(sorted(DEDICATED_DEVICES - RETIRED_FROM_ALL)),
             ",".join(sorted(AWS_DEVICES)),
         )
 
