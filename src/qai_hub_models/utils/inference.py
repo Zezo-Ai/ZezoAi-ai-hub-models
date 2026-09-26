@@ -379,18 +379,22 @@ class AsyncOnDeviceModel:
         if producer._job_type == hub.JobType.QUANTIZE:
             return workbench_to_qihm_input_spec(cast(hub.QuantizeJob, producer).shapes)
         if producer._job_type == hub.JobType.COMPILE:
+            target_shapes = cast(hub.CompileJob, producer).get_target_shapes()
+            assert target_shapes is not None
             out = workbench_to_qihm_input_spec(
-                cast(hub.CompileJob, producer).target_shapes
+                {name: target_shapes[name] for name in self.input_names}
             )
             return transpose_channel_last_to_first_input_specs(
                 out, self.channel_last_input
             )
         if producer._job_type == hub.JobType.LINK:
+            target_shapes = cast(
+                hub.CompileJob,
+                cast(hub.LinkJob, producer).models[0].get_producer(),
+            ).get_target_shapes()
+            assert target_shapes is not None
             out = workbench_to_qihm_input_spec(
-                cast(
-                    hub.CompileJob,
-                    cast(hub.LinkJob, producer).models[0].get_producer(),
-                ).target_shapes
+                {name: target_shapes[name] for name in self.input_names}
             )
             return transpose_channel_last_to_first_input_specs(
                 out, self.channel_last_input

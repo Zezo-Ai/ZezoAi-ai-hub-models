@@ -329,12 +329,14 @@ class ScorecardModelConfig(BaseQAIHMConfig):
             # If the model was compiled with AI Hub Workbench, we have some additional I/O shape info accessible to validate with
             if producer_job := model.get_producer():
                 assert isinstance(producer_job, CompileJob)
+                target_shapes = producer_job.get_target_shapes()
+                assert target_shapes is not None
                 for input_name in self.channel_first_inputs:
-                    if input_name not in producer_job.target_shapes:
+                    if input_name not in target_shapes:
                         return f"Input {input_name} is defined in channel_first_inputs, but does not exist in the ONNX model."
 
                 if self.precision != Precision.float:
-                    for input_name, input_value in producer_job.target_shapes.items():
+                    for input_name, input_value in target_shapes.items():
                         assert isinstance(input_value, tuple)
                         if input_value[1] in ["int32", "float32"]:
                             return f"Model is marked quantized, but input {input_name} has type {input_value[1]}"

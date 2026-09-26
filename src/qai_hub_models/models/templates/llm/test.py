@@ -371,7 +371,7 @@ def test_cli_device_with_skips(
         patch_get_or_create_cached_model,
         patch_tool_versions,
     ):
-        mock_hub.submit_compile_job.return_value.target_shapes = {
+        mock_hub.submit_compile_job.return_value.get_target_shapes.return_value = {
             "input_ids": (1, context_length)
         }
 
@@ -469,7 +469,7 @@ def test_cli_multiple_context_lengths_link_jobs(
         patch_get_or_create_cached_model,
         patch_tool_versions,
     ):
-        mock_hub.submit_compile_job.return_value.target_shapes = {
+        mock_hub.submit_compile_job.return_value.get_target_shapes.return_value = {
             "input_ids": (1, max(context_lengths))
         }
 
@@ -576,7 +576,7 @@ def test_cli_chipset_with_options(
             "--do-inferencing",
         ]
 
-        mock_hub.submit_compile_job.return_value.target_shapes = {
+        mock_hub.submit_compile_job.return_value.get_target_shapes.return_value = {
             "input_ids": (1, context_length)
         }
 
@@ -732,7 +732,7 @@ def test_cli_default_device_select_component(
         if skip_summary:
             sys.argv.append("--skip-summary")
 
-        mock_hub.submit_compile_job.return_value.target_shapes = {
+        mock_hub.submit_compile_job.return_value.get_target_shapes.return_value = {
             "input_ids": (1, context_length)
         }
 

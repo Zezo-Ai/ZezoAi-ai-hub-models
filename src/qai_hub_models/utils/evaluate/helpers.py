@@ -12,7 +12,7 @@ import math
 import os
 import shutil
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sized
+from collections.abc import Callable, Mapping, Sequence, Sized
 from dataclasses import dataclass
 from enum import Enum, unique
 from pathlib import Path
@@ -67,6 +67,10 @@ from qai_hub_models.utils.transpose_channel import transpose_channel_last_to_fir
 
 CACHE_SAMPLES_PER_JOB_FILE = "current_samples_per_job.txt"
 DEFAULT_NUM_EVAL_SAMPLES = 1000
+
+
+def _count_num_samples(data: Sequence[torch.Tensor] | torch.Tensor) -> int:
+    return len(data[0]) if isinstance(data, Sequence) else len(data)
 
 
 @dataclass
@@ -686,7 +690,7 @@ def evaluate(
     # Get each sample from the dataloader. Each sample has batch size batch_size.
     for batch_idx, sample in enumerate(dataloader):
         model_inputs, ground_truth_values, *_ = sample
-        cumulative_samples = len(model_inputs) + batch_idx * batch_size
+        cumulative_samples = _count_num_samples(model_inputs) + batch_idx * batch_size
 
         model_inputs = _torch_io_to_tuple(model_inputs)
         ground_truth_values = _torch_io_to_tuple(ground_truth_values)
@@ -781,7 +785,7 @@ def evaluate(
     if async_outputs:
         for model_name, batched_outputs in async_outputs.items():
             for batch_idx, sample in enumerate(dataloader):
-                _, ground_truth_values, *_ = sample
+                model_inputs, ground_truth_values, *_ = sample
                 async_model_output = batched_outputs[batch_idx]
                 model_output = (
                     async_model_output.wait()
@@ -791,10 +795,8 @@ def evaluate(
                 evaluators[model_name].add_batch(model_output, ground_truth_values)
 
                 cumulative_samples = (
-                    len(model_output[0])
-                    if isinstance(model_output, tuple)
-                    else len(model_output)
-                ) + batch_idx * batch_size
+                    _count_num_samples(model_output) + batch_idx * batch_size
+                )
                 if verbose:
                     print(
                         f"Cumulative {model_name} accuracy on {cumulative_samples} samples: "

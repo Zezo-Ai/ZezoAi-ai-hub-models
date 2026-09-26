@@ -531,7 +531,7 @@ def export_model(
     # 1 1/2. Determine IO specs from jobs
     for sub_component_name, cjob in compile_jobs.items():
         cjob.wait()  # make sure target_shapes materializes
-        input_specs[sub_component_name] = cjob.target_shapes
+        input_specs[sub_component_name] = cjob.get_target_shapes()
     assert llm_config is not None
     output_specs = _infer_output_specs(
         instantiations, num_splits, input_specs, llm_config, precision
